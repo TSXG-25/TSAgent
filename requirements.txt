@@ -1,0 +1,8 @@
+openai>=1.30
+python-dotenv
+fastmcp
+langgraph 
+langchain-core 
+langchain-mcp-adapters 
+langchain
+langchain-openai

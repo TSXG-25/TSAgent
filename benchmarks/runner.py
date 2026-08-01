@@ -57,11 +57,20 @@ def bootstrap_once():
     print("  ✅ benchmarks runtime initialized", flush=True)
 
 
+def reset_fixtures():
+    """恢复 fixture 到 git 基准状态（agent 执行会污染 fixture 文件）。"""
+    subprocess.run(
+        ["git", "checkout", "HEAD", "--", "benchmarks/_fixtures/repos/"],
+        capture_output=True,
+    )
+
+
 def run_single(task):
     from agent.runtime import UniversalAgent
 
     task_id = task["id"]
     print(f"\n===== {task_id} {task['name']} ({task.get('category','')}) =====", flush=True)
+    reset_fixtures()
 
     # 捕获 agent 运行 stdout 作为 step trace
     buf = io.StringIO()

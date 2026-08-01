@@ -101,6 +101,69 @@ class TestActionResolverResolution:
         assert "没有找到匹配" in result["summary"]
 
 
+class TestToolExecutor:
+    """ToolExecutor（经 ExecutorFactory）执行确定性 ExecutionPlan。"""
+
+    def setup_method(self):
+        from agent.executor.contract import executor_factory
+        from agent.registry.tool_registry import registry as tr
+
+        executor_factory._registry.clear()
+        tr._tools.clear()
+        tr._categories.clear()
+        tr._tags.clear()
+
+        def test_echo(msg: str) -> str:
+            """Echo a message."""
+            return f"echo: {msg}"
+
+        tr.register(test_echo, name="test_echo", category="test", tags=["test"])
+
+        # 重新注册 factory（测试隔离导致 factory 被清空）
+        from agent.executor.executors.tool import ToolExecutor
+        from agent.executor.llm_executor import LLMExecutor
+        executor_factory.register("tool", ToolExecutor)
+        executor_factory.register("llm", LLMExecutor)
+
+    def test_tool_executor_executes_plan(self):
+        import asyncio
+
+        from agent.executor.contract import executor_factory
+        from agent.workflow import ExecutionContext
+        from agent.task import Task, Verb, ExecutionPlan, ExecutionStep
+
+        task = Task(id="t1", verb=Verb.READ, target="", goal="echo hello")
+        plan = ExecutionPlan(
+            task=task,
+            steps=[ExecutionStep(tool="test_echo", args={"msg": "hello"}, outputs=["out"])],
+        )
+        ctx = ExecutionContext(task=task)
+        ctx.set_var("execution_plan", plan)
+
+        executor = executor_factory.get("tool")
+        result = asyncio.run(executor.execute(task, ctx))
+
+        assert result.success, result.error
+        assert "echo: hello" in result.text
+        assert "out" in result.metadata["variables"]
+
+    def test_tool_executor_missing_plan(self):
+        import asyncio
+
+        from agent.executor.contract import executor_factory
+        from agent.workflow import ExecutionContext
+        from agent.task import Task, Verb
+
+        task = Task(id="t2", verb=Verb.READ, target="", goal="x")
+        ctx = ExecutionContext(task=task)  # 无 execution_plan
+
+        executor = executor_factory.get("tool")
+        result = asyncio.run(executor.execute(task, ctx))
+
+        assert not result.success
+        assert "execution_plan" in result.error
+
+
 class TestStageToTask:
     """Stage.to_task() 投影到统一 Task 模型。"""
 

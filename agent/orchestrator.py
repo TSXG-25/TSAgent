@@ -61,8 +61,7 @@ from agent.query_normalizer import QueryNormalizer
 from agent.task import Task, Verb, ExecutionPlan, ExecutionStep
 from agent.selector.tool_selector import ToolSelector
 from agent.selector.rules import DEFAULT_RULES
-from agent.executor.dispatcher import dispatcher
-from agent.executor.plan_executor import plan_executor
+from agent.executor.contract import executor_factory
 
 MAX_REPLAN = 2
 
@@ -417,43 +416,46 @@ class ExecutionOrchestrator:
             executor = ReActExecutor()
             state = await executor.execute(state, tasks)
         else:
-            # 新路径：Dispatcher 分发
+            # 新路径：Compiler 已决定执行器（plan.executor），ExecutorFactory 分发
             for idx, task_dict in enumerate(tasks):
                 task_obj = self._dict_to_task(task_dict) if idx < len(tasks) else None
                 plan = execution_plans[idx] if idx < len(execution_plans) else None
 
-                dispatch_to = dispatcher.select_executor_name(task_obj, plan)
-                print(f"  🔀 Dispatcher: {task_dict.get('id', '?')} → {dispatch_to}")
-
-                if dispatch_to == "tool":
-                    # PlanExecutor 执行确定性步骤
+                if plan is not None and plan.executor == "tool":
+                    # Phase B.2: ToolExecutor（确定性 ExecutionPlan 步骤序列）
+                    print(f"  🔀 Compiler: {task_dict.get('id', '?')} → tool_executor")
                     ws_service = None
                     try:
                         ws_service = get_workspace_service()
                     except Exception:
                         pass
-                    plan_result = await plan_executor.execute(plan, workspace=ws_service)
-                    if plan_result.get("_error"):
+                    context = ExecutionContext(task=task_obj, variables={})
+                    if ws_service:
+                        context.set_var("workspace", ws_service)
+                    context.set_var("execution_plan", plan)
+
+                    tool_executor = executor_factory.get("tool")
+                    exec_result = await tool_executor.execute(task_obj, context)
+
+                    if not exec_result.success:
                         task_dict["status"] = "failed"
-                        task_dict["error"] = plan_result.get("_error", "PlanExecutor 失败")
+                        task_dict["error"] = exec_result.error
                     else:
                         task_dict["status"] = "succeeded"
+                        exec_meta = exec_result.metadata or {}
                         task_dict["observations"].append({
-                            "action": "plan_executor",
-                            "tool": "plan_executor",
+                            "action": "tool_executor",
+                            "tool": "tool_executor",
                             "status": "succeeded",
-                            "summary": plan_result.get("_last_output", "")[:300],
+                            "summary": exec_result.text[:300],
                             "artifact_ids": [],
-                            "time_s": 0,
+                            "time_s": round(exec_meta.get("time_s", 0), 2),
                         })
                         # 保存变量供后续任务使用
-                        task_dict["facts"] = {
-                            k: str(v)[:300]
-                            for k, v in plan_result.items()
-                            if not k.startswith("_")
-                        }
+                        task_dict["facts"] = exec_meta.get("variables", {})
                 else:
-                    # ReActExecutor 执行开放式任务
+                    # ReActExecutor 执行开放式任务（Phase B.3 迁移到统一契约）
+                    print(f"  🔀 Compiler: {task_dict.get('id', '?')} → react_executor")
                     executor = ReActExecutor()
                     sub_state = await executor.execute(state, [task_dict])
                     # 合并回主 state

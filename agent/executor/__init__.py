@@ -21,11 +21,16 @@ from .tool_executor import ToolExecutor
 from .workflow_executor import WorkflowExecutor
 from .react_executor import ReactExecutor
 from .action_resolver import ActionResolver, resolver as action_resolver
+from .executors.tool import ToolExecutor as PlanToolExecutor
 
-# 注册全部内置执行器
+# 注册全部内置执行器（旧 Stage 体系）
 ExecutorRegistry.register("llm", LLMExecutor)
 ExecutorRegistry.register("tool", ToolExecutor)
 ExecutorRegistry.register("react", ReactExecutor)
+
+# 注册统一契约执行器（Phase B.2+）
+executor_factory.register("tool", PlanToolExecutor)
+executor_factory.register("llm", LLMExecutor)
 
 __all__ = [
     "ExecutorRegistry",
@@ -39,4 +44,5 @@ __all__ = [
     "ExecutorFactory",
     "executor_factory",
     "ExecutionTarget",
+    "PlanToolExecutor",
 ]

@@ -19,9 +19,9 @@ import time
 from typing import Any, Dict, List, Optional
 from langchain_core.messages import AIMessage
 from agent.llm import llm
-from agent.services import ToolService, EventService
+from agent.event_bus import event_bus
 from agent.services.artifact_service import ArtifactService
-from agent.services.context_service import ContextService
+from agent.context.context_service import ContextService
 from agent.state import AgentState
 from agent.executor.dag import resolve_dag, flatten_tree
 from agent.validators import validator
@@ -180,7 +180,7 @@ class ReactExecutor:
         state: AgentState,
         task: Dict,
     ) -> AgentState:
-        EventService.emit("task_start", {"task": task["id"]})
+        event_bus.emit("task_start", {"task": task["id"]})
         task["status"] = "running"
         print(f"\n🎯 [任务] {task['goal']}")
 
@@ -281,7 +281,7 @@ class ReactExecutor:
             task["status"] = "failed"
             task["error"] = f"超过最大迭代次数 ({self._max_iterations()})"
 
-        EventService.emit("task_end", {
+        event_bus.emit("task_end", {
             "task": task["id"],
             "status": task["status"],
         })

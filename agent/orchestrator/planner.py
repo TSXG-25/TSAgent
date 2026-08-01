@@ -32,8 +32,7 @@ from agent.state import AgentState
 from agent.executor.executors.workflow import WorkflowExecutor
 from agent.planner.planner import generate_plan
 from agent.services import (
-    MemoryService, WorkflowService, EventService,
-    RepositoryService, ArtifactService,
+    MemoryService, RepositoryService, ArtifactService,
 )
 from agent.services.workspace_service import get_workspace_service
 from agent.registry.skill_registry import skill_registry

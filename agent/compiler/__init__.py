@@ -1,8 +1,10 @@
-"""ToolSelector — maps Planner Tasks to deterministic ExecutionPlans.
+"""Compiler — maps Planner Tasks to deterministic ExecutionPlans.
 
-Stateless rule engine. No LLM involvement.
-Each verb has a corresponding Rule that knows which tools to call.
+ADR-0002: four stages (Normalize → Semantic Check → Lower → Static Check).
+Stateless rule engine. No LLM involvement. Pure function, no side effects.
+Each verb has a corresponding Rule (lowering rule) that knows which tools to call.
 """
-from agent.compiler.tool_selector import ToolSelector, Rule
+from agent.compiler.tool_selector import ToolSelector, Compiler, Rule, CompileError
+from agent.compiler.context import CompilerContext
 
-__all__ = ["ToolSelector", "Rule"]
+__all__ = ["ToolSelector", "Compiler", "Rule", "CompileError", "CompilerContext"]

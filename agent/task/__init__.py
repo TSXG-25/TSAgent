@@ -16,7 +16,8 @@ produce modified variants instead of mutating in place.
 """
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional
+import re
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -91,7 +92,7 @@ class Task(BaseModel):
     verb: Verb = Verb.READ
     target: str = ""
     kind: str = ""                     # legacy; prefer target_type
-    target_type: str = "none"          # "file" | "symbol" | "text" | "none"
+    target_type: Literal["file", "symbol", "text", "none"] = "none"
     goal: str = ""
     dependencies: list[str] = Field(default_factory=list)
     status: str = "pending"            # runtime state, not part of plan
@@ -117,10 +118,12 @@ class Task(BaseModel):
     def from_dict(d: dict) -> "Task":
         """Deserialize from dict (Planner JSON output / legacy task dicts)."""
         data = dict(d)
-        data.setdefault("target_type", "none")
         data.setdefault("target", "")
         data.setdefault("kind", "")
         data.setdefault("status", "pending")
+        # target_type 推断：planner 旧输出可能不含该字段
+        if "target_type" not in data:
+            data["target_type"] = Task._infer_target_type(data.get("target", ""))
         verb_str = data.get("verb", "read")
         try:
             data["verb"] = Verb(verb_str.lower())
@@ -129,6 +132,21 @@ class Task(BaseModel):
         policy_data = d.get("policy") or {}
         data["policy"] = TaskPolicy(**policy_data) if isinstance(policy_data, dict) else TaskPolicy()
         return Task(**data)
+
+    @staticmethod
+    def _infer_target_type(target: str) -> str:
+        """从 target 文本推断 target_type（契约适配层，非猜测）。
+
+        - 空 → "none"
+        - 含路径特征（/ 或 .ext）→ "file"
+        - 其他（标识符/符号名）→ "symbol"
+        """
+        target = (target or "").strip()
+        if not target:
+            return "none"
+        if "/" in target or "\\" in target or re.search(r"\.\w+", target):
+            return "file"
+        return "symbol"
 
 
 @dataclass

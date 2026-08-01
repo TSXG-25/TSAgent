@@ -404,6 +404,7 @@ class PlannerStage:
             id=d.get("id", "task-1"),
             verb=verb,
             target=target,
+            target_type=Task._infer_target_type(target),
             goal=goal,
             dependencies=d.get("dependencies", []),
             status=d.get("status", "pending"),

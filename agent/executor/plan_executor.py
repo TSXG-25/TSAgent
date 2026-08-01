@@ -136,6 +136,14 @@ class PlanExecutor:
 
             prompt = str(args.get("prompt", args.get("system_prompt", "")))
             user = str(args.get("user", args.get("input", "")))
+            # edit/analyze 类：content 携带文件原文（ModifyRule 数据流）
+            content = args.get("content", "")
+            if content:
+                prompt = prompt or (
+                    "你是一个代码编辑助手。根据目标与文件原文，"
+                    "输出修改后的完整文件内容（不要任何解释、不要 markdown 代码块）。"
+                )
+                user = f"目标: {args.get('target', '')}\n\n文件原文:\n{content}"
             messages = []
             if prompt:
                 messages.append({"role": "system", "content": prompt})

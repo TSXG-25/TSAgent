@@ -18,8 +18,12 @@ class ModifyRule(Rule):
             task=task,
             steps=[
                 ExecutionStep(tool="workspace", args={"spec": task.target}, outputs=["path"]),
-                ExecutionStep(tool="filesystem.read", args={"path": "$path"}, outputs=["content", "path"]),
-                ExecutionStep(tool="llm", args={"verb": "edit", "target": task.target}, outputs=["new_content"]),
+                ExecutionStep(tool="filesystem.read", args={"path": "$path"}, outputs=["content"]),
+                ExecutionStep(
+                    tool="llm",
+                    args={"verb": "edit", "target": task.target, "content": "$content"},
+                    outputs=["new_content"],
+                ),
                 ExecutionStep(tool="filesystem.write", args={"path": "$path", "content": "$new_content"}, outputs=["result"]),
             ],
         )

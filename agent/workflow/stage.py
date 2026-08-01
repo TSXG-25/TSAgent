@@ -58,6 +58,7 @@ class Stage:
             budget_dict = spec.to_dict()
 
         # 确定 verb：优先从 goal 推断，回退到 READ（确定性读取）
+        # 注意：Verb 枚举没有 design/verify，开放式分析/验证统一映射到 EXPLAIN
         verb = Verb.READ
         goal_lower = (goal or self.description or "").lower()
         verb_hints = {
@@ -65,9 +66,7 @@ class Stage:
             "modify": ["修改", "编辑", "更新", "更改", "重构", "优化", "modify", "edit", "update"],
             "execute": ["运行", "执行", "run", "execute"],
             "search": ["搜索", "查找", "查询", "search", "find"],
-            "design": ["设计", "规划", "design", "plan", "分析", "analyze"],
-            "explain": ["解释", "说明", "总结", "explain", "analyze", "summarize"],
-            "verify": ["验证", "测试", "检查", "verify", "test", "check"],
+            "explain": ["解释", "说明", "总结", "分析", "设计", "规划", "验证", "测试", "检查", "explain", "analyze", "design", "plan", "verify", "test", "check", "summarize"],
         }
         for v, hints in verb_hints.items():
             if any(h in goal_lower for h in hints):

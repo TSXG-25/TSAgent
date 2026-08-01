@@ -1,25 +1,30 @@
 """Task Model — Planner output and Execution Plan.
 
 Task represents a goal. ExecutionPlan represents how to achieve it.
-Task does NOT know about tools. ToolSelector (Compiler) maps Task → ExecutionPlan.
+Task does NOT know about tools. Compiler (ToolSelector) maps Task → ExecutionPlan.
 
-One level, one model:
-- Planning layer: Task (with policy: retry/budget/validator/tool_policy/executor)
-- Compilation layer: ExecutionPlan (steps + executor: "tool" | "llm")
+One level, one model (ADR-0001):
+- Planning layer: Task (Pydantic, the ONLY task model in the system)
+- Compilation layer: ExecutionPlan (steps + executor)
 - Execution layer: ExecutionStep (atomic tool invocation)
 
 Stage is a Task template with the same policy fields — no separate Stage model
 in the execution chain. WorkflowExecutor projects Stage → Task via stage.to_task().
+
+Task is immutable-by-convention (Principle 6): use model_copy(update=...) to
+produce modified variants instead of mutating in place.
 """
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
+from pydantic import BaseModel, Field, model_validator
+
 
 class Verb(Enum):
     """Fixed set of verbs that Planner can output.
-    
-    Each verb maps to a specific capability in ToolSelector (Compiler).
+
+    Each verb maps to a specific capability in Compiler (ToolSelector).
     No free-form strings — ensures deterministic tool selection.
     """
     RESOLVE = "resolve"       # workspace.resolve() — always first step
@@ -34,21 +39,22 @@ class Verb(Enum):
     EXECUTE = "execute"       # shell.execute()
 
 
-@dataclass
-class TaskPolicy:
+# target_type 契约值（ADR-0002: Semantic Check 依据）
+TARGET_TYPES = ("file", "symbol", "text", "none")
+
+
+class TaskPolicy(BaseModel):
     """Execution policy attached to a Task.
 
     Replaces the separate Stage/ExecutionSpec concept in the execution chain.
-    A Stage is just a Task template carrying the same policy fields.
 
     Attributes:
-        executor: Which executor should run this task. Decided by the Compiler
-            (ToolSelector). "tool" = deterministic plan execution,
-            "llm" = open-ended LLM reasoning (no tool invocation).
+        executor: Which executor should run this task. Decided by the Compiler.
+            "tool" = deterministic plan execution, "llm" = open-ended reasoning.
         max_retries: Retry count for tools.
         timeout: Timeout seconds (None = unlimited).
         max_tokens: Max output tokens (LLM tasks only).
-        budget: BudgetSpec.to_dict() — resource budget (no import to avoid cycles).
+        budget: BudgetSpec.to_dict() — resource budget.
         validators: Validator objects/callables for success checking.
         tool_policy: {"allow": [tool names]} — restricted tool access.
         required_outputs: Artifact types required before execution.
@@ -58,73 +64,71 @@ class TaskPolicy:
     timeout: Optional[int] = None
     max_tokens: Optional[int] = None
     budget: Optional[Dict[str, Any]] = None
-    validators: List[Any] = field(default_factory=list)
+    validators: List[Any] = Field(default_factory=list)
     tool_policy: Optional[Dict[str, Any]] = None
-    required_outputs: List[str] = field(default_factory=list)
+    required_outputs: List[str] = Field(default_factory=list)
 
 
-@dataclass
-class Task:
-    """A single unit of work output by the Planner.
+class Task(BaseModel):
+    """A single unit of work output by the Planner / Workflow.
 
+    This is the ONLY task model in the system (ADR-0001, single-model principle).
     Does NOT know about tools or execution.
-    ToolSelector (Compiler) maps verb + target + kind → ExecutionPlan.
+    Compiler maps verb + target + target_type → ExecutionPlan.
 
     Attributes:
         id: Unique task ID (e.g. "task-1")
         verb: Action verb (fixed enum, not free-form)
-        target: What to act on (e.g. "runtime.py", "ProjectIndex", "workflows")
-        kind: Type of target ("file", "symbol", "directory", "workflow", "tool", "concept")
+        target: What to act on (file path / symbol name / free text)
+        kind: Legacy target kind — kept for compat; prefer target_type
+        target_type: Contract type: "file" | "symbol" | "text" | "none"
         goal: Human-readable description
         dependencies: IDs of tasks that must complete first
+        status: runtime state (pending/running/succeeded/failed/skipped)
         policy: Execution policy (retry/budget/validator/tool_policy/executor)
     """
     id: str
-    verb: Verb
-    target: str
-    kind: str = ""                     # "file", "symbol", "directory", ...
+    verb: Verb = Verb.READ
+    target: str = ""
+    kind: str = ""                     # legacy; prefer target_type
+    target_type: str = "none"          # "file" | "symbol" | "text" | "none"
     goal: str = ""
-    dependencies: list[str] = field(default_factory=list)
+    dependencies: list[str] = Field(default_factory=list)
     status: str = "pending"            # runtime state, not part of plan
-    policy: TaskPolicy = field(default_factory=TaskPolicy)
+    policy: TaskPolicy = Field(default_factory=TaskPolicy)
+
+    @model_validator(mode="after")
+    def _check_target_contract(self) -> "Task":
+        """Semantic check: file/symbol targets must be non-empty (ADR-0002)."""
+        if self.target_type in ("file", "symbol") and not self.target.strip():
+            raise ValueError(
+                f"target_type={self.target_type} 但 target 为空。"
+                f"file/symbol 类型必须提供具体路径或符号名，禁止中文描述。"
+            )
+        return self
 
     def to_dict(self) -> dict:
         """Serialize to dict for LLM output parsing backward compat."""
-        return {
-            "id": self.id,
-            "verb": self.verb.value,
-            "target": self.target,
-            "kind": self.kind,
-            "goal": self.goal or f"{self.verb.value} {self.target}",
-            "dependencies": list(self.dependencies),
-            "status": self.status,
-        }
+        d = self.model_dump()
+        d["verb"] = self.verb.value
+        return d
 
     @staticmethod
     def from_dict(d: dict) -> "Task":
-        """Deserialize from dict (Planner JSON output)."""
-        verb_str = d.get("verb", "RESOLVE")
+        """Deserialize from dict (Planner JSON output / legacy task dicts)."""
+        data = dict(d)
+        data.setdefault("target_type", "none")
+        data.setdefault("target", "")
+        data.setdefault("kind", "")
+        data.setdefault("status", "pending")
+        verb_str = data.get("verb", "read")
         try:
-            verb = Verb(verb_str.lower())
+            data["verb"] = Verb(verb_str.lower())
         except ValueError:
-            verb = Verb.RESOLVE
+            data["verb"] = Verb.READ
         policy_data = d.get("policy") or {}
-        return Task(
-            id=d.get("id", "task-1"),
-            verb=verb,
-            target=d.get("target", ""),
-            kind=d.get("kind", ""),
-            goal=d.get("goal", ""),
-            dependencies=d.get("dependencies", []),
-            status=d.get("status", "pending"),
-            policy=TaskPolicy(
-                executor=policy_data.get("executor", "tool"),
-                max_retries=policy_data.get("max_retries", 0),
-                timeout=policy_data.get("timeout"),
-                max_tokens=policy_data.get("max_tokens"),
-                budget=policy_data.get("budget"),
-            ),
-        )
+        data["policy"] = TaskPolicy(**policy_data) if isinstance(policy_data, dict) else TaskPolicy()
+        return Task(**data)
 
 
 @dataclass
@@ -146,20 +150,23 @@ class ExecutionStep:
 
 @dataclass
 class ExecutionPlan:
-    """Deterministic execution plan produced by ToolSelector (Compiler).
+    """Deterministic execution plan produced by Compiler.
 
-    No LLM involved — pure rule-based mapping from Task.
+    This is the ONLY IR (intermediate representation) Executor may consume
+    (ADR-0001, Principle 8). Immutable-by-convention.
 
     Attributes:
         task: The Task this plan executes.
         steps: Ordered atomic tool invocations.
         executor: Which executor should run this plan.
-            "tool" → PlanExecutor (deterministic step execution).
+            "tool" → ToolExecutor (deterministic step execution).
             "llm" → LLMExecutor (open-ended reasoning, steps empty).
+        metadata: Plan metadata (trace, source, etc.).
     """
     task: Task
     steps: list[ExecutionStep] = field(default_factory=list)
     executor: str = "tool"
+    metadata: Optional[Dict] = None
 
     def to_dict(self) -> dict:
         return {

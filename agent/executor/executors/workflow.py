@@ -5,10 +5,11 @@ Workflow 不是执行体系，而是 Task Generator。
 1. 按拓扑序迭代 Stage
 2. 每个 Stage 投影为统一 Task（stage.to_task()）
 3. 通过 Compiler（ToolSelector）编译 Task → ExecutionPlan
-4. 按 plan.executor 分发：llm → LLMExecutor（纯推理）/ tool → PlanExecutor（确定性步骤）
+4. 通过 ExecutorFactory 分发：llm → LLMExecutor / tool → ToolExecutor
 5. 保留 Stage 的编排能力：Prompt 渲染、required_outputs 跳过、validator、retry、Artifact 回填
 
 不再拥有独立的 Stage 执行体系（ExecutorRegistry / StageToolExecutor / StageLLMExecutor）。
+Phase B.4：从 agent/executor/work 草稿正式化；_execute_plan 统一走 ExecutorFactory。
 """
 import logging
 import re
@@ -19,8 +20,7 @@ from agent.workflow import Workflow, ExecutionContext, Artifact, ExecutionResult
 from agent.prompts.workflow import PromptRegistry
 from agent.selector.tool_selector import ToolSelector
 from agent.selector.rules import DEFAULT_RULES
-from agent.executor.llm_executor import llm_executor
-from agent.executor.plan_executor import plan_executor
+from agent.executor.contract import executor_factory
 
 logger = logging.getLogger(__name__)
 
@@ -138,7 +138,7 @@ class WorkflowExecutor:
         result.outputs["_summary"] = summary
         return result
 
-    # ── 统一执行分发 ──
+    # ── 统一执行分发（ExecutorFactory，无 if/elif 选择逻辑）──
 
     async def _execute_plan(
         self,
@@ -146,28 +146,10 @@ class WorkflowExecutor:
         task: Task,
         context: ExecutionContext,
     ) -> ExecutionResult:
-        """按 plan.executor 分发到 LLMExecutor 或 PlanExecutor。"""
-        if plan.is_llm:
-            return await llm_executor.execute(task, context)
-
-        # 确定性工具执行
-        ws = context.get_var("workspace")
-        plan_result = await plan_executor.execute(plan, workspace=ws)
-
-        if plan_result.get("_error"):
-            return ExecutionResult(
-                success=False,
-                error=plan_result["_error"],
-                outputs={},
-                metadata={"executor": "tool", "task_id": task.id},
-            )
-
-        content = plan_result.get("_last_output", "")
-        return ExecutionResult(
-            success=True,
-            outputs={"text": content},
-            metadata={"executor": "tool", "task_id": task.id},
-        )
+        """按 plan.executor 通过 ExecutorFactory 分发。"""
+        context.set_var("execution_plan", plan)
+        executor = executor_factory.get(plan.executor)
+        return await executor.execute(task, context)
 
     # ── 辅助 ──
 
@@ -193,3 +175,4 @@ class WorkflowExecutor:
         if q:
             return f"问题已读取: {len(q.content)} 字符"
         return "工作流执行完成"
+

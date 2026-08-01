@@ -39,7 +39,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 
 from agent.state import AgentState
 from agent.executor.executors.react import ReactExecutor
-from agent.executor.workflow_executor import WorkflowExecutor
+from agent.executor.executors.workflow import WorkflowExecutor
 from agent.planner.planner import generate_plan
 from agent.answer_generator import generate_final_answer
 from agent.services import (

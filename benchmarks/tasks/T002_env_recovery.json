@@ -1,0 +1,9 @@
+{
+  "id": "T002",
+  "name": "env_recovery",
+  "category": "environment",
+  "cwd": "benchmarks/_fixtures/repos/T002_env_recovery",
+  "prompt": "benchmarks/_fixtures/repos/T002_env_recovery 项目的 main.py 当前无法运行。请诊断原因并修复（注意：没有网络，不能 pip install 外部包），最终让 `python benchmarks/_fixtures/repos/T002_env_recovery/main.py` 输出 Hello, TSAgent!",
+  "verify": "benchmarks/_fixtures/verify/T002_verify.py",
+  "timeout": 300
+}

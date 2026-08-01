@@ -1,0 +1,9 @@
+{
+  "id": "T001",
+  "name": "file_location",
+  "category": "context",
+  "cwd": "benchmarks/_fixtures/repos/T001_file_location",
+  "prompt": "仓库 benchmarks/_fixtures/repos/T001_file_location 中的计算模块有一个 bug，导致负数相加的结果不正确。请定位问题所在文件并修复它，然后运行该仓库的 tests/test_add.py 确认三个测试全部通过。",
+  "verify": "benchmarks/_fixtures/verify/T001_verify.py",
+  "timeout": 300
+}

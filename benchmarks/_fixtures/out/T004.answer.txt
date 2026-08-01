@@ -1,0 +1,11 @@
+# server.py
+"""极简 HTTP 服务（标准库实现，无第三方依赖）。"""
+import json
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+
+class Handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == "/":
+            body = json.dumps({"message": "hello"}).encode()
+            self.send_response(2

@@ -1,0 +1,9 @@
+{
+  "id": "T008",
+  "name": "self_correction",
+  "category": "recovery",
+  "cwd": "benchmarks/_fixtures/repos/T008_self_correction",
+  "prompt": "仓库 benchmarks/_fixtures/repos/T008_self_correction 中 tests/test_target.py 有测试失败。请运行测试，修复 target.py 的 compute 函数使所有测试通过。注意：负数输入也需要正确处理。",
+  "verify": "benchmarks/_fixtures/verify/T008_verify.py",
+  "timeout": 360
+}

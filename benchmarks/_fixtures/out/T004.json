@@ -1,0 +1,16 @@
+{
+  "task": "T004",
+  "name": "feature_add",
+  "category": "planning",
+  "result": "fail",
+  "answer": "# server.py\n\"\"\"极简 HTTP 服务（标准库实现，无第三方依赖）。\"\"\"\nimport json\nfrom http.server import BaseHTTPRequestHandler, HTTPServer\n\n\nclass Handler(BaseHTTPRequestHandler):\n    def do_GET(self):\n        if self.path == \"/\":\n            body = json.dumps({\"message\": \"hello\"}).encode()\n            self.send_response(2",
+  "verify_output": "server did not start\n",
+  "elapsed_s": 29.9,
+  "error": "",
+  "trace": "  🧠 认知上下文: 对话轮次: 最近1轮\n  🔍 引用消歧: 无需消歧\n  🧠 意图: Intent(domain=development, action=add_endpoint, target='benchmarks/_fixtures/repos/T004_feature_add/server.py', entities=['GET /health', 'GET /', 'python'], current_file='', conf=0.95, exec=True)\n  🎯 Workspace 解析 target: benchmarks/_fixtures/repos/T004_feature_add/server.py → /Users/tsxg/Desktop/TSAgent/benchmarks/_fixtures/repos/T004_feature_add/server.py\n\n==================================================\n🚀 路由到 Workflow: <function feature_dev_workflow at 0x1464da020>\n==================================================\n\n============================================================\n📋 执行计划（Task 分解）\n============================================================\n  task-1: read /Users/tsxg/Desktop/TSAgent/benchmarks/_fixtures/repos/T004_feature_add/server.py\n  task-2: analyze /Users/tsxg/Desktop/TSAgent/benchmarks/_fixtures/repos/T004_feature_add/server.py\n  task-3: modify /Users/tsxg/Desktop/TSAgent/benchmarks/_fixtures/repos/T004_feature_add/server.py\n  task-4: verify /Users/tsxg/Desktop/TSAgent/benchmarks/_fixtures/repos/T004_feature_add/server.py\n============================================================\n\n  🔀 Compiler: task-1 → tool_executor\n  🔀 Compiler: task-2 → tool_executor\n  🔀 Compiler: task-3 → tool_executor\n  🔀 Compiler: task-4 → tool_executor\n\n==================================================\n⏱️  启动耗时 Profile\n==================================================\n  TOTAL                  0.00s\n==================================================\n\n==================================================\n⚡ 执行耗时 Profile\n==================================================\n  plan                  14.34s  ██████░░░░░░░░░░░░░░ 32%\n  plan_llm              14.34s  ██████░░░░░░░░░░░░░░ 32%\n  executor              11.94s  █████░░░░░░░░░░░░░░░ 27%\n  init                   3.17s  █░░░░░░░░░░░░░░░░░░░ 7%\n  answer_gen             0.34s  ░░░░░░░░░░░░░░░░░░░░ 1%\n  TOTAL                 44.12s\n==================================================\n\n",
+  "failure_category": [
+    "execution",
+    "verification"
+  ],
+  "first_wrong_step": 2
+}

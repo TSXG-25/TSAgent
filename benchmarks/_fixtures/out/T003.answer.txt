@@ -1,0 +1,7 @@
+{
+  "id": "T003",
+  "name": "bug_fix",
+  "category": "verification",
+  "cwd": "benchmarks/_fixtures/repos/T003_bug_fix",
+  "prompt": "仓库 benchmarks/_fixtures/repos/T003_bug_fix 中 tests/test_calc.py 有一个测试失败。请运行测试找到失败原因，修复 src 下的代码，最终让该仓库的所有测试通过。",
+  "verify": "benchmarks/_fixtures/verify/T003_verify.

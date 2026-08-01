@@ -1,0 +1,9 @@
+{
+  "id": "T005",
+  "name": "refactor",
+  "category": "long_task",
+  "cwd": "benchmarks/_fixtures/repos/T005_refactor",
+  "prompt": "仓库 benchmarks/_fixtures/repos/T005_refactor 的 utils.py 中 handle_data 函数过于庞大。请把它拆分成 parse_row、transform_row、validate_row 三个小函数，并让 handle_data 编排它们。拆分后必须保证 tests/test_utils.py 的所有测试全部通过（行为不变）。",
+  "verify": "benchmarks/_fixtures/verify/T005_verify.py",
+  "timeout": 360
+}

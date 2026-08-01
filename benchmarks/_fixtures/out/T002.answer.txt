@@ -1,0 +1,11 @@
+"""ExecutionOrchestrator — 执行编排容器。
+
+Runtime 只做状态机迁移。
+Orchestrator 负责任务编排：
+- PLAN 阶段：ContextBuilder 构建上下文 → PlannerStage 规划
+- EXECUTE 阶段：ExecutionStage 分发执行
+- 后处理：Finalizer 生成答案并提交记忆
+
+Phase C.1：从 orchestrator.py 拆包。
+共享状态（timings / selector / conversation_state / replan_count）保留在容器，
+各 Stage 通过 self._o

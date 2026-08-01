@@ -1,0 +1,9 @@
+{
+  "id": "T006",
+  "name": "repo_research",
+  "category": "context",
+  "cwd": "benchmarks/_fixtures/repos/T006_repo_research",
+  "prompt": "请分析仓库 benchmarks/_fixtures/repos/T006_repo_research 的架构。阅读其中的代码，输出一份简洁的架构报告，必须包含：核心模块及其职责、模块间依赖关系、一条典型的数据流（从入口到结果）。报告用中文。",
+  "verify": "benchmarks/_fixtures/verify/T006_verify.py",
+  "timeout": 360
+}

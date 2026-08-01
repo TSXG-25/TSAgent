@@ -1,0 +1,16 @@
+{
+  "task": "T006",
+  "name": "repo_research",
+  "category": "context",
+  "result": "fail",
+  "answer": "{\n  \"id\": \"T006\",\n  \"name\": \"repo_research\",\n  \"category\": \"context\",\n  \"cwd\": \"benchmarks/_fixtures/repos/T006_repo_research\",\n  \"prompt\": \"请分析仓库 benchmarks/_fixtures/repos/T006_repo_research 的架构。阅读其中的代码，输出一份简洁的架构报告，必须包含：核心模块及其职责、模块间依赖关系、一条典型的数据流（从入口到结果）。报告用中文。\",\n  \"verify\": \"benchmarks/_fixtures/v",
+  "verify_output": "ANSWER_LEN=300\nKEYWORD_HITS=[]\n",
+  "elapsed_s": 27.2,
+  "error": "",
+  "trace": "  🧠 认知上下文: 当前文件: benchmarks/tasks/T003_bug_fix.json | 对话轮次: 最近1轮\n  🔍 引用消歧: 无需消歧\n  🧠 意图: Intent(domain=development, action=analyze, target='benchmarks/_fixtures/repos/T006_repo_research', entities=['benchmarks/_fixtures/repos/T006_repo_research'], current_file='benchmarks/tasks/T003_bug_fix.json', conf=0.98, exec=True)\n  🎯 Workspace 解析 target: benchmarks/_fixtures/repos/T006_repo_research → /Users/tsxg/Desktop/TSAgent/benchmarks/tasks/T006_repo_research.json\n\n==================================================\n🚀 路由到 Workflow: <function feature_dev_workflow at 0x16c5d6020>\n==================================================\n\n============================================================\n📋 执行计划（Task 分解）\n============================================================\n  task-1: read /Users/tsxg/Desktop/TSAgent/benchmarks/tasks/T006_repo_research.json\n  task-2: analyze /Users/tsxg/Desktop/TSAgent/benchmarks/tasks/T006_repo_research.json\n  task-3: modify /Users/tsxg/Desktop/TSAgent/benchmarks/tasks/T006_repo_research.json\n  task-4: verify /Users/tsxg/Desktop/TSAgent/benchmarks/tasks/T006_repo_research.json\n============================================================\n\n  🔀 Compiler: task-1 → tool_executor\n  🔀 Compiler: task-2 → tool_executor\n  🔀 Compiler: task-3 → tool_executor\n  🔀 Compiler: task-4 → tool_executor\n\n==================================================\n⏱️  启动耗时 Profile\n==================================================\n  TOTAL                  0.00s\n==================================================\n\n==================================================\n⚡ 执行耗时 Profile\n==================================================\n  executor              14.66s  █████████░░░░░░░░░░░ 47%\n  init                   7.86s  ████░░░░░░░░░░░░░░░░ 25%\n  plan                   4.41s  ██░░░░░░░░░░░░░░░░░░ 14%\n  plan_llm               4.41s  ██░░░░░░░░░░░░░░░░░░ 14%\n  answer_gen             0.18s  ░░░░░░░░░░░░░░░░░░░░ 1%\n  TOTAL                 31.52s\n==================================================\n\n",
+  "failure_category": [
+    "tool_selection",
+    "context"
+  ],
+  "first_wrong_step": 1
+}

@@ -233,38 +233,58 @@ class PlannerStage:
                 self._orch._timings["plan_llm"] = round(time.perf_counter() - t0, 3)
                 return state, "EXECUTE", None
         else:
-            # 未命中 Workflow → Planner 兜底
+            # 未命中 Workflow → Planner 兜底（带契约校验 + Retry，PR-4）
             print(f"\n📋 无匹配 Workflow（{wf_reason}），使用 Planner 生成计划。")
-            plan = await generate_plan(
-                user_input, context.get("short_term", ""),
-                repo_context, skill_hint, None,
-            )
-            for i, t in enumerate(plan):
-                t.setdefault("id", f"task-{i+1}")
-                t.setdefault("status", "pending")
-                t.setdefault("observations", [])
-                t.setdefault("error", "")
-                t.setdefault("children", [])
-                t.setdefault("description", "")
-                t.setdefault("dependencies", [])
-            self._print_plan(plan)
-
-            # ── Stage 4: ToolSelector 将 Task dict → ExecutionPlan ──
             ws_service = None
             try:
                 ws_service = get_workspace_service()
             except Exception:
                 pass
 
+            plan = None
             execution_plans = []
-            for t in plan:
-                task_obj = self._dict_to_task(t)
+            last_error = ""
+            planner_input = user_input
+            for attempt in range(3):
                 try:
-                    ep = self._orch._selector.select(task_obj, workspace=ws_service, registry=_tool_registry)
+                    plan = await generate_plan(
+                        planner_input, context.get("short_term", ""),
+                        repo_context, skill_hint, None,
+                    )
+                    for i, t in enumerate(plan):
+                        t.setdefault("id", f"task-{i+1}")
+                        t.setdefault("status", "pending")
+                        t.setdefault("observations", [])
+                        t.setdefault("error", "")
+                        t.setdefault("children", [])
+                        t.setdefault("description", "")
+                        t.setdefault("dependencies", [])
+                    self._print_plan(plan)
+
+                    # 契约校验 + 编译（编译期错误 → retry）
+                    execution_plans = []
+                    for t in plan:
+                        task_obj = self._dict_to_task(t)
+                        ep = self._orch._selector.select(
+                            task_obj, workspace=ws_service, registry=_tool_registry,
+                        )
+                        execution_plans.append(ep)
+                    break
                 except Exception as e:
-                    print(f"  ⚠️ ToolSelector 失败 ({t.get('id', '?')}: {e})，使用空 plan")
-                    ep = ExecutionPlan(task=task_obj)
-                execution_plans.append(ep)
+                    last_error = str(e)
+                    print(f"  ⚠️ Planner 输出不合法（{attempt+1}/3）: {last_error}")
+                    planner_input = (
+                        f"你上一次输出的计划不合法，需要修正后重新输出。\n"
+                        f"错误：{last_error}\n"
+                        f"规则：verb 必须是 read/write/modify/execute/search/list/explain/delete/move/resolve；\n"
+                        f"target_type=file 时 target 必须是具体文件路径（禁止中文描述）；\n"
+                        f"示例：{{\"verb\": \"read\", \"target\": \"output/solution.py\", \"target_type\": \"file\"}}\n\n"
+                        f"原始需求：{user_input}"
+                    )
+
+            if plan is None:
+                print("❌ Planner 连续 3 次输出不合法，任务失败（PlanningFailure，不进入执行链）")
+                return state, "FAIL", None
 
             state["execution_plans"] = execution_plans
             state["plan"] = plan
@@ -395,17 +415,23 @@ class PlannerStage:
                 verb_str = verb_str or "read"
                 target = target or ""
 
-        # 解析 verb
-        try:
-            verb = Verb(verb_str.lower())
-        except ValueError:
+        # 解析 verb（严格契约：planner 显式输出的非法 verb 必须抛错触发 retry）
+        if verb_str:
+            try:
+                verb = Verb(verb_str.lower())
+            except ValueError:
+                raise ValueError(
+                    f"task {d.get('id', '?')}: 非法 verb {verb_str!r}。"
+                    f"合法值: {[v.value for v in Verb]}"
+                ) from None
+        else:
             verb = Verb.READ
 
         return Task(
             id=d.get("id", "task-1"),
             verb=verb,
             target=target,
-            target_type=Task._infer_target_type(target),
+            target_type=d.get("target_type") or Task._infer_target_type(target),
             goal=goal,
             dependencies=d.get("dependencies", []),
             status=d.get("status", "pending"),

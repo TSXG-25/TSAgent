@@ -125,10 +125,8 @@ class Task(BaseModel):
         if "target_type" not in data:
             data["target_type"] = Task._infer_target_type(data.get("target", ""))
         verb_str = data.get("verb", "read")
-        try:
-            data["verb"] = Verb(verb_str.lower())
-        except ValueError:
-            data["verb"] = Verb.READ
+        # 严格契约：非法 verb 抛 ValidationError（PR-4，Planner 必须输出合法 verb）
+        data["verb"] = Verb(verb_str.lower())
         policy_data = d.get("policy") or {}
         data["policy"] = TaskPolicy(**policy_data) if isinstance(policy_data, dict) else TaskPolicy()
         return Task(**data)

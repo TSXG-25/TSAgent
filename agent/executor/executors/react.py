@@ -1,12 +1,15 @@
-"""Executor — ReAct Loop 执行器。
+"""ReactExecutor — ReAct Loop 执行器。
 
-核心改进:
+核心改进（迁移自 agent/executor/executor.py，逻辑不变）：
 1. Compact Observation: 只存 args_preview 而非全参数
 2. Question Summarize: read_file 成功后 LLM 自动总结题目
 3. Failure Signature: hash(params) 防止完全相同重试
 4. Validator: 真实验证而非 bool Facts
 5. Tool Selection Rules: 根据任务类型注入工具选择策略
 6. Recovery: 工具失败后不 finish，继续重试
+
+Phase B.3 迁移：纯移动 + 改名（Executor → ReactExecutor）。
+ActionResolver 已在 Phase B.1 接入（_execute_action 委托）。
 """
 import asyncio
 import hashlib
@@ -64,7 +67,7 @@ TOOL_SELECTION_SYSTEM_PROMPT = """你是一个智能 Agent。根据当前目标�
 """
 
 
-class Executor:
+class ReactExecutor:
     """ReAct Loop 执行器。"""
 
     async def execute(

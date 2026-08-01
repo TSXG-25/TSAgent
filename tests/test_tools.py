@@ -140,7 +140,7 @@ def test_executor_decider():
     """
     _reload_all_tools()
 
-    from agent.executor.executor import Executor
+    from agent.executor.executors.react import ReactExecutor as Executor
     # Verify executor has ReAct loop structure
     assert hasattr(Executor, "_execute_task_react")
     assert hasattr(Executor, "_think")

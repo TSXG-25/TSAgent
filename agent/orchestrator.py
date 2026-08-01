@@ -38,7 +38,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from langchain_core.messages import SystemMessage, HumanMessage
 
 from agent.state import AgentState
-from agent.executor.executor import Executor as ReActExecutor
+from agent.executor.executors.react import ReactExecutor
 from agent.executor.workflow_executor import WorkflowExecutor
 from agent.planner.planner import generate_plan
 from agent.answer_generator import generate_final_answer
@@ -413,7 +413,7 @@ class ExecutionOrchestrator:
 
         if not execution_plans:
             # 无 ExecutionPlan（旧 Workflow 路径），走老 ReAct
-            executor = ReActExecutor()
+            executor = ReactExecutor()
             state = await executor.execute(state, tasks)
         else:
             # 新路径：Compiler 已决定执行器（plan.executor），ExecutorFactory 分发
@@ -456,7 +456,7 @@ class ExecutionOrchestrator:
                 else:
                     # ReActExecutor 执行开放式任务（Phase B.3 迁移到统一契约）
                     print(f"  🔀 Compiler: {task_dict.get('id', '?')} → react_executor")
-                    executor = ReActExecutor()
+                    executor = ReactExecutor()
                     sub_state = await executor.execute(state, [task_dict])
                     # 合并回主 state
                     updated = sub_state.get("plan", [])

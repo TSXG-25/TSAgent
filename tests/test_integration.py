@@ -163,7 +163,7 @@ def test_tool_registry_capability():
 
 def test_executor_no_tool_decider():
     """Verify Executor no longer exports ToolDecider."""
-    from agent.executor.executor import Executor
+    from agent.executor.executors.react import ReactExecutor as Executor
 
     assert hasattr(Executor, "execute")
     assert not hasattr(Executor, "ToolDecider")  # ToolDecider removed

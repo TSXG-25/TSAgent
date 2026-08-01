@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+
+venv/
+.venv/
+
+.repo_index/
+.symbol_index.json
+
+data/
+patches/
+
+.env
+.DS_Store

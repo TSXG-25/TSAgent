@@ -21,6 +21,7 @@ from agent.prompts.workflow import PromptRegistry
 from agent.compiler.tool_selector import ToolSelector
 from agent.compiler.rules import DEFAULT_RULES
 from agent.executor.contract import executor_factory
+from agent.registry.tool_registry import registry as _tool_registry
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +73,7 @@ class WorkflowExecutor:
             task = stage.to_task(goal=goal)
 
             # ── Compiler 编译 → 决定 executor ──
-            plan = self._compiler.compile(task, workspace=context.get_var("workspace"))
+            plan = self._compiler.compile(task, workspace=context.get_var("workspace"), registry=_tool_registry)
 
             # ── 执行（retry 由本编排层控制）──
             max_retries = task.policy.max_retries or 0

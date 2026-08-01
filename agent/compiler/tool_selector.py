@@ -115,13 +115,13 @@ class Compiler:
         # Task policy may force an executor (Stage 投影时已声明)
         if task.policy.executor == "llm":
             plan = ExecutionPlan(task=task, steps=[], executor="llm")
-            self._static_check(plan)
+            self._static_check(plan, context)
             return plan
 
         task = self._normalize(task)
         self._semantic_check(task)
         plan = self._lower(task, context)
-        self._static_check(plan)
+        self._static_check(plan, context)
         return plan
 
     def select(self, task: Task, **services) -> ExecutionPlan:
@@ -212,16 +212,31 @@ class Compiler:
     _BUILTIN_TOOLS = {
         "workspace", "repository", "knowledge", "llm",
     }
+    # filesystem.* 前缀映射到实际工具名
+    _FS_PREFIX_MAP = {
+        "filesystem.read": "read_file",
+        "filesystem.write": "write_file",
+        "filesystem.list": "list_directory",
+        "filesystem.delete": "delete_file",
+        "filesystem.move": "move_file",
+    }
 
-    def _static_check(self, plan: ExecutionPlan) -> None:
+    def _static_check(self, plan: ExecutionPlan, context: Optional[CompilerContext] = None) -> None:
         if plan.executor == "llm":
             return  # LLM plan: 无步骤，SSA 检查不适用
 
         if not plan.steps:
             raise CompileError(f"task={plan.task.id}: executor=tool 但 steps 为空")
 
+        registry = context.registry if context is not None else None
         defined: set[str] = set()
         for step in plan.steps:
+            # tool 必须存在（内置特殊工具或 ToolRegistry）
+            if registry is not None and not self._tool_exists(step.tool, registry):
+                raise CompileError(
+                    f"task={plan.task.id} step={step.tool}: 工具不存在于 ToolRegistry（编译期错误）"
+                )
+
             # outputs 非空（SSA）
             if not step.outputs:
                 raise CompileError(
@@ -242,6 +257,20 @@ class Compiler:
                         raise CompileError(
                             f"task={plan.task.id} step={step.tool}: 引用了未定义变量 '${var}'"
                         )
+
+    @classmethod
+    def _tool_exists(cls, tool: str, registry) -> bool:
+        """工具存在性：内置特殊工具 / filesystem.* 映射 / ToolRegistry 注册。"""
+        if tool in cls._BUILTIN_TOOLS:
+            return True
+        if tool.startswith("filesystem."):
+            actual = cls._FS_PREFIX_MAP.get(tool, tool.split(".", 1)[1])
+        else:
+            actual = tool
+        try:
+            return registry.get(actual) is not None
+        except Exception:
+            return True  # registry 不可用时跳过（防御）
 
     # ── Legacy SPI（保留测试兼容）──
 

@@ -128,6 +128,34 @@ class TestExecutionPlanContract:
         ])
         self.compiler._static_check(plan)  # 不抛异常
 
+    def test_tool_must_exist_in_registry(self):
+        # registry 提供时，不存在的工具 → 编译期错误
+        class FakeRegistry:
+            def get(self, name):
+                return {"read_file": object(), "write_file": object()}.get(name)
+
+        from agent.compiler.context import CompilerContext
+        from agent.task import ExecutionPlan, ExecutionStep
+
+        task = Task(id="t1", verb=Verb.READ, target="x.py", target_type="file", goal="g")
+        plan = ExecutionPlan(task=task, steps=[ExecutionStep(tool="nonexistent_tool", args={}, outputs=["o"])])
+        with pytest.raises(CompileError, match="工具不存在"):
+            self.compiler._static_check(plan, CompilerContext(registry=FakeRegistry()))
+
+    def test_filesystem_prefix_maps_to_registered_tool(self):
+        from agent.compiler.context import CompilerContext
+        from agent.task import ExecutionPlan, ExecutionStep
+
+        class FakeRegistry:
+            def get(self, name):
+                return {"read_file": object()}.get(name)
+
+        task = Task(id="t1", verb=Verb.READ, target="x.py", target_type="file", goal="g")
+        plan = ExecutionPlan(task=task, steps=[
+            ExecutionStep(tool="filesystem.read", args={"path": "a"}, outputs=["c"]),
+        ])
+        self.compiler._static_check(plan, CompilerContext(registry=FakeRegistry()))
+
     def test_compile_runs_static_check(self):
         # 完整编译入口也触发 static check：LLM executor 无步骤则跳过
         task = Task(id="t1", verb=Verb.EXPLAIN, target="解释", target_type="text", goal="g")

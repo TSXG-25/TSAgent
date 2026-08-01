@@ -41,6 +41,7 @@ from agent.cognition.intent_engine import engine as intent_engine
 from agent.cognition.intent_schema import IntentResult, DOMAIN_CHAT
 from agent.workflow import ExecutionContext, Artifact
 from agent.task import Task, Verb, ExecutionPlan
+from agent.registry.tool_registry import registry as _tool_registry
 
 
 class PlannerStage:
@@ -221,7 +222,7 @@ class PlannerStage:
                 for t in plan:
                     task_obj = self._dict_to_task(t)
                     try:
-                        ep = self._orch._selector.select(task_obj, workspace=ws_service)
+                        ep = self._orch._selector.select(task_obj, workspace=ws_service, registry=_tool_registry)
                     except Exception:
                         ep = ExecutionPlan(task=task_obj)
                     execution_plans.append(ep)
@@ -259,7 +260,7 @@ class PlannerStage:
             for t in plan:
                 task_obj = self._dict_to_task(t)
                 try:
-                    ep = self._orch._selector.select(task_obj, workspace=ws_service)
+                    ep = self._orch._selector.select(task_obj, workspace=ws_service, registry=_tool_registry)
                 except Exception as e:
                     print(f"  ⚠️ ToolSelector 失败 ({t.get('id', '?')}: {e})，使用空 plan")
                     ep = ExecutionPlan(task=task_obj)
@@ -334,7 +335,7 @@ class PlannerStage:
         for t in new_plan:
             task_obj = self._dict_to_task(t)
             try:
-                ep = self._orch._selector.select(task_obj, workspace=ws_service)
+                ep = self._orch._selector.select(task_obj, workspace=ws_service, registry=_tool_registry)
             except Exception:
                 ep = ExecutionPlan(task=task_obj)
             execution_plans.append(ep)

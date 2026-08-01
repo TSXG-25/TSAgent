@@ -60,7 +60,10 @@ class PlanExecutor:
 
                 # 处理结果
                 for out_key in step.outputs:
-                    value = result.get(out_key) if isinstance(result, dict) else result
+                    value = result.get(out_key)
+                    if value is None and isinstance(result, dict) and "content" in result:
+                        # 缺失的输出键回退到 content（如 llm 步骤声明 new_content 但返回 content）
+                        value = result["content"]
                     variables[out_key] = str(value)
 
                 # 记录文本摘要
@@ -144,6 +147,31 @@ class PlanExecutor:
             response = await llm_engine.ainvoke(messages)
             content = response.content if hasattr(response, 'content') else str(response)
             return {"content": content, "text": content}
+
+        # ── 特殊处理：repository 语义搜索（RepositoryService）──
+        if tool_name == "repository":
+            from agent.services import RepositoryService
+
+            query = str(args.get("query", args.get("spec", "")))
+            k = int(args.get("k", 5))
+            hits = RepositoryService.search_similar(query, k=k)
+            if hits:
+                content = "\n\n".join(
+                    f"[{h['path']}]\n{h['content'][:300]}" for h in hits
+                )
+            else:
+                content = "未找到相关代码"
+            return {"content": content, "results": content, "text": content}
+
+        # ── 特殊处理：knowledge 列出能力（工具 + 工作流）──
+        if tool_name == "knowledge":
+            from agent.registry.tool_registry import registry as tr
+            from agent.registry.workflow_registry import workflow_registry
+
+            tools = ", ".join(sorted(tr.get_all().keys()))
+            wfs = ", ".join(workflow_registry.list())
+            content = f"可用工具: {tools}\n可用工作流: {wfs}"
+            return {"content": content, "items": content, "text": content}
 
         # ── 规范化工具名 ──
         actual_name = tool_name

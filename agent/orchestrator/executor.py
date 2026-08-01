@@ -43,7 +43,7 @@ class ExecutionStage:
         else:
             # 新路径：Compiler 已决定执行器（plan.executor），ExecutorFactory 分发
             for idx, task_dict in enumerate(tasks):
-                task_obj = self._orch._dict_to_task(task_dict) if idx < len(tasks) else None
+                task_obj = self._orch._planner._dict_to_task(task_dict) if idx < len(tasks) else None
                 plan = execution_plans[idx] if idx < len(execution_plans) else None
 
                 if plan is not None and plan.executor == "tool":

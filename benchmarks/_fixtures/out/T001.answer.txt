@@ -1,1 +1,2 @@
-已写入 None
+命令执行失败 (code 126):
+/bin/sh: benchmarks/_fixtures/repos/T001_file_location/tests/test_add.py: Permission denied

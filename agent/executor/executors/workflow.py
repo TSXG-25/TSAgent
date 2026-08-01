@@ -18,8 +18,8 @@ from typing import Any, Dict, List, Optional
 from agent.task import Task, ExecutionPlan
 from agent.workflow import Workflow, ExecutionContext, Artifact, ExecutionResult
 from agent.prompts.workflow import PromptRegistry
-from agent.selector.tool_selector import ToolSelector
-from agent.selector.rules import DEFAULT_RULES
+from agent.compiler.tool_selector import ToolSelector
+from agent.compiler.rules import DEFAULT_RULES
 from agent.executor.contract import executor_factory
 
 logger = logging.getLogger(__name__)

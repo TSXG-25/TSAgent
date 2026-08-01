@@ -164,6 +164,33 @@ class TestToolExecutor:
         assert "execution_plan" in result.error
 
 
+class TestReactBudget:
+    """ReactExecutor budget 接入：max_steps 控制 ReAct 循环。"""
+
+    def test_budget_overrides_max_iterations(self):
+        from agent.executor.executors.react import ReactExecutor
+        from agent.workflow.budget import BudgetSpec
+
+        ex = ReactExecutor(budget=BudgetSpec(max_steps=3))
+        assert ex._max_iterations() == 3
+
+    def test_default_max_iterations(self):
+        from agent.executor.executors.react import ReactExecutor
+
+        ex = ReactExecutor()
+        assert ex._max_iterations() == 8
+
+    def test_no_budget_no_manager(self):
+        from agent.executor.executors.react import ReactExecutor
+
+        ex = ReactExecutor()
+        assert ex._budget_manager is None
+        ex2 = ReactExecutor(budget=__import__(
+            "agent.workflow.budget", fromlist=["BudgetSpec"]
+        ).BudgetSpec())
+        assert ex2._budget_manager is not None
+
+
 class TestStageToTask:
     """Stage.to_task() 投影到统一 Task 模型。"""
 

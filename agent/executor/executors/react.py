@@ -25,6 +25,7 @@ from agent.services.context_service import ContextService
 from agent.state import AgentState
 from agent.executor.dag import resolve_dag, flatten_tree
 from agent.validators import validator
+from agent.workflow.budget import BudgetManager, BudgetSpec
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +70,21 @@ TOOL_SELECTION_SYSTEM_PROMPT = """你是一个智能 Agent。根据当前目标�
 
 class ReactExecutor:
     """ReAct Loop 执行器。"""
+
+    def __init__(self, budget: Optional[BudgetSpec] = None):
+        """初始化执行器。
+
+        Args:
+            budget: 资源预算（max_steps 控制 ReAct 循环步数）。
+                未提供时回退到模块级 MAX_THINK_ITERATIONS。
+        """
+        self._budget_manager = BudgetManager(budget) if budget is not None else None
+
+    def _max_iterations(self) -> int:
+        """获取最大 Think 迭代次数（budget 优先，默认 MAX_THINK_ITERATIONS）。"""
+        if self._budget_manager is not None:
+            return self._budget_manager.spec.max_steps
+        return MAX_THINK_ITERATIONS
 
     async def execute(
         self,
@@ -170,8 +186,10 @@ class ReactExecutor:
 
         iteration = 0
         consecutive_finish_fails = 0
-        while iteration < MAX_THINK_ITERATIONS:
+        while iteration < self._max_iterations():
             iteration += 1
+            if self._budget_manager is not None:
+                self._budget_manager.count_step()
             action = await self._think(state, task)
 
             if action.get("action") == "finish":
@@ -248,7 +266,7 @@ class ReactExecutor:
                 )
                 # P0-3 Recovery: tool 失败后不走 validator，直接继续 Think
                 # (不要在这里 finish，让 LLM 换工具重试)
-                print(f"   🔄 失败后不结束，继续尝试 (第 {iteration}/{MAX_THINK_ITERATIONS} 轮)")
+                print(f"   🔄 失败后不结束，继续尝试 (第 {iteration}/{self._max_iterations()} 轮)")
                 continue
 
             print(f"   ➡️ {observation.get('summary', '')[:100]}")
@@ -261,7 +279,7 @@ class ReactExecutor:
 
         else:
             task["status"] = "failed"
-            task["error"] = f"超过最大迭代次数 ({MAX_THINK_ITERATIONS})"
+            task["error"] = f"超过最大迭代次数 ({self._max_iterations()})"
 
         EventService.emit("task_end", {
             "task": task["id"],

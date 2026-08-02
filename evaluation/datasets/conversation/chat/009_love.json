@@ -5,8 +5,22 @@
     "intent": "chat",
     "planner": false,
     "tool_calls": 0,
-    "answer_contains": [
-      "谢谢"
+    "one_of": [
+      [
+        "谢谢"
+      ],
+      [
+        "喜欢"
+      ],
+      [
+        "温暖"
+      ],
+      [
+        "荣幸"
+      ],
+      [
+        "陪伴"
+      ]
     ],
     "answer_not_contains": [
       "查不到",

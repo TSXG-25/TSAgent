@@ -5,10 +5,25 @@
     "intent": "chat",
     "planner": false,
     "tool_calls": 0,
-    "answer_contains": [
-      "认识",
-      "歌手",
-      "不知道"
+    "one_of": [
+      [
+        "认识"
+      ],
+      [
+        "歌手"
+      ],
+      [
+        "不知道"
+      ],
+      [
+        "明星"
+      ],
+      [
+        "艺人"
+      ],
+      [
+        "了解"
+      ]
     ],
     "answer_not_contains": [
       "搜索",

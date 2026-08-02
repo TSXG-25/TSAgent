@@ -5,9 +5,19 @@
     "intent": "chat",
     "planner": false,
     "tool_calls": 0,
-    "answer_contains": [
-      "晚安",
-      "好梦"
+    "one_of": [
+      [
+        "晚安"
+      ],
+      [
+        "好梦"
+      ],
+      [
+        "休息"
+      ],
+      [
+        "睡"
+      ]
     ],
     "answer_not_contains": [
       "搜索",

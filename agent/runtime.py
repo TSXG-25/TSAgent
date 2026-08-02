@@ -3,7 +3,12 @@
 Runtime 只做状态迁移。
 真正的业务逻辑全部委托给 ExecutionOrchestrator。
 这样 Runtime 永远不会变胖。
+
+P0.1: Runtime Recovery —— 最后一道防线。
+任何 Exception 都被 Runtime 捕获 → 结构化分类 → 友好回答 → Session 继续。
+Python Traceback 永不暴露到 CLI。
 """
+import logging
 import time
 from enum import Enum
 from agent.services import MemoryService, RepositoryService, ArtifactService
@@ -12,6 +17,8 @@ from agent.registry.skill_registry import skill_registry
 from agent.state import AgentState
 from agent.orchestrator import ExecutionOrchestrator
 from agent.bootstrap import print_timings as print_bootstrap_timings
+
+logger = logging.getLogger(__name__)
 
 
 class RuntimeState(str, Enum):
@@ -70,6 +77,39 @@ class UniversalAgent:
         print(f"  {'TOTAL':20s} {total:>6.2f}s")
         print("=" * 50 + "\n")
 
+    def _recover(self, e: Exception, user_input: str, user_id: str) -> str:
+        """Runtime Recovery：异常 → 结构化分类 → 友好回答 → Session 继续。
+
+        返回最终答案；Traceback 永不暴露到 CLI。
+        """
+        layer, code, friendly = self._classify(e)
+        logger.error("Runtime recovered: layer=%s code=%s error=%s", layer, code, e)
+        # 结构化记录（供 Recovery Dataset / Metrics）
+        event_bus.emit("runtime_recovered", {
+            "layer": layer, "error_code": code, "error": str(e)[:300],
+        })
+        answer = f"抱歉，刚才在处理「{user_input[:30]}」时遇到了一点问题（{friendly}），请换一种说法再试试。"
+        try:
+            MemoryService.record_full_exchange(user_id, user_input, answer)
+        except Exception:
+            pass
+        return answer
+
+    @staticmethod
+    def _classify(e: Exception) -> tuple:
+        """异常 → (layer, error_code, friendly_hint)。"""
+        name = type(e).__name__
+        msg = str(e)
+        if "unexpected keyword" in msg or "TypeError" in msg:
+            return "integration", "TOOL_CONTRACT", "接口参数不匹配"
+        if "TimeoutError" in name or "timeout" in msg.lower():
+            return "tool", "TOOL_TIMEOUT", "工具执行超时"
+        if "ValidationError" in name or "validation" in msg.lower():
+            return "compiler", "CONTRACT_VIOLATION", "计划不合法"
+        if "KeyError" in name or "IndexError" in name:
+            return "runtime", "DATA_ACCESS", "内部数据访问异常"
+        return "runtime", f"{name.upper()}", "内部错误"
+
     async def run(self, user_input: str) -> str:
         """主入口：状态机循环。"""
         # ── 初始化 ──
@@ -105,45 +145,52 @@ class UniversalAgent:
         }
         best_answer = None
 
-        while rt_state not in (RuntimeState.FINISH, RuntimeState.FAIL):
-            if rt_state == RuntimeState.INIT:
-                rt_state = RuntimeState.PLAN
+        # ── 状态机循环（P0.1: Runtime Recovery 最后防线）──
+        try:
+            while rt_state not in (RuntimeState.FINISH, RuntimeState.FAIL):
+                if rt_state == RuntimeState.INIT:
+                    rt_state = RuntimeState.PLAN
 
-            elif rt_state == RuntimeState.PLAN:
-                # 委托 Orchestrator
-                state, next_state, answer = await self.orchestrator.plan(
-                    user_input=normalized_input,
-                    user_id=self.user_id,
-                    context=context,
-                    repo_context=repo_context,
-                    skill_hint=skill_hint,
-                )
-                if answer:
-                    best_answer = answer
-                rt_state = RuntimeState[next_state] if isinstance(next_state, str) else next_state
-                self._timings["plan"] = self.orchestrator._timings.get("plan_llm", 0)
+                elif rt_state == RuntimeState.PLAN:
+                    # 委托 Orchestrator
+                    state, next_state, answer = await self.orchestrator.plan(
+                        user_input=normalized_input,
+                        user_id=self.user_id,
+                        context=context,
+                        repo_context=repo_context,
+                        skill_hint=skill_hint,
+                    )
+                    if answer:
+                        best_answer = answer
+                    rt_state = RuntimeState[next_state] if isinstance(next_state, str) else next_state
+                    self._timings["plan"] = self.orchestrator._timings.get("plan_llm", 0)
 
-            elif rt_state == RuntimeState.EXECUTE:
-                state, next_state = await self.orchestrator.execute(state)
-                rt_state = RuntimeState[next_state] if isinstance(next_state, str) else next_state
+                elif rt_state == RuntimeState.EXECUTE:
+                    state, next_state = await self.orchestrator.execute(state)
+                    rt_state = RuntimeState[next_state] if isinstance(next_state, str) else next_state
 
-            elif rt_state == RuntimeState.RECOVER:
-                state, next_state = await self.orchestrator.replan(
-                    state, normalized_input, self.user_id,
-                )
-                rt_state = RuntimeState[next_state] if isinstance(next_state, str) else next_state
+                elif rt_state == RuntimeState.RECOVER:
+                    state, next_state = await self.orchestrator.replan(
+                        state, normalized_input, self.user_id,
+                    )
+                    rt_state = RuntimeState[next_state] if isinstance(next_state, str) else next_state
 
-            elif rt_state == RuntimeState.NEXT_TASK:
-                best_answer = await self.orchestrator.finalize(
-                    state=state,
-                    user_input=user_input,
-                    user_id=self.user_id,
-                )
-                rt_state = RuntimeState.FINISH
+                elif rt_state == RuntimeState.NEXT_TASK:
+                    best_answer = await self.orchestrator.finalize(
+                        state=state,
+                        user_input=user_input,
+                        user_id=self.user_id,
+                    )
+                    rt_state = RuntimeState.FINISH
 
-            elif rt_state == RuntimeState.REPLAN:
-                # 已由 RECOVER 处理
-                pass
+                elif rt_state == RuntimeState.REPLAN:
+                    # 已由 RECOVER 处理
+                    pass
+        except Exception as e:
+            # P0.1: Runtime Recovery —— 不暴露 Traceback，Session 继续
+            print(f"  ⚠️ Runtime 捕获异常并恢复: {type(e).__name__}")
+            best_answer = self._recover(e, user_input, self.user_id)
+            rt_state = RuntimeState.FINISH
 
         # ── 最终输出 ──
         final_answer = await self.orchestrator.finalize(

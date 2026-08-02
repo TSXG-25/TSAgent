@@ -1,0 +1,10 @@
+{
+  "id": "G005_followup",
+  "input": "那帮我修一下刚才那个文件",
+  "expected": {
+    "intent": "modify",
+    "answer_not_contains": [
+      "Traceback"
+    ]
+  }
+}

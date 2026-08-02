@@ -1,0 +1,11 @@
+{
+  "id": "019_search",
+  "input": "搜索人工智能最新进展",
+  "expected": {
+    "intent": "knowledge",
+    "tool_calls": ">=1",
+    "answer_not_contains": [
+      "{"
+    ]
+  }
+}

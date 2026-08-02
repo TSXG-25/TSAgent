@@ -19,6 +19,8 @@ class MetricsV1:
     # 资源
     latency_ms: float = 0.0            # 平均任务耗时
     cost_usd: float = 0.0              # 平均成本
+    # 恢复能力
+    recovery_rate: float = 0.0         # Workflow/执行异常被 Runtime 捕获并继续 Session 的比例
 
     def to_dict(self) -> dict:
         return {
@@ -30,6 +32,7 @@ class MetricsV1:
             "verification_success": round(self.verification_success, 3),
             "latency_ms": round(self.latency_ms, 1),
             "cost_usd": round(self.cost_usd, 4),
+            "recovery_rate": round(self.recovery_rate, 3),
         }
 
     @staticmethod

@@ -1,0 +1,14 @@
+{
+  "id": "017_translate",
+  "input": "翻译 hello 到中文",
+  "expected": {
+    "intent": "translate",
+    "planner": false,
+    "answer_contains": [
+      "你好"
+    ],
+    "answer_not_contains": [
+      "{"
+    ]
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "id": "010_celebrity",
+  "input": "你认识蔡徐坤吗",
+  "expected": {
+    "intent": "chat",
+    "planner": false,
+    "tool_calls": 0,
+    "answer_contains": [
+      "认识",
+      "歌手",
+      "不知道"
+    ],
+    "answer_not_contains": [
+      "搜索",
+      "{"
+    ]
+  }
+}

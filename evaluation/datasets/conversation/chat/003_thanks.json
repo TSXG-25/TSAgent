@@ -1,0 +1,17 @@
+{
+  "id": "003_thanks",
+  "input": "谢谢",
+  "expected": {
+    "intent": "chat",
+    "planner": false,
+    "tool_calls": 0,
+    "answer_contains": [
+      "不客气"
+    ],
+    "answer_not_contains": [
+      "查不到",
+      "搜索",
+      "{"
+    ]
+  }
+}

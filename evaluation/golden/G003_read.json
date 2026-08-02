@@ -1,0 +1,14 @@
+{
+  "id": "G003_read",
+  "input": "读取 benchmarks/_fixtures/repos/T003_bug_fix/src/calc.py",
+  "expected": {
+    "intent": "file",
+    "planner": true,
+    "answer_contains": [
+      "divide"
+    ],
+    "answer_not_contains": [
+      "{"
+    ]
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "id": "004_laugh",
+  "input": "哈哈哈哈哈",
+  "expected": {
+    "intent": "chat",
+    "planner": false,
+    "tool_calls": 0,
+    "answer_contains": [
+      "哈哈"
+    ],
+    "answer_not_contains": [
+      "搜索",
+      "{"
+    ]
+  }
+}

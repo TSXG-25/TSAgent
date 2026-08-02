@@ -1,0 +1,14 @@
+{
+  "id": "018_math",
+  "input": "帮我算一下 15+27",
+  "expected": {
+    "intent": "math",
+    "planner": false,
+    "answer_contains": [
+      "42"
+    ],
+    "answer_not_contains": [
+      "{"
+    ]
+  }
+}

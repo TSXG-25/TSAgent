@@ -1,0 +1,12 @@
+{
+  "id": "G002_weather",
+  "input": "今天天气怎么样",
+  "expected": {
+    "intent": "knowledge",
+    "tool_calls": ">=1",
+    "answer_not_contains": [
+      "{",
+      "status"
+    ]
+  }
+}

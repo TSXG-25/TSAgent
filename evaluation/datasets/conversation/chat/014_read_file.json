@@ -1,0 +1,15 @@
+{
+  "id": "014_read_file",
+  "input": "读取 output/solution.py",
+  "expected": {
+    "intent": "file",
+    "planner": true,
+    "tool_calls": ">=1",
+    "answer_contains": [
+      "solution"
+    ],
+    "answer_not_contains": [
+      "{"
+    ]
+  }
+}

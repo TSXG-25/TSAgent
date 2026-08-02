@@ -1,0 +1,17 @@
+{
+  "id": "002_hi",
+  "input": "嗨，在吗",
+  "expected": {
+    "intent": "chat",
+    "planner": false,
+    "tool_calls": 0,
+    "answer_contains": [
+      "在",
+      "你好"
+    ],
+    "answer_not_contains": [
+      "搜索",
+      "{"
+    ]
+  }
+}

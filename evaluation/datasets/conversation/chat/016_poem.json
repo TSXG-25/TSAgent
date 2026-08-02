@@ -1,0 +1,14 @@
+{
+  "id": "016_poem",
+  "input": "给我写一首关于春天的诗",
+  "expected": {
+    "intent": "creation",
+    "planner": false,
+    "answer_contains": [
+      "春天"
+    ],
+    "answer_not_contains": [
+      "{"
+    ]
+  }
+}

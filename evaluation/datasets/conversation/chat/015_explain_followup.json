@@ -1,0 +1,10 @@
+{
+  "id": "015_explain_followup",
+  "input": "解释一下刚才的",
+  "expected": {
+    "intent": "explain",
+    "answer_not_contains": [
+      "Traceback"
+    ]
+  }
+}

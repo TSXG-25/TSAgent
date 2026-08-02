@@ -1,0 +1,17 @@
+{
+  "id": "009_love",
+  "input": "我喜欢你",
+  "expected": {
+    "intent": "chat",
+    "planner": false,
+    "tool_calls": 0,
+    "answer_contains": [
+      "谢谢"
+    ],
+    "answer_not_contains": [
+      "查不到",
+      "搜索",
+      "{"
+    ]
+  }
+}

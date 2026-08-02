@@ -1,0 +1,17 @@
+{
+  "id": "006_bye",
+  "input": "再见",
+  "expected": {
+    "intent": "chat",
+    "planner": false,
+    "tool_calls": 0,
+    "answer_contains": [
+      "再见",
+      "下次"
+    ],
+    "answer_not_contains": [
+      "搜索",
+      "{"
+    ]
+  }
+}

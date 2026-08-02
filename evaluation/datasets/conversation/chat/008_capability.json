@@ -1,0 +1,18 @@
+{
+  "id": "008_capability",
+  "input": "你会做什么",
+  "expected": {
+    "intent": "chat",
+    "planner": false,
+    "tool_calls": 0,
+    "answer_contains": [
+      "可以",
+      "帮助",
+      "文件"
+    ],
+    "answer_not_contains": [
+      "搜索",
+      "{"
+    ]
+  }
+}

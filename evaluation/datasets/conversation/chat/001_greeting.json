@@ -1,0 +1,17 @@
+{
+  "id": "001_greeting",
+  "input": "你好",
+  "expected": {
+    "intent": "chat",
+    "planner": false,
+    "tool_calls": 0,
+    "answer_contains": [
+      "你好"
+    ],
+    "answer_not_contains": [
+      "搜索",
+      "查不到",
+      "{"
+    ]
+  }
+}

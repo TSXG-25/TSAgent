@@ -1,0 +1,17 @@
+{
+  "id": "005_farewell",
+  "input": "晚安",
+  "expected": {
+    "intent": "chat",
+    "planner": false,
+    "tool_calls": 0,
+    "answer_contains": [
+      "晚安",
+      "好梦"
+    ],
+    "answer_not_contains": [
+      "搜索",
+      "{"
+    ]
+  }
+}

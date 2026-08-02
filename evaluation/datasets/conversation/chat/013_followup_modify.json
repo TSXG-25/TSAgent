@@ -1,0 +1,12 @@
+{
+  "id": "013_followup_modify",
+  "input": "那改一下",
+  "expected": {
+    "intent": "modify",
+    "planner": true,
+    "answer_not_contains": [
+      "Traceback",
+      "Error"
+    ]
+  }
+}

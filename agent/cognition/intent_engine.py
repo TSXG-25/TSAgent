@@ -51,6 +51,8 @@ _KEYWORD_MAP: list[tuple[re.Pattern, str, str, bool]] = [
     (re.compile(r'^(再见|拜拜|晚安|bye)'), DOMAIN_CHAT, "farewell", False),
     (re.compile(r'^(谢谢|感谢|谢啦|多谢|感激|thx|thanks)'), DOMAIN_CHAT, "thanks", False),
     (re.compile(r'^(你是谁|你是干嘛的|你叫什么|介绍一下你|你是谁呀)'), DOMAIN_CHAT, "identity", False),
+    (re.compile(r'^(我喜欢你|我爱你|喜欢你|我好喜欢你|好喜欢你)'), DOMAIN_CHAT, "affection", False),
+    (re.compile(r'^(你认识|认识我|你觉得我|你喜欢|你觉得)'), DOMAIN_CHAT, "social", False),
 
     # 天气
     (re.compile(r'天气|气温|温度|下雨|下雪|台风|雾霾|空气|湿度'), DOMAIN_KNOWLEDGE, "weather", True),

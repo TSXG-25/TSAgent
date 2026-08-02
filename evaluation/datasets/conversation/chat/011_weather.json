@@ -4,6 +4,23 @@
   "expected": {
     "intent": "knowledge",
     "tool_calls": ">=1",
+    "one_of": [
+      [
+        "天气"
+      ],
+      [
+        "温度"
+      ],
+      [
+        "℃"
+      ],
+      [
+        "度"
+      ],
+      [
+        "预报"
+      ]
+    ],
     "answer_not_contains": [
       "{",
       "status"

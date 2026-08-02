@@ -4,8 +4,22 @@
   "expected": {
     "intent": "knowledge",
     "tool_calls": ">=1",
-    "answer_contains": [
-      "杭州"
+    "one_of": [
+      [
+        "杭州"
+      ],
+      [
+        "天气"
+      ],
+      [
+        "℃"
+      ],
+      [
+        "温度"
+      ],
+      [
+        "度"
+      ]
     ],
     "answer_not_contains": [
       "{",

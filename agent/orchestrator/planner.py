@@ -233,13 +233,27 @@ class PlannerStage:
                 self._orch._timings["plan_llm"] = round(time.perf_counter() - t0, 3)
                 return state, "EXECUTE", None
         else:
-            # 未命中 Workflow → Planner 兜底（带契约校验 + Retry，PR-4）
+            # 未命中 Workflow → Planner 兜底（带契约校验 + Retry + Grounding，PR-7）
             print(f"\n📋 无匹配 Workflow（{wf_reason}），使用 Planner 生成计划。")
             ws_service = None
             try:
                 ws_service = get_workspace_service()
             except Exception:
                 pass
+
+            # ── Grounding：缩小 Planner 搜索空间（基于 intent 检索键）──
+            grounding_ctx = None
+            try:
+                from agent.grounding import Grounder, GroundingInput
+                ws_ctx = cognitive_context.workspace
+                grounding_ctx = Grounder().ground(GroundingInput(
+                    query=user_input,
+                    intent=intent,
+                    current_file=getattr(ws_ctx, "current_file", "") or "",
+                    opened_files=list(getattr(ws_ctx, "opened_files", []) or []),
+                )).context
+            except Exception as e:
+                print(f"  ⚠️ Grounding 失败（忽略）: {e}")
 
             plan = None
             execution_plans = []
@@ -250,6 +264,7 @@ class PlannerStage:
                     plan = await generate_plan(
                         planner_input, context.get("short_term", ""),
                         repo_context, skill_hint, None,
+                        grounding=grounding_ctx,
                     )
                     for i, t in enumerate(plan):
                         t.setdefault("id", f"task-{i+1}")

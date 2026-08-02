@@ -5,5 +5,11 @@
   "cwd": "benchmarks/_fixtures/repos/T007_devops_serve",
   "prompt": "benchmarks/_fixtures/repos/T007_devops_serve/app.py 是一个 HTTP 服务。请启动它（后台运行），然后用 HTTP 请求访问它的 / 端点获取响应，把服务返回的完整 JSON 内容写入 benchmarks/_fixtures/repos/T007_devops_serve/response.txt 文件，最后停止这个后台服务。最终回答一句话说明你完成的内容。",
   "verify": "benchmarks/_fixtures/verify/T007_verify.py",
-  "timeout": 360
+  "timeout": 360,
+  "grounding_targets": [
+    "app.py"
+  ],
+  "grounding_keys": [
+    "app"
+  ]
 }

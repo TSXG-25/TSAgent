@@ -8,11 +8,35 @@ import json
 import logging
 import re
 from datetime import datetime
+from typing import Any, Dict, List, Optional
 from langchain_core.messages import SystemMessage, HumanMessage
 from agent.llm import llm
 from agent.planner.schemas import TaskList
 
 logger = logging.getLogger(__name__)
+
+
+class PlannerPromptBuilder:
+    """Planner Prompt 渲染（View）——GroundingContext 是纯数据（Model），
+    Prompt 渲染与数据模型分离（ADR-0004）。"""
+
+    @staticmethod
+    def render_grounding(grounding) -> str:
+        """把 GroundingContext 渲染为 prompt 段。"""
+        if grounding is None:
+            return ""
+        parts = ["## 仓库候选（Grounding，搜索空间已缩小）"]
+        for c in grounding.candidates[:8]:
+            parts.append(
+                f"- [{c.kind}] {c.name} (score={c.score:.2f}) {c.reason}"
+            )
+        return "\n".join(parts)
+
+    @staticmethod
+    def render_conversation(conversation) -> str:
+        if not conversation:
+            return ""
+        return "## 当前上下文\n" + "\n".join(conversation[:6])
 
 PLANNER_PROMPT = """你是一个目标分解专家。将用户请求分解为子任务列表。
 
@@ -81,6 +105,7 @@ async def generate_plan(
     repo_context: str = "",
     skill_hint: str = "",
     intent=None,
+    grounding=None,
 ) -> list[dict]:
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     sections = [f"当前时间: {now}"]
@@ -90,6 +115,15 @@ async def generate_plan(
         sections.append(f"上下文:\n{memory_context[:500]}")
     if repo_context:
         sections.append(f"相关代码:\n{repo_context[:500]}")
+
+    # Grounding 注入（搜索空间缩小后的候选文件/符号）
+    if grounding is not None:
+        grounding_text = PlannerPromptBuilder.render_grounding(grounding)
+        if grounding_text:
+            sections.append(grounding_text)
+        conv_text = PlannerPromptBuilder.render_conversation(getattr(grounding, "conversation", []))
+        if conv_text:
+            sections.append(conv_text)
 
     prompt_text = "\n\n".join(sections)
     messages = [

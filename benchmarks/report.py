@@ -21,6 +21,21 @@ def main():
     passed = sum(1 for r in results if r["result"] == "pass")
     print(f"===== TSAgent Benchmark: {passed}/{total} passed =====")
 
+    # ── Grounding 指标（Search Space 置顶，D3 最重要数据）──
+    print("\n-- grounding (search space / recall / precision) --")
+    for r in results:
+        g = r.get("grounding") or {}
+        mark = "PASS" if r["result"] == "pass" else "FAIL"
+        print(
+            f"  [{mark}] {r['task']:6s} "
+            f"space={g.get('search_space', '?'):12s} "
+            f"recall={g.get('recall', 0):.2f} prec={g.get('precision', 0):.2f} "
+            f"cands={len(g.get('candidates', []))}"
+        )
+    if results:
+        avg_recall = sum((r.get("grounding") or {}).get("recall", 0) for r in results) / total
+        print(f"  avg_recall={avg_recall:.2f}")
+
     cats = {}
     for r in results:
         if r["result"] == "fail":

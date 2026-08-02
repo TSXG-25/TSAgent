@@ -65,6 +65,46 @@ def reset_fixtures():
     )
 
 
+def eval_grounding(task):
+    """独立评估 Grounder（不依赖 agent 执行）——Grounding 层指标。
+
+    Search Space / Recall / Precision 与 Planner Pass 解耦（ADR-0004）。
+    检索键用 grounding_keys（模拟 Intent 输出），两层分别测。
+    """
+    from agent.grounding import Grounder, GroundingInput
+
+    class _FakeIntent:
+        def __init__(self, keys):
+            self.target = keys[0] if keys else ""
+            self.entities = list(keys)
+
+    keys = task.get("grounding_keys", [])
+    result = Grounder().ground(GroundingInput(
+        query=task["prompt"],
+        intent=_FakeIntent(keys),
+    ))
+    targets = task.get("grounding_targets", [])
+    candidates = [c.name for c in result.context.candidates]
+    hits = [t for t in targets if any(t in c for c in candidates)]
+
+    total_files = 0
+    try:
+        from agent.services.workspace_service import get_workspace_service
+        total_files = get_workspace_service().current_workspace().file_count()
+    except Exception:
+        pass
+
+    return {
+        "candidates": candidates[:5],
+        "targets": targets,
+        "recall": round(len(hits) / len(targets), 2) if targets else 0.0,
+        "precision": round(len(hits) / len(candidates), 2) if candidates else 0.0,
+        "search_space": f"{total_files} → {len(candidates)}",
+        "stats": result.stats.to_dict(),
+        "trace": result.trace.to_dict(),
+    }
+
+
 def run_single(task):
     from agent.runtime import UniversalAgent
 
@@ -117,6 +157,7 @@ def run_single(task):
         "trace": trace[-8000:],
         "failure_category": [],
         "first_wrong_step": None,
+        "grounding": eval_grounding(task),
     }
 
     out_path = os.path.join(OUT_DIR, f"{task_id}.json")

@@ -5,5 +5,11 @@
   "cwd": "benchmarks/_fixtures/repos/T004_feature_add",
   "prompt": "仓库 benchmarks/_fixtures/repos/T004_feature_add/server.py 是一个 HTTP 服务。请给它新增 GET /health 端点，返回 JSON 对象 {\"status\": \"ok\"}，同时保持 GET / 端点行为不变。修改后用 python 启动服务验证两个端点都能返回正确 JSON，验证完关闭服务。",
   "verify": "benchmarks/_fixtures/verify/T004_verify.py",
-  "timeout": 360
+  "timeout": 360,
+  "grounding_targets": [
+    "server.py"
+  ],
+  "grounding_keys": [
+    "server"
+  ]
 }

@@ -1,0 +1,13 @@
+{
+  "id": "NAV05",
+  "name": "navigation_sort_records",
+  "category": "navigation",
+  "cwd": "evaluation/datasets/navigation/NAV05",
+  "prompt": "仓库 evaluation/datasets/navigation/NAV05 中实现了函数 sort_records（sort by score）。请找到包含该函数实现的文件，输出该文件的相对路径。",
+  "grounding_targets": [
+    "src/utils.py"
+  ],
+  "grounding_keys": [
+    "sort_records"
+  ]
+}

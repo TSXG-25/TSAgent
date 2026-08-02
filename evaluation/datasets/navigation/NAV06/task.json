@@ -1,0 +1,13 @@
+{
+  "id": "NAV06",
+  "name": "navigation_merge_lists",
+  "category": "navigation",
+  "cwd": "evaluation/datasets/navigation/NAV06",
+  "prompt": "仓库 evaluation/datasets/navigation/NAV06 中实现了函数 merge_lists（merge two lists dedupe）。请找到包含该函数实现的文件，输出该文件的相对路径。",
+  "grounding_targets": [
+    "src/utils.py"
+  ],
+  "grounding_keys": [
+    "merge_lists"
+  ]
+}

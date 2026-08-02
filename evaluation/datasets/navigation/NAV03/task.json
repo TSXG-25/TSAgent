@@ -1,0 +1,13 @@
+{
+  "id": "NAV03",
+  "name": "navigation_extract_tokens",
+  "category": "navigation",
+  "cwd": "evaluation/datasets/navigation/NAV03",
+  "prompt": "仓库 evaluation/datasets/navigation/NAV03 中实现了函数 extract_tokens（extract comma tokens）。请找到包含该函数实现的文件，输出该文件的相对路径。",
+  "grounding_targets": [
+    "src/utils.py"
+  ],
+  "grounding_keys": [
+    "extract_tokens"
+  ]
+}

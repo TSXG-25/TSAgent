@@ -1,0 +1,13 @@
+{
+  "id": "NAV01",
+  "name": "navigation_compute_total",
+  "category": "navigation",
+  "cwd": "evaluation/datasets/navigation/NAV01",
+  "prompt": "仓库 evaluation/datasets/navigation/NAV01 中实现了函数 compute_total（calculate total of numbers）。请找到包含该函数实现的文件，输出该文件的相对路径。",
+  "grounding_targets": [
+    "src/utils.py"
+  ],
+  "grounding_keys": [
+    "compute_total"
+  ]
+}

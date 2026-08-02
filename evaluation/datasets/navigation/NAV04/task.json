@@ -1,0 +1,13 @@
+{
+  "id": "NAV04",
+  "name": "navigation_parse_config",
+  "category": "navigation",
+  "cwd": "evaluation/datasets/navigation/NAV04",
+  "prompt": "仓库 evaluation/datasets/navigation/NAV04 中实现了函数 parse_config（parse key=value lines）。请找到包含该函数实现的文件，输出该文件的相对路径。",
+  "grounding_targets": [
+    "src/utils.py"
+  ],
+  "grounding_keys": [
+    "parse_config"
+  ]
+}

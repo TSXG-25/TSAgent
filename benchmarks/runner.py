@@ -31,9 +31,16 @@ OUT_DIR = os.path.join(BASE, "_fixtures", "out")
 
 def load_tasks():
     tasks = []
+    # 1. benchmarks/tasks/*.json（既有 8 个核心任务）
     for fn in sorted(os.listdir(TASKS_DIR)):
         if fn.endswith(".json"):
             with open(os.path.join(TASKS_DIR, fn)) as f:
+                tasks.append(json.load(f))
+    # 2. evaluation/datasets/**/task.json（factory 生成的 Dataset，ADR-0005）
+    datasets_dir = os.path.join(ROOT, "evaluation", "datasets")
+    for root, _, files in os.walk(datasets_dir):
+        if "task.json" in files:
+            with open(os.path.join(root, "task.json")) as f:
                 tasks.append(json.load(f))
     return tasks
 

@@ -8,24 +8,42 @@ import sys
 
 
 def classify(r) -> tuple:
-    """推断失败层与原因。"""
+    """推断失败层与原因 + 修复成本。"""
     layer = ""
     reason = ""
+    difficulty = "M"
     if r.get("error"):
-        layer = "runtime"
-        reason = r["error"][:80]
-    elif r.get("answer") and "{" in r["answer"]:
-        layer = "answer"
-        reason = "返回原始 JSON/结构，未转自然语言"
+        err = r["error"]
+        if "unexpected keyword" in err or "TypeError" in err:
+            layer = "integration"
+            difficulty = "XS"
+        else:
+            layer = "runtime"
+            difficulty = "L"
+        reason = err[:80]
     elif r.get("answer", "").strip() == "":
         layer = "runtime"
+        difficulty = "L"
         reason = "空回答"
+    elif r.get("answer") and "{" in r["answer"]:
+        layer = "answer"
+        difficulty = "S"
+        reason = "返回原始 JSON/结构，未转自然语言"
     else:
-        # 断言失败
-        failed_checks = [c for c in r.get("checks", []) if not c[1]]
-        layer = "assert"
-        reason = "; ".join(f"{c[0]}" for c in failed_checks[:3])
-    return layer, reason
+        failed = [c for c in r.get("checks", []) if not c[1]]
+        # 层推断：断言类别
+        names = [c[0] for c in failed]
+        if any("intent" in n for n in names):
+            layer = "intent"
+            difficulty = "XS"
+        elif any("one_of" in n or "not:" in n for n in names):
+            layer = "answer"
+            difficulty = "S"
+        else:
+            layer = "dataset"
+            difficulty = "XS"
+        reason = "; ".join(names[:3])
+    return layer, reason, difficulty
 
 
 def main(path):
@@ -33,15 +51,20 @@ def main(path):
         data = json.load(f)
 
     print(f"E2E: {data['passed']}/{data['total']} passed\n")
-    print(f"{'ID':12s} {'Input':14s} {'Expected':18s} {'Layer':8s} {'Reason'}")
+    print(f"{'ID':12s} {'Input':14s} {'Layer':12s} {'Diff':5s} Reason")
     print("-" * 90)
+    dist = {}
     for r in data["results"]:
         if r["ok"]:
             continue
-        exp = ""
-        ans = r["answer"][:50].replace("\n", " ")
-        layer, reason = classify(r)
-        print(f"{r['id']:12s} {r['input']:14s} {ans:18s} {layer:8s} {reason}")
+        layer, reason, diff = classify(r)
+        dist[layer] = dist.get(layer, 0) + 1
+        ans = r["answer"][:40].replace("\n", " ")
+        print(f"{r['id']:12s} {r['input']:14s} {layer:12s} {diff:5s} {reason}")
+
+    print("\n== Fail Distribution ==")
+    for layer, n in sorted(dist.items(), key=lambda x: -x[1]):
+        print(f"  {layer:12s} {n}")
 
     fails = [r for r in data["results"] if not r["ok"]]
     print(f"\n{len(fails)} failed cases (fix one -> failboard shrinks by one)")

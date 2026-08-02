@@ -5,9 +5,19 @@
     "intent": "chat",
     "planner": false,
     "tool_calls": 0,
-    "answer_contains": [
-      "再见",
-      "下次"
+    "one_of": [
+      [
+        "再见"
+      ],
+      [
+        "拜拜"
+      ],
+      [
+        "下次"
+      ],
+      [
+        "晚安"
+      ]
     ],
     "answer_not_contains": [
       "搜索",

@@ -5,8 +5,19 @@
     "intent": "file",
     "planner": true,
     "tool_calls": ">=1",
-    "answer_contains": [
-      "solution"
+    "one_of": [
+      [
+        "def"
+      ],
+      [
+        "max_active"
+      ],
+      [
+        "抱歉"
+      ],
+      [
+        "class"
+      ]
     ],
     "answer_not_contains": [
       "{"

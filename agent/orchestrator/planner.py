@@ -121,19 +121,18 @@ class PlannerStage:
         # 更新跨轮对话状态
         self._orch._context_builder.update_conversation_state(intent)
 
-        # 闲聊/无意义输入 → 直接 LLM 回答
-        if intent.is_chat or not intent.requires_execution:
-            if intent.is_chat:
-                try:
-                    response = await llm.ainvoke([
-                        SystemMessage(content=system_content),
-                        HumanMessage(content=user_input),
-                    ])
-                    answer = response.content if hasattr(response, 'content') else str(response)
-                except Exception:
-                    answer = "抱歉，我暂时无法回答。"
-                MemoryService.record_full_exchange(user_id, user_input, answer)
-                return state, "FINISH", answer
+        # 不要求执行（chat / translation / math / creation / identity 等）→ 直接 LLM 回答
+        if not intent.requires_execution:
+            try:
+                response = await llm.ainvoke([
+                    SystemMessage(content=system_content),
+                    HumanMessage(content=user_input),
+                ])
+                answer = response.content if hasattr(response, 'content') else str(response)
+            except Exception:
+                answer = "抱歉，我暂时无法回答。"
+            MemoryService.record_full_exchange(user_id, user_input, answer)
+            return state, "FINISH", answer
 
         # ── Stage 1.5: Workspace 解析 target（Planner 前介入） ──
         resolved_target = None

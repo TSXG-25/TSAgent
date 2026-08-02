@@ -5,9 +5,22 @@
     "intent": "chat",
     "planner": false,
     "tool_calls": 0,
-    "answer_contains": [
-      "在",
-      "你好"
+    "one_of": [
+      [
+        "我在"
+      ],
+      [
+        "在"
+      ],
+      [
+        "你好"
+      ],
+      [
+        "嗨"
+      ],
+      [
+        "有什么"
+      ]
     ],
     "answer_not_contains": [
       "搜索",

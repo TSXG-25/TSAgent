@@ -64,9 +64,9 @@ _KEYWORD_MAP: list[tuple[re.Pattern, str, str, bool]] = [
     # 翻译
     (re.compile(r'翻译|译成|用.*怎么说|英文.*意思|中文.*意思'), DOMAIN_TRANSLATION, "translate", False),
 
-    # 数学
-    (re.compile(r'计算|等于|方程|求导|积分|函数|公式|解.*方程'), DOMAIN_MATH, "calculate", True),
-    (re.compile(r'^\d+[+\-*/]\d+|^\d+\.\d+'), DOMAIN_MATH, "calculate", True),
+    # 数学（简单计算走 LLM 直答；复杂计算/脚本才用工具）
+    (re.compile(r'计算|算一下|算算|等于|方程|求导|积分|函数|公式|解.*方程'), DOMAIN_MATH, "calculate", False),
+    (re.compile(r'^\d+[+\-*/]\d+|^\d+\.\d+'), DOMAIN_MATH, "calculate", False),
 
     # 创作
     (re.compile(r'写.*[诗故事文小说剧本]|创作|生成.*[诗故事文案]'), DOMAIN_CREATION, "generate", False),

@@ -1,77 +1,15 @@
 {
-  "passed": 12,
-  "total": 20,
+  "passed": 3,
+  "total": 4,
   "results": [
-    {
-      "id": "001_greeting",
-      "input": "你好",
-      "ok": true,
-      "answer": "你好！我在这里呢。看起来你连着打了好几次招呼，是有什么特别想聊的吗？直接告诉我你需要什么就好。",
-      "error": "",
-      "elapsed_s": 5.6,
-      "checks": [
-        [
-          "contains:你好",
-          true
-        ],
-        [
-          "not:搜索",
-          true
-        ],
-        [
-          "not:查不到",
-          true
-        ],
-        [
-          "not:{",
-          true
-        ]
-      ],
-      "trace": "  🧠 认知上下文: 对话轮次: 最近1轮\n  🔍 引用消歧: 无需消歧\n  🧠 意图: Intent(domain=chat, action=greeting, target='', entities=[], current_file='', conf=0.85, exec=False)\n\n==================================================\n⏱️  启动耗时 Profile\n==================================================\n  TOTAL                  0.00s\n==================================================\n\n==================================================\n⚡ 执行耗时 Profile\n==================================================\n  init                   0.70s  ████████████████████ 100%\n  plan                   0.00s  ░░░░░░░░░░░░░░░░░░░░ 0%\n  TOTAL                  0.70s\n==================================================\n\n"
-    },
     {
       "id": "002_hi",
       "input": "嗨，在吗",
-      "ok": false,
-      "answer": "嗨，我在的！👋 有什么可以帮你的吗？",
-      "error": "",
-      "elapsed_s": 4.6,
-      "checks": [
-        [
-          "contains:在",
-          true
-        ],
-        [
-          "contains:你好",
-          false
-        ],
-        [
-          "not:搜索",
-          true
-        ],
-        [
-          "not:{",
-          true
-        ]
-      ],
-      "trace": "  🧠 认知上下文: 对话轮次: 最近1轮\n  🔍 引用消歧: 无需消歧\n  🧠 意图: Intent(domain=chat, action=greeting, target='', entities=[], current_file='', conf=0.85, exec=False)\n\n==================================================\n⏱️  启动耗时 Profile\n==================================================\n  TOTAL                  0.00s\n==================================================\n\n==================================================\n⚡ 执行耗时 Profile\n==================================================\n  init                   1.53s  ████████████████████ 100%\n  plan                   0.00s  ░░░░░░░░░░░░░░░░░░░░ 0%\n  TOTAL                  1.53s\n==================================================\n\n"
-    },
-    {
-      "id": "003_thanks",
-      "input": "谢谢",
       "ok": true,
-      "answer": "不客气！如果接下来有需要处理的任务或问题，随时告诉我，我会一步步协助你完成。😊",
+      "answer": "在的！一直在等你呢 😊  \n有什么我可以帮你的吗？无论是工作、学习还是生活上的问题，随时告诉我！",
       "error": "",
-      "elapsed_s": 3.1,
+      "elapsed_s": 7.0,
       "checks": [
-        [
-          "contains:不客气",
-          true
-        ],
-        [
-          "not:查不到",
-          true
-        ],
         [
           "not:搜索",
           true
@@ -79,107 +17,22 @@
         [
           "not:{",
           true
-        ]
-      ],
-      "trace": "  🧠 认知上下文: 对话轮次: 最近1轮\n  🔍 引用消歧: 无需消歧\n  🧠 意图: Intent(domain=chat, action=thanks, target='', entities=[], current_file='', conf=0.85, exec=False)\n\n==================================================\n⏱️  启动耗时 Profile\n==================================================\n  TOTAL                  0.00s\n==================================================\n\n==================================================\n⚡ 执行耗时 Profile\n==================================================\n  init                   0.02s  ████████████████████ 100%\n  plan                   0.00s  ░░░░░░░░░░░░░░░░░░░░ 0%\n  TOTAL                  0.02s\n==================================================\n\n"
-    },
-    {
-      "id": "004_laugh",
-      "input": "哈哈哈哈哈",
-      "ok": true,
-      "answer": "哈哈，看来今天的快乐值已经拉满了！😄 是有什么好事发生，还是单纯想笑一笑？我随时都在，你想聊点啥都行～",
-      "error": "",
-      "elapsed_s": 5.1,
-      "checks": [
-        [
-          "contains:哈哈",
-          true
         ],
         [
-          "not:搜索",
-          true
-        ],
-        [
-          "not:{",
+          "one_of(5groups)",
           true
         ]
       ],
-      "trace": "  🧠 认知上下文: 对话轮次: 最近1轮\n  🔍 引用消歧: 无需消歧\n  🧠 意图: Intent(domain=chat, action=greeting, target='', entities=[], current_file='', conf=0.85, exec=False)\n\n==================================================\n⏱️  启动耗时 Profile\n==================================================\n  TOTAL                  0.00s\n==================================================\n\n==================================================\n⚡ 执行耗时 Profile\n==================================================\n  init                   2.20s  ████████████████████ 100%\n  plan                   0.00s  ░░░░░░░░░░░░░░░░░░░░ 0%\n  TOTAL                  2.20s\n==================================================\n\n"
-    },
-    {
-      "id": "005_farewell",
-      "input": "晚安",
-      "ok": true,
-      "answer": "晚安，祝您好梦。",
-      "error": "",
-      "elapsed_s": 4.2,
-      "checks": [
-        [
-          "contains:晚安",
-          true
-        ],
-        [
-          "contains:好梦",
-          true
-        ],
-        [
-          "not:搜索",
-          true
-        ],
-        [
-          "not:{",
-          true
-        ]
-      ],
-      "trace": "  🧠 认知上下文: 对话轮次: 最近1轮\n  🔍 引用消歧: 无需消歧\n  🧠 意图: Intent(domain=chat, action=farewell, target='', entities=[], current_file='', conf=0.85, exec=False)\n\n==================================================\n⏱️  启动耗时 Profile\n==================================================\n  TOTAL                  0.00s\n==================================================\n\n==================================================\n⚡ 执行耗时 Profile\n==================================================\n  init                   0.02s  ████████████████████ 100%\n  plan                   0.00s  ░░░░░░░░░░░░░░░░░░░░ 0%\n  TOTAL                  0.02s\n==================================================\n\n"
+      "trace": "  🧠 认知上下文: 对话轮次: 最近1轮\n  🔍 引用消歧: 无需消歧\n  🧠 意图: Intent(domain=chat, action=greeting, target='', entities=[], current_file='', conf=0.85, exec=False)\n\n==================================================\n⏱️  启动耗时 Profile\n==================================================\n  TOTAL                  0.00s\n==================================================\n\n==================================================\n⚡ 执行耗时 Profile\n==================================================\n  init                   2.85s  ████████████████████ 100%\n  plan                   0.00s  ░░░░░░░░░░░░░░░░░░░░ 0%\n  TOTAL                  2.85s\n==================================================\n\n"
     },
     {
       "id": "006_bye",
       "input": "再见",
-      "ok": false,
-      "answer": "再见！现在是晚上，祝您晚安，一路平安。如果之后还有疑问，随时欢迎回来找我。",
-      "error": "",
-      "elapsed_s": 6.3,
-      "checks": [
-        [
-          "contains:再见",
-          true
-        ],
-        [
-          "contains:下次",
-          false
-        ],
-        [
-          "not:搜索",
-          true
-        ],
-        [
-          "not:{",
-          true
-        ]
-      ],
-      "trace": "  🧠 认知上下文: 对话轮次: 最近1轮\n  🔍 引用消歧: 无需消歧\n  🧠 意图: Intent(domain=chat, action=farewell, target='', entities=[], current_file='', conf=0.85, exec=False)\n\n==================================================\n⏱️  启动耗时 Profile\n==================================================\n  TOTAL                  0.00s\n==================================================\n\n==================================================\n⚡ 执行耗时 Profile\n==================================================\n  init                   0.02s  ████████████████████ 100%\n  plan                   0.00s  ░░░░░░░░░░░░░░░░░░░░ 0%\n  TOTAL                  0.02s\n==================================================\n\n"
-    },
-    {
-      "id": "007_identity",
-      "input": "你是谁",
       "ok": true,
-      "answer": "你好！我是AI助手，可以帮你解答问题、处理信息、完成各种任务。有什么需要帮助的，尽管告诉我。",
+      "answer": "好的，再见！夜深了，早点休息，祝您晚安。有需要随时找我。",
       "error": "",
-      "elapsed_s": 14.3,
+      "elapsed_s": 4.8,
       "checks": [
-        [
-          "contains:助手",
-          true
-        ],
-        [
-          "contains:可以",
-          true
-        ],
-        [
-          "not:查不到",
-          true
-        ],
         [
           "not:搜索",
           true
@@ -187,288 +40,51 @@
         [
           "not:{",
           true
+        ],
+        [
+          "one_of(4groups)",
+          true
         ]
       ],
-      "trace": "  🧠 认知上下文: 对话轮次: 最近1轮\n  🔍 引用消歧: 无需消歧\n  🧠 意图: Intent(domain=chat, action=identity, target='', entities=[], current_file='', conf=0.85, exec=False)\n\n==================================================\n⏱️  启动耗时 Profile\n==================================================\n  TOTAL                  0.00s\n==================================================\n\n==================================================\n⚡ 执行耗时 Profile\n==================================================\n  init                   2.23s  ████████████████████ 100%\n  plan                   0.00s  ░░░░░░░░░░░░░░░░░░░░ 0%\n  TOTAL                  2.23s\n==================================================\n\n"
+      "trace": "  🧠 认知上下文: 对话轮次: 最近1轮\n  🔍 引用消歧: 无需消歧\n  🧠 意图: Intent(domain=chat, action=farewell, target='', entities=[], current_file='', conf=0.85, exec=False)\n\n==================================================\n⏱️  启动耗时 Profile\n==================================================\n  TOTAL                  0.00s\n==================================================\n\n==================================================\n⚡ 执行耗时 Profile\n==================================================\n  init                   0.06s  ████████████████████ 100%\n  plan                   0.00s  ░░░░░░░░░░░░░░░░░░░░ 0%\n  TOTAL                  0.06s\n==================================================\n\n"
     },
     {
       "id": "008_capability",
       "input": "你会做什么",
       "ok": false,
-      "answer": "我会做很多事情，核心能力包括：\n\n## 🔍 研究（当前聚焦）\n- 搜索网络信息、查找外部知识\n- 调研资料、整理文献\n- 汇总分析报告\n\n## ✍️ 写作与编辑\n- 写文章、报告、邮件、演讲稿\n- 润色、改写、翻译\n- 创意写作（故事、剧本、诗歌）\n\n## 💻 编程与代码\n- 写代码（Python、JavaScript、SQL 等）\n- 调试、解释代码逻辑\n- 生成算法和函数\n\n## 📚 学习与解答\n- 解释复杂概念（科学、历史、哲学等）\n- 解答数学题、逻辑题\n- 提供学习计划和知识梳理\n\n#",
+      "answer": "简单说，我能帮你做这几类事：\n\n- **查**：搜资料、找信息、做调研\n- **写**：写文章、润色、翻译、编故事\n- **算**：写代码、分析数据、解数学题\n- **想**：出点子、做计划、理思路\n\n整体就是你的“外挂助手”——你给方向，我给你结果。\n\n不过我得坦白一下：我会给方案、给答案、给草稿，但**没法替你点外卖**。😄\n\n你现在有什么具体想让我帮的吗？",
       "error": "",
-      "elapsed_s": 10.0,
-      "checks": [
-        [
-          "contains:可以",
-          false
-        ],
-        [
-          "contains:帮助",
-          false
-        ],
-        [
-          "contains:文件",
-          false
-        ],
-        [
-          "not:搜索",
-          false
-        ],
-        [
-          "not:{",
-          true
-        ]
-      ],
-      "trace": "  🧠 认知上下文: 对话轮次: 最近1轮\n  🔍 引用消歧: 无需消歧\n  🧠 意图: Intent(domain=chat, action=describe_capabilities, target='', entities=[], current_file='', conf=0.90, exec=False)\n\n==================================================\n⏱️  启动耗时 Profile\n==================================================\n  TOTAL                  0.00s\n==================================================\n\n==================================================\n⚡ 执行耗时 Profile\n==================================================\n  init                   1.92s  ████████████████████ 100%\n  plan                   0.00s  ░░░░░░░░░░░░░░░░░░░░ 0%\n  TOTAL                  1.92s\n==================================================\n\n"
-    },
-    {
-      "id": "009_love",
-      "input": "我喜欢你",
-      "ok": true,
-      "answer": "你的心意我收到了，真的很谢谢你愿意这样信任我、依赖我。虽然我是AI，但能成为你此刻愿意倾诉的对象，我很珍惜。如果可以的话，我也想多听听关于你的故事，那些开心的、烦恼的、重要的小事，我都会好好放在心上。你随时都在值得被认真对待的。❤️",
-      "error": "",
-      "elapsed_s": 7.1,
-      "checks": [
-        [
-          "contains:谢谢",
-          true
-        ],
-        [
-          "not:查不到",
-          true
-        ],
-        [
-          "not:搜索",
-          true
-        ],
-        [
-          "not:{",
-          true
-        ]
-      ],
-      "trace": "  🧠 认知上下文: 对话轮次: 最近1轮\n  🔍 引用消歧: 无需消歧\n  🧠 意图: Intent(domain=chat, action=express_affection, target='', entities=[], current_file='', conf=0.98, exec=False)\n\n==================================================\n⏱️  启动耗时 Profile\n==================================================\n  TOTAL                  0.00s\n==================================================\n\n==================================================\n⚡ 执行耗时 Profile\n==================================================\n  init                   1.94s  ████████████████████ 100%\n  plan                   0.00s  ░░░░░░░░░░░░░░░░░░░░ 0%\n  TOTAL                  1.94s\n==================================================\n\n"
-    },
-    {
-      "id": "010_celebrity",
-      "input": "你认识蔡徐坤吗",
-      "ok": false,
-      "answer": "",
-      "error": "TypeError: research_workflow() got an unexpected keyword argument 'resolved_target'",
-      "elapsed_s": 8.1,
-      "checks": [
-        [
-          "contains:认识",
-          false
-        ],
-        [
-          "contains:歌手",
-          false
-        ],
-        [
-          "contains:不知道",
-          false
-        ],
-        [
-          "not:搜索",
-          true
-        ],
-        [
-          "not:{",
-          true
-        ],
-        [
-          "no_crash",
-          false
-        ]
-      ],
-      "trace": "  🧠 认知上下文: 对话轮次: 最近1轮\n  🔍 引用消歧: 无需消歧\n  🧠 意图: Intent(domain=knowledge, action=answer, target='蔡徐坤', entities=['蔡徐坤'], current_file='', conf=0.90, exec=False)\n  🎯 target 未在 Workspace 找到匹配，使用原始值: 蔡徐坤\n\n==================================================\n🚀 路由到 Workflow: <function research_workflow at 0x146dabba0>\n==================================================\n"
-    },
-    {
-      "id": "011_weather",
-      "input": "今天天气怎么样",
-      "ok": true,
-      "answer": "1. **未来三天北京雷雨天气频繁 湿度较大闷热感持续-资讯**\n   查天气 关注 “中国天气网” 微信公众号、“中国天气”微博、“中国天气”抖音.8月2日全国航空天气预报.\n   https://news.weather.com.cn/2026/08/4743146.shtml\n\n2. **m.163.com/dy/article/L38TPBIM0514AM4I.html**\n   2026年8月1日早间：中央气象台农历六月十九天气预报_3. 明天起！ 辽宁省7月31日至8月2日天气预报.",
-      "error": "",
-      "elapsed_s": 49.8,
+      "elapsed_s": 10.3,
       "checks": [
         [
           "not:{",
           true
         ],
         [
-          "not:status",
-          true
+          "one_of(5groups)",
+          false
         ]
       ],
-      "trace": "  🧠 认知上下文: 对话轮次: 最近1轮\n  🔍 引用消歧: LLM 消歧: target=, symbol=\n  🧠 意图: Intent(domain=knowledge, action=weather, target='', entities=[], current_file='', conf=0.85, exec=True)\n\n📋 无匹配 Workflow（路由: knowledge/weather → 不需要 Workflow），使用 Planner 生成计划。\n\n============================================================\n📋 执行计划（Task 分解）\n============================================================\n  task-1: 2026年08月02日天气怎么样\n============================================================\n\n  🔀 Compiler: task-1 → react_executor\n\n🎯 [任务] 2026年08月02日天气怎么样\n   ➡️ 1. **未来三天北京雷雨天气频繁 湿度较大闷热感持续-资讯**\n   查天气 关注 “中国天气网” 微信公众号、“中国天气”微博、“中国天气”抖音.8月2日全国航空天气预报.\n   https://\n   ✅ 验证通过 (第 1 轮) — 任务已完成（兜底通过）\n\n==================================================\n⏱️  启动耗时 Profile\n==================================================\n  TOTAL                  0.00s\n==================================================\n\n==================================================\n⚡ 执行耗时 Profile\n==================================================\n  executor              37.40s  ████████████░░░░░░░░ 62%\n  plan                  10.34s  ███░░░░░░░░░░░░░░░░░ 17%\n  plan_llm              10.34s  ███░░░░░░░░░░░░░░░░░ 17%\n  init                   1.60s  ░░░░░░░░░░░░░░░░░░░░ 3%\n  answer_gen             0.37s  ░░░░░░░░░░░░░░░░░░░░ 1%\n  TOTAL                 60.05s\n==================================================\n\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n"
-    },
-    {
-      "id": "012_weather_city",
-      "input": "杭州天气",
-      "ok": true,
-      "answer": "杭州当前天气: Smoky haze, 温度: 30°C, 湿度: 71%, 风速: 4 km/h",
-      "error": "",
-      "elapsed_s": 19.5,
-      "checks": [
-        [
-          "contains:杭州",
-          true
-        ],
-        [
-          "not:{",
-          true
-        ],
-        [
-          "not:status",
-          true
-        ]
-      ],
-      "trace": "  🧠 认知上下文: 对话轮次: 最近1轮\n  🔍 引用消歧: 无需消歧\n  🧠 意图: Intent(domain=knowledge, action=weather, target='', entities=[], current_file='', conf=0.85, exec=True)\n\n📋 无匹配 Workflow（路由: knowledge/weather → 不需要 Workflow），使用 Planner 生成计划。\n\n============================================================\n📋 执行计划（Task 分解）\n============================================================\n  task-1: search 杭州天气\n============================================================\n\n  🔀 Compiler: task-1 → react_executor\n\n🎯 [任务] 获取杭州当前天气信息\n   ➡️ 杭州当前天气: Smoky haze, 温度: 30°C, 湿度: 71%, 风速: 4 km/h\n   ✅ 验证通过 (第 1 轮) — 任务已完成（兜底通过）\n\n==================================================\n⏱️  启动耗时 Profile\n==================================================\n  TOTAL                  0.00s\n==================================================\n\n==================================================\n⚡ 执行耗时 Profile\n==================================================\n  executor               9.78s  ███████░░░░░░░░░░░░░ 36%\n  plan                   7.51s  █████░░░░░░░░░░░░░░░ 28%\n  plan_llm               7.51s  █████░░░░░░░░░░░░░░░ 28%\n  init                   2.01s  █░░░░░░░░░░░░░░░░░░░ 7%\n  answer_gen             0.15s  ░░░░░░░░░░░░░░░░░░░░ 1%\n  TOTAL                 26.96s\n==================================================\n\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n"
-    },
-    {
-      "id": "013_followup_modify",
-      "input": "那改一下",
-      "ok": true,
-      "answer": "已写入 /Users/tsxg/Desktop/TSAgent/agent/compiler/rules/modify_rule.py",
-      "error": "",
-      "elapsed_s": 28.2,
-      "checks": [
-        [
-          "not:Traceback",
-          true
-        ],
-        [
-          "not:Error",
-          true
-        ]
-      ],
-      "trace": "  🧠 认知上下文: 对话轮次: 最近1轮\n  🔍 引用消歧: 续操作消歧: action=modify\n  🧠 意图: Intent(domain=unknown, action=, target='', entities=['modify'], current_file='', conf=0.30, exec=True)\n\n📋 无匹配 Workflow（无匹配路由 (domain=unknown, action=)），使用 Planner 生成计划。\n\n============================================================\n📋 执行计划（Task 分解）\n============================================================\n  task-1: read /Users/tsxg/Desktop/TSAgent/agent/compiler/rules/modify_rule.py\n  task-2: modify /Users/tsxg/Desktop/TSAgent/agent/compiler/rules/modify_rule.py (依赖: ['task-1'])\n============================================================\n\n  🔀 Compiler: task-1 → tool_executor\n  🔀 Compiler: task-2 → tool_executor\n\n==================================================\n⏱️  启动耗时 Profile\n==================================================\n  TOTAL                  0.00s\n==================================================\n\n==================================================\n⚡ 执行耗时 Profile\n==================================================\n  plan                  17.98s  ███████░░░░░░░░░░░░░ 39%\n  plan_llm              17.98s  ███████░░░░░░░░░░░░░ 39%\n  executor               7.05s  ███░░░░░░░░░░░░░░░░░ 15%\n  init                   2.90s  █░░░░░░░░░░░░░░░░░░░ 6%\n  answer_gen             0.21s  ░░░░░░░░░░░░░░░░░░░░ 0%\n  TOTAL                 46.11s\n==================================================\n\n"
+      "trace": "  🧠 认知上下文: 对话轮次: 最近1轮\n  🔍 引用消歧: 无需消歧\n  🧠 意图: Intent(domain=chat, action=explain, target='', entities=[], current_file='', conf=0.98, exec=False)\n\n==================================================\n⏱️  启动耗时 Profile\n==================================================\n  TOTAL                  0.00s\n==================================================\n\n==================================================\n⚡ 执行耗时 Profile\n==================================================\n  init                   2.22s  ████████████████████ 100%\n  plan                   0.00s  ░░░░░░░░░░░░░░░░░░░░ 0%\n  TOTAL                  2.22s\n==================================================\n\n"
     },
     {
       "id": "014_read_file",
       "input": "读取 output/solution.py",
-      "ok": false,
+      "ok": true,
       "answer": "def max_active_segments(s):\n    # 原始字符串中连续1段数\n    def count_segments(t):\n        cnt = 0\n        i = 0\n        n = len(t)\n        while i < n:\n            if t[i] == '1':\n                cnt += 1\n                while i < n and t[i] == '1':\n         ",
       "error": "",
-      "elapsed_s": 6.8,
-      "checks": [
-        [
-          "contains:solution",
-          false
-        ],
-        [
-          "not:{",
-          true
-        ]
-      ],
-      "trace": "  🧠 认知上下文: 当前文件: agent/compiler/rules/modify_rule.py | 对话轮次: 最近1轮\n  🔍 引用消歧: 无需消歧\n  🧠 意图: Intent(domain=file, action=operate, target='output/solution.py', entities=[], current_file='agent/compiler/rules/modify_rule.py', conf=0.85, exec=True)\n  🎯 Workspace 解析 target: output/solution.py → /Users/tsxg/Desktop/TSAgent/output/solution.py\n\n📋 无匹配 Workflow（无匹配路由 (domain=file, action=operate)），使用 Planner 生成计划。\n\n============================================================\n📋 执行计划（Task 分解）\n============================================================\n  task-1: read output/solution.py\n============================================================\n\n  🔀 Compiler: task-1 → tool_executor\n\n==================================================\n⏱️  启动耗时 Profile\n==================================================\n  TOTAL                  0.00s\n==================================================\n\n==================================================\n⚡ 执行耗时 Profile\n==================================================\n  plan                   3.61s  ██████░░░░░░░░░░░░░░ 35%\n  plan_llm               3.61s  ██████░░░░░░░░░░░░░░ 35%\n  init                   2.99s  █████░░░░░░░░░░░░░░░ 29%\n  answer_gen             0.12s  ░░░░░░░░░░░░░░░░░░░░ 1%\n  executor               0.03s  ░░░░░░░░░░░░░░░░░░░░ 0%\n  TOTAL                 10.36s\n==================================================\n\n"
-    },
-    {
-      "id": "015_explain_followup",
-      "input": "解释一下刚才的",
-      "ok": true,
-      "answer": "📁 ./ (32 项)\n# main.py\nimport sys\nimport os\n\nsys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))\n\nfrom app import greet\n\nif __name__ == \"__main__\":\n    print(greet(\"TSAgent\"))\n\n# src/\n.DS_Store\n.env\n.git/\n.gitignore\n.pytest_cache/\n.repo_ind",
-      "error": "",
-      "elapsed_s": 19.8,
-      "checks": [
-        [
-          "not:Traceback",
-          true
-        ]
-      ],
-      "trace": "  🧠 认知上下文: 当前文件: output/solution.py | 对话轮次: 最近1轮\n  🔍 引用消歧: 无需消歧\n  🧠 意图: Intent(domain=unknown, action=, target='output/solution.py', entities=[], current_file='output/solution.py', conf=0.30, exec=True)\n  🎯 Workspace 解析 target: output/solution.py → /Users/tsxg/Desktop/TSAgent/output/solution.py\n\n📋 无匹配 Workflow（无匹配路由 (domain=unknown, action=)），使用 Planner 生成计划。\n\n============================================================\n📋 执行计划（Task 分解）\n============================================================\n  task-1: explain 刚才的仓库候选搜索与匹配结果：为什么 output/solution.py 被选为最佳候选（score=1.00），以及当前上下文中的相关文件\n============================================================\n\n  🔀 Compiler: task-1 → react_executor\n\n🎯 [任务] 解释刚才的仓库候选和当前上下文\n   ➡️ 📁 ./ (32 项)\n# main.py\nimport sys\nimport os\n\nsys.path.insert(0, os.path.dirname(os.path.abspath(__fil\n   ✅ 验证通过 (第 1 轮) — 任务已完成（兜底通过）\n\n==================================================\n⏱️  启动耗时 Profile\n==================================================\n  TOTAL                  0.00s\n==================================================\n\n==================================================\n⚡ 执行耗时 Profile\n==================================================\n  plan                  10.67s  ███████░░░░░░░░░░░░░ 35%\n  plan_llm              10.67s  ███████░░░░░░░░░░░░░ 35%\n  init                   6.01s  ███░░░░░░░░░░░░░░░░░ 20%\n  executor               2.92s  █░░░░░░░░░░░░░░░░░░░ 10%\n  answer_gen             0.13s  ░░░░░░░░░░░░░░░░░░░░ 0%\n  TOTAL                 30.41s\n==================================================\n\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n"
-    },
-    {
-      "id": "016_poem",
-      "input": "给我写一首关于春天的诗",
-      "ok": true,
-      "answer": "给我写一首关于春天的诗",
-      "error": "",
-      "elapsed_s": 15.8,
-      "checks": [
-        [
-          "contains:春天",
-          true
-        ],
-        [
-          "not:{",
-          true
-        ]
-      ],
-      "trace": "  🧠 认知上下文: 当前文件: output/solution.py | 对话轮次: 最近1轮\n  🔍 引用消歧: 无需消歧\n  🧠 意图: Intent(domain=creation, action=generate, target='output/solution.py', entities=[], current_file='output/solution.py', conf=0.85, exec=False)\n  🎯 Workspace 解析 target: output/solution.py → /Users/tsxg/Desktop/TSAgent/output/solution.py\n\n📋 无匹配 Workflow（无匹配路由 (domain=creation, action=generate)），使用 Planner 生成计划。\n\n============================================================\n📋 执行计划（Task 分解）\n============================================================\n  task-1: write 关于春天的诗\n============================================================\n\n  🔀 Compiler: task-1 → react_executor\n\n🎯 [任务] 创作一首关于春天的诗\n   ⚠️ LLM 要求结束但验证不通过 (验证条件未满足)，继续执行\n   ✅ 强制完成 (连续 2 次 finish，兜底)\n\n==================================================\n⏱️  启动耗时 Profile\n==================================================\n  TOTAL                  0.00s\n==================================================\n\n==================================================\n⚡ 执行耗时 Profile\n==================================================\n  executor               8.97s  █████████░░░░░░░░░░░ 45%\n  plan                   4.17s  ████░░░░░░░░░░░░░░░░ 21%\n  plan_llm               4.17s  ████░░░░░░░░░░░░░░░░ 21%\n  init                   2.44s  ██░░░░░░░░░░░░░░░░░░ 12%\n  answer_gen             0.13s  ░░░░░░░░░░░░░░░░░░░░ 1%\n  TOTAL                 19.88s\n==================================================\n\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n"
-    },
-    {
-      "id": "017_translate",
-      "input": "翻译 hello 到中文",
-      "ok": false,
-      "answer": "翻译 hello 到中文",
-      "error": "",
-      "elapsed_s": 46.8,
-      "checks": [
-        [
-          "contains:你好",
-          false
-        ],
-        [
-          "not:{",
-          true
-        ]
-      ],
-      "trace": "  🧠 认知上下文: 当前文件: output/solution.py | 对话轮次: 最近1轮\n  🔍 引用消歧: 无需消歧\n  🧠 意图: Intent(domain=translation, action=translate, target='output/solution.py', entities=[], current_file='output/solution.py', conf=0.85, exec=False)\n  🎯 Workspace 解析 target: output/solution.py → /Users/tsxg/Desktop/TSAgent/output/solution.py\n\n📋 无匹配 Workflow（无匹配路由 (domain=translation, action=translate)），使用 Planner 生成计划。\n\n============================================================\n📋 执行计划（Task 分解）\n============================================================\n  task-1: read output/solution.py\n  task-2: write output/solution.py (依赖: ['task-1'])\n============================================================\n\n  🔀 Compiler: task-1 → tool_executor\n  🔀 Compiler: task-2 → tool_executor\n\n⚠️ 任务失败，重规划 (1/2)...\n  🔄 重新规划，共 1 个任务（保留 2 个 Facts）\n  🔀 Compiler: task-1 → tool_executor\n\n⚠️ 任务失败，重规划 (2/2)...\n  🔄 重新规划，共 2 个任务（保留 0 个 Facts）\n  🔀 Compiler: task-1 → react_executor\n\n🎯 [任务] 确定 hello 的中文翻译结果\n   ⚠️ LLM 要求结束但验证不通过 (验证条件未满足)，继续执行\n   ✅ 强制完成 (连续 2 次 finish，兜底)\n  🔀 Compiler: task-2 → tool_executor\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n\n==================================================\n⏱️  启动耗时 Profile\n==================================================\n  TOTAL                  0.00s\n==================================================\n\n==================================================\n⚡ 执行耗时 Profile\n==================================================\n  replan_llm             9.88s  ██████░░░░░░░░░░░░░░ 34%\n  executor               6.97s  ████░░░░░░░░░░░░░░░░ 24%\n  plan                   4.71s  ███░░░░░░░░░░░░░░░░░ 16%\n  plan_llm               4.71s  ███░░░░░░░░░░░░░░░░░ 16%\n  init                   2.42s  █░░░░░░░░░░░░░░░░░░░ 8%\n  answer_gen             0.13s  ░░░░░░░░░░░░░░░░░░░░ 0%\n  TOTAL                 28.81s\n==================================================\n\n"
-    },
-    {
-      "id": "018_math",
-      "input": "帮我算一下 15+27",
-      "ok": false,
-      "answer": "run_python 返回空结果",
-      "error": "",
-      "elapsed_s": 27.6,
-      "checks": [
-        [
-          "contains:42",
-          false
-        ],
-        [
-          "not:{",
-          true
-        ]
-      ],
-      "trace": "  🧠 认知上下文: 当前文件: output/solution.py | 对话轮次: 最近1轮\n  🔍 引用消歧: 无需消歧\n  🧠 意图: Intent(domain=unknown, action=calculate, target='15+27', entities=['15', '27'], current_file='output/solution.py', conf=0.98, exec=True)\n  🎯 target 未在 Workspace 找到匹配，使用原始值: 15+27\n\n📋 无匹配 Workflow（无匹配路由 (domain=unknown, action=calculate)），使用 Planner 生成计划。\n\n============================================================\n📋 执行计划（Task 分解）\n============================================================\n  task-1: execute 15+27\n============================================================\n\n  🔀 Compiler: task-1 → react_executor\n\n🎯 [任务] 计算 15+27 的结果\n   ⚠️ 失败: run_python 返回空结果\n   🔄 失败后不结束，继续尝试 (第 1/8 轮)\n   ⚠️ LLM 要求结束但验证不通过 (验证条件未满足)，继续执行\n   ⚠️ 失败: run_python 返回空结果\n   🔄 失败后不结束，继续尝试 (第 3/8 轮)\n   ✅ 强制完成 (连续 2 次 finish，兜底)\n\n==================================================\n⏱️  启动耗时 Profile\n==================================================\n  TOTAL                  0.00s\n==================================================\n\n==================================================\n⚡ 执行耗时 Profile\n==================================================\n  executor              19.04s  ███████████░░░░░░░░░ 56%\n  plan                   6.39s  ███░░░░░░░░░░░░░░░░░ 19%\n  plan_llm               6.39s  ███░░░░░░░░░░░░░░░░░ 19%\n  init                   2.00s  █░░░░░░░░░░░░░░░░░░░ 6%\n  answer_gen             0.14s  ░░░░░░░░░░░░░░░░░░░░ 0%\n  TOTAL                 33.95s\n==================================================\n\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n[EVENT] Task task-1 ended with succeeded\n"
-    },
-    {
-      "id": "019_search",
-      "input": "搜索人工智能最新进展",
-      "ok": false,
-      "answer": "",
-      "error": "TypeError: research_workflow() got an unexpected keyword argument 'resolved_target'",
-      "elapsed_s": 1.8,
+      "elapsed_s": 6.0,
       "checks": [
         [
           "not:{",
           true
         ],
         [
-          "no_crash",
-          false
-        ]
-      ],
-      "trace": "  🧠 认知上下文: 当前文件: output/solution.py | 对话轮次: 最近1轮\n  🔍 引用消歧: 无需消歧\n  🧠 意图: Intent(domain=knowledge, action=news, target='output/solution.py', entities=[], current_file='output/solution.py', conf=0.85, exec=True)\n  🎯 Workspace 解析 target: output/solution.py → /Users/tsxg/Desktop/TSAgent/output/solution.py\n\n==================================================\n🚀 路由到 Workflow: <function research_workflow at 0x146dabba0>\n==================================================\n"
-    },
-    {
-      "id": "020_repeat",
-      "input": "没看懂，再解释一遍",
-      "ok": true,
-      "answer": "I can’t access or view local files directly, so I can’t summarize `output/solution.py` without seeing its contents.\n\nIf you paste the code here, I’ll be happy to summarize what it does.",
-      "error": "",
-      "elapsed_s": 31.0,
-      "checks": [
-        [
-          "not:Traceback",
+          "one_of(4groups)",
           true
         ]
       ],
-      "trace": "  🧠 认知上下文: 当前文件: output/solution.py | 对话轮次: 最近1轮\n  🔍 引用消歧: 无需消歧\n  🧠 意图: Intent(domain=unknown, action=, target='output/solution.py', entities=[], current_file='output/solution.py', conf=0.30, exec=True)\n  🎯 Workspace 解析 target: output/solution.py → /Users/tsxg/Desktop/TSAgent/output/solution.py\n\n📋 无匹配 Workflow（无匹配路由 (domain=unknown, action=)），使用 Planner 生成计划。\n\n============================================================\n📋 执行计划（Task 分解）\n============================================================\n  task-1: read output/solution.py\n  task-2: explain output/solution.py (依赖: ['task-1'])\n============================================================\n\n  🔀 Compiler: task-1 → tool_executor\n  🔀 Compiler: task-2 → tool_executor\n\n==================================================\n⏱️  启动耗时 Profile\n==================================================\n  TOTAL                  0.00s\n==================================================\n\n==================================================\n⚡ 执行耗时 Profile\n==================================================\n  plan                  17.95s  ███████░░░░░░░░░░░░░ 37%\n  plan_llm              17.95s  ███████░░░░░░░░░░░░░ 37%\n  executor               7.74s  ███░░░░░░░░░░░░░░░░░ 16%\n  init                   5.06s  ██░░░░░░░░░░░░░░░░░░ 10%\n  answer_gen             0.22s  ░░░░░░░░░░░░░░░░░░░░ 0%\n  TOTAL                 48.92s\n==================================================\n\n"
+      "trace": "  🧠 认知上下文: 对话轮次: 最近1轮\n  🔍 引用消歧: 无需消歧\n  🧠 意图: Intent(domain=file, action=operate, target='output/solution.py', entities=[], current_file='', conf=0.85, exec=True)\n  🎯 Workspace 解析 target: output/solution.py → /Users/tsxg/Desktop/TSAgent/output/solution.py\n\n📋 无匹配 Workflow（无匹配路由 (domain=file, action=operate)），使用 Planner 生成计划。\n\n============================================================\n📋 执行计划（Task 分解）\n============================================================\n  task-1: read output/solution.py\n============================================================\n\n  🔀 Compiler: task-1 → tool_executor\n\n==================================================\n⏱️  启动耗时 Profile\n==================================================\n  TOTAL                  0.00s\n==================================================\n\n==================================================\n⚡ 执行耗时 Profile\n==================================================\n  plan                   3.44s  ███████░░░░░░░░░░░░░ 37%\n  plan_llm               3.44s  ███████░░░░░░░░░░░░░ 37%\n  init                   2.27s  ████░░░░░░░░░░░░░░░░ 24%\n  answer_gen             0.13s  ░░░░░░░░░░░░░░░░░░░░ 1%\n  executor               0.04s  ░░░░░░░░░░░░░░░░░░░░ 0%\n  TOTAL                  9.33s\n==================================================\n\n"
     }
   ]
 }

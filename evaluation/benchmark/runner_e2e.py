@@ -16,6 +16,7 @@ import glob
 import io
 import json
 import os
+import subprocess
 import sys
 import time
 from datetime import date
@@ -40,9 +41,19 @@ def bootstrap_once():
     print("  ✅ e2e runtime initialized", flush=True)
 
 
+def protect_source():
+    """E2E 运行可能污染 agent 源码（ModifyRule write 路径错位）。
+    每个任务前恢复规则/执行器层到 git 基准，防止源码被写入 LLM 输出。"""
+    subprocess.run(
+        ["git", "checkout", "HEAD", "--", "agent/compiler/", "agent/executor/executors/"],
+        capture_output=True,
+    )
+
+
 def run_one(c):
     from agent.runtime import UniversalAgent
 
+    protect_source()  # 防源码污染
     buf = io.StringIO()
     t0 = time.perf_counter()
     error = ""
@@ -59,14 +70,24 @@ def run_one(c):
     exp = c.get("expected", {})
     checks = []
     ok = True
+
+    def add_check(name, passed):
+        nonlocal ok
+        ok = ok and passed
+        checks.append((name, passed))
+
     for kw in exp.get("answer_contains", []):
-        hit = kw in (answer or "")
-        ok = ok and hit
-        checks.append((f"contains:{kw}", hit))
+        add_check(f"contains:{kw}", kw in (answer or ""))
     for kw in exp.get("answer_not_contains", []):
-        hit = (kw or "") not in (answer or "")
-        ok = ok and hit
-        checks.append((f"not:{kw}", hit))
+        add_check(f"not:{kw}", (kw or "") not in (answer or ""))
+    # one_of: 任一子组（列表）全部命中即过（语义级断言，降低措辞耦合）
+    one_of_groups = exp.get("one_of", [])
+    if one_of_groups:
+        one_of_ok = any(
+            all(kw in (answer or "") for kw in group)
+            for group in one_of_groups
+        )
+        add_check(f"one_of({len(one_of_groups)}groups)", one_of_ok)
     if error:
         ok = False
         checks.append(("no_crash", False))

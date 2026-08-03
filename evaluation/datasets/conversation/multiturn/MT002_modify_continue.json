@@ -1,0 +1,26 @@
+{
+  "id": "MT002_modify_continue",
+  "turns": [
+    {
+      "input": "读取 output/solution.py",
+      "expected": {
+        "target": "output/solution.py",
+        "topic": "file"
+      }
+    },
+    {
+      "input": "那改一下",
+      "expected": {
+        "target": "output/solution.py",
+        "topic": "modify"
+      }
+    },
+    {
+      "input": "继续",
+      "expected": {
+        "target": "output/solution.py",
+        "topic": "modify"
+      }
+    }
+  ]
+}

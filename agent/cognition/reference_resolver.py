@@ -41,6 +41,15 @@ _SYMBOL_REFERENCE_PATTERNS = [
     re.compile(r'^(函数|方法|类|变量|常量|接口|模块|文件)\s*(的|中|里)\s*(这个|那个|这个)'),
 ]
 
+# 省略目标操作中的动词（用于区分主题延续，如"上海呢" vs "改呢"）
+_OMITTED_TARGET_VERBS = {
+    "修改", "改", "优化", "重构", "调整", "更新", "编辑", "完善", "改进",
+    "看看", "查看", "打开", "读", "读取", "显示",
+    "解释", "说明", "分析", "总结", "审查", "review",
+    "删除", "移除", "清理", "去掉", "运行", "执行", "测试", "跑",
+    "继续", "下一步", "接着", "往下", "重新", "再试", "再来", "再来一次",
+}
+
 # 跨轮续操作模式：基于上一轮的目标继续操作
 _CONTINUATION_PATTERNS = [
     re.compile(r'^那\s*(修改|改|优化|重构|调整|更新|编辑|完善|改进)(一下|一哈)?$'),
@@ -193,19 +202,25 @@ class ReferenceResolver:
         if _is_continuation(text):
             return self._resolve_continuation(text, context)
 
-        # 规则 2: 符号引用 → 使用 last_symbol
+        # 规则 2: 主题延续（"上海呢" / "那广州呢" / "北京怎么样"）
+        # → 新 target + 继承上一轮 domain/action（v1.2A）
+        # 注意：必须早于代词规则（"那广州呢" 否则会被"那"代词模式吞掉）
+        if self._is_topic_continuation(text, context):
+            return self._resolve_topic_continuation(text, context)
+
+        # 规则 3: 符号引用 → 使用 last_symbol
         if _is_symbol_reference(text):
             return self._resolve_symbol_ref(text, context)
 
-        # 规则 3: 省略目标操作 → 使用 current_file
+        # 规则 4: 省略目标操作 → 使用 current_file
         if _is_omitted_target(text):
             return self._resolve_omitted_target(text, context)
 
-        # 规则 4: 纯代词引用 → 使用 last_file / last_symbol（最后检查，避免误吞续操作/省略句）
+        # 规则 5: 纯代词引用 → 使用 last_file / last_symbol（最后检查，避免误吞续操作/省略句）
         if _is_pronoun_only(text):
             return self._resolve_pronoun(text, context)
 
-        # 规则 5: 序数引用 → TODO: 解析上一轮列表
+        # 规则 6: 序数引用 → TODO: 解析上一轮列表
         if _is_ordinal_reference(text):
             return self._resolve_ordinal(text, context)
 
@@ -220,6 +235,37 @@ class ReferenceResolver:
             raw=user_input,
             confidence=1.0,
             resolution_trace="无需消歧",
+        )
+
+    def _is_topic_continuation(self, text: str, context: CognitiveContext) -> bool:
+        """检测主题延续（"上海呢"/"那广州呢"/"北京怎么样"）。
+
+        X 不能是纯操作动词（避免吞掉省略句），且需要上一轮 domain 才能延续。
+        """
+        if not (context.conversation_state and context.conversation_state.last_domain):
+            return False
+        m = re.match(r'^(那|那么)?\s*([\w\u4e00-\u9fff]+?)\s*(呢|怎么样|如何|现在怎么样)\s*$', text)
+        if not m:
+            return False
+        x = m.group(2)
+        # "那个函数呢" 这类是指代+名词 → 符号引用（非主题延续）
+        if re.match(r'^(个|这个|那个|上面|下面|这里的|上面的|下面的)', x):
+            return False
+        return x not in _OMITTED_TARGET_VERBS
+
+    def _resolve_topic_continuation(self, text: str, context: CognitiveContext) -> ResolvedQuery:
+        """解析主题延续：新 target + 继承上一轮 domain/action。"""
+        conv = context.conversation_state
+        m = re.match(r'^(那|那么)?\s*([\w\u4e00-\u9fff]+?)\s*(呢|怎么样|如何|现在怎么样)\s*$', text)
+        target = m.group(2).strip() if m else text.strip()
+        return ResolvedQuery(
+            target=target,
+            raw=text,
+            entities=[conv.last_action] if conv and conv.last_action else [],
+            confidence=0.8,
+            resolution_trace=(
+                f"主题延续: target={target}（继承 {conv.last_domain}/{conv.last_action}）"
+            ),
         )
 
     def _resolve_pronoun(self, text: str, context: CognitiveContext) -> ResolvedQuery:

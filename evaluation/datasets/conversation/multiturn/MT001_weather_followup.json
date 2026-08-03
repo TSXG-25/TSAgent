@@ -1,0 +1,33 @@
+{
+  "id": "MT001_weather_followup",
+  "turns": [
+    {
+      "input": "杭州天气怎么样",
+      "expected": {
+        "target": "杭州",
+        "topic": "weather"
+      }
+    },
+    {
+      "input": "上海呢",
+      "expected": {
+        "target": "上海",
+        "topic": "weather"
+      }
+    },
+    {
+      "input": "那广州呢",
+      "expected": {
+        "target": "广州",
+        "topic": "weather"
+      }
+    },
+    {
+      "input": "谢谢",
+      "expected": {
+        "target": "",
+        "topic": "chat"
+      }
+    }
+  ]
+}

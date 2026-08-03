@@ -1,0 +1,19 @@
+{
+  "id": "MT003_symbol_reference",
+  "turns": [
+    {
+      "input": "解释一下 ExecutionOrchestrator",
+      "expected": {
+        "target": "ExecutionOrchestrator",
+        "topic": "symbol"
+      }
+    },
+    {
+      "input": "那个函数呢",
+      "expected": {
+        "target": "ExecutionOrchestrator",
+        "topic": "symbol"
+      }
+    }
+  ]
+}

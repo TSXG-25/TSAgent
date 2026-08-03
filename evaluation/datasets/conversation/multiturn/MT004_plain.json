@@ -1,0 +1,26 @@
+{
+  "id": "MT004_plain",
+  "turns": [
+    {
+      "input": "你好",
+      "expected": {
+        "target": "",
+        "topic": "chat"
+      }
+    },
+    {
+      "input": "介绍一下自己",
+      "expected": {
+        "target": "",
+        "topic": "chat"
+      }
+    },
+    {
+      "input": "谢谢",
+      "expected": {
+        "target": "",
+        "topic": "chat"
+      }
+    }
+  ]
+}

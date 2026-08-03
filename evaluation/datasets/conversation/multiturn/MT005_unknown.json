@@ -1,0 +1,21 @@
+{
+  "id": "MT005_unknown",
+  "turns": [
+    {
+      "input": "改一下",
+      "expected": {
+        "target": "",
+        "topic": "unknown",
+        "kind": "unknown"
+      }
+    },
+    {
+      "input": "那个",
+      "expected": {
+        "target": "",
+        "topic": "unknown",
+        "kind": "unknown"
+      }
+    }
+  ]
+}

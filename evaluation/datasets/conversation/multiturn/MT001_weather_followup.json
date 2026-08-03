@@ -5,28 +5,32 @@
       "input": "杭州天气怎么样",
       "expected": {
         "target": "杭州",
-        "topic": "weather"
+        "topic": "weather",
+        "kind": "direct"
       }
     },
     {
       "input": "上海呢",
       "expected": {
         "target": "上海",
-        "topic": "weather"
+        "topic": "weather",
+        "kind": "topic"
       }
     },
     {
       "input": "那广州呢",
       "expected": {
         "target": "广州",
-        "topic": "weather"
+        "topic": "weather",
+        "kind": "topic"
       }
     },
     {
       "input": "谢谢",
       "expected": {
         "target": "",
-        "topic": "chat"
+        "topic": "chat",
+        "kind": "chat"
       }
     }
   ]

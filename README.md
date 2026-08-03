@@ -18,7 +18,12 @@ Quality Gate  PASS / WARNING / FAIL
 
 Current Phase
 ──────────────
-Stabilization — Quality / Regression / Evaluation
+v1.2A — Conversation Runtime（Capability 阶段）
+  Context Resolution  14/14 = 100%（目标 ≥94%）
+  Topic Continuity    2/2 = 100%（目标 ≥98%）
+  Symbol Reference    2/2 = 100%（目标 ≥90%）
+  File Reference      1/1 = 100%（目标 ≥90%）
+  Unknown Precision   2/2 = 100%（目标 ≥95%）
 
 Architecture Changes
 ──────────────
@@ -43,7 +48,7 @@ Intent → Task → ExecutionPlan → ExecutionResult
 ```
 agent/         # Intent / Grounding / Planner / Compiler / Executor / Runtime
 evaluation/    # Dataset / Benchmark / Regression / Metrics / History / Factory
-docs/adr/      # ADR-0001..0006（架构决策记录）
+docs/adr/      # ADR-0001..0008（架构决策记录）
 benchmarks/    # 既有 benchmark 执行器（runner / report）
 ```
 

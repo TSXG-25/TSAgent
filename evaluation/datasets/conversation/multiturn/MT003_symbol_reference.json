@@ -5,14 +5,16 @@
       "input": "解释一下 ExecutionOrchestrator",
       "expected": {
         "target": "ExecutionOrchestrator",
-        "topic": "symbol"
+        "topic": "symbol",
+        "kind": "symbol"
       }
     },
     {
       "input": "那个函数呢",
       "expected": {
         "target": "ExecutionOrchestrator",
-        "topic": "symbol"
+        "topic": "symbol",
+        "kind": "symbol"
       }
     }
   ]

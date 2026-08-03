@@ -215,6 +215,14 @@ def _extract_target(text: str) -> str:
     if match:
         return match.group(0)
 
+    # 策略 6: 中文天气城市（"杭州天气怎么样" → 杭州，v1.2A Intent Extraction）
+    if re.search(r'天气|气温|温度|下雨|下雪|台风|雾霾', text):
+        m = re.search(r'([\u4e00-\u9fff]{2,3}?)\s*(?:的)?\s*(?:天气|气温|温度|如何|怎么样)', text)
+        if m:
+            city = m.group(1)
+            if city and city not in ("天气", "气温", "温度", "如何"):
+                return city
+
     return ""
 
 

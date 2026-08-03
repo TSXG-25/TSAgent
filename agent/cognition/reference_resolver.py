@@ -13,7 +13,7 @@
 import re
 from typing import Optional
 
-from .cognitive_context import CognitiveContext, ResolvedQuery, ConversationState
+from .cognitive_context import CognitiveContext, ResolvedQuery, ConversationState, ResolutionCandidate
 
 # ── 确定性消歧规则 ──
 
@@ -208,6 +208,10 @@ class ReferenceResolver:
         if self._is_topic_continuation(text, context):
             return self._resolve_topic_continuation(text, context)
 
+        # 规则 2.5: 符号引用 + 语气词（"那个函数呢" → last_symbol，v1.2A）
+        if re.match(r'^(那个|这个|上面|下面)\s*(函数|方法|类|变量|接口|模块|文件)?\s*(呢|呢？|呢吧)?$', text):
+            return self.resolve_symbol(text, context).to_resolved_query(text)
+
         # 规则 3: 符号引用 → 使用 last_symbol
         if _is_symbol_reference(text):
             return self._resolve_symbol_ref(text, context)
@@ -377,6 +381,54 @@ class ReferenceResolver:
             confidence=0.3,
             resolution_trace="序数消歧: 暂未实现（TODO）",
         )
+
+    # ── Resolution Pipeline（ADR-0008）：统一 Candidate + merge（纯函数）──
+
+    def resolve_symbol(self, text: str, context: CognitiveContext) -> ResolutionCandidate:
+        """符号引用消歧（"那个函数呢" → last_symbol）。"""
+        conv = context.conversation_state
+        symbol = conv.last_symbol if conv else ""
+        return ResolutionCandidate(
+            kind="symbol",
+            target=symbol or None,
+            confidence=0.85 if symbol else 0.0,
+            reason=f"符号引用: last_symbol={symbol}" if symbol else "符号引用: 无可用符号",
+            source="symbol",
+        )
+
+    def resolve_unknown(self, text: str, context: CognitiveContext) -> ResolutionCandidate:
+        """上下文不足 → unknown（Unknown 优于误判，ADR-0008）。"""
+        return ResolutionCandidate(
+            kind="unknown",
+            confidence=0.1,
+            reason="无可用上下文，返回 unknown（由 Runtime 引导用户补充）",
+            source="unknown",
+        )
+
+    def resolve_candidates(self, text: str, context: CognitiveContext) -> list:
+        """收集所有子 Resolver 的候选（Pipeline 输入）。"""
+        conv = context.conversation_state
+        candidates = []
+        # topic / symbol / reference / unknown 各产生候选
+        if conv and conv.last_domain:
+            m = re.match(r'^(那|那么)?\s*([\w\u4e00-\u9fff]+?)\s*(呢|怎么样|如何|现在怎么样)\s*$', text)
+            if m and not re.match(r'^(个|这个|那个|上面|下面)', m.group(2)):
+                candidates.append(ResolutionCandidate(
+                    kind="topic", target=m.group(2), confidence=0.8,
+                    reason=f"主题延续: {m.group(2)}", source="topic",
+                ))
+        if re.match(r'^(那个|这个|上面|下面)\s*(函数|方法|类|变量|接口|模块|文件)?\s*(呢|呢？|呢吧)?$', text):
+            candidates.append(self.resolve_symbol(text, context))
+        if not candidates:
+            candidates.append(self.resolve_unknown(text, context))
+        return candidates
+
+    @staticmethod
+    def merge_candidates(candidates: list) -> ResolutionCandidate:
+        """merge（纯函数，无副作用）：按 confidence 择优。"""
+        if not candidates:
+            return ResolutionCandidate(kind="unknown", confidence=0.1, reason="无候选")
+        return max(candidates, key=lambda c: c.confidence)
 
     def _llm_resolve(self, text: str, context: CognitiveContext) -> ResolvedQuery:
         """LLM 1-shot 复杂引用消歧。"""

@@ -14,6 +14,29 @@ from typing import Optional
 
 
 @dataclass
+class ResolutionCandidate:
+    """统一解析候选（ADR-0008 Resolution Contract）。
+
+    Reference / Repository / Memory 等所有 Resolver 共用同一模型。
+    kind 标识候选类型；confidence 由 merge 用于择优；source 记录来源。
+    """
+    kind: str = "unknown"        # "topic" | "symbol" | "file" | "ordinal" | "reference" | "unknown"
+    target: Optional[str] = None
+    confidence: float = 0.0
+    reason: str = ""
+    source: str = ""
+
+    def to_resolved_query(self, raw: str) -> "ResolvedQuery":
+        return ResolvedQuery(
+            target=self.target or "",
+            symbol=self.target if self.kind == "symbol" else "",
+            raw=raw,
+            confidence=self.confidence,
+            resolution_trace=self.reason,
+        )
+
+
+@dataclass
 class ConversationState:
     """跨轮对话状态追踪。
 

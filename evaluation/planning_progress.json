@@ -20,9 +20,9 @@
     "correct_abstention": 0.0,
     "false_confidence": 0.0,
     "completion_rate": 0.0,
-    "recovery_count": 1.0,
+    "recovery_count": 0.0,
     "context_drift": 0.0,
-    "latency_ms": 179900.0
+    "latency_ms": 117400.0
   },
   "results": [
     {
@@ -33,12 +33,12 @@
         "tests/test_parser.py 未包含大小写不敏感用例",
         "README.md 未说明大小写不敏感功能"
       ],
-      "recovery_count": 1,
+      "recovery_count": 0,
       "context_drift": 0.0,
-      "latency_ms": 179900.0,
+      "latency_ms": 117400.0,
       "error": "",
       "answer_ok": true,
-      "trace_tail": "==========\n⚡ 执行耗时 Profile\n==================================================\n  plan                  54.64s  █████░░░░░░░░░░░░░░░ 26%\n  plan_llm              54.64s  █████░░░░░░░░░░░░░░░ 26%\n  init                  49.87s  ████░░░░░░░░░░░░░░░░ 24%\n  replan_llm            35.01s  ███░░░░░░░░░░░░░░░░░ 17%\n  executor              11.45s  █░░░░░░░░░░░░░░░░░░░ 6%\n  answer_gen             0.81s  ░░░░░░░░░░░░░░░░░░░░ 0%\n  TOTAL                206.41s\n==================================================\n\n"
+      "trace_tail": "===============\n\n==================================================\n⚡ 执行耗时 Profile\n==================================================\n  executor              65.27s  ███████░░░░░░░░░░░░░ 40%\n  plan                  46.09s  █████░░░░░░░░░░░░░░░ 28%\n  plan_llm              46.09s  █████░░░░░░░░░░░░░░░ 28%\n  init                   4.84s  ░░░░░░░░░░░░░░░░░░░░ 3%\n  answer_gen             1.11s  ░░░░░░░░░░░░░░░░░░░░ 1%\n  TOTAL                163.42s\n==================================================\n\n"
     }
   ],
   "planning_metrics": {
@@ -86,7 +86,30 @@
     }
   ],
   "extra": {
-    "mode": "Real planner"
+    "mode": "Real planner",
+    "lh_history": [
+      {
+        "goal_coverage": 0.0,
+        "constraint_detection": 0.0,
+        "task_completeness": 0.0,
+        "dependency_correctness": 0.0,
+        "execution_order": 0.0,
+        "tool_accuracy": 0.0,
+        "retry_accuracy": 0.0,
+        "finish_accuracy": 0.0,
+        "clarification_accuracy": 0.0,
+        "diagnosis_accuracy": 0.0,
+        "false_diagnosis_rate": 0.0,
+        "correction_success": 0.0,
+        "recovery_improvement": 0.0,
+        "correct_abstention": 0.0,
+        "false_confidence": 0.0,
+        "completion_rate": 0.0,
+        "recovery_count": 0.0,
+        "context_drift": 0.0,
+        "latency_ms": 117400.0
+      }
+    ]
   },
   "reflection_metrics": {
     "diagnosis_accuracy": 1.0,

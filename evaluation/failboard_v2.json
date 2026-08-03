@@ -1,0 +1,26 @@
+{
+  "events": [
+    {
+      "benchmark": "long_horizon",
+      "scenario": "LH001",
+      "layer": "long_horizon",
+      "dimension": "completion",
+      "failure": "verify 未通过: 保留原始 key 拼写失败: host（期望 HOST）",
+      "evidence": [
+        "Evidence(source='verify', location='LH001', expected='全部验证项通过', actual='保留原始 key 拼写失败: host（期望 HOST）')"
+      ],
+      "symptom": "wrong_answer",
+      "detected_at": "",
+      "id": "long_horizon:LH001:completion"
+    }
+  ],
+  "transitions": [
+    {
+      "event_id": "long_horizon:LH001:completion",
+      "status": "NEW",
+      "at": "2026-08-03T16:55:41",
+      "reason": "",
+      "commit": ""
+    }
+  ]
+}

@@ -18,11 +18,18 @@ Quality Gate  PASS / WARNING / FAIL
 
 Current Phase
 ──────────────
-v2.0-A — Agent Intelligence: Planning Quality（Evaluation 先行）
+v2.0-C — Agent Intelligence: Reflection（Diagnosis → Correction Proposal）
+  Reflection              10/10 = 100%（Diagnosis Accuracy / Correction Proposal / False Dx 0.000）
+  Reflection Contract     reflect(event: FailureEvent) 唯一入口（只消费 Fail Board Evidence）
+  Correction              Proposal（不执行，Executor 决定采纳）→ 已接入 ReAct 失败路径
+  Determinism Gate        10 场景 × 100 次 Diagnosis 完全一致
+  FixCommit               FIXED(commit) 生命周期闭环（REGRESSION 可关联首次修复）
+  Long Horizon            drift 0.333 → 0.0（Reflection 改善目标保持）；Trend Gate PASS
+
+v2.0-A — Agent Intelligence: Planning Quality（已完成）
   Planning (real planner)    6/6 = 100%（Goal/Constraint/Task/Dependency/Order/Abstention）
   Planning Dataset           8 场景（含 no_web / scope_only / no_delete / 信息不足 Abstain）
   Structural Validator       可跨领域复用（SQL/Browser/Coding Planner 共享）
-  Long Horizon LH001         Integration Baseline（drift 0.0，执行链路打通）
   Trend Gate                 Capability Progress Curve（不能下降）
   Fail Board v2              Diagnostic Backbone（Event Sourcing + Evidence + 统一 Root Cause 映射）
   Contract Verification      PASS（v1 三层冻结持续有效）

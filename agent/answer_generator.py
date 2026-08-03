@@ -1,6 +1,37 @@
 import json
+import re
 from langchain_core.messages import SystemMessage, HumanMessage
 from agent.llm import llm
+
+
+async def _naturalize(text: str, user_input: str) -> str:
+    """Presentation Layer：把 JSON/结构化工具输出转为自然语言（P0.3b）。
+
+    检测到 JSON 或结构化片段 → LLM 转述。非结构化则原样返回。
+    """
+    stripped = (text or "").strip()
+    if not stripped:
+        return stripped
+    looks_structured = (
+        stripped.startswith("{") or stripped.startswith("[")
+        or re.search(r'"(status|temperature|weather|result|data|content)"\s*:', stripped)
+        or "status" in stripped[:30]
+    )
+    if not looks_structured or len(stripped) < 20:
+        return stripped
+    try:
+        response = await llm.ainvoke([
+            SystemMessage(content=(
+                "你是回答生成器。用户的查询被工具执行，下面是工具的原始输出（可能是 JSON/结构化数据）。"
+                "请用自然流畅的中文，把结果转述成用户能直接读懂的答案。不要输出 JSON，不要输出代码块。"
+            )),
+            HumanMessage(content=f"用户问题：{user_input}\n\n工具原始输出：\n{stripped[:2000]}"),
+        ])
+        content = response.content if hasattr(response, 'content') else str(response)
+        return content.strip()
+    except Exception:
+        return stripped
+
 
 async def generate_final_answer(state, user_input: str) -> str:
     artifacts = state.get("artifacts", {})
@@ -57,12 +88,12 @@ async def generate_final_answer(state, user_input: str) -> str:
             last_obs = obs[-1]
             summary = last_obs.get("summary", "")
             if summary and len(summary) > 5:
-                return summary
+                return await _naturalize(summary, user_input)
 
     # Last resort: return last non-System message content
     for msg in reversed(state.get("messages", [])):
         if not isinstance(msg, SystemMessage):
             if hasattr(msg, 'content') and isinstance(msg.content, str) and len(msg.content) > 10:
-                return msg.content
+                return await _naturalize(msg.content, user_input)
 
     return f"抱歉，未能查到相关信息。"

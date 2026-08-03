@@ -54,15 +54,6 @@ class _Engine:
             resolved_query=resolved.to_resolved_query(),
         )
         self.state.record(result)
-        # Deprecated 兼容层（双写，迁移期）
-        if final_target:
-            self.state.last_target = final_target
-        if sym:
-            self.state.last_symbol = sym
-        if intent.domain:
-            self.state.last_domain = intent.domain
-        if intent.action:
-            self.state.last_action = intent.action
         return {
             "target": final_target,
             "domain": intent.domain,

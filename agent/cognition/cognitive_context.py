@@ -142,19 +142,8 @@ class ConversationState:
     唯一字段 timeline：ResolutionResult 窗口缓存（Capability Cache）。
     Resolver 负责推理（从 timeline 派生语义），State 只负责缓存。
     Runtime 通过 record() 写入。
-
-    last_* 为 Deprecated 兼容层（B1 迁移期双写，所有读取点迁移完成后删除）。
     """
     timeline: ResolutionTimeline = field(default_factory=ResolutionTimeline)
-
-    # ── Deprecated（v1.2B 迁移期兼容层，Phase A：断写 → 断读 → 删字段）──
-    last_file: Optional[str] = None
-    last_symbol: Optional[str] = None
-    last_target: Optional[str] = None
-    last_action: Optional[str] = None
-    last_domain: Optional[str] = None
-    last_task: Optional[str] = None
-    last_workflow: Optional[str] = None
 
     def record(self, result: ResolutionResult) -> None:
         """唯一写入入口：Runtime 在 Resolver 产出 ResolutionResult 后调用。"""
@@ -248,18 +237,35 @@ class CognitiveContext:
 
     @property
     def last_file(self) -> Optional[str]:
-        """上一轮讨论的文件。"""
-        return self.conversation_state.last_file if self.conversation_state else None
+        """上一轮讨论的文件（v1.2B：timeline 派生）。"""
+        if self.conversation_state and self.conversation_state.timeline:
+            for r in self.conversation_state.timeline.iter_reverse():
+                if r.kind == "file" and r.target:
+                    return r.target
+                if r.target and (r.target.endswith(".py") or r.target.endswith(".js") or "/" in r.target):
+                    return r.target
+        return None
 
     @property
     def last_symbol(self) -> Optional[str]:
-        """上一轮讨论的符号。"""
-        return self.conversation_state.last_symbol if self.conversation_state else None
+        """上一轮讨论的符号（v1.2B：timeline 派生）。"""
+        if self.conversation_state and self.conversation_state.timeline:
+            for r in self.conversation_state.timeline.iter_reverse():
+                if r.symbol:
+                    return r.symbol
+        return None
 
     @property
     def last_target(self) -> Optional[str]:
-        """上一轮的目标。"""
-        return self.conversation_state.last_target if self.conversation_state else None
+        """上一轮的目标（v1.2B：timeline 派生）。"""
+        if self.conversation_state and self.conversation_state.timeline:
+            latest = self.conversation_state.timeline.latest()
+            if latest and latest.target:
+                return latest.target
+            for r in self.conversation_state.timeline.iter_reverse():
+                if r.target:
+                    return r.target
+        return None
 
     def short_summary(self) -> str:
         """简短上下文摘要（用于 LLM Prompt 注入）。"""

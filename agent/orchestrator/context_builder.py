@@ -101,22 +101,10 @@ class ContextBuilder:
         """在意图理解后更新跨轮对话状态（v1.2B：State = Cache）。
 
         timeline 是唯一语义来源（写入 Resolver 产出的 ResolutionResult）。
-        last_* 为 Deprecated 兼容层（双写，迁移完成后删除）。
         """
         state = self._orch._conversation_state
         if resolution is not None:
             state.record(resolution)
-        # Deprecated 兼容层（双写，迁移期）
-        if intent.target:
-            state.last_file = intent.target
-            state.last_target = intent.target
-        if intent.entities:
-            for entity in intent.entities:
-                if entity and entity[0].isupper():
-                    state.last_symbol = entity
-                    break
-        state.last_domain = intent.domain
-        state.last_action = intent.action
 
     def render_context(self, context: dict, now: datetime) -> str:
         """渲染系统 Prompt 的记忆上下文部分。"""

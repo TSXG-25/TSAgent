@@ -150,15 +150,14 @@ def _build_context_summary(context: CognitiveContext) -> str:
     if resolved and (resolved.target or resolved.symbol):
         parts.append(f"消歧结果: target={resolved.target!r}, symbol={resolved.symbol!r}")
 
-    # 跨轮上下文
+    # 跨轮上下文（v1.2B：timeline 派生）
     conv_state = context.conversation_state
-    if conv_state:
-        if conv_state.last_file:
-            parts.append(f"上一轮文件: {conv_state.last_file}")
-        if conv_state.last_symbol:
-            parts.append(f"上一轮符号: {conv_state.last_symbol}")
-        if conv_state.last_target:
-            parts.append(f"上一轮目标: {conv_state.last_target}")
+    if conv_state and conv_state.timeline:
+        latest = conv_state.timeline.latest()
+        if latest and latest.target:
+            parts.append(f"上一轮目标: {latest.target}")
+        if latest and latest.symbol:
+            parts.append(f"上一轮符号: {latest.symbol}")
 
     # 最近对话摘要
     if context.conversation:

@@ -99,6 +99,17 @@ def _is_continuation(text: str) -> bool:
     return False
 
 
+# 显式文件引用模式：动词 + 路径/扩展名（"读取 output/solution.py"、"打开 solution.py"）
+_FILE_REFERENCE_PATTERNS = [
+    re.compile(r'^(读取|读|打开|查看|修改|改|写入|写|删除|复制|移动|优化|撤销)\s*(\S*[./\\]\S*)$'),
+]
+
+
+def _is_file_reference(text: str) -> bool:
+    """检查是否显式文件引用（含路径/扩展名）。"""
+    return any(p.match(text) for p in _FILE_REFERENCE_PATTERNS)
+
+
 def _is_ordinal_reference(text: str) -> bool:
     """检查是否序数引用（"第一个"、"第二个"、"上面的"等）。"""
     for pattern in _ORDINAL_PATTERNS:
@@ -225,9 +236,9 @@ class ReferenceResolver:
     def _is_topic_continuation(self, text: str, context: CognitiveContext) -> bool:
         """检测主题延续（"上海呢"/"那广州呢"/"北京怎么样"）。
 
-        X 不能是纯操作动词（避免吞掉省略句），且需要上一轮 domain 才能延续。
+        X 不能是纯操作动词（避免吞掉省略句），且需要 timeline 有上一轮解析（有对话上下文）。
         """
-        if not (context.conversation_state and context.conversation_state.last_domain):
+        if not (context.conversation_state and len(context.conversation_state.timeline) > 0):
             return False
         m = re.match(r'^(那|那么)?\s*([\w\u4e00-\u9fff]+?)\s*(呢|怎么样|如何|现在怎么样)\s*$', text)
         if not m:
@@ -239,46 +250,46 @@ class ReferenceResolver:
         return x not in _OMITTED_TARGET_VERBS
 
     def _resolve_topic_continuation(self, text: str, context: CognitiveContext) -> ResolvedQuery:
-        """解析主题延续：新 target + 继承上一轮 domain/action。"""
-        conv = context.conversation_state
+        """解析主题延续：新 target（domain/action 由 IntentEngine 本轮判定）。"""
         m = re.match(r'^(那|那么)?\s*([\w\u4e00-\u9fff]+?)\s*(呢|怎么样|如何|现在怎么样)\s*$', text)
         target = m.group(2).strip() if m else text.strip()
         return ResolvedQuery(
             target=target,
             raw=text,
-            entities=[conv.last_action] if conv and conv.last_action else [],
             confidence=0.8,
-            resolution_trace=(
-                f"主题延续: target={target}（继承 {conv.last_domain}/{conv.last_action}）"
-            ),
+            resolution_trace=f"主题延续: target={target}（继承上一轮主题）",
             kind="topic",
         )
 
     def _resolve_pronoun(self, text: str, context: CognitiveContext) -> ResolvedQuery:
         """消歧纯代词引用。
 
-        优先级: last_symbol > last_file > current_symbol > current_file
+        优先级: timeline 最近符号 > timeline 最近文件 > current_symbol > current_file
+        （v1.2B：last_* 语义来自 timeline）
         """
         target = ""
         symbol = ""
         trace_parts = []
 
-        # 优先使用 last_symbol（最精确）
-        if context.last_symbol:
-            symbol = context.last_symbol
-            target = context.last_file or context.current_file or ""
+        # 优先使用 timeline 最近符号（最精确）
+        sym = self._timeline_latest_symbol(context)
+        if sym:
+            symbol = sym
+            target = self._timeline_latest_file(context) or context.current_file or ""
             trace_parts.append(f"last_symbol={symbol}")
-        elif context.last_file:
-            target = context.last_file
-            trace_parts.append(f"last_file={target}")
-        elif context.current_symbol:
+        else:
+            t = self._timeline_latest_file(context) or context.current_file or ""
+            if t:
+                target = t
+                trace_parts.append(f"last_file={target}")
+        if not symbol and context.current_symbol:
             symbol = context.current_symbol
             target = context.current_file or ""
             trace_parts.append(f"current_symbol={symbol}")
-        elif context.current_file:
+        if not target and context.current_file:
             target = context.current_file
             trace_parts.append(f"current_file={target}")
-        else:
+        if not target and not symbol:
             trace_parts.append("无可用上下文")
 
         return ResolvedQuery(
@@ -292,8 +303,8 @@ class ReferenceResolver:
 
     def _resolve_symbol_ref(self, text: str, context: CognitiveContext) -> ResolvedQuery:
         """消歧符号引用（"这个函数"、"上面的方法"等）。"""
-        target = context.last_file or context.current_file or ""
-        symbol = context.last_symbol or context.current_symbol or ""
+        target = self._timeline_latest_file(context) or context.current_file or ""
+        symbol = self._timeline_latest_symbol(context) or context.current_symbol or ""
 
         trace_parts = []
         if symbol:
@@ -311,19 +322,20 @@ class ReferenceResolver:
         )
 
     def _resolve_omitted_target(self, text: str, context: CognitiveContext) -> ResolvedQuery:
-        """消歧省略目标的操作句（"修改一下" → target=current_file）。"""
+        """消歧省略目标的操作句（"修改一下" → target=current_file / timeline 最近文件）。"""
         action = _extract_action_from_omitted(text)
         target = ""
 
-        # 优先使用 current_file
+        # 优先使用 current_file（workspace 实时状态）
         if context.current_file:
             target = context.current_file
-        elif context.last_file:
-            target = context.last_file
-        elif context.last_target:
-            target = context.last_target
-        elif context.current_symbol:
-            target = context.current_symbol
+        else:
+            t = self._timeline_latest_file(context)
+            if not t:
+                t = self._timeline_latest_target(context)
+            if not t:
+                t = context.current_symbol or ""
+            target = t
 
         trace = f"省略目标消歧: action={action}"
         if target:
@@ -331,7 +343,7 @@ class ReferenceResolver:
 
         return ResolvedQuery(
             target=target,
-            symbol=context.current_symbol or context.last_symbol or "",
+            symbol=context.current_symbol or self._timeline_latest_symbol(context) or "",
             raw=text,
             entities=[action] if action else [],
             confidence=0.9 if target else 0.3,
@@ -340,9 +352,9 @@ class ReferenceResolver:
         )
 
     def _resolve_continuation(self, text: str, context: CognitiveContext) -> ResolvedQuery:
-        """消歧跨轮续操作（"那改一下" → target=last_target）。"""
+        """消歧跨轮续操作（"那改一下" → timeline 最近目标）。"""
         action = _extract_action_from_omitted(text)
-        target = context.last_target or context.last_file or context.current_file or ""
+        target = self._timeline_latest_target(context) or self._timeline_latest_file(context) or context.current_file or ""
 
         trace = f"续操作消歧: action={action}"
         if target:
@@ -350,7 +362,7 @@ class ReferenceResolver:
 
         return ResolvedQuery(
             target=target,
-            symbol=context.last_symbol or "",
+            symbol=self._timeline_latest_symbol(context) or "",
             raw=text,
             entities=[action] if action else [],
             confidence=0.85 if target else 0.3,
@@ -369,15 +381,40 @@ class ReferenceResolver:
             kind="ordinal",
         )
 
+    # ── Timeline 语义查询（Timeline = Storage，Resolver = Semantics）──
+
+    def _timeline_latest_symbol(self, context: CognitiveContext) -> str:
+        """最近一条带符号的解析结果（最新优先）。"""
+        for r in context.conversation_state.timeline.iter_reverse():
+            if r.symbol:
+                return r.symbol
+        return ""
+
+    def _timeline_latest_file(self, context: CognitiveContext) -> str:
+        """最近一条指向文件的解析结果（kind=file 或路径特征）。"""
+        for r in context.conversation_state.timeline.iter_reverse():
+            if r.kind == "file" and r.target:
+                return r.target
+            if r.target and (r.target.endswith(".py") or r.target.endswith(".js") or "/" in r.target):
+                return r.target
+        return ""
+
+    def _timeline_latest_target(self, context: CognitiveContext) -> str:
+        """最近一条带目标的解析结果（最新优先）。"""
+        for r in context.conversation_state.timeline.iter_reverse():
+            if r.target:
+                return r.target
+        return ""
+
     # ── Resolution Pipeline（ADR-0008）：统一 Candidate + merge（纯函数）──
 
     def resolve_symbol(self, text: str, context: CognitiveContext) -> ResolutionCandidate:
-        """符号引用消歧（"那个函数呢" → last_symbol）。"""
-        conv = context.conversation_state
-        symbol = conv.last_symbol if conv else ""
+        """符号引用消歧（"那个函数呢" → timeline 最近符号）。"""
+        symbol = self._timeline_latest_symbol(context)
         return ResolutionCandidate(
             kind="symbol",
             target=symbol or None,
+            symbol=symbol,
             confidence=0.85 if symbol else 0.0,
             reason=f"符号引用: last_symbol={symbol}" if symbol else "符号引用: 无可用符号",
             source="symbol",
@@ -435,6 +472,9 @@ class ReferenceResolver:
             candidates.append(
                 self._candidate_from(self._resolve_ordinal(text, context), "ordinal")
             )
+        # 规则 7: 显式文件引用（"读取 output/solution.py" → kind=file；Repository Runtime 前置）
+        elif _is_file_reference(text):
+            candidates.append(self._candidate_file(text, context))
         # Stage 2: LLM 复杂消歧（仅确定性规则未命中时）
         if not candidates and _needs_complex_llm_resolve(text, context):
             candidates.append(self._candidate_llm(text, context))
@@ -453,6 +493,22 @@ class ReferenceResolver:
         """LLM 子 Resolver（复杂引用，确定性规则未命中时兜底）。"""
         rq = self._llm_resolve(text, context)
         return self._candidate_from(rq, "llm")
+
+    def _candidate_file(self, text: str, context: CognitiveContext) -> ResolutionCandidate:
+        """文件子 Resolver：显式文件引用 → kind=file（Repository Runtime 复用）。"""
+        m = None
+        for p in _FILE_REFERENCE_PATTERNS:
+            m = p.match(text)
+            if m:
+                break
+        target = m.group(2) if m else ""
+        return ResolutionCandidate(
+            kind="file",
+            target=target or None,
+            confidence=0.95 if target else 0.0,
+            reason=f"文件引用: {target}" if target else "文件引用: 未提取到路径",
+            source="file",
+        )
 
     @staticmethod
     def merge_candidates(candidates: list) -> ResolutionCandidate:

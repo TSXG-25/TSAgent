@@ -1,0 +1,20 @@
+{
+  "id": "MT006_retention",
+  "turns": [
+    {"input": "读取 output/solution.py", "expected": {"target": "output/solution.py", "topic": "file", "kind": "file"}},
+    {"input": "改一下", "expected": {"target": "output/solution.py", "topic": "modify", "kind": "reference"}},
+    {"input": "继续", "expected": {"target": "output/solution.py", "topic": "modify", "kind": "reference"}},
+    {"input": "读取 output/notes.md", "expected": {"target": "output/notes.md", "topic": "file", "kind": "file"}},
+    {"input": "改一下", "expected": {"target": "output/notes.md", "topic": "modify", "kind": "reference"}},
+    {"input": "继续", "expected": {"target": "output/notes.md", "topic": "modify", "kind": "reference"}},
+    {"input": "打开 agent/config.py", "expected": {"target": "agent/config.py", "topic": "file", "kind": "file"}},
+    {"input": "改一下", "expected": {"target": "agent/config.py", "topic": "modify", "kind": "reference"}},
+    {"input": "继续", "expected": {"target": "agent/config.py", "topic": "modify", "kind": "reference"}},
+    {"input": "打开 output/solution.py", "expected": {"target": "output/solution.py", "topic": "file", "kind": "file"}},
+    {"input": "改一下", "expected": {"target": "output/solution.py", "topic": "modify", "kind": "reference"}},
+    {"input": "继续", "expected": {"target": "output/solution.py", "topic": "modify", "kind": "reference"}},
+    {"input": "那继续", "expected": {"target": "output/solution.py", "topic": "modify", "kind": "reference"}},
+    {"input": "再优化一下", "expected": {"target": "output/solution.py", "topic": "modify", "kind": "reference"}},
+    {"input": "继续", "expected": {"target": "output/solution.py", "topic": "modify", "kind": "reference"}}
+  ]
+}

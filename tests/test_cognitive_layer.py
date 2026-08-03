@@ -27,10 +27,18 @@ class WorkspaceContextStub:
 
 
 # ── Import actual modules ──
-from agent.cognition.cognitive_context import CognitiveContext, ConversationState, ResolvedQuery
+from agent.cognition.cognitive_context import CognitiveContext, ConversationState, ResolvedQuery, ResolutionResult
 from agent.cognition.reference_resolver import ReferenceResolver
 from agent.cognition.intent_engine import IntentEngine
 from agent.cognition.intent_schema import IntentResult, DOMAIN_DEVELOPMENT, DOMAIN_CHAT
+
+
+def _state_with(*history):
+    """从 ResolutionResult 构建 ConversationState（v1.2B：Resolver 从 timeline 断读）。"""
+    state = ConversationState()
+    for r in history:
+        state.record(r)
+    return state
 
 
 class TestReferenceResolver:
@@ -43,9 +51,9 @@ class TestReferenceResolver:
         """代词引用 → 使用 last_symbol。"""
         ctx = CognitiveContext(
             query="解释这里",
-            conversation_state=ConversationState(
-                last_symbol="Planner",
-                last_file="agent/planner/planner.py",
+            conversation_state=_state_with(
+                ResolutionResult(kind="file", target="agent/planner/planner.py"),
+                ResolutionResult(kind="symbol", target="Planner", symbol="Planner"),
             ),
         )
         result = self.resolver.resolve("解释这里", ctx)
@@ -57,7 +65,9 @@ class TestReferenceResolver:
         """代词引用（无 symbol）→ 使用 last_file。"""
         ctx = CognitiveContext(
             query="改一下",
-            conversation_state=ConversationState(last_file="runtime.py"),
+            conversation_state=_state_with(
+                ResolutionResult(kind="file", target="runtime.py"),
+            ),
         )
         result = self.resolver.resolve("改一下", ctx)
         # "改一下" 匹配省略目标规则（有动词），不匹配纯代词规则
@@ -84,9 +94,8 @@ class TestReferenceResolver:
         """跨轮续操作 → 使用 last_target。"""
         ctx = CognitiveContext(
             query="那改一下",
-            conversation_state=ConversationState(
-                last_target="planner.py",
-                last_symbol="Planner",
+            conversation_state=_state_with(
+                ResolutionResult(kind="reference", target="planner.py"),
             ),
         )
         result = self.resolver.resolve("那改一下", ctx)
@@ -97,9 +106,9 @@ class TestReferenceResolver:
         """符号引用 → 使用 last_symbol。"""
         ctx = CognitiveContext(
             query="这个函数",
-            conversation_state=ConversationState(
-                last_symbol="IntentEngine",
-                last_file="intent_engine.py",
+            conversation_state=_state_with(
+                ResolutionResult(kind="file", target="intent_engine.py"),
+                ResolutionResult(kind="symbol", target="IntentEngine", symbol="IntentEngine"),
             ),
         )
         result = self.resolver.resolve("这个函数", ctx)
@@ -141,9 +150,9 @@ class TestCognitiveContext:
                 current_file="runtime.py",
                 current_symbol="Executor",
             ),
-            conversation_state=ConversationState(
-                last_file="planner.py",
-                last_symbol="Planner",
+            conversation_state=_state_with(
+                ResolutionResult(kind="file", target="planner.py"),
+                ResolutionResult(kind="symbol", target="Planner", symbol="Planner"),
             ),
         )
         summary = ctx.short_summary()
@@ -159,7 +168,10 @@ class TestCognitiveContext:
     def test_properties(self):
         """便捷属性访问。"""
         ws = WorkspaceContextStub(current_file="test.py", current_symbol="TestClass")
-        conv = ConversationState(last_file="old.py", last_symbol="OldClass")
+        conv = _state_with(
+            ResolutionResult(kind="file", target="old.py"),
+            ResolutionResult(kind="symbol", target="OldClass", symbol="OldClass"),
+        )
         ctx = CognitiveContext(
             query="test",
             workspace=ws,
@@ -171,14 +183,13 @@ class TestCognitiveContext:
         assert ctx.last_symbol == "OldClass"
 
     def test_conversation_state_update(self):
-        """ConversationState 更新。"""
+        """ConversationState 更新（v1.2B：State = Cache，record 唯一写入）。"""
         state = ConversationState()
-        assert state.last_file is None
+        assert state.timeline.latest() is None
 
-        state.last_file = "runtime.py"
-        state.last_symbol = "Executor"
-        assert state.last_file == "runtime.py"
-        assert state.last_symbol == "Executor"
+        state.record(ResolutionResult(kind="file", target="runtime.py"))
+        state.record(ResolutionResult(kind="symbol", target="Executor", symbol="Executor"))
+        assert state.timeline.latest().symbol == "Executor"
 
 
 class TestResolvedQuery:
@@ -283,9 +294,9 @@ class TestIntegration:
         resolver = ReferenceResolver()
         engine = IntentEngine()
 
-        conv_state = ConversationState(
-            last_symbol="Planner",
-            last_file="agent/planner/planner.py",
+        conv_state = _state_with(
+            ResolutionResult(kind="file", target="agent/planner/planner.py"),
+            ResolutionResult(kind="symbol", target="Planner", symbol="Planner"),
         )
 
         ctx = CognitiveContext(
@@ -308,10 +319,8 @@ class TestIntegration:
         resolver = ReferenceResolver()
         engine = IntentEngine()
 
-        conv_state = ConversationState(
-            last_target="planner.py",
-            last_domain="development",
-            last_action="read",
+        conv_state = _state_with(
+            ResolutionResult(kind="reference", target="planner.py"),
         )
 
         ctx = CognitiveContext(

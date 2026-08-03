@@ -108,9 +108,9 @@ class PlannerStage:
         )
         print(f"  🧠 认知上下文: {cognitive_context.short_summary()}")
 
-        # ── Stage 0.5: ReferenceResolver 消歧 ──
+        # ── Stage 0.5: ReferenceResolver 消歧（v1.2B：产出 ResolutionResult）──
         resolved = self._orch._reference_resolver.resolve(user_input, cognitive_context)
-        cognitive_context.resolved_query = resolved
+        cognitive_context.resolved_query = resolved.to_resolved_query()
         if resolved.resolution_trace:
             print(f"  🔍 引用消歧: {resolved.resolution_trace}")
 
@@ -118,8 +118,8 @@ class PlannerStage:
         intent = intent_engine.analyze(cognitive_context)
         print(f"  🧠 意图: {intent}")
 
-        # 更新跨轮对话状态
-        self._orch._context_builder.update_conversation_state(intent)
+        # 更新跨轮对话状态（State = Cache：timeline 写入；last_* 为 Deprecated 双写）
+        self._orch._context_builder.update_conversation_state(intent, resolution=resolved)
 
         # 不要求执行（chat / translation / math / creation / identity 等）→ 直接 LLM 回答
         if not intent.requires_execution:

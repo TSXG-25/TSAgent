@@ -93,9 +93,20 @@ class ContextBuilder:
             artifacts=artifacts,
         )
 
-    def update_conversation_state(self, intent: IntentResult) -> None:
-        """在意图理解后更新跨轮对话状态。"""
+    def update_conversation_state(
+        self,
+        intent: IntentResult,
+        resolution=None,
+    ) -> None:
+        """在意图理解后更新跨轮对话状态（v1.2B：State = Cache）。
+
+        timeline 是唯一语义来源（写入 Resolver 产出的 ResolutionResult）。
+        last_* 为 Deprecated 兼容层（双写，迁移完成后删除）。
+        """
         state = self._orch._conversation_state
+        if resolution is not None:
+            state.record(resolution)
+        # Deprecated 兼容层（双写，迁移期）
         if intent.target:
             state.last_file = intent.target
             state.last_target = intent.target

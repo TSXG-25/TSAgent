@@ -13,7 +13,7 @@
 import re
 from typing import Optional
 
-from .cognitive_context import CognitiveContext, ResolvedQuery, ConversationState, ResolutionCandidate
+from .cognitive_context import CognitiveContext, ResolvedQuery, ConversationState, ResolutionCandidate, ResolutionResult
 
 # ── 确定性消歧规则 ──
 
@@ -182,63 +182,44 @@ class ReferenceResolver:
     def llm_call_count(self) -> int:
         return self._llm_calls
 
-    def resolve(self, user_input: str, context: CognitiveContext) -> ResolvedQuery:
-        """消歧主入口。
+    def resolve(self, user_input: str, context: CognitiveContext) -> ResolutionResult:
+        """消歧主入口（v1.2B：Pipeline = 子 Resolver → merge → ResolutionResult）。
 
-        Args:
-            user_input: 用户原始输入
-            context: 当前认知上下文
+        Pipeline（ADR-0008）：
+            Input → [子 Resolver 收集候选] → merge_candidates()（纯函数择优）→ ResolutionResult
 
-        Returns:
-            消歧后的 ResolvedQuery
+        - resolve() 与各子 Resolver 不修改任何状态（ConversationState 由 Runtime 更新）。
+        - 规则按优先级从高到低排列（与原规则链一致，行为不变）。
         """
         text = user_input.strip()
+        candidates = self.resolve_candidates(text, context)
+        merged = self.merge_candidates(candidates)
+        return self._candidate_to_result(merged, text)
 
-        # ── Stage 1: 确定性规则消歧 ──
-        # 注意：规则按优先级从高到低排列
-        # 更具体的模式（如续操作）先于更宽泛的模式（如代词）
+    @staticmethod
+    def _candidate_to_result(c: ResolutionCandidate, raw: str) -> ResolutionResult:
+        """ResolutionCandidate → ResolutionResult（极简，保留查询视图）。"""
+        rq = c.to_resolved_query(raw)
+        return ResolutionResult(
+            kind=c.kind,
+            target=rq.target,
+            symbol=rq.symbol,
+            confidence=c.confidence,
+            trace=c.reason,
+            raw=raw,
+            resolved_query=rq,
+        )
 
-        # 规则 1: 跨轮续操作 → 使用 last_target（优先级最高，避免"那改一下"被代词规则吞掉）
-        if _is_continuation(text):
-            return self._resolve_continuation(text, context)
-
-        # 规则 2: 主题延续（"上海呢" / "那广州呢" / "北京怎么样"）
-        # → 新 target + 继承上一轮 domain/action（v1.2A）
-        # 注意：必须早于代词规则（"那广州呢" 否则会被"那"代词模式吞掉）
-        if self._is_topic_continuation(text, context):
-            return self._resolve_topic_continuation(text, context)
-
-        # 规则 2.5: 符号引用 + 语气词（"那个函数呢" → last_symbol，v1.2A）
-        if re.match(r'^(那个|这个|上面|下面)\s*(函数|方法|类|变量|接口|模块|文件)?\s*(呢|呢？|呢吧)?$', text):
-            return self.resolve_symbol(text, context).to_resolved_query(text)
-
-        # 规则 3: 符号引用 → 使用 last_symbol
-        if _is_symbol_reference(text):
-            return self._resolve_symbol_ref(text, context)
-
-        # 规则 4: 省略目标操作 → 使用 current_file
-        if _is_omitted_target(text):
-            return self._resolve_omitted_target(text, context)
-
-        # 规则 5: 纯代词引用 → 使用 last_file / last_symbol（最后检查，避免误吞续操作/省略句）
-        if _is_pronoun_only(text):
-            return self._resolve_pronoun(text, context)
-
-        # 规则 6: 序数引用 → TODO: 解析上一轮列表
-        if _is_ordinal_reference(text):
-            return self._resolve_ordinal(text, context)
-
-        # ── Stage 2: LLM 复杂消歧 ──
-        if _needs_complex_llm_resolve(text, context):
-            return self._llm_resolve(text, context)
-
-        # 默认：无消歧
-        return ResolvedQuery(
-            target="",
-            symbol="",
-            raw=user_input,
-            confidence=1.0,
-            resolution_trace="无需消歧",
+    @staticmethod
+    def _candidate_from(rq: ResolvedQuery, source: str) -> ResolutionCandidate:
+        """ResolvedQuery → ResolutionCandidate（子 Resolver 内部复用）。"""
+        return ResolutionCandidate(
+            kind=rq.kind or "reference",
+            target=rq.target or None,
+            symbol=rq.symbol or "",
+            confidence=rq.confidence,
+            reason=rq.resolution_trace,
+            source=source,
         )
 
     def _is_topic_continuation(self, text: str, context: CognitiveContext) -> bool:
@@ -270,6 +251,7 @@ class ReferenceResolver:
             resolution_trace=(
                 f"主题延续: target={target}（继承 {conv.last_domain}/{conv.last_action}）"
             ),
+            kind="topic",
         )
 
     def _resolve_pronoun(self, text: str, context: CognitiveContext) -> ResolvedQuery:
@@ -305,6 +287,7 @@ class ReferenceResolver:
             raw=text,
             confidence=0.9 if target or symbol else 0.0,
             resolution_trace=f"代词消歧: {' | '.join(trace_parts)}",
+            kind="reference",
         )
 
     def _resolve_symbol_ref(self, text: str, context: CognitiveContext) -> ResolvedQuery:
@@ -324,6 +307,7 @@ class ReferenceResolver:
             raw=text,
             confidence=0.85 if symbol else 0.5,
             resolution_trace=f"符号引用消歧: {' | '.join(trace_parts) if trace_parts else '未命中'}",
+            kind="symbol",
         )
 
     def _resolve_omitted_target(self, text: str, context: CognitiveContext) -> ResolvedQuery:
@@ -352,6 +336,7 @@ class ReferenceResolver:
             entities=[action] if action else [],
             confidence=0.9 if target else 0.3,
             resolution_trace=trace,
+            kind="reference",
         )
 
     def _resolve_continuation(self, text: str, context: CognitiveContext) -> ResolvedQuery:
@@ -370,6 +355,7 @@ class ReferenceResolver:
             entities=[action] if action else [],
             confidence=0.85 if target else 0.3,
             resolution_trace=trace,
+            kind="reference",
         )
 
     def _resolve_ordinal(self, text: str, context: CognitiveContext) -> ResolvedQuery:
@@ -380,6 +366,7 @@ class ReferenceResolver:
             raw=text,
             confidence=0.3,
             resolution_trace="序数消歧: 暂未实现（TODO）",
+            kind="ordinal",
         )
 
     # ── Resolution Pipeline（ADR-0008）：统一 Candidate + merge（纯函数）──
@@ -406,22 +393,66 @@ class ReferenceResolver:
         )
 
     def resolve_candidates(self, text: str, context: CognitiveContext) -> list:
-        """收集所有子 Resolver 的候选（Pipeline 输入）。"""
-        conv = context.conversation_state
+        """收集所有子 Resolver 的候选（Pipeline 输入）。
+
+        规则按优先级从高到低排列（与原规则链一致，行为不变）：
+        continuation > topic > symbol(2.5) > symbol(3) > omitted > pronoun > ordinal
+        > LLM（复杂场景）> unknown（fallback）
+
+        每个命中规则产生 1 个候选；merge 在候选内择优（纯函数）。
+        """
         candidates = []
-        # topic / symbol / reference / unknown 各产生候选
-        if conv and conv.last_domain:
-            m = re.match(r'^(那|那么)?\s*([\w\u4e00-\u9fff]+?)\s*(呢|怎么样|如何|现在怎么样)\s*$', text)
-            if m and not re.match(r'^(个|这个|那个|上面|下面)', m.group(2)):
-                candidates.append(ResolutionCandidate(
-                    kind="topic", target=m.group(2), confidence=0.8,
-                    reason=f"主题延续: {m.group(2)}", source="topic",
-                ))
-        if re.match(r'^(那个|这个|上面|下面)\s*(函数|方法|类|变量|接口|模块|文件)?\s*(呢|呢？|呢吧)?$', text):
+        # 规则 1: 跨轮续操作（"那改一下" → last_target，优先级最高）
+        if _is_continuation(text):
+            candidates.append(
+                self._candidate_from(self._resolve_continuation(text, context), "continuation")
+            )
+        # 规则 2: 主题延续（"上海呢" → 新 target，先于代词规则）
+        elif self._is_topic_continuation(text, context):
+            candidates.append(
+                self._candidate_from(self._resolve_topic_continuation(text, context), "topic")
+            )
+        # 规则 2.5: 符号引用 + 语气词（"那个函数呢" → last_symbol）
+        elif re.match(r'^(那个|这个|上面|下面)\s*(函数|方法|类|变量|接口|模块|文件)?\s*(呢|呢？|呢吧)?$', text):
             candidates.append(self.resolve_symbol(text, context))
+        # 规则 3: 符号引用（"这个函数" → last_symbol）
+        elif _is_symbol_reference(text):
+            candidates.append(
+                self._candidate_from(self._resolve_symbol_ref(text, context), "symbol")
+            )
+        # 规则 4: 省略目标操作（"修改一下" → current_file）
+        elif _is_omitted_target(text):
+            candidates.append(
+                self._candidate_from(self._resolve_omitted_target(text, context), "omitted")
+            )
+        # 规则 5: 纯代词引用（"解释这里" → last_symbol/last_file）
+        elif _is_pronoun_only(text):
+            candidates.append(
+                self._candidate_from(self._resolve_pronoun(text, context), "pronoun")
+            )
+        # 规则 6: 序数引用（"第二个" → B5 实现）
+        elif _is_ordinal_reference(text):
+            candidates.append(
+                self._candidate_from(self._resolve_ordinal(text, context), "ordinal")
+            )
+        # Stage 2: LLM 复杂消歧（仅确定性规则未命中时）
+        if not candidates and _needs_complex_llm_resolve(text, context):
+            candidates.append(self._candidate_llm(text, context))
+        # Unknown fallback（无引用需消歧：confidence=1.0，保持原"无需消歧"语义）
         if not candidates:
-            candidates.append(self.resolve_unknown(text, context))
+            candidates.append(ResolutionCandidate(
+                kind="unknown",
+                target=None,
+                confidence=1.0,
+                reason="无需消歧",
+                source="none",
+            ))
         return candidates
+
+    def _candidate_llm(self, text: str, context: CognitiveContext) -> ResolutionCandidate:
+        """LLM 子 Resolver（复杂引用，确定性规则未命中时兜底）。"""
+        rq = self._llm_resolve(text, context)
+        return self._candidate_from(rq, "llm")
 
     @staticmethod
     def merge_candidates(candidates: list) -> ResolutionCandidate:
@@ -465,6 +496,7 @@ class ReferenceResolver:
                 raw=text,
                 confidence=0.7 if target or symbol else 0.0,
                 resolution_trace=f"LLM 消歧: target={target}, symbol={symbol}",
+                kind="reference",
             )
 
         except Exception as e:
@@ -473,6 +505,7 @@ class ReferenceResolver:
                 raw=text,
                 confidence=0.0,
                 resolution_trace=f"LLM 消歧失败: {e}",
+                kind="unknown",
             )
 
     def _build_llm_prompt(self, text: str, context: CognitiveContext) -> str:

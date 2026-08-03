@@ -11,6 +11,7 @@ CognitiveContext 是纯数据容器，零方法、零 import 外部服务。
 """
 from dataclasses import dataclass, field
 from typing import Optional
+from collections import deque
 
 
 @dataclass
@@ -19,9 +20,11 @@ class ResolutionCandidate:
 
     Reference / Repository / Memory 等所有 Resolver 共用同一模型。
     kind 标识候选类型；confidence 由 merge 用于择优；source 记录来源。
+    symbol: 附加符号（代词消歧等场景同时产出 file+symbol；kind="symbol" 时冗余）。
     """
     kind: str = "unknown"        # "topic" | "symbol" | "file" | "ordinal" | "reference" | "unknown"
     target: Optional[str] = None
+    symbol: str = ""
     confidence: float = 0.0
     reason: str = ""
     source: str = ""
@@ -29,20 +32,122 @@ class ResolutionCandidate:
     def to_resolved_query(self, raw: str) -> "ResolvedQuery":
         return ResolvedQuery(
             target=self.target or "",
-            symbol=self.target if self.kind == "symbol" else "",
+            symbol=self.symbol or (self.target if self.kind == "symbol" else ""),
             raw=raw,
             confidence=self.confidence,
             resolution_trace=self.reason,
+            kind=self.kind,
         )
 
 
 @dataclass
-class ConversationState:
-    """跨轮对话状态追踪。
+class ResolutionResult:
+    """Resolver Pipeline 输出（ADR-0008 / v1.2B 极简）。
 
-    由 Orchestrator 在每次处理后更新。
-    ReferenceResolver 消费这些信息来消歧代词和省略句。
+    只回答"引用最终解析成了什么"（kind/target/symbol/confidence）。
+    domain/action 属于 Intent，不进入 Resolution —— Resolver 决定"指的是谁"，
+    Intent 决定"要做什么"，两者组合后再交给 Planner。
+
+    resolved_query: 可选查询视图（兼容下游 intent_engine 对 target/symbol/entities 的读取）。
+    to_json(): Determinism Hash 输入（B3：Result Hash + Trace Hash）。
     """
+    kind: str = "unknown"        # "topic" | "symbol" | "file" | "ordinal" | "reference" | "unknown"
+    target: str = ""             # 解析后的目标（无目标 = ""）
+    symbol: str = ""
+    confidence: float = 0.0
+    trace: str = ""              # 推理路径（Trace Hash 输入）
+    raw: str = ""                # 原始输入
+    resolved_query: Optional["ResolvedQuery"] = None
+
+    @property
+    def resolution_trace(self) -> str:
+        return self.trace
+
+    @property
+    def has_target(self) -> bool:
+        return bool(self.target)
+
+    @property
+    def entities(self) -> list:
+        """只读委托（兼容下游直接消费 ResolutionResult 的用法）。"""
+        if self.resolved_query is not None:
+            return self.resolved_query.entities
+        return []
+
+    def to_resolved_query(self) -> "ResolvedQuery":
+        if self.resolved_query is not None:
+            return self.resolved_query
+        return ResolvedQuery(
+            target=self.target or "",
+            symbol=self.symbol or "",
+            raw=self.raw,
+            confidence=self.confidence,
+            resolution_trace=self.trace,
+            kind=self.kind,
+        )
+
+    def to_json(self) -> dict:
+        """Determinism Hash 输入（结果 + 推理路径）。"""
+        return {
+            "kind": self.kind,
+            "target": self.target,
+            "symbol": self.symbol,
+            "confidence": round(self.confidence, 6),
+            "trace": self.trace,
+        }
+
+
+class ResolutionTimeline:
+    """能力缓存（v1.2B：State = Cache，Timeline = Storage）。
+
+    - 内部固定窗口 deque（默认 15 轮），对外只见存储接口。
+    - 不承载任何 kind 语义 —— "什么叫 symbol/topic/ordinal" 由 Resolver 决定。
+    - 语义查询（latest_symbol / nth(kind, n)）由 Resolver 基于 history()/iter_reverse() 实现。
+    - 所有 Resolver（Reference / Repository / Memory）共享同一缓存。
+    """
+
+    def __init__(self, maxlen: int = 15):
+        self._items: deque = deque(maxlen=maxlen)
+
+    def push(self, result: ResolutionResult) -> None:
+        """写入（Runtime 唯一调用）。"""
+        self._items.append(result)
+
+    def latest(self) -> Optional[ResolutionResult]:
+        """最近一条解析结果（无则 None）。"""
+        return self._items[-1] if self._items else None
+
+    def history(self) -> list:
+        """窗口内全部（旧 → 新）。"""
+        return list(self._items)
+
+    def iter_reverse(self):
+        """从新到旧迭代（最新优先，用于"最近的"查询）。"""
+        return reversed(list(self._items))
+
+    def __len__(self) -> int:
+        return len(self._items)
+
+    def __iter__(self):
+        return iter(self._items)
+
+    def clear(self) -> None:
+        self._items.clear()
+
+
+@dataclass
+class ConversationState:
+    """跨轮对话状态追踪（v1.2B：State = Cache）。
+
+    唯一字段 timeline：ResolutionResult 窗口缓存（Capability Cache）。
+    Resolver 负责推理（从 timeline 派生语义），State 只负责缓存。
+    Runtime 通过 record() 写入。
+
+    last_* 为 Deprecated 兼容层（B1 迁移期双写，所有读取点迁移完成后删除）。
+    """
+    timeline: ResolutionTimeline = field(default_factory=ResolutionTimeline)
+
+    # ── Deprecated（v1.2B 迁移期兼容层，Phase A：断写 → 断读 → 删字段）──
     last_file: Optional[str] = None
     last_symbol: Optional[str] = None
     last_target: Optional[str] = None
@@ -50,6 +155,10 @@ class ConversationState:
     last_domain: Optional[str] = None
     last_task: Optional[str] = None
     last_workflow: Optional[str] = None
+
+    def record(self, result: ResolutionResult) -> None:
+        """唯一写入入口：Runtime 在 Resolver 产出 ResolutionResult 后调用。"""
+        self.timeline.push(result)
 
 
 @dataclass
@@ -70,6 +179,7 @@ class ResolvedQuery:
     raw: str = ""
     confidence: float = 0.0
     resolution_trace: str = ""
+    kind: str = ""              # ResolutionKind（v1.2B：由 Resolver 标注）
 
     @property
     def has_target(self) -> bool:

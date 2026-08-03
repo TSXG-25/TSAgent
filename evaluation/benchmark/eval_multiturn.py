@@ -10,7 +10,7 @@ import sys
 
 sys.path.insert(0, ".")
 
-from agent.cognition.cognitive_context import CognitiveContext, ConversationState
+from agent.cognition.cognitive_context import CognitiveContext, ConversationState, ResolutionResult
 from agent.cognition.reference_resolver import ReferenceResolver
 from agent.cognition.intent_engine import IntentEngine
 
@@ -30,13 +30,11 @@ class _Engine:
             conversation=[],
         )
         resolved = self.resolver.resolve(user_input, ctx)
-        ctx.resolved_query = resolved
+        ctx.resolved_query = resolved.to_resolved_query()
         intent = self.intent.analyze(ctx)
-        # 更新状态（供下一轮）
+        # v1.2B: State = Cache —— timeline 写入（Resolver 产出 ResolutionResult）
         # target：消歧结果优先，否则用 IntentEngine 提取的显式 target
         final_target = resolved.target or getattr(intent, "target", "") or ""
-        if final_target:
-            self.state.last_target = final_target
         # last_symbol：resolved.symbol 或 intent 提取的驼峰实体，或驼峰 target
         sym = resolved.symbol or ""
         if not sym:
@@ -46,6 +44,19 @@ class _Engine:
                     break
         if not sym and final_target and final_target[0].isupper():
             sym = final_target
+        result = ResolutionResult(
+            kind=resolved.kind,
+            target=final_target,
+            symbol=sym,
+            confidence=resolved.confidence,
+            trace=resolved.trace,
+            raw=user_input,
+            resolved_query=resolved.to_resolved_query(),
+        )
+        self.state.record(result)
+        # Deprecated 兼容层（双写，迁移期）
+        if final_target:
+            self.state.last_target = final_target
         if sym:
             self.state.last_symbol = sym
         if intent.domain:

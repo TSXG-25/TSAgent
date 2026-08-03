@@ -264,6 +264,10 @@ class ReactExecutor:
                     observation.get("summary", ""),
                     params,
                 )
+                # v2.0-C Reflection：失败 → 确定性诊断 → Correction Proposal（注入下一轮 Think）
+                # 约束 1：reflect() 只消费 FailureEvent（evidence 结构化）
+                # 约束 2：correction 是 Proposal，Executor/LLM 决定是否采纳
+                self._reflect_failure(task, observation)
                 # P0-3 Recovery: tool 失败后不走 validator，直接继续 Think
                 # (不要在这里 finish，让 LLM 换工具重试)
                 print(f"   🔄 失败后不结束，继续尝试 (第 {iteration}/{self._max_iterations()} 轮)")
@@ -407,10 +411,73 @@ class ReactExecutor:
         success, _ = validator.validate(task)
         return success
 
+    def _symptom_from_observation(self, obs: Dict) -> str:
+        """确定性 symptom 判定（从失败观察，ADR-0009：无 LLM）。"""
+        s = f"{obs.get('summary', '')} {obs.get('error', '')}"
+        sl = s.lower()
+        if "timeout" in sl or "超时" in sl:
+            return "timeout"
+        if ("不存在" in s or "未找到" in s or "无匹配" in s
+                or "not found" in sl or "no such file" in sl):
+            return "hallucination"
+        if ("拦截" in s or "拒绝" in s or "禁止" in s or "安全策略" in s):
+            return "missing_constraint"
+        return "wrong_answer"
+
+    def _reflect_failure(self, task: Dict, observation: Dict) -> None:
+        """v2.0-C Reflection：失败观察 → FailureEvent → reflect() → Correction Proposal。
+
+        Correction 是 Proposal（约束 2）：只注入下一轮 Think 的提示，
+        由 Executor/LLM 决定是否采纳。Reflection 不执行修正。
+        """
+        try:
+            from agent.reflection.reflector import reflect
+            from evaluation.benchmark.failboard_v2 import FailureEvent, Evidence
+
+            obs = observation or {}
+            event = FailureEvent(
+                benchmark="executor",
+                scenario=task.get("id", "task"),
+                layer="long_horizon",
+                dimension="completion",
+                failure=(obs.get("summary", "") or "")[:120],
+                evidence=[Evidence(
+                    source="tool",
+                    location=obs.get("tool_used", obs.get("action", "")),
+                    expected="执行成功",
+                    actual=(obs.get("summary", "") or "")[:120],
+                )],
+                symptom=self._symptom_from_observation(obs),
+            )
+            result = reflect(event)
+            task["_reflection"] = {
+                "root_cause": result.diagnosis.root_cause,
+                "confidence": result.diagnosis.confidence,
+                "correction": result.correction.action,
+                "reason": result.correction.reason,
+            }
+            print(f"   🔬 反射诊断: root_cause={result.diagnosis.root_cause} "
+                  f"(conf={result.diagnosis.confidence}) → 建议 correction={result.correction.action}")
+        except Exception as e:
+            # Reflection 是增强，失败不阻塞执行
+            task["_reflection"] = {"root_cause": "unknown", "confidence": 0.0,
+                                   "correction": "retry", "reason": f"Reflection 失败: {e}"}
+
     async def _think(self, state: AgentState, task: Dict) -> Dict:
         # P0-2: Inject tool selection rules into the system prompt
         task_goal = (task.get("goal", "") or "").lower()
         rules = self._build_tool_selection_rules(task_goal)
+
+        # v2.0-C Reflection：上一轮失败的 Correction Proposal 注入（Proposal，LLM 决定采纳）
+        refl = task.get("_reflection")
+        if refl:
+            rules += (
+                f"\n🔹 上一轮失败已诊断: root_cause={refl.get('root_cause')}"
+                f"（confidence={refl.get('confidence')}）。"
+                f"建议 correction={refl.get('correction')}（仅供参考，自行判断）。"
+                f"如果该 correction 不适用，请给出你的替代方案。"
+            )
+
         system_prompt = TOOL_SELECTION_SYSTEM_PROMPT + "\n\n" + rules
         
         messages = ContextService.build_think_prompt(task, system_prompt=system_prompt)

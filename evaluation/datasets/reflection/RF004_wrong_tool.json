@@ -1,0 +1,18 @@
+{
+  "id": "RF004",
+  "name": "wrong_tool",
+  "event": {
+    "benchmark": "long_horizon",
+    "scenario": "LH001",
+    "layer": "long_horizon",
+    "dimension": "completion",
+    "failure": "选错工具：用 read_file 读目录导致失败",
+    "evidence": [
+      {"source": "executor", "location": "task[1]", "expected": "list_directory 列出目录", "actual": "read_file 读取目录报错"},
+      {"source": "capability", "location": "intent", "expected": "capability=list_directory", "actual": "capability=read_file"}
+    ],
+    "symptom": "wrong_answer"
+  },
+  "gold": {"root_cause": "decision", "correction": "re_decide"},
+  "note": "决策错误（工具选错）→ 重新决策，不是 replan 也不是换 grounding。"
+}

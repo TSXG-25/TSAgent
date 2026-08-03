@@ -1,6 +1,7 @@
 {
   "capabilities": [
-    "planning"
+    "planning",
+    "reflection"
   ],
   "lh_metrics": {
     "goal_coverage": 0.0,
@@ -86,5 +87,21 @@
   ],
   "extra": {
     "mode": "Real planner"
-  }
+  },
+  "reflection_metrics": {
+    "diagnosis_accuracy": 1.0,
+    "correction_proposal_accuracy": 1.0,
+    "false_diagnosis_rate": 0.0,
+    "scenarios": 10,
+    "determinism_gate": true
+  },
+  "reflection_history": [
+    {
+      "diagnosis_accuracy": 1.0,
+      "correction_proposal_accuracy": 1.0,
+      "false_diagnosis_rate": 0.0,
+      "scenarios": 10,
+      "determinism_gate": true
+    }
+  ]
 }

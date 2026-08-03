@@ -1,0 +1,18 @@
+{
+  "id": "RF008",
+  "name": "runtime_error",
+  "event": {
+    "benchmark": "long_horizon",
+    "scenario": "LH001",
+    "layer": "long_horizon",
+    "dimension": "completion",
+    "failure": "Runtime 捕获 OSError（文件路径错误）",
+    "evidence": [
+      {"source": "runtime", "location": "_recover", "expected": "异常被恢复，Session 继续", "actual": "OSError: [Errno 2] No such file or directory"},
+      {"source": "workspace", "location": "resolve", "expected": "路径存在", "actual": "路径不存在"}
+    ],
+    "symptom": "timeout"
+  },
+  "gold": {"root_cause": "runtime", "correction": "recover"},
+  "note": "Runtime 异常 → Recovery（Runtime 已捕获），不是 replan 也不是换工具。"
+}

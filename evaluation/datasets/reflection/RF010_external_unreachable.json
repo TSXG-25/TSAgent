@@ -1,0 +1,18 @@
+{
+  "id": "RF010",
+  "name": "external_unreachable",
+  "event": {
+    "benchmark": "long_horizon",
+    "scenario": "LH001",
+    "layer": "long_horizon",
+    "dimension": "completion",
+    "failure": "外部服务不可达（web_fetch 连接失败）",
+    "evidence": [
+      {"source": "tool", "location": "web_fetch", "expected": "返回页面内容", "actual": "ConnectionError: 无法连接"},
+      {"source": "runtime", "location": "timeout", "expected": "网络可用", "actual": "外部服务无响应"}
+    ],
+    "symptom": "timeout"
+  },
+  "gold": {"root_cause": "external", "correction": "notify"},
+  "note": "外部依赖不可达 → Notify（告知用户外部问题），重试无意义。"
+}

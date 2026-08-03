@@ -1,0 +1,18 @@
+{
+  "id": "RF003",
+  "name": "constraint_violated",
+  "event": {
+    "benchmark": "planning",
+    "scenario": "PL002",
+    "layer": "planning",
+    "dimension": "constraint",
+    "failure": "计划违反 no_web 约束",
+    "evidence": [
+      {"source": "semantic_validator", "location": "task[2]", "expected": "no_web", "actual": "search web"},
+      {"source": "constraint_extractor", "location": "input", "expected": "提取 no_web 约束", "actual": "约束存在但 plan 未遵守"}
+    ],
+    "symptom": "missing_constraint"
+  },
+  "gold": {"root_cause": "planning", "correction": "replanning"},
+  "note": "约束遗漏 → 重新规划（带约束注入），不是换工具。"
+}

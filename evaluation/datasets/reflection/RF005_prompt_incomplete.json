@@ -1,0 +1,18 @@
+{
+  "id": "RF005",
+  "name": "prompt_incomplete",
+  "event": {
+    "benchmark": "planning",
+    "scenario": "PL004",
+    "layer": "planning",
+    "dimension": "task",
+    "failure": "LLM 输出 task 缺 verb/target 字段（结构不完整）",
+    "evidence": [
+      {"source": "plan_validator", "location": "task[0]", "expected": "verb ∈ 合法枚举", "actual": "verb=''"},
+      {"source": "plan_validator", "location": "task[0]", "expected": "target_type ∈ 合法枚举", "actual": "target_type=''"}
+    ],
+    "symptom": "wrong_answer"
+  },
+  "gold": {"root_cause": "prompt", "correction": "enrich_prompt"},
+  "note": "输出结构不完整 → 补 prompt（严格格式约束），不是 replan。"
+}

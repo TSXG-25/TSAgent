@@ -1,0 +1,18 @@
+{
+  "id": "RF002",
+  "name": "grounding_miss",
+  "event": {
+    "benchmark": "planning",
+    "scenario": "PL002",
+    "layer": "planning",
+    "dimension": "goal",
+    "failure": "目标文件未在仓库候选命中（grounding 无候选）",
+    "evidence": [
+      {"source": "grounder", "location": "GroundingInput", "expected": "parser.py 进入候选", "actual": "候选为空"},
+      {"source": "workspace", "location": "resolve('parser.py')", "expected": "命中文件", "actual": "无匹配"}
+    ],
+    "symptom": "hallucination"
+  },
+  "gold": {"root_cause": "grounding", "correction": "re_ground"},
+  "note": "Grounding 未命中 → 重新 grounding（换检索键/扩大搜索），不是改 prompt。"
+}

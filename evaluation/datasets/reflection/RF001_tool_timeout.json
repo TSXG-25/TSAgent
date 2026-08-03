@@ -1,0 +1,18 @@
+{
+  "id": "RF001",
+  "name": "tool_timeout",
+  "event": {
+    "benchmark": "long_horizon",
+    "scenario": "LH001",
+    "layer": "long_horizon",
+    "dimension": "completion",
+    "failure": "run_python 执行超时（120s）",
+    "evidence": [
+      {"source": "tool", "location": "run_python", "expected": "命令在 30s 内完成", "actual": "timeout 120s"},
+      {"source": "tool", "location": "run_python_file", "expected": "脚本正常退出", "actual": "无响应"}
+    ],
+    "symptom": "timeout"
+  },
+  "gold": {"root_cause": "tool", "correction": "switch_tool"},
+  "note": "工具超时 → 换工具（run_python → run_python_file 或 shell），不是重试同一工具。"
+}

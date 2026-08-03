@@ -1,0 +1,18 @@
+{
+  "id": "RF006",
+  "name": "info_insufficient",
+  "event": {
+    "benchmark": "planning",
+    "scenario": "PL007",
+    "layer": "planning",
+    "dimension": "abstention",
+    "failure": "用户输入信息不足（无法确定目标对象）",
+    "evidence": [
+      {"source": "constraint_extractor", "location": "detect_abstention", "expected": "Abstain / Ask User", "actual": "planner 乱猜目标"},
+      {"source": "input", "location": "query", "expected": "具体文件/符号", "actual": "模糊代词（那个模块）"}
+    ],
+    "symptom": "hallucination"
+  },
+  "gold": {"root_cause": "unknown", "correction": "ask_user"},
+  "note": "信息不足 → Ask User（澄清），不是 replan 也不是换工具。"
+}

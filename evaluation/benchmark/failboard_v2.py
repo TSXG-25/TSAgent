@@ -104,8 +104,8 @@ class FailBoard:
             added += 1
         return added
 
-    def transition(self, event_id: str, status: str, reason: str = "") -> None:
-        """追加状态转换（校验合法性）。"""
+    def transition(self, event_id: str, status: str, reason: str = "", commit: str = "") -> None:
+        """追加状态转换（校验合法性）。FIXED 可携带 FixCommit（commit hash）。"""
         if status not in VALID_STATUSES:
             raise ValueError(f"非法状态: {status!r}")
         last = self.current_status(event_id)
@@ -113,7 +113,8 @@ class FailBoard:
             raise ValueError(f"非法转换: {last} → {status}")
         self._transitions[event_id].append(FailureTransition(
             event_id=event_id, status=status,
-            at=datetime.now().strftime("%Y-%m-%dT%H:%M:%S"), reason=reason,
+            at=datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+            reason=reason, commit=commit,
         ))
 
     # ── 读取 ──
@@ -122,6 +123,18 @@ class FailBoard:
         if event_id not in self._transitions:
             raise KeyError(event_id)
         return self._transitions[event_id][-1].status
+
+    # ── FixCommit（约束 5：生命周期闭环） ──
+
+    def fix_commits(self, event_id: str) -> List[str]:
+        """所有 FIXED 状态对应的修复 commit（含多次回归后的多次修复）。"""
+        return [t.commit for t in self._transitions.get(event_id, [])
+                if t.status == "FIXED" and t.commit]
+
+    def first_fix_commit(self, event_id: str) -> str:
+        """首次修复 commit（REGRESSION 时用于定位谁重新引入）。"""
+        commits = self.fix_commits(event_id)
+        return commits[0] if commits else ""
 
     def resolve(self) -> List[dict]:
         """统一补全 root_cause + correction（SYMPTOM_MAP 唯一来源）。"""
@@ -201,11 +214,15 @@ class FailBoard:
 
 @dataclass
 class FailureTransition:
-    """状态演进（append-only，Event Sourcing）。"""
+    """状态演进（append-only，Event Sourcing）。
+
+    FIXED 时记录 commit（FixCommit）：REGRESSION 可关联首次修复 commit → 定位谁重新引入。
+    """
     event_id: str
     status: str
     at: str
     reason: str = ""
+    commit: str = ""   # FixCommit：FIXED 时的修复 commit hash
 
 # ── 持久化（FailBoard 存为 JSON 资产） ──
 
@@ -241,7 +258,7 @@ def load(path: str = FAILBOARD_PATH) -> FailBoard:
         if len(board._transitions[eid]) == 1 and td.get("status") == "NEW":
             continue  # NEW 已在 collect 建立
         try:
-            board.transition(eid, td["status"], td.get("reason", ""))
+            board.transition(eid, td["status"], td.get("reason", ""), td.get("commit", ""))
         except ValueError:
             pass
     return board

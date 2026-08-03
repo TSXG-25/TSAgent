@@ -1,0 +1,18 @@
+{
+  "id": "RF009",
+  "name": "hallucinated_target",
+  "event": {
+    "benchmark": "planning",
+    "scenario": "PL006",
+    "layer": "planning",
+    "dimension": "task",
+    "failure": "幻觉目标：plan 引用不存在的文件",
+    "evidence": [
+      {"source": "workspace", "location": "lookup('output/nonexist.py')", "expected": "文件存在于仓库", "actual": "文件不存在"},
+      {"source": "grounder", "location": "GroundingContext", "expected": "目标来自候选", "actual": "目标非候选"}
+    ],
+    "symptom": "hallucination"
+  },
+  "gold": {"root_cause": "grounding", "correction": "re_ground"},
+  "note": "幻觉目标 → 重新 grounding（目标必须来自候选），不是 replan。"
+}

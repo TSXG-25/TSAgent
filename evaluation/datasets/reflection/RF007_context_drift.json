@@ -1,0 +1,17 @@
+{
+  "id": "RF007",
+  "name": "context_drift",
+  "event": {
+    "benchmark": "long_horizon",
+    "scenario": "LH001",
+    "layer": "long_horizon",
+    "dimension": "drift",
+    "failure": "执行目标漂移：只改了 parser.py，漏 tests/README（Context Drift 0.33）",
+    "evidence": [
+      {"source": "trace", "location": "LH001", "expected": "[parser.py, tests/test_parser.py, README.md]", "actual": "漏 [tests/test_parser.py, README.md]"}
+    ],
+    "symptom": "context_drift"
+  },
+  "gold": {"root_cause": "planning", "correction": "replanning"},
+  "note": "目标漂移 → 重新规划（保持完整目标集），不是补 prompt。"
+}

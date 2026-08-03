@@ -81,6 +81,17 @@ class ContextBuilder:
             "facts": context.get("facts", ""),
         }
 
+        # Repository 符号列表（file → [symbols]，Ordinal 解析用；v1.2B B5）
+        repository_symbols = {}
+        try:
+            from agent.repository.indexer import get_repository_indexer
+
+            idx = get_repository_indexer()
+            if idx is not None and idx.file_symbols:
+                repository_symbols = idx.file_symbols
+        except Exception:
+            pass
+
         return CognitiveContext(
             query=user_input,
             conversation=conversation,
@@ -89,6 +100,7 @@ class ContextBuilder:
             plan=plan,
             task=current_task,
             repository_context=repo_context,
+            repository_symbols=repository_symbols,
             memory=memory,
             artifacts=artifacts,
         )

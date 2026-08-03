@@ -328,10 +328,8 @@ class IntentEngine:
         # Stage 2: LLM 1-shot 分析
         result = self._llm_analyze(user_input, context)
 
-        # 合并 target（LLM 提取的 + 上下文的）
-        final_target = _merge_target(result.target, context)
-        if not final_target:
-            final_target = raw_target
+        # 合并 target（确定性提取 raw_target 优先于 LLM 结果，消除 LLM 抖动）
+        final_target = raw_target or _merge_target(result.target, context)
 
         result.target = final_target
         result.entities = _merge_entities(result.entities, context)

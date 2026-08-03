@@ -18,13 +18,13 @@ Quality Gate  PASS / WARNING / FAIL
 
 Current Phase
 ──────────────
-v1.2B — Resolver Contract（B1..B6 完成）
-  Context Resolution       39/39 = 100%（v1.2A 目标 ≥94%）
-  Context Retention        15 轮 = 100%（MT006）
-  Reference Chains         100%（MT007）
-  Ordinal Reference        100%（MT008）
-  Repository Resolution    10/10 = 100%（Capability Reuse Ratio：零新增抽象）
-  Resolver Determinism     8/8 × 100 runs PASS（Result Hash + Trace Hash）
+v1.2C — Capability Expansion（Resolver Contract 横向扩展）
+  Context Resolution       42/42 = 100%（+ ME001 跨会话 Memory）
+  Repository Resolution    10/10 = 100%
+  Capability Hint          7/7 = 100%
+  Capability Reuse Score   4/4 = 100%（Conversation/Repository/Memory/Capability 零新增抽象）
+  Contract Verification    PASS（fields + methods + signature + schema 四部分冻结）
+  Resolver Determinism     8/8 × 100 runs PASS
 
 Architecture Changes
 ──────────────

@@ -115,3 +115,53 @@ Resolver 是确定性的（无 LLM 随机性），不同于 LLM 层。
 以后只能：新增 resolver / 新增 dataset / 新增 metric。
 这是 v1.1 Runtime Contract 的自然延伸（v1.1 冻结执行层接口，v1.2B 冻结解析层接口）。
 
+---
+
+## v1.2C 落实（2026-08）—— Capability Expansion
+
+### Contract Verification（可执行化冻结）
+
+四部分验证（`evaluation/benchmark/contract_verification.py` + 基线）：
+
+```
+✓ public fields          （字段名 + 类型）
+✓ public methods         （Timeline / Result 方法签名）
+✓ function signature     （merge_candidates / resolve_candidates / resolve）
+✓ serialization schema   （ResolutionResult.to_json() 的固定 key 集 + 类型）
+```
+
+比字段 hash 更稳（改类型 / 改 schema 全部 FAIL）。eval 入口自动校验。
+
+### Memory Resolution（跨会话，Facts 层）
+
+- Memory 保存**事实**（`ResolutionMemory: timestamp / utterance / resolved_target / kind / metadata`），
+  不保存 ResolutionResult（不依赖 Runtime 内部对象）。
+- `resolve_memory()` 负责 `ResolutionMemory → ResolutionCandidate`（Converter 在 Resolver 层）。
+- "昨天那个文件 / 上次那个函数" → memory facts（confidence 0.6，低于当前会话 → merge 时当前会话优先）。
+
+### Capability Hint（Tool 选择归 Planner）
+
+- `resolve_capability()` 返回 `kind="capability"`、`target="calculation"/"web_search"/...`。
+- **不绑定具体工具**（否则工具一换 Dataset 全坏）；Tool 选择是 Planner 的职责。
+- 独立于引用解析链（resolve_candidates 不收集），供 Planner/Intent 消费。
+
+### Capability Reuse Score（长期 KPI）
+
+```
+Conversation   Reuse 100%  Accuracy 42/42
+Repository     Reuse 100%  Accuracy 10/10
+Memory         Reuse 100%  Accuracy 3/3
+Capability     Reuse 100%  Accuracy 7/7
+```
+
+规则：某 Capability 需要新 Candidate / Result / Timeline / Merge → 该 Capability Reuse 降级 → Contract 失效信号。
+
+Extension Cost（演化信号，非质量指标）：新增 Resolver 方法数 / Dataset 数 / LOC。
+
+### 关键设计决定
+
+- **target 只信确定性来源**（`raw_target > Resolver 消歧 > current_file`），LLM 不参与 target 决定
+  —— 这是 Determinism 的根因修复（曾暴露 100 次 1 次抖动）。
+- Memory 是**数据源注入**（`CognitiveContext.memory_resolutions`），Resolver 仍纯函数。
+
+

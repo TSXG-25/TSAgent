@@ -1,0 +1,12 @@
+{
+  "id": "TL001_capability",
+  "turns": [
+    {"input": "帮我算一下 15+27", "expected": {"capability": "calculation", "kind": "capability"}},
+    {"input": "搜索一下人工智能最新进展", "expected": {"capability": "web_search", "kind": "capability"}},
+    {"input": "翻译 hello 到中文", "expected": {"capability": "translation", "kind": "capability"}},
+    {"input": "修复这个 bug", "expected": {"capability": "code", "kind": "capability"}},
+    {"input": "读取 output/solution.py", "expected": {"capability": "file_ops", "kind": "capability"}},
+    {"input": "杭州天气怎么样", "expected": {"capability": "knowledge", "kind": "capability"}},
+    {"input": "提醒我 9 点开会", "expected": {"capability": "scheduling", "kind": "capability"}}
+  ]
+}

@@ -119,6 +119,18 @@ def _is_memory_reference(text: str) -> bool:
     return any(p.match(text) for p in _MEMORY_REFERENCE_PATTERNS)
 
 
+# Capability Hint 模式（意图 → capability；Tool 选择是 Planner 职责，v1.2C C3）
+_CAPABILITY_PATTERNS = [
+    (re.compile(r'算一下|计算|方程|积分|求导|等于|多[少大]|加减乘除|15\+|\d+\s*[+\-*/]\s*\d+'), "calculation"),
+    (re.compile(r'搜索|搜一下|查询|百度|谷歌|最新|头条|查一下|找.*资料'), "web_search"),
+    (re.compile(r'翻译|译成|用.*怎么说|英文.*意思'), "translation"),
+    (re.compile(r'写.*代码|实现.*功能|重构|修复.*bug|debug|代码.*审查|review'), "code"),
+    (re.compile(r'读取.*文件|打开.*文件|写入.*文件|删除.*文件|列出.*目录|(读取|打开|写入|删除|读|看).*\.[a-zA-Z0-9]+'), "file_ops"),
+    (re.compile(r'天气|气温|温度|下雨|下雪|台风|空气|湿度'), "knowledge"),
+    (re.compile(r'提醒|闹钟|待办|日程|安排'), "scheduling"),
+]
+
+
 def _is_file_reference(text: str) -> bool:
     """检查是否显式文件引用（含路径/扩展名）。"""
     return any(p.match(text) for p in _FILE_REFERENCE_PATTERNS)
@@ -626,7 +638,6 @@ class ReferenceResolver:
 
     def resolve_memory(self, text: str, context: CognitiveContext) -> ResolutionCandidate:
         """Memory 子 Resolver（v1.2C）：跨会话引用 → memory facts。
-
         Memory 是 Facts（ResolutionMemory），不是 ResolutionResult——
         Memory 不依赖 Runtime Contract。Converter 在这里完成
         ResolutionMemory → ResolutionCandidate。
@@ -666,6 +677,30 @@ class ReferenceResolver:
             confidence=0.2,
             reason=f"Memory: 无匹配记录（{text}）",
             source="memory",
+        )
+
+    def resolve_capability(self, text: str, context: CognitiveContext) -> ResolutionCandidate:
+        """Capability Hint 子 Resolver（v1.2C C3）：意图 → capability。
+
+        - 返回 kind="capability"，target 为 capability 名（calculation / web_search / ...）。
+        - Tool 选择是 Planner 的职责 —— Resolver 只提供能力提示，不绑定具体工具
+          （否则工具一换，Dataset 全坏）。
+        - 独立于引用解析链（resolve_candidates 不收集），供 Planner/Intent 消费。
+        """
+        for pattern, capability in _CAPABILITY_PATTERNS:
+            if pattern.search(text):
+                return ResolutionCandidate(
+                    kind="capability",
+                    target=capability,
+                    confidence=0.9,
+                    reason=f"Capability Hint: {capability}",
+                    source="capability",
+                )
+        return ResolutionCandidate(
+            kind="capability",
+            confidence=0.1,
+            reason="Capability: 未命中",
+            source="capability",
         )
 
     @staticmethod

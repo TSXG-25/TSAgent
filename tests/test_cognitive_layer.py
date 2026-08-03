@@ -158,6 +158,20 @@ class TestReferenceResolver:
         assert result.target == ""
         assert result.confidence < 0.5
 
+    def test_capability_hint(self):
+        """Capability Hint：意图 → capability（v1.2C C3，不绑定具体工具）。"""
+        ctx = CognitiveContext(query="帮我算一下 15+27")
+        c = self.resolver.resolve_capability("帮我算一下 15+27", ctx)
+        assert c.kind == "capability"
+        assert c.target == "calculation"
+        assert c.confidence == 0.9
+
+    def test_capability_hint_no_match(self):
+        """未命中 → 低置信度，不硬猜。"""
+        ctx = CognitiveContext(query="你好")
+        c = self.resolver.resolve_capability("你好", ctx)
+        assert c.confidence < 0.5
+
 
 class TestCognitiveContext:
     """CognitiveContext 数据模型测试。"""

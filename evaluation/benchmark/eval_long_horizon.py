@@ -124,6 +124,52 @@ def _run_one(task: dict) -> dict:
     }
 
 
+def events_from_long_horizon(results: list, tasks: list) -> list:
+    """把 Long Horizon 评估结果转成 FailureEvent（Diagnostic Backbone）。
+
+    symptom 映射：
+        verify 未通过           → wrong_answer（行为未达标）
+        context_drift > 0       → context_drift（计划目标漂移）
+        空 answer               → wrong_answer
+    """
+    from evaluation.benchmark.failboard_v2 import FailureEvent, Evidence
+    events = []
+    task_map = {t["id"]: t for t in tasks}
+    for r in results:
+        tid = r["id"]
+        groundings = task_map.get(tid, {}).get("grounding_targets", [])
+        if not r["completion"]:
+            for reason in r.get("verify_reasons", []) or []:
+                events.append(FailureEvent(
+                    benchmark="long_horizon", scenario=tid, layer="long_horizon",
+                    dimension="completion",
+                    failure=f"verify 未通过: {reason[:90]}",
+                    evidence=[Evidence(source="verify", location=tid,
+                                       expected="全部验证项通过", actual=reason[:90])],
+                    symptom="wrong_answer",
+                ))
+        if r.get("context_drift", 0) > 0:
+            missed = [g for g in groundings if g not in (r.get("trace_tail", "") or "")]
+            events.append(FailureEvent(
+                benchmark="long_horizon", scenario=tid, layer="long_horizon",
+                dimension="drift",
+                failure=f"Context Drift {r['context_drift']:.2f}（目标未全部触碰）",
+                evidence=[Evidence(source="trace", location=tid,
+                                   expected=str(groundings), actual=f"漏: {missed or '无法判定'}")],
+                symptom="context_drift",
+            ))
+        if not r.get("answer_ok"):
+            events.append(FailureEvent(
+                benchmark="long_horizon", scenario=tid, layer="long_horizon",
+                dimension="completion",
+                failure="无最终回答",
+                evidence=[Evidence(source="runtime", location=tid,
+                                   expected="产出最终答案", actual="空回答")],
+                symptom="wrong_answer",
+            ))
+    return events
+
+
 def main():
     ids = sys.argv[1:]
     tasks = _load_tasks(ids)
@@ -164,6 +210,14 @@ def main():
     with open(PROGRESS, "w") as f:
         json.dump(curve, f, ensure_ascii=False, indent=2)
     print(f"\nProgress Curve 已写入 {PROGRESS}（long-horizon history 已追加）")
+
+    # Diagnostic Backbone：Long Horizon 失败事件 → Fail Board v2
+    from evaluation.benchmark.failboard_v2 import load, save
+    board = load()
+    lh_events = events_from_long_horizon(results, tasks)
+    added = board.collect(lh_events)
+    save(board)
+    print(f"📋 Fail Board v2 新增 {added} 条 FailureEvent（Long Horizon 层）")
 
     return 0
 

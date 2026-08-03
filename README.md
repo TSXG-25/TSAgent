@@ -24,6 +24,7 @@ v2.0-A — Agent Intelligence: Planning Quality（Evaluation 先行）
   Structural Validator       可跨领域复用（SQL/Browser/Coding Planner 共享）
   Long Horizon LH001         Integration Baseline（drift 0.0，执行链路打通）
   Trend Gate                 Capability Progress Curve（不能下降）
+  Fail Board v2              Diagnostic Backbone（Event Sourcing + Evidence + 统一 Root Cause 映射）
   Contract Verification      PASS（v1 三层冻结持续有效）
 
 v1.2C — Capability Expansion（Resolver Contract 横向扩展，已完成）

@@ -211,7 +211,7 @@ def evaluate_real_planner(scenarios: list = None) -> tuple:
 
     asyncio.run(_run())
     metrics = aggregate(results, scenarios)
-    return metrics, failboard
+    return metrics, failboard, results
 
 
 PROGRESS = os.path.join("evaluation", "planning_progress.json")
@@ -239,6 +239,50 @@ def record_curve(capability: str, metrics: dict, extra: dict = None) -> None:
     print(f"📈 Capability Progress Curve 已更新: {capability} → {PROGRESS}")
 
 
+def events_from_planning(scenario_results: list, scenarios: list) -> list:
+    """把 Planning 评估的归因转成 FailureEvent（Diagnostic Backbone）。
+
+    Benchmark 只输出 symptom + evidence；root_cause/correction 由 FailBoard 统一映射。
+    """
+    from evaluation.benchmark.failboard_v2 import FailureEvent, Evidence
+    events = []
+    for r, s in zip(scenario_results, scenarios):
+        sid = s["id"]
+        for err in r["attribution"]["structural"]:
+            events.append(FailureEvent(
+                benchmark="planning", scenario=sid, layer="planning", dimension="task",
+                failure=f"结构不合法: {err[:90]}",
+                evidence=[Evidence(source="plan_validator", location=sid,
+                                   expected="合法 task 结构", actual=err[:80])],
+                symptom="wrong_answer",
+            ))
+        for t in r["attribution"]["goal_coverage"]:
+            events.append(FailureEvent(
+                benchmark="planning", scenario=sid, layer="planning", dimension="goal",
+                failure=f"Goal 未覆盖: {t}",
+                evidence=[Evidence(source="semantic_validator", location=sid,
+                                   expected=t, actual="plan 中未覆盖")],
+                symptom="wrong_answer",
+            ))
+        for v in r["attribution"]["constraints"]:
+            events.append(FailureEvent(
+                benchmark="planning", scenario=sid, layer="planning", dimension="constraint",
+                failure=v,
+                evidence=[Evidence(source="semantic_validator", location=sid,
+                                   expected="遵守显式约束", actual=v)],
+                symptom="missing_constraint",
+            ))
+        for a in r["attribution"]["abstention"]:
+            events.append(FailureEvent(
+                benchmark="planning", scenario=sid, layer="planning", dimension="abstention",
+                failure=a,
+                evidence=[Evidence(source="semantic_validator", location=sid,
+                                   expected="Abstain / Ask User", actual="给出了任务（乱猜）")],
+                symptom="hallucination",
+            ))
+    return events
+
+
 def main():
     import argparse
     parser = argparse.ArgumentParser(description="Planning Quality Benchmark（v2.0-A）")
@@ -254,7 +298,17 @@ def main():
 
     if args.real:
         print("Planning Quality Benchmark（v2.0-A · real planner）\n")
-        metrics, failboard = evaluate_real_planner()
+        metrics, failboard, scenario_results = evaluate_real_planner()
+        # Diagnostic Backbone：把 Planning 归因转成 FailureEvent 聚合进 Fail Board
+        from evaluation.benchmark.failboard_v2 import FailBoard, load, save
+        board = load()
+        new_events = events_from_planning(scenario_results, load_scenarios())
+        added = board.collect(new_events)
+        save(board)
+        if added:
+            print(f"📋 Fail Board v2 新增 {added} 条 FailureEvent（Planning 层）")
+        elif new_events:
+            print(f"📋 Fail Board v2 无新增（{len(new_events)} 条均已建档）")
     else:
         print("Planning Quality Benchmark（v2.0-A · golden self-check）\n")
         metrics, failboard, _ = evaluate_dataset()

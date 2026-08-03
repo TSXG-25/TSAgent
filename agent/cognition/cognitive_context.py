@@ -216,6 +216,9 @@ class CognitiveContext:
     # 用户长期记忆（偏好、事实）
     memory: dict = field(default_factory=dict)
 
+    # 跨会话解析事实（Memory Facts，v1.2C；Resolver 保持纯函数）
+    memory_resolutions: list = field(default_factory=list)
+
     # 当前 Artifacts
     artifacts: dict = field(default_factory=dict)
 

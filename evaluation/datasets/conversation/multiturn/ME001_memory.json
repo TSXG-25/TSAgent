@@ -1,0 +1,12 @@
+{
+  "id": "ME001_memory",
+  "memory": [
+    {"timestamp": "2026-08-01T10:00:00", "utterance": "读取 output/solution.py", "resolved_target": "output/solution.py", "kind": "file"},
+    {"timestamp": "2026-08-01T10:05:00", "utterance": "解释一下 max_active", "resolved_target": "max_active", "kind": "symbol"}
+  ],
+  "turns": [
+    {"input": "昨天那个文件", "expected": {"target": "output/solution.py", "topic": "file", "kind": "file"}},
+    {"input": "那改一下", "expected": {"target": "output/solution.py", "topic": "modify", "kind": "reference"}},
+    {"input": "上次那个函数", "expected": {"target": "max_active", "topic": "symbol", "kind": "symbol"}}
+  ]
+}

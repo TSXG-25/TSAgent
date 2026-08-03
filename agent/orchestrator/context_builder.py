@@ -81,6 +81,13 @@ class ContextBuilder:
             "facts": context.get("facts", ""),
         }
 
+        # 跨会话解析事实（Memory Facts，v1.2C；Resolver 纯函数）
+        memory_resolutions = []
+        try:
+            memory_resolutions = MemoryService.get_resolutions(user_id, n=20)
+        except Exception:
+            pass
+
         # Repository 符号列表（file → [symbols]，Ordinal 解析用；v1.2B B5）
         repository_symbols = {}
         try:
@@ -102,6 +109,7 @@ class ContextBuilder:
             repository_context=repo_context,
             repository_symbols=repository_symbols,
             memory=memory,
+            memory_resolutions=memory_resolutions,
             artifacts=artifacts,
         )
 

@@ -325,11 +325,12 @@ class IntentEngine:
                     raw_input=user_input,
                 )
 
-        # Stage 2: LLM 1-shot 分析
+        # Stage 2: LLM 1-shot 分析（domain/action 可 LLM 判定）
         result = self._llm_analyze(user_input, context)
 
-        # 合并 target（确定性提取 raw_target 优先于 LLM 结果，消除 LLM 抖动）
-        final_target = raw_target or _merge_target(result.target, context)
+        # target 只信确定性来源：显式提取 raw_target > Resolver 消歧 > current_file
+        # （LLM 不参与 target 决定 —— Determinism 要求，v1.2B raw>LLM 的延续）
+        final_target = raw_target or _merge_target("", context)
 
         result.target = final_target
         result.entities = _merge_entities(result.entities, context)

@@ -1,0 +1,49 @@
+{
+  "digest": "a4bcfdafbb990097a7114b378efe6d35a0a2b5c0f5f3c4a62e08d72b63ca5115",
+  "snapshot": {
+    "ResolutionCandidate.fields": {
+      "confidence": "<class 'float'>",
+      "kind": "<class 'str'>",
+      "reason": "<class 'str'>",
+      "source": "<class 'str'>",
+      "symbol": "<class 'str'>",
+      "target": "Optional[str]"
+    },
+    "ResolutionResult.entities.signature": "property",
+    "ResolutionResult.fields": {
+      "confidence": "<class 'float'>",
+      "kind": "<class 'str'>",
+      "raw": "<class 'str'>",
+      "resolved_query": "Optional[ForwardRef('ResolvedQuery')]",
+      "symbol": "<class 'str'>",
+      "target": "<class 'str'>",
+      "trace": "<class 'str'>"
+    },
+    "ResolutionResult.resolution_trace.signature": "property",
+    "ResolutionResult.to_json.keys": [
+      "confidence",
+      "kind",
+      "symbol",
+      "target",
+      "trace"
+    ],
+    "ResolutionResult.to_json.schema": {
+      "confidence": "float",
+      "kind": "str",
+      "symbol": "str",
+      "target": "str",
+      "trace": "str"
+    },
+    "ResolutionResult.to_json.signature": "(self) -> dict",
+    "ResolutionResult.to_resolved_query.signature": "(self) -> 'ResolvedQuery'",
+    "ResolutionTimeline.__iter__.signature": "(self)",
+    "ResolutionTimeline.__len__.signature": "(self) -> int",
+    "ResolutionTimeline.history.signature": "(self) -> list",
+    "ResolutionTimeline.iter_reverse.signature": "(self)",
+    "ResolutionTimeline.latest.signature": "(self) -> Optional[agent.cognition.cognitive_context.ResolutionResult]",
+    "ResolutionTimeline.push.signature": "(self, result: agent.cognition.cognitive_context.ResolutionResult) -> None",
+    "merge_candidates.signature": "(candidates: list) -> agent.cognition.cognitive_context.ResolutionCandidate",
+    "resolve.signature": "(self, user_input: str, context: agent.cognition.cognitive_context.CognitiveContext) -> agent.cognition.cognitive_context.ResolutionResult",
+    "resolve_candidates.signature": "(self, text: str, context: agent.cognition.cognitive_context.CognitiveContext) -> list"
+  }
+}

@@ -26,6 +26,7 @@ _PRONOUN_PATTERNS = [
 # 省略目标操作模式：动词 + 程度词，无目标
 _OMITTED_TARGET_PATTERNS = [
     re.compile(r'^(修改|改|优化|重构|调整|更新|编辑|完善|改进)(一下|一哈|一点)?$'),
+    re.compile(r'^(再|重新|继续)(修改|改|优化|重构|调整|更新|编辑|完善|改进|看看|查看|分析|总结)(一下|一哈|一点)?$'),
     re.compile(r'^(看看|查看|打开|读|读取|显示)(一下|一哈)?$'),
     re.compile(r'^(解释|说明|分析|总结|审查|review)(一下|一哈)?$'),
     re.compile(r'^(删除|移除|清理|去掉|撤销)(一下|一哈)?$'),
@@ -104,6 +105,18 @@ def _is_continuation(text: str) -> bool:
 _FILE_REFERENCE_PATTERNS = [
     re.compile(r'^(读取|读|打开|查看|修改|改|写入|写|删除|复制|移动|优化|撤销)\s*(\S*[./\\]\S*)$'),
 ]
+
+
+# 跨会话 Memory 引用模式（"昨天那个文件"、"上次说的方案"）
+_MEMORY_REFERENCE_PATTERNS = [
+    re.compile(r'^(昨天|前天|上周|上次|之前|上一次|昨天那个|上次那个|之前那个)'),
+    re.compile(r'^(继续|接着|改|看|处理|打开|读取)?\s*(昨天|上次|之前|前天|上周)\s*'),
+]
+
+
+def _is_memory_reference(text: str) -> bool:
+    """检查是否跨会话 Memory 引用（时间维度：昨天/上次/之前）。"""
+    return any(p.match(text) for p in _MEMORY_REFERENCE_PATTERNS)
 
 
 def _is_file_reference(text: str) -> bool:
@@ -573,6 +586,9 @@ class ReferenceResolver:
         # 规则 7: 显式文件引用（"读取 output/solution.py" → kind=file；Repository Runtime 前置）
         elif _is_file_reference(text):
             candidates.append(self._candidate_file(text, context))
+        # 规则 8: 跨会话 Memory 引用（"昨天那个文件" → memory facts，v1.2C）
+        elif _is_memory_reference(text):
+            candidates.append(self.resolve_memory(text, context))
         # Stage 2: LLM 复杂消歧（仅确定性规则未命中时）
         if not candidates and _needs_complex_llm_resolve(text, context):
             candidates.append(self._candidate_llm(text, context))
@@ -606,6 +622,50 @@ class ReferenceResolver:
             confidence=0.95 if target else 0.0,
             reason=f"文件引用: {target}" if target else "文件引用: 未提取到路径",
             source="file",
+        )
+
+    def resolve_memory(self, text: str, context: CognitiveContext) -> ResolutionCandidate:
+        """Memory 子 Resolver（v1.2C）：跨会话引用 → memory facts。
+
+        Memory 是 Facts（ResolutionMemory），不是 ResolutionResult——
+        Memory 不依赖 Runtime Contract。Converter 在这里完成
+        ResolutionMemory → ResolutionCandidate。
+        """
+        memories = getattr(context, "memory_resolutions", None) or []
+        if not memories:
+            return ResolutionCandidate(
+                kind="memory",
+                confidence=0.1,
+                reason="Memory: 无跨会话记录",
+                source="memory",
+            )
+        # kind 提示："文件" → file；"函数/方案/代码" → symbol；默认最近一条
+        kind_hint = ""
+        if "文件" in text:
+            kind_hint = "file"
+        elif any(k in text for k in ("函数", "方法", "类", "方案", "代码", "符号")):
+            kind_hint = "symbol"
+        # 最新优先匹配
+        for m in reversed(memories):
+            if kind_hint and m.get("kind") != kind_hint:
+                continue
+            target = m.get("resolved_target")
+            if target:
+                return ResolutionCandidate(
+                    kind=m.get("kind", "file") or "file",
+                    target=target,
+                    confidence=0.6,
+                    reason=(
+                        f"Memory: {m.get('timestamp', '')} "
+                        f"{m.get('utterance', '')} → {target}"
+                    ),
+                    source="memory",
+                )
+        return ResolutionCandidate(
+            kind="memory",
+            confidence=0.2,
+            reason=f"Memory: 无匹配记录（{text}）",
+            source="memory",
         )
 
     @staticmethod

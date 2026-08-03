@@ -65,6 +65,20 @@ class MemoryService:
         from agent.memory.long_term import get_facts_text
         return get_facts_text(user_id)
 
+    # ===== Layer 4: Cross-Session Resolution Memory（v1.2C）=====
+
+    @staticmethod
+    def record_resolution(user_id: str, utterance: str, resolved_target: str, kind: str, metadata: dict = None) -> None:
+        """记录跨会话解析事实（Facts，非 ResolutionResult）。"""
+        from agent.memory.resolution import record_resolution as _record
+        _record(user_id, utterance, resolved_target, kind, metadata)
+
+    @staticmethod
+    def get_resolutions(user_id: str, n: int = 20) -> list:
+        """最近 N 条跨会话解析事实。"""
+        from agent.memory.resolution import get_resolutions as _get
+        return _get(user_id, n=n)
+
     # ===== Legacy compatibility =====
 
     @staticmethod

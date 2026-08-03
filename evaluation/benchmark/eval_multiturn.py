@@ -27,11 +27,12 @@ def _is_code_symbol(text: str) -> bool:
 
 
 class _Engine:
-    def __init__(self, repository=None):
+    def __init__(self, repository=None, memory=None):
         self.resolver = ReferenceResolver()
         self.intent = IntentEngine()
         self.state = ConversationState()
         self.repository = repository or {}
+        self.memory = memory or []
 
     def resolve(self, user_input: str) -> dict:
         ctx = CognitiveContext(
@@ -39,6 +40,7 @@ class _Engine:
             conversation_state=self.state,
             conversation=[],
             repository_symbols=self.repository,
+            memory_resolutions=self.memory,
         )
         resolved = self.resolver.resolve(user_input, ctx)
         ctx.resolved_query = resolved.to_resolved_query()
@@ -74,6 +76,10 @@ class _Engine:
 
 
 def main():
+    from evaluation.benchmark.contract_verification import verify as verify_contract
+    if not verify_contract():
+        print("⚠️  Resolver Contract 已变化 —— 先解决 Contract Verification 再评估。")
+
     total = 0
     correct = 0
     # 分项统计（v1.2A KPI：Topic / Symbol / File / Reference / Unknown）
@@ -83,7 +89,10 @@ def main():
             continue
         with open(os.path.join(MT_DIR, fn)) as f:
             scenario = json.load(f)
-        engine = _Engine(repository=scenario.get("repository", {}))
+        engine = _Engine(
+            repository=scenario.get("repository", {}),
+            memory=scenario.get("memory", []),
+        )
         print(f"\n== {scenario['id']} ==")
         for turn in scenario["turns"]:
             exp = turn["expected"]

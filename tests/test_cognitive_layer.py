@@ -138,6 +138,26 @@ class TestReferenceResolver:
         """检查 LLM 调用计数（仅复杂引用时触发）。"""
         assert self.resolver.llm_call_count == 0
 
+    def test_memory_reference(self):
+        """跨会话 Memory 引用（"昨天那个文件"）→ memory facts（v1.2C）。"""
+        ctx = CognitiveContext(
+            query="昨天那个文件",
+            memory_resolutions=[
+                {"timestamp": "2026-08-01T10:00:00", "utterance": "读取 output/solution.py", "resolved_target": "output/solution.py", "kind": "file"},
+            ],
+        )
+        result = self.resolver.resolve("昨天那个文件", ctx)
+        assert result.target == "output/solution.py"
+        assert result.kind == "file"
+        assert result.confidence == 0.6
+
+    def test_memory_no_history(self):
+        """无跨会话记忆 → 低置信度，不硬猜（Unknown 优于误判）。"""
+        ctx = CognitiveContext(query="昨天那个文件")
+        result = self.resolver.resolve("昨天那个文件", ctx)
+        assert result.target == ""
+        assert result.confidence < 0.5
+
 
 class TestCognitiveContext:
     """CognitiveContext 数据模型测试。"""

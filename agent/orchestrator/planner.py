@@ -121,6 +121,15 @@ class PlannerStage:
         # 更新跨轮对话状态（State = Cache：timeline 写入；last_* 为 Deprecated 双写）
         self._orch._context_builder.update_conversation_state(intent, resolution=resolved)
 
+        # 记录跨会话解析事实（Memory Facts，v1.2C；不依赖 ResolutionResult 内部）
+        try:
+            if resolved and resolved.target:
+                MemoryService.record_resolution(
+                    user_id, user_input, resolved.target, resolved.kind,
+                )
+        except Exception:
+            pass
+
         # 不要求执行（chat / translation / math / creation / identity 等）→ 直接 LLM 回答
         if not intent.requires_execution:
             try:

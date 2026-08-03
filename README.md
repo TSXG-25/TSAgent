@@ -18,7 +18,15 @@ Quality Gate  PASS / WARNING / FAIL
 
 Current Phase
 ──────────────
-v1.2C — Capability Expansion（Resolver Contract 横向扩展）
+v2.0-A — Agent Intelligence: Planning Quality（Evaluation 先行）
+  Planning (real planner)    6/6 = 100%（Goal/Constraint/Task/Dependency/Order/Abstention）
+  Planning Dataset           8 场景（含 no_web / scope_only / no_delete / 信息不足 Abstain）
+  Structural Validator       可跨领域复用（SQL/Browser/Coding Planner 共享）
+  Long Horizon LH001         Integration Baseline（drift 0.0，执行链路打通）
+  Trend Gate                 Capability Progress Curve（不能下降）
+  Contract Verification      PASS（v1 三层冻结持续有效）
+
+v1.2C — Capability Expansion（Resolver Contract 横向扩展，已完成）
   Context Resolution       42/42 = 100%（+ ME001 跨会话 Memory）
   Repository Resolution    10/10 = 100%
   Capability Hint          7/7 = 100%
@@ -49,7 +57,7 @@ Intent → Task → ExecutionPlan → ExecutionResult
 ```
 agent/         # Intent / Grounding / Planner / Compiler / Executor / Runtime
 evaluation/    # Dataset / Benchmark / Regression / Metrics / History / Factory
-docs/adr/      # ADR-0001..0008（架构决策记录）
+docs/adr/      # ADR-0001..0011（架构决策记录 + v2 开发纪律）
 benchmarks/    # 既有 benchmark 执行器（runner / report）
 ```
 

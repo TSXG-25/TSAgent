@@ -73,3 +73,14 @@ Metrics 版本化：以后新增指标（PermissionSuccess 等）→ `metrics_v2
 ## 影响
 
 - 未来发布 v1.1 / v1.2 / v2 以 Quality Gate + Regression PASS 为准，而非"pytest 通过"。
+
+## Evidence
+
+### Trigger
+D3 后 Planner 输出非法 target（"计算模块"）反复出现。
+### Observation
+Fail Board 显示 Planning 层失败，且每次修改都需全量回归。
+### Decision
+将 Benchmark 提升为 Evaluation Framework：Dataset → Benchmark → Metrics → Regression → Quality Gate。
+### Validation
+E2E 从 12/20 → 17/20；每次修复都有 Regression 证据；质量指标可量化。

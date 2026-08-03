@@ -116,6 +116,9 @@ router = WorkflowRouter()
 router.register(DOMAIN_DEVELOPMENT, "code", "code_generation")
 router.register(DOMAIN_DEVELOPMENT, "review", "code_review")
 router.register(DOMAIN_DEVELOPMENT, "feature", "feature_dev")
+# v2.0-B：modify 类（改现有代码）→ 不路由 workflow，走 Planner（多步：读→改→测试→文档）
+# code_generation 只适合"生成新代码文件"（write output/solution.py），不适合修改仓库
+router.register(DOMAIN_DEVELOPMENT, "modify", "__none__")
 router.register_domain(DOMAIN_DEVELOPMENT, "feature_dev")
 
 # knowledge domain
@@ -125,7 +128,5 @@ router.register(DOMAIN_KNOWLEDGE, "search", None)    # search → no workflow, h
 router.register_domain(DOMAIN_KNOWLEDGE, "research")
 
 # 注册条件路由示例：修改 .py 文件走 code_generation
-router.register_condition(
-    condition=lambda i: i.action in ("modify", "optimize", "refactor") and i.target.endswith(".py"),
-    workflow_id="code_generation",
-)
+# v2.0-B：移除 —— code_generation 是"生成新代码"模板，modify/refactor（改现有代码）
+# 应走 Planner（多步修改）。避免修改类请求被模板化到新建文件路径。

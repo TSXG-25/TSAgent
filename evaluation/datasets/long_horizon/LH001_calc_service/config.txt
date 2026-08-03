@@ -1,0 +1,5 @@
+"""config.txt —— LH001 配置样例。"""
+
+HOST=localhost
+PORT=8080
+TIMEOUT=30

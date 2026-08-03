@@ -309,6 +309,14 @@ class PlannerStage:
                 print("❌ Planner 连续 3 次输出不合法，任务失败（PlanningFailure，不进入执行链）")
                 return state, "FAIL", None
 
+            # v2.0-A Abstention：Planner 信息不足 → 不猜测，向用户澄清（Uncertainty 横切）
+            if not plan:
+                print("⚠️ Planner 信息不足（Abstain，不猜测）—— 需要向用户澄清。")
+                return state, "FINISH", (
+                    "信息不足，需要澄清：请提供具体的目标（如文件路径或模块名），"
+                    "以便我制定执行计划。"
+                )
+
             state["execution_plans"] = execution_plans
             state["plan"] = plan
             state["current_task_index"] = 0

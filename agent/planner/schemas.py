@@ -63,6 +63,10 @@ class PlanMetadata(BaseModel):
     """Plan 元数据"""
     reasoning: str = Field(description="Planner 为什么这样分解")
     estimated_steps: int = Field(default=0, description="预估步骤数")
+    constraints: List[str] = Field(
+        default_factory=list,
+        description="Planner 识别并遵守的显式约束（v2.0-A Constraint Detection）",
+    )
 
 
 class TaskList(BaseModel):

@@ -37,7 +37,10 @@ def _target_matches(plan_target: str, golden_target: str) -> bool:
     1) basename 相等（parser.py == src/parser.py）
     2) 前缀包含（golden 是 plan 的子串，处理目录形式）
     3) 完全相等
+    4) 命令词匹配（execute 类）：golden 是短命令（pytest），plan 是完整命令
+       （python -m pytest）——整词匹配，避免 "test" in "latest.py" 误匹配
     """
+    import re as _re
     p = _normalize_target(plan_target)
     g = _normalize_target(golden_target)
     if not p or not g:
@@ -46,7 +49,12 @@ def _target_matches(plan_target: str, golden_target: str) -> bool:
         return True
     if p.endswith("/" + g) or g.endswith("/" + p):
         return True
-    return p.rsplit("/", 1)[-1] == g.rsplit("/", 1)[-1]
+    if p.rsplit("/", 1)[-1] == g.rsplit("/", 1)[-1]:
+        return True
+    # 命令词匹配：无扩展名、非路径的短命令 token
+    if "/" not in g and "." not in g and _re.search(rf"\b{_re.escape(g)}\b", p):
+        return True
+    return False
 
 
 @dataclass
@@ -61,13 +69,16 @@ class SemanticReport:
 
 
 def _plan_text(tasks: List[dict]) -> str:
-    """把 plan 全部 task 的字段拼成文本（供 no_web 等文本型检查）。"""
+    """把 plan 的动作对象拼成文本（verb + target），供 no_web 检查。
+
+    只收**动作对象**（verb/target），不收 goal/description：
+    说明文字中出现"网络/联网"（如"本地实现，不依赖网络"）是**遵守**约束，
+    不是违反（ADR-0010：以行为为准，不以措辞为准）。
+    """
     parts = []
     for t in tasks:
-        parts.append((t or {}).get("target", ""))
-        parts.append((t or {}).get("goal", ""))
-        parts.append((t or {}).get("description", ""))
         parts.append((t or {}).get("verb", ""))
+        parts.append((t or {}).get("target", ""))
     return " ".join(parts)
 
 def validate_semantic(plan: dict, scenario: dict) -> SemanticReport:

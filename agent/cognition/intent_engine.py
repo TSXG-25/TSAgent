@@ -71,12 +71,16 @@ _KEYWORD_MAP: list[tuple[re.Pattern, str, str, bool]] = [
     (re.compile(r'计算|算一下|算算|等于|方程|求导|积分|函数|公式|解.*方程'), DOMAIN_MATH, "calculate", False),
     (re.compile(r'^\d+[+\-*/]\d+|^\d+\.\d+'), DOMAIN_MATH, "calculate", False),
 
-    # 创作
-    (re.compile(r'写.*[诗故事文小说剧本]|创作|生成.*[诗故事文案]'), DOMAIN_CREATION, "generate", False),
+    # 创作（精确短语，避免"大小写/拼写"的"写"作为语素时误判为创作）
+    (re.compile(r'写[一首篇个段]{0,2}[诗故事小说剧本文案]|作诗|赋诗|创作|生成.*[诗故事文案]'), DOMAIN_CREATION, "generate", False),
 
     # 代码开发
     (re.compile(r'写.*[代码程序函数类]|编程|开发|实现.*功能|写.*[接口模块]|修复.*bug|debug|重构'), DOMAIN_DEVELOPMENT, "code", True),
     (re.compile(r'代码.*[审查审阅查看]|review|代码审查'), DOMAIN_DEVELOPMENT, "review", True),
+    # v2.0-B：明确代码修改请求（给 X 增加功能 / 配置解析 / 大小写不敏感）
+    # action=modify → 无 workflow 路由（走 Planner，多步修改：读→改→测试→文档），
+    # 避免误入 code_generation（该 workflow 只适合"生成新代码文件"）
+    (re.compile(r'给.*增加|增加.*[功能解析支持]|大小写|不区分大小写|配置.*解析'), DOMAIN_DEVELOPMENT, "modify", True),
 
     # 记忆查询
     (re.compile(r'我.*[叫姓名是]|我的.*[兴趣喜好名字]|之前.*[说提问]|记不记得|还记得'), DOMAIN_MEMORY, "query", False),
@@ -383,10 +387,13 @@ class IntentEngine:
             }
             domain = domain_map.get(domain_raw, DOMAIN_UNKNOWN)
             confidence = obj.get("confidence", 0.5)
-            requires_exec = obj.get("requires_execution", True)
-            # Chat domain always skips execution
-            if domain == DOMAIN_CHAT:
-                requires_exec = False
+            # v2.0-B：requires_execution 由 domain 确定性推导（ADR-0009），不信任 LLM 字段。
+            # LLM 只决定 domain/action；"是否执行"是行为决策，必须确定。
+            # 开发/文件/运维/办公/网络/未知 → 执行；闲聊/创作/知识/记忆/数学/翻译 → 回答
+            requires_exec = domain in {
+                DOMAIN_DEVELOPMENT, DOMAIN_FILE, DOMAIN_OPERATION,
+                DOMAIN_OFFICE, DOMAIN_WEB, DOMAIN_UNKNOWN,
+            }
 
             self._llm_fallback_count += 1
             return IntentResult(

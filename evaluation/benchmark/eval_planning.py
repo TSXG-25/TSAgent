@@ -162,24 +162,120 @@ def evaluate_dataset() -> tuple:
     return metrics, failboard, len(failboard) == 0
 
 
+def evaluate_real_planner(scenarios: list = None) -> tuple:
+    """真实 Planner 评估（Stage 3 验收）：generate_plan 对每个 dataset 场景跑一遍。
+
+    Planner 输出 PlanOutput → 转成 plan dict → evaluate_plan 评估。
+    全部确定性校验（ADR-0009）。Abstain 场景：空 plan + abstain → abstention PASS。
+
+    Returns:
+        (MetricsV2, list[Fail Board entries])
+    """
+    import asyncio
+    from agent.planner.planner import plan_with_metadata
+
+    scenarios = scenarios if scenarios is not None else load_scenarios()
+    results = []
+    failboard = []
+
+    async def _run():
+        for s in scenarios:
+            out = await plan_with_metadata(
+                s["input"],
+                memory_context="",
+                repo_context="",
+                skill_hint="",
+                intent=None,
+                grounding=None,
+            )
+            if s.get("expect_abstention"):
+                # Abstain 场景：planner 返回空 + abstain 标记才算 abstain
+                abstained = out.abstain and len(out.tasks) == 0
+                r = {
+                    "structural_valid": True,
+                    "semantic_valid": abstained,
+                    "checks": {"abstention": abstained},
+                    "attribution": {
+                        "structural": [],
+                        "goal_coverage": [],
+                        "constraints": [],
+                        "abstention": [] if abstained else [f"planner 未 abstain（tasks={len(out.tasks)}）"],
+                    },
+                }
+            else:
+                plan = {"tasks": out.tasks}
+                r = evaluate_plan(plan, s)
+            results.append(r)
+            if not (r["structural_valid"] and r["semantic_valid"]):
+                failboard.append({"id": s["id"], "attribution": r["attribution"]})
+
+    asyncio.run(_run())
+    metrics = aggregate(results, scenarios)
+    return metrics, failboard
+
+
+PROGRESS = os.path.join("evaluation", "planning_progress.json")
+
+
+def record_curve(capability: str, metrics: dict, extra: dict = None) -> None:
+    """把某 Capability 的指标写入 Capability Progress Curve（Trend Gate 基线）。
+
+    曲线 = capability → metrics 序列。CI 检查同一 capability 的指标**不能下降**。
+    """
+    curve = {}
+    if os.path.exists(PROGRESS):
+        with open(PROGRESS) as f:
+            curve = json.load(f)
+    curve.setdefault("capabilities", [])
+    if capability not in curve["capabilities"]:
+        curve["capabilities"].append(capability)
+    curve[f"{capability}_metrics"] = metrics
+    # 历史序列（Trend Gate 对比用：新 Capability 不能使整体能力下降）
+    curve.setdefault(f"{capability}_history", []).append(metrics)
+    if extra:
+        curve.setdefault("extra", {}).update(extra)
+    with open(PROGRESS, "w") as f:
+        json.dump(curve, f, ensure_ascii=False, indent=2)
+    print(f"📈 Capability Progress Curve 已更新: {capability} → {PROGRESS}")
+
+
 def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="Planning Quality Benchmark（v2.0-A）")
+    parser.add_argument("--real", action="store_true",
+                        help="评估真实 Planner（调用 LLM）而非 golden self-check")
+    parser.add_argument("--record", action="store_true",
+                        help="把评估结果记录到 Capability Progress Curve（Trend Gate 基线）")
+    args = parser.parse_args()
+
     from evaluation.benchmark.contract_verification import verify as verify_contract
     if not verify_contract():
         print("⚠️  Resolver Contract 已变化 —— 先解决 Contract Verification 再评估。")
 
-    print("Planning Quality Benchmark（v2.0-A · golden self-check）\n")
-    metrics, failboard, all_pass = evaluate_dataset()
+    if args.real:
+        print("Planning Quality Benchmark（v2.0-A · real planner）\n")
+        metrics, failboard = evaluate_real_planner()
+    else:
+        print("Planning Quality Benchmark（v2.0-A · golden self-check）\n")
+        metrics, failboard, _ = evaluate_dataset()
+        all_pass = len(failboard) == 0
+
     for k, v in metrics.to_dict().items():
         if v > 0.0:
             print(f"  {k:28s} {v:.3f}")
 
-    print(f"\nGolden self-check: {'PASS' if all_pass else 'FAIL'}")
+    mode = "Real planner" if args.real else "Golden self-check"
+    print(f"\n{mode}: {'PASS' if len(failboard) == 0 else 'FAIL'}")
     if failboard:
         print("Fail Board:")
         for fb in failboard:
             print(f"  ✗ {fb['id']}: {fb['attribution']}")
-    return 0 if all_pass else 1
+
+    if args.record:
+        record_curve("planning", metrics.to_dict(), extra={"mode": mode})
+    return 0 if len(failboard) == 0 else 1
 
 
 if __name__ == "__main__":
     sys.exit(main())
+

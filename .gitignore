@@ -12,3 +12,4 @@ patches/
 
 .env
 .DS_Store
+evaluation/history/

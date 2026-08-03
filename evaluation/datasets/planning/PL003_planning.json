@@ -1,7 +1,7 @@
 {
   "id": "PL003",
   "name": "constraint_scope_test",
-  "input": "只能修改 test/ 目录下的文件，给 tests 补上边界用例",
+  "input": "只能修改 tests/ 目录下的文件，给 tests/test_target.py 补上边界用例",
   "constraints": [
     {"type": "scope_only", "path": "tests", "detail": "只能修改 test/ 目录"}
   ],

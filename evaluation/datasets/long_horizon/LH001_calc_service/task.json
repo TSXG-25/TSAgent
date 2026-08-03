@@ -1,0 +1,12 @@
+{
+  "id": "LH001",
+  "name": "calc_service_enhancement",
+  "category": "long_horizon",
+  "cwd": "evaluation/datasets/long_horizon/LH001_calc_service",
+  "prompt": "仓库 evaluation/datasets/long_horizon/LH001_calc_service 中，给 parser.py 增加大小写不敏感的配置解析（key 匹配时不区分大小写：HOST 和 host 视为同一个 key，合并为一个；相同 key 合并时保留第一次出现的原始拼写，如 HOST）。先读相关文件理解现状，然后修改 parser.py，在 tests/test_parser.py 补上大小写不敏感的测试用例，运行测试确认全部通过，最后更新 README.md 说明新功能。不要联网。",
+  "verify": "evaluation/datasets/long_horizon/LH001_calc_service/verify.py",
+  "timeout": 600,
+  "grounding_targets": ["parser.py", "tests/test_parser.py", "README.md"],
+  "grounding_keys": ["parser", "config", "case"],
+  "constraints": ["no_web"]
+}

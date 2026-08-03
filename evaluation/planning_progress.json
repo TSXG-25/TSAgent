@@ -1,0 +1,90 @@
+{
+  "capabilities": [
+    "planning"
+  ],
+  "lh_metrics": {
+    "goal_coverage": 0.0,
+    "constraint_detection": 0.0,
+    "task_completeness": 0.0,
+    "dependency_correctness": 0.0,
+    "execution_order": 0.0,
+    "tool_accuracy": 0.0,
+    "retry_accuracy": 0.0,
+    "finish_accuracy": 0.0,
+    "clarification_accuracy": 0.0,
+    "diagnosis_accuracy": 0.0,
+    "false_diagnosis_rate": 0.0,
+    "correction_success": 0.0,
+    "recovery_improvement": 0.0,
+    "correct_abstention": 0.0,
+    "false_confidence": 0.0,
+    "completion_rate": 0.0,
+    "recovery_count": 1.0,
+    "context_drift": 0.0,
+    "latency_ms": 179900.0
+  },
+  "results": [
+    {
+      "id": "LH001",
+      "completion": false,
+      "verify_reasons": [
+        "保留原始 key 拼写失败: host（期望 HOST）",
+        "tests/test_parser.py 未包含大小写不敏感用例",
+        "README.md 未说明大小写不敏感功能"
+      ],
+      "recovery_count": 1,
+      "context_drift": 0.0,
+      "latency_ms": 179900.0,
+      "error": "",
+      "answer_ok": true,
+      "trace_tail": "==========\n⚡ 执行耗时 Profile\n==================================================\n  plan                  54.64s  █████░░░░░░░░░░░░░░░ 26%\n  plan_llm              54.64s  █████░░░░░░░░░░░░░░░ 26%\n  init                  49.87s  ████░░░░░░░░░░░░░░░░ 24%\n  replan_llm            35.01s  ███░░░░░░░░░░░░░░░░░ 17%\n  executor              11.45s  █░░░░░░░░░░░░░░░░░░░ 6%\n  answer_gen             0.81s  ░░░░░░░░░░░░░░░░░░░░ 0%\n  TOTAL                206.41s\n==================================================\n\n"
+    }
+  ],
+  "planning_metrics": {
+    "goal_coverage": 1.0,
+    "constraint_detection": 1.0,
+    "task_completeness": 1.0,
+    "dependency_correctness": 1.0,
+    "execution_order": 1.0,
+    "tool_accuracy": 0.0,
+    "retry_accuracy": 0.0,
+    "finish_accuracy": 0.0,
+    "clarification_accuracy": 0.0,
+    "diagnosis_accuracy": 0.0,
+    "false_diagnosis_rate": 0.0,
+    "correction_success": 0.0,
+    "recovery_improvement": 0.0,
+    "correct_abstention": 1.0,
+    "false_confidence": 0.0,
+    "completion_rate": 0.0,
+    "recovery_count": 0.0,
+    "context_drift": 0.0,
+    "latency_ms": 0.0
+  },
+  "planning_history": [
+    {
+      "goal_coverage": 1.0,
+      "constraint_detection": 1.0,
+      "task_completeness": 1.0,
+      "dependency_correctness": 1.0,
+      "execution_order": 1.0,
+      "tool_accuracy": 0.0,
+      "retry_accuracy": 0.0,
+      "finish_accuracy": 0.0,
+      "clarification_accuracy": 0.0,
+      "diagnosis_accuracy": 0.0,
+      "false_diagnosis_rate": 0.0,
+      "correction_success": 0.0,
+      "recovery_improvement": 0.0,
+      "correct_abstention": 1.0,
+      "false_confidence": 0.0,
+      "completion_rate": 0.0,
+      "recovery_count": 0.0,
+      "context_drift": 0.0,
+      "latency_ms": 0.0
+    }
+  ],
+  "extra": {
+    "mode": "Real planner"
+  }
+}

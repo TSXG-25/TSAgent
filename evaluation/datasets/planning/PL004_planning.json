@@ -1,0 +1,14 @@
+{
+  "id": "PL004",
+  "name": "constraint_no_delete",
+  "input": "重构 utils.py，但不要删除任何文件，旧的导出要保留",
+  "constraints": [
+    {"type": "no_delete", "detail": "不要删除任何文件"}
+  ],
+  "golden_tasks": [
+    {"id": "task-1", "verb": "modify", "target": "utils.py", "goal": "重构 utils.py 并保留旧导出", "dependencies": []}
+  ],
+  "expected_order": ["utils.py"],
+  "attribution": "constraint",
+  "notes": "no_delete 约束：plan 中不得出现 delete 动作。"
+}

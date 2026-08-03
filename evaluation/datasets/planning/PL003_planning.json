@@ -1,0 +1,14 @@
+{
+  "id": "PL003",
+  "name": "constraint_scope_test",
+  "input": "只能修改 test/ 目录下的文件，给 tests 补上边界用例",
+  "constraints": [
+    {"type": "scope_only", "path": "tests", "detail": "只能修改 test/ 目录"}
+  ],
+  "golden_tasks": [
+    {"id": "task-1", "verb": "modify", "target": "tests/test_target.py", "goal": "给 tests/test_target.py 补边界用例", "dependencies": []}
+  ],
+  "expected_order": ["tests/test_target.py"],
+  "attribution": "constraint",
+  "notes": "scope_only 约束：所有修改动作的 target 必须位于 test/ 下。"
+}

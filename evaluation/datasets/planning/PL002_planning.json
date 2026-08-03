@@ -1,0 +1,14 @@
+{
+  "id": "PL002",
+  "name": "constraint_no_web",
+  "input": "不要联网，用本地实现给工具加一个温度转换功能（temperature.py）",
+  "constraints": [
+    {"type": "no_web", "detail": "不要联网，本地实现"}
+  ],
+  "golden_tasks": [
+    {"id": "task-1", "verb": "modify", "target": "temperature.py", "goal": "实现温度转换功能", "dependencies": []}
+  ],
+  "expected_order": ["temperature.py"],
+  "attribution": "constraint",
+  "notes": "no_web 约束：plan 中不得出现网络相关动作（search web / 查资料）。"
+}

@@ -1,0 +1,12 @@
+{
+  "id": "PL007",
+  "name": "ambiguous_ask_user",
+  "input": "修改一下那个模块",
+  "constraints": [],
+  "golden_tasks": [],
+  "expected_order": [],
+  "expect_abstention": true,
+  "abstention": "ask_user",
+  "attribution": "uncertainty",
+  "notes": "信息不足（哪个模块）→ 应 Abstain / Ask User，而不是默认猜一个文件。Uncertainty 横切原则。"
+}

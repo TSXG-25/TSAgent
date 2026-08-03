@@ -1,0 +1,14 @@
+{
+  "id": "PL001",
+  "name": "multi_step_coding",
+  "input": "修改 parser.py 的 parse 函数，然后给 tests/test_parser.py 加一个用例，最后更新 README.md 文档",
+  "constraints": [],
+  "golden_tasks": [
+    {"id": "task-1", "verb": "modify", "target": "parser.py", "goal": "修改 parser.py 的 parse 函数", "dependencies": []},
+    {"id": "task-2", "verb": "modify", "target": "tests/test_parser.py", "goal": "给 tests/test_parser.py 加一个用例", "dependencies": ["task-1"]},
+    {"id": "task-3", "verb": "modify", "target": "README.md", "goal": "更新 README.md 文档", "dependencies": ["task-2"]}
+  ],
+  "expected_order": ["parser.py", "tests/test_parser.py", "README.md"],
+  "attribution": "goal/task/order",
+  "notes": "多步 + 明确顺序（改 → 测试 → 文档）。"
+}

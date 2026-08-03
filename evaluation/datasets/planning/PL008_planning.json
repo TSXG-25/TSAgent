@@ -1,0 +1,16 @@
+{
+  "id": "PL008",
+  "name": "composite_constraint_order",
+  "input": "不要联网，修改 parser.py 支持新语法，然后补 tests/test_parser.py 用例，最后更新 README.md",
+  "constraints": [
+    {"type": "no_web", "detail": "不要联网"}
+  ],
+  "golden_tasks": [
+    {"id": "task-1", "verb": "modify", "target": "parser.py", "goal": "修改 parser.py 支持新语法", "dependencies": []},
+    {"id": "task-2", "verb": "modify", "target": "tests/test_parser.py", "goal": "补 tests/test_parser.py 用例", "dependencies": ["task-1"]},
+    {"id": "task-3", "verb": "modify", "target": "README.md", "goal": "更新 README.md 文档", "dependencies": ["task-2"]}
+  ],
+  "expected_order": ["parser.py", "tests/test_parser.py", "README.md"],
+  "attribution": "goal/task/order/constraint",
+  "notes": "复合场景：多步 + 顺序 + no_web 约束。"
+}

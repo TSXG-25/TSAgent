@@ -1,0 +1,12 @@
+{
+  "id": "PL006",
+  "name": "simple_single",
+  "input": "修复 config.py 里的一个 bug",
+  "constraints": [],
+  "golden_tasks": [
+    {"id": "task-1", "verb": "modify", "target": "config.py", "goal": "修复 config.py 的 bug", "dependencies": []}
+  ],
+  "expected_order": ["config.py"],
+  "attribution": "goal",
+  "notes": "基础单目标场景。"
+}

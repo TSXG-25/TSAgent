@@ -1,0 +1,13 @@
+{
+  "id": "PL005",
+  "name": "dependency_refactor_then_test",
+  "input": "先重构 target.py 的 compute 函数，然后再运行测试确认没破坏功能",
+  "constraints": [],
+  "golden_tasks": [
+    {"id": "task-1", "verb": "modify", "target": "target.py", "goal": "重构 target.py 的 compute 函数", "dependencies": []},
+    {"id": "task-2", "verb": "execute", "target": "pytest", "goal": "运行测试确认重构未破坏功能", "dependencies": ["task-1"]}
+  ],
+  "expected_order": ["target.py", "pytest"],
+  "attribution": "dependency/order",
+  "notes": "依赖正确性：pytest 必须在重构之后。"
+}

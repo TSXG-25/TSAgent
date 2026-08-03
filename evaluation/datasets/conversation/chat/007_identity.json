@@ -5,9 +5,22 @@
     "intent": "chat",
     "planner": false,
     "tool_calls": 0,
-    "answer_contains": [
-      "助手",
-      "可以"
+    "one_of": [
+      [
+        "助手"
+      ],
+      [
+        "可以"
+      ],
+      [
+        "帮助"
+      ],
+      [
+        "随时"
+      ],
+      [
+        "AI"
+      ]
     ],
     "answer_not_contains": [
       "查不到",

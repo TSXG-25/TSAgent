@@ -13,3 +13,13 @@ patches/
 .env
 .DS_Store
 evaluation/history/
+
+# Tooling caches / build artifacts
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+build/
+dist/

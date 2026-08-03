@@ -171,16 +171,15 @@ def test_tool_registry_imports():
             importlib.import_module(mod_name)
         except Exception as e:
             print(f"[FAIL] Import {mod_name}: {e}")
-            return False
+            raise AssertionError(f"Import {mod_name} failed: {e}")
 
     # Verify they registered
     from agent.registry.tool_registry import registry as reg
     if not reg.get_all():
         print("[FAIL] test_tool_registry_imports: modules imported but no tools registered")
-        return False
+        raise AssertionError("[FAIL] test_tool_registry_imports: modules imported but no tools registered")
 
     print(f"[PASS] test_tool_registry_imports - all {len(tool_modules)} modules imported ({len(reg.get_all())} tools)")
-    return True
 
 
 def test_sandbox_import():
@@ -191,7 +190,6 @@ def test_sandbox_import():
         print("[PASS] test_sandbox_import")
     except Exception as e:
         print(f"[SKIP] test_sandbox_import - Docker not available: {e}")
-    return True
 
 
 def _unload_tool_modules():

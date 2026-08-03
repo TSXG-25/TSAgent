@@ -1,0 +1,11 @@
+{
+  "id": "DS003",
+  "name": "permission_denied",
+  "input": {
+    "diagnosis": "permission_denied",
+    "diagnosis_confidence": 0.9,
+    "state": {"retry_count": 0, "same_tool": false, "user_blocked": true, "evidence_completeness": 1.0}
+  },
+  "gold": {"action": "ask", "rule": "permission_ask"},
+  "note": "权限拒绝 → Ask User（重试无意义）。"
+}

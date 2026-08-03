@@ -1,0 +1,11 @@
+{
+  "id": "DS002",
+  "name": "tool_timeout_exhausted",
+  "input": {
+    "diagnosis": "tool_timeout",
+    "diagnosis_confidence": 0.95,
+    "state": {"retry_count": 3, "same_tool": true, "user_blocked": false, "evidence_completeness": 1.0}
+  },
+  "gold": {"action": "switch", "rule": "timeout_retry_exhausted"},
+  "note": "重试耗尽（retry=3, max_retry=3）→ 换工具。"
+}

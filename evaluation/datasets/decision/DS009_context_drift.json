@@ -1,0 +1,11 @@
+{
+  "id": "DS009",
+  "name": "context_drift",
+  "input": {
+    "diagnosis": "context_drift",
+    "diagnosis_confidence": 0.8,
+    "state": {"retry_count": 0, "same_tool": false, "user_blocked": false, "evidence_completeness": 1.0}
+  },
+  "gold": {"action": "retry", "rule": "context_drift_retry"},
+  "note": "目标漂移但可保留 → 重试（保持目标继续）。"
+}

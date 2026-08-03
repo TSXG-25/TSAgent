@@ -268,6 +268,17 @@ class ReactExecutor:
                 # 约束 1：reflect() 只消费 FailureEvent（evidence 结构化）
                 # 约束 2：correction 是 Proposal，Executor/LLM 决定是否采纳
                 self._reflect_failure(task, observation)
+                # v2.0-D Decision：诊断 + 状态 → next action（retry/switch/ask/finish）
+                # Decision 是 Policy + Confidence Gate 的确定性层，不是 LLM 自由发挥
+                next_action = self._decide_next(task, observation)
+                if next_action in ("ask", "finish"):
+                    print(f"   ⏹️ Decision: {next_action}（策略性停止，不无限重试）")
+                    task["status"] = "failed"
+                    task["error"] = (
+                        f"[Decision:{next_action}] "
+                        f"{task.get('_decision', {}).get('rule', '')} — 需要用户介入或放弃"
+                    )
+                    break
                 # P0-3 Recovery: tool 失败后不走 validator，直接继续 Think
                 # (不要在这里 finish，让 LLM 换工具重试)
                 print(f"   🔄 失败后不结束，继续尝试 (第 {iteration}/{self._max_iterations()} 轮)")
@@ -462,6 +473,74 @@ class ReactExecutor:
             # Reflection 是增强，失败不阻塞执行
             task["_reflection"] = {"root_cause": "unknown", "confidence": 0.0,
                                    "correction": "retry", "reason": f"Reflection 失败: {e}"}
+
+    def _refined_diagnosis(self, root_cause: str, symptom: str) -> str:
+        """root_cause（粗） + symptom → 细化 diagnosis（Decision Policy key）。"""
+        if root_cause == "tool":
+            if symptom == "timeout":
+                return "tool_timeout"
+            if symptom == "missing_constraint":
+                return "permission_denied"
+            return "tool_failure"
+        if root_cause == "grounding":
+            if symptom == "hallucination":
+                return "hallucination"
+            return "grounding_miss"
+        if root_cause == "planning":
+            if symptom == "context_drift":
+                return "context_drift"
+            if symptom == "missing_constraint":
+                return "constraint_violation"
+            return "planning_failure"
+        return {
+            "tool": "tool_failure", "decision": "decision_failure",
+            "prompt": "prompt_failure", "runtime": "runtime_failure",
+            "external": "external_failure", "unknown": "unknown",
+        }.get(root_cause, "unknown")
+
+    def _decide_next(self, task: Dict, observation: Dict) -> str:
+        """v2.0-D Decision：diagnosis + ExecutionState → next action（retry/switch/ask/finish）。
+
+        Decision 是确定性 Policy 层（不是 LLM 自由发挥）。DecisionTrace 记录 rule/confidence。
+        """
+        try:
+            from agent.decision.decision import decide, DecisionInput, ExecutionState
+
+            refl = task.get("_reflection", {})
+            root_cause = refl.get("root_cause", "unknown")
+            diagnosis = self._refined_diagnosis(root_cause, self._symptom_from_observation(observation or {}))
+            failures = task.get("recent_failures", []) or []
+            retry_count = len(failures)
+            last_tool = (observation or {}).get("tool_used", "")
+            same_tool = bool(last_tool) and any(
+                f.get("tool") == last_tool for f in failures
+            )
+
+            inp = DecisionInput(
+                diagnosis=diagnosis,
+                diagnosis_confidence=refl.get("confidence", 0.2),
+                state=ExecutionState(
+                    retry_count=retry_count,
+                    same_tool=same_tool,
+                    evidence_completeness=1.0 if refl.get("confidence", 0) > 0 else 0.5,
+                ),
+                event_id=task.get("id", "task"),
+            )
+            decision, trace = decide(inp)
+            task["_decision"] = {
+                "action": decision.action,
+                "confidence": decision.confidence,
+                "rule": trace.policy_rule,
+                "diagnosis": diagnosis,
+            }
+            print(f"   🎯 Decision: {decision.action} "
+                  f"(rule={trace.policy_rule}, conf={decision.confidence})")
+            return decision.action
+        except Exception as e:
+            # Decision 是增强，失败默认 retry（与旧行为一致）
+            task["_decision"] = {"action": "retry", "confidence": 0.0,
+                                 "rule": "fallback", "diagnosis": "unknown"}
+            return "retry"
 
     async def _think(self, state: AgentState, task: Dict) -> Dict:
         # P0-2: Inject tool selection rules into the system prompt

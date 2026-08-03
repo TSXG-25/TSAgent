@@ -1,0 +1,11 @@
+{
+  "id": "DS010",
+  "name": "unknown_low_conf",
+  "input": {
+    "diagnosis": "unknown",
+    "diagnosis_confidence": 0.2,
+    "state": {"retry_count": 0, "same_tool": false, "user_blocked": false, "evidence_completeness": 0.5}
+  },
+  "gold": {"action": "ask", "rule": "unknown_ask"},
+  "note": "未知诊断（低置信）→ Ask User（不许乱改）。"
+}

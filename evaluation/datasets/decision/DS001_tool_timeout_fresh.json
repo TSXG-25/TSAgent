@@ -1,0 +1,11 @@
+{
+  "id": "DS001",
+  "name": "tool_timeout_fresh",
+  "input": {
+    "diagnosis": "tool_timeout",
+    "diagnosis_confidence": 0.95,
+    "state": {"retry_count": 0, "same_tool": false, "user_blocked": false, "evidence_completeness": 1.0}
+  },
+  "gold": {"action": "retry", "rule": "timeout_default"},
+  "note": "首次超时（retry=0）→ 重试。"
+}

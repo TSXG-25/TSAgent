@@ -73,6 +73,45 @@ class ReactReflectionTest(unittest.TestCase):
             {"root_cause", "confidence", "correction", "reason"},
         )
 
+    # ── v2.0-D Decision 接入 ──
+
+    def test_decide_next_grounding_switch(self):
+        task = {"id": "task-5", "recent_failures": []}
+        self.exec._reflect_failure(task, self._obs("文件不存在: x.py"))
+        action = self.exec._decide_next(task, self._obs("文件不存在: x.py"))
+        # grounding + hallucination → 细化 diagnosis=hallucination → 策略仍 switch
+        self.assertEqual(action, "switch")
+        self.assertEqual(task["_decision"]["diagnosis"], "hallucination")
+
+    def test_decide_next_timeout_retry(self):
+        task = {"id": "task-6", "recent_failures": []}
+        self.exec._reflect_failure(task, self._obs("命令执行超时 (timeout)"))
+        action = self.exec._decide_next(task, self._obs("命令执行超时 (timeout)"))
+        self.assertEqual(action, "retry")
+        self.assertEqual(task["_decision"]["diagnosis"], "tool_timeout")
+
+    def test_decide_next_retry_exhausted_switch(self):
+        # 3 次失败（重试耗尽）→ switch
+        task = {"id": "task-7",
+                "recent_failures": [
+                    {"tool": "run_python", "error": "timeout", "time": 1},
+                    {"tool": "run_python", "error": "timeout", "time": 2},
+                    {"tool": "run_python", "error": "timeout", "time": 3},
+                ]}
+        self.exec._reflect_failure(task, self._obs("命令执行超时 (timeout)"))
+        action = self.exec._decide_next(task, self._obs("命令执行超时 (timeout)"))
+        self.assertEqual(action, "switch")
+        self.assertEqual(task["_decision"]["rule"], "tool_timeout_exhausted")
+
+    def test_refined_diagnosis_mapping(self):
+        m = self.exec._refined_diagnosis
+        self.assertEqual(m("tool", "timeout"), "tool_timeout")
+        self.assertEqual(m("tool", "missing_constraint"), "permission_denied")
+        self.assertEqual(m("grounding", "hallucination"), "hallucination")
+        self.assertEqual(m("planning", "context_drift"), "context_drift")
+        self.assertEqual(m("external", ""), "external_failure")
+        self.assertEqual(m("unknown", ""), "unknown")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

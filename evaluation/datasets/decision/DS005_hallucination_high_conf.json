@@ -1,0 +1,11 @@
+{
+  "id": "DS005",
+  "name": "hallucination_high_conf",
+  "input": {
+    "diagnosis": "hallucination",
+    "diagnosis_confidence": 0.9,
+    "state": {"retry_count": 0, "same_tool": false, "user_blocked": false, "evidence_completeness": 1.0}
+  },
+  "gold": {"action": "switch", "rule": "hallucination_switch"},
+  "note": "幻觉目标（高置信）→ 换 grounding/工具，不需打断用户。"
+}

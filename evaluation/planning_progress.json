@@ -1,7 +1,8 @@
 {
   "capabilities": [
     "planning",
-    "reflection"
+    "reflection",
+    "decision"
   ],
   "lh_metrics": {
     "goal_coverage": 0.0,
@@ -125,6 +126,26 @@
       "false_diagnosis_rate": 0.0,
       "scenarios": 10,
       "determinism_gate": true
+    }
+  ],
+  "decision_metrics": {
+    "recovery_rate": 1.0,
+    "wrong_recovery_rate": 0.0,
+    "intervention_efficiency": 0.4,
+    "scenarios": 10,
+    "retry_accuracy": 1.0,
+    "clarification_accuracy": 1.0,
+    "finish_accuracy": 0.0
+  },
+  "decision_history": [
+    {
+      "recovery_rate": 1.0,
+      "wrong_recovery_rate": 0.0,
+      "intervention_efficiency": 0.4,
+      "scenarios": 10,
+      "retry_accuracy": 1.0,
+      "clarification_accuracy": 1.0,
+      "finish_accuracy": 0.0
     }
   ]
 }

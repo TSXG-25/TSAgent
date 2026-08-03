@@ -18,13 +18,21 @@ Quality Gate  PASS / WARNING / FAIL
 
 Current Phase
 ──────────────
-v2.0-C — Agent Intelligence: Reflection（Diagnosis → Correction Proposal）
+v2.0-D — Agent Intelligence: Decision（Policy → Confidence Gate → Next Action）
+  Decision              10/10 = 100%（Recovery Rate 1.000 / Wrong Recovery 0.000）
+  Decision Policy       retry/switch/ask/finish 四动作，PolicyRegistry（v2.1 可动态更新）
+  Decision Confidence   组合置信（诊断置信 + 重试耗尽 + 动作风险 + 证据完整度）< 0.5 → ASK
+  DecisionTrace         决策可解释性（rule/confidence/rejected）→ Wrong Recovery 分析
+  接入 ReAct            失败 → Reflection → Decision → next action（策略性停止不无限重试）
+  Trend Gate            PASS（planning + reflection + decision 三基线）
+
+v2.0-C — Agent Intelligence: Reflection（Diagnosis → Correction Proposal，已完成）
   Reflection              10/10 = 100%（Diagnosis Accuracy / Correction Proposal / False Dx 0.000）
   Reflection Contract     reflect(event: FailureEvent) 唯一入口（只消费 Fail Board Evidence）
   Correction              Proposal（不执行，Executor 决定采纳）→ 已接入 ReAct 失败路径
   Determinism Gate        10 场景 × 100 次 Diagnosis 完全一致
   FixCommit               FIXED(commit) 生命周期闭环（REGRESSION 可关联首次修复）
-  Long Horizon            drift 0.333 → 0.0（Reflection 改善目标保持）；Trend Gate PASS
+  Long Horizon            drift 0.333 → 0.0（Reflection 改善目标保持）
 
 v2.0-A — Agent Intelligence: Planning Quality（已完成）
   Planning (real planner)    6/6 = 100%（Goal/Constraint/Task/Dependency/Order/Abstention）

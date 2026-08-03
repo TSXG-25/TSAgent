@@ -1,0 +1,11 @@
+{
+  "id": "DS007",
+  "name": "external_failure_fresh",
+  "input": {
+    "diagnosis": "external_failure",
+    "diagnosis_confidence": 0.9,
+    "state": {"retry_count": 1, "same_tool": true, "user_blocked": false, "evidence_completeness": 1.0}
+  },
+  "gold": {"action": "retry", "rule": "external_default"},
+  "note": "外部失败（retry=1 < max_retry=3）→ 重试。"
+}

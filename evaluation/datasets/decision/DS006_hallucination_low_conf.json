@@ -1,0 +1,11 @@
+{
+  "id": "DS006",
+  "name": "hallucination_low_conf",
+  "input": {
+    "diagnosis": "hallucination",
+    "diagnosis_confidence": 0.4,
+    "state": {"retry_count": 0, "same_tool": false, "user_blocked": false, "evidence_completeness": 1.0}
+  },
+  "gold": {"action": "ask", "rule": "confidence_gate"},
+  "note": "幻觉目标（低置信 0.4 < 0.5）→ Confidence Gate 强制 Ask User。"
+}

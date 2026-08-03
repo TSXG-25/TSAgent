@@ -1,0 +1,11 @@
+{
+  "id": "DS008",
+  "name": "external_failure_exhausted",
+  "input": {
+    "diagnosis": "external_failure",
+    "diagnosis_confidence": 0.9,
+    "state": {"retry_count": 5, "same_tool": true, "user_blocked": false, "evidence_completeness": 1.0}
+  },
+  "gold": {"action": "ask", "rule": "external_exhausted"},
+  "note": "外部失败（retry=5 >= max_retry=3）→ Ask/Finish（重试无意义）。"
+}

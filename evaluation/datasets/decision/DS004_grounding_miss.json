@@ -1,0 +1,11 @@
+{
+  "id": "DS004",
+  "name": "grounding_miss",
+  "input": {
+    "diagnosis": "grounding_miss",
+    "diagnosis_confidence": 0.85,
+    "state": {"retry_count": 0, "same_tool": false, "user_blocked": false, "evidence_completeness": 0.8}
+  },
+  "gold": {"action": "switch", "rule": "grounding_re_ground"},
+  "note": "Grounding 未命中 → 换检索策略（Re-ground）。"
+}

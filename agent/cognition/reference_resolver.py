@@ -28,7 +28,7 @@ _OMITTED_TARGET_PATTERNS = [
     re.compile(r'^(修改|改|优化|重构|调整|更新|编辑|完善|改进)(一下|一哈|一点)?$'),
     re.compile(r'^(看看|查看|打开|读|读取|显示)(一下|一哈)?$'),
     re.compile(r'^(解释|说明|分析|总结|审查|review)(一下|一哈)?$'),
-    re.compile(r'^(删除|移除|清理|去掉)(一下|一哈)?$'),
+    re.compile(r'^(删除|移除|清理|去掉|撤销)(一下|一哈)?$'),
     re.compile(r'^(运行|执行|测试|跑)(一下|一哈)?$'),
     re.compile(r'^(继续|下一步|接着|往下)$'),
     re.compile(r'^(重新|再试|再来|再来一次)$'),
@@ -46,7 +46,7 @@ _OMITTED_TARGET_VERBS = {
     "修改", "改", "优化", "重构", "调整", "更新", "编辑", "完善", "改进",
     "看看", "查看", "打开", "读", "读取", "显示",
     "解释", "说明", "分析", "总结", "审查", "review",
-    "删除", "移除", "清理", "去掉", "运行", "执行", "测试", "跑",
+    "删除", "移除", "清理", "去掉", "撤销", "运行", "执行", "测试", "跑",
     "继续", "下一步", "接着", "往下", "重新", "再试", "再来", "再来一次",
 }
 
@@ -57,11 +57,12 @@ _CONTINUATION_PATTERNS = [
     re.compile(r'^(也|同样)\s*(修改|改|优化|重构|调整|更新|编辑|完善|改进)(一下|一哈)?$'),
 ]
 
-# 中文数字序数模式
+# 中文数字序数模式（支持动词前缀："修改第一个文件"）
 _ORDINAL_PATTERNS = [
-    re.compile(r'^(第[一二三四五六七八九十\d])个'),
-    re.compile(r'^(第[一二三四五六七八九十\d])步'),
-    re.compile(r'^(第[一二三四五六七八九十\d])条'),
+    re.compile(r'^(修改|改|优化|重构|调整|更新|删除|移除|打开|读取|读|查看|处理|解决|继续|执行)?\s*(第[一二三四五六七八九十\d])个'),
+    re.compile(r'^(修改|改|优化|重构|调整|更新|删除|移除|打开|读取|读|查看|处理|解决|继续|执行)?\s*(第[一二三四五六七八九十\d])步'),
+    re.compile(r'^(修改|改|优化|重构|调整|更新|删除|移除|打开|读取|读|查看|处理|解决|继续|执行)?\s*(第[一二三四五六七八九十\d])条'),
+    re.compile(r'^(修改|改|优化|重构|调整|更新|删除|移除|打开|读取|读|查看|处理|解决|继续|执行)?\s*(最后|最后一个|刚才|刚才那个)'),
     re.compile(r'^上面(的|那)?'),
     re.compile(r'^下面(的|那)?'),
 ]
@@ -371,14 +372,111 @@ class ReferenceResolver:
         )
 
     def _resolve_ordinal(self, text: str, context: CognitiveContext) -> ResolvedQuery:
-        """消歧序数引用（"第一个"、"上面的"等）。"""
-        # TODO: 实现序数消歧（需要跟踪上一轮输出的列表）
-        return ResolvedQuery(
-            target="",
-            raw=text,
-            confidence=0.3,
-            resolution_trace="序数消歧: 暂未实现（TODO）",
+        """消歧序数引用（"第二个函数"、"最后一个"、"刚才那个文件"）。
+
+        - Repository 数据经 context.repository_symbols 注入（Resolver 保持纯函数）。
+        - Timeline = Storage：nth/最近 语义由 Resolver 实现。
+        """
+        return self._candidate_ordinal(text, context).to_resolved_query(text)
+
+    # ── 序数解析（B5：Ordinal Reference）──
+
+    @staticmethod
+    def _parse_ordinal(word: str) -> int:
+        """中文/数字序数 → 1-based 序号。"""
+        chinese = {
+            "一": 1, "二": 2, "两": 2, "三": 3, "四": 4, "五": 5,
+            "六": 6, "七": 7, "八": 8, "九": 9, "十": 10,
+        }
+        if word.isdigit():
+            return int(word)
+        if word in chinese:
+            return chinese[word]
+        return 0
+
+    def _symbols_for(self, context: CognitiveContext, symbol: str) -> list:
+        """定位符号所属文件的符号列表（Repository → 该文件有序列表）。
+
+        无 Repository 数据时退化用 timeline 的 symbol 序列（保持确定性）。
+        """
+        repo = getattr(context, "repository_symbols", None) or {}
+        if symbol:
+            for path, symbols in repo.items():
+                if symbol in symbols:
+                    return list(symbols)
+        hist = [r.symbol for r in context.conversation_state.timeline.history() if r.symbol]
+        return hist
+
+    def _candidate_ordinal(self, text: str, context: CognitiveContext) -> ResolutionCandidate:
+        """序数子 Resolver：kind=ordinal / symbol / file。"""
+        # 去掉动词前缀（"修改第一个文件" → "第一个文件"）
+        body = re.sub(r'^(修改|改|优化|重构|调整|更新|删除|移除|打开|读取|读|查看|处理|解决|继续|执行)\s*', '', text)
+        # 模式 1: 刚才那个文件 → timeline 最近 file
+        if body.startswith("刚才") and "文件" in body:
+            f = self._timeline_latest_file(context)
+            return ResolutionCandidate(
+                kind="file",
+                target=f or None,
+                confidence=0.9 if f else 0.0,
+                reason=f"序数引用: 刚才那个文件 → {f}" if f else "序数引用: 无最近文件",
+                source="ordinal",
+            )
+        # 模式 2: 第 N 个（函数/方法/类/变量/文件，无类型词时按上下文兜底）
+        m = re.match(r'^第([一二三四五六七八九十\d]+)(个|条)(函数|方法|类|变量|文件)?', body)
+        if m:
+            n = self._parse_ordinal(m.group(1))
+            typ = m.group(3) or ""
+            latest_sym = self._timeline_latest_symbol(context)
+            symbols = self._symbols_for(context, latest_sym) if latest_sym else []
+            if n > 0:
+                # 文件候选：显式"文件"，或"无类型词且无符号候选"
+                if typ == "文件" or (typ == "" and not symbols):
+                    repo = getattr(context, "repository_symbols", None) or {}
+                    files = sorted(repo.keys()) if repo else [
+                        r.target for r in context.conversation_state.timeline.history()
+                        if r.target and (r.kind == "file" or "/" in r.target or r.target.endswith(".py"))
+                    ]
+                    if files and 1 <= n <= len(files):
+                        target = files[n - 1]
+                        return ResolutionCandidate(
+                            kind="file",
+                            target=target,
+                            confidence=0.9,
+                            reason=f"序数引用: 第{n}个文件 → {target}（{len(files)} 个候选）",
+                            source="ordinal",
+                        )
+                # 符号候选
+                if typ != "文件" and symbols and 1 <= n <= len(symbols):
+                    target = symbols[n - 1]
+                    return ResolutionCandidate(
+                        kind="symbol",
+                        target=target,
+                        symbol=target,
+                        confidence=0.9,
+                        reason=f"序数引用: 第{n}个 → {target}（{len(symbols)} 个候选）",
+                        source="ordinal",
+                    )
+        # 模式 3: 最后一个（函数）
+        m = re.match(r'^最后(一个)?(函数|方法|类|变量)?', body)
+        if m:
+            latest_sym = self._timeline_latest_symbol(context)
+            symbols = self._symbols_for(context, latest_sym)
+            if symbols:
+                target = symbols[-1]
+                return ResolutionCandidate(
+                    kind="symbol",
+                    target=target,
+                    symbol=target,
+                    confidence=0.9,
+                    reason=f"序数引用: 最后一个 → {target}（{len(symbols)} 个候选）",
+                    source="ordinal",
+                )
+        # 未解析到目标 → ordinal 低置信度（由 Runtime 引导）
+        return ResolutionCandidate(
             kind="ordinal",
+            confidence=0.3,
+            reason=f"序数引用: 无法定位第 N 个候选（{text}）",
+            source="ordinal",
         )
 
     # ── Timeline 语义查询（Timeline = Storage，Resolver = Semantics）──

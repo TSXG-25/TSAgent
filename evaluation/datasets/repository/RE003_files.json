@@ -1,0 +1,8 @@
+{
+  "id": "RE003_files",
+  "repository": {"output/a.py": ["a"], "output/b.py": ["b"]},
+  "turns": [
+    {"input": "修改第一个文件", "expected": {"target": "output/a.py", "topic": "modify", "kind": "ordinal"}},
+    {"input": "第二个也改一下", "expected": {"target": "output/b.py", "topic": "modify", "kind": "ordinal"}}
+  ]
+}

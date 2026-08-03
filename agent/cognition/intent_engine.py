@@ -214,6 +214,12 @@ def _extract_target(text: str) -> str:
     if match:
         return match.group(0)
 
+    # 策略 5b: snake_case / 下划线命名（max_active → max_active，v1.2B B5）
+    snake_pattern = re.compile(r'\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b')
+    match = snake_pattern.search(text)
+    if match:
+        return match.group(0)
+
     # 策略 6: 中文天气城市（"杭州天气怎么样" → 杭州，v1.2A Intent Extraction）
     if re.search(r'天气|气温|温度|下雨|下雪|台风|雾霾', text):
         m = re.search(r'([\u4e00-\u9fff]{2,3}?)\s*(?:的)?\s*(?:天气|气温|温度|如何|怎么样)', text)

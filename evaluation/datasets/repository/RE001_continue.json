@@ -1,0 +1,10 @@
+{
+  "id": "RE001_continue",
+  "repository": {"output/solution.py": ["solution"]},
+  "turns": [
+    {"input": "打开 output/solution.py", "expected": {"target": "output/solution.py", "topic": "file", "kind": "file"}},
+    {"input": "改一下", "expected": {"target": "output/solution.py", "topic": "modify", "kind": "reference"}},
+    {"input": "继续", "expected": {"target": "output/solution.py", "topic": "modify", "kind": "reference"}},
+    {"input": "撤销", "expected": {"target": "output/solution.py", "topic": "modify", "kind": "reference"}}
+  ]
+}

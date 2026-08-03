@@ -17,17 +17,28 @@ from agent.cognition.intent_engine import IntentEngine
 MT_DIR = "evaluation/datasets/conversation/multiturn"
 
 
+def _is_code_symbol(text: str) -> bool:
+    """代码符号特征：含英文字母且非路径/文件（排除中文目标与文件路径）。"""
+    if not text or "/" in text or "\\" in text:
+        return False
+    if any(text.endswith(ext) for ext in (".py", ".js", ".ts", ".md", ".json", ".txt")):
+        return False
+    return any(("a" <= ch <= "z") or ("A" <= ch <= "Z") for ch in text)
+
+
 class _Engine:
-    def __init__(self):
+    def __init__(self, repository=None):
         self.resolver = ReferenceResolver()
         self.intent = IntentEngine()
         self.state = ConversationState()
+        self.repository = repository or {}
 
     def resolve(self, user_input: str) -> dict:
         ctx = CognitiveContext(
             query=user_input,
             conversation_state=self.state,
             conversation=[],
+            repository_symbols=self.repository,
         )
         resolved = self.resolver.resolve(user_input, ctx)
         ctx.resolved_query = resolved.to_resolved_query()
@@ -35,14 +46,14 @@ class _Engine:
         # v1.2B: State = Cache —— timeline 写入（Resolver 产出 ResolutionResult）
         # target：消歧结果优先，否则用 IntentEngine 提取的显式 target
         final_target = resolved.target or getattr(intent, "target", "") or ""
-        # last_symbol：resolved.symbol 或 intent 提取的驼峰实体，或驼峰 target
+        # last_symbol：resolved.symbol 或 intent 提取的驼峰实体，或代码符号 target
         sym = resolved.symbol or ""
         if not sym:
             for e in (getattr(intent, "entities", None) or []):
                 if isinstance(e, str) and e and e[0].isupper():
                     sym = e
                     break
-        if not sym and final_target and final_target[0].isupper():
+        if not sym and final_target and _is_code_symbol(final_target):
             sym = final_target
         result = ResolutionResult(
             kind=resolved.kind,
@@ -72,7 +83,7 @@ def main():
             continue
         with open(os.path.join(MT_DIR, fn)) as f:
             scenario = json.load(f)
-        engine = _Engine()
+        engine = _Engine(repository=scenario.get("repository", {}))
         print(f"\n== {scenario['id']} ==")
         for turn in scenario["turns"]:
             exp = turn["expected"]

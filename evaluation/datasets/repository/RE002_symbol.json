@@ -1,0 +1,10 @@
+{
+  "id": "RE002_symbol",
+  "repository": {"src/max_active.py": ["max_active", "resolve", "merge", "execute"]},
+  "turns": [
+    {"input": "解释 max_active", "expected": {"target": "max_active", "topic": "symbol", "kind": "direct"}},
+    {"input": "那个函数", "expected": {"target": "max_active", "topic": "symbol", "kind": "symbol"}},
+    {"input": "第二个函数", "expected": {"target": "resolve", "topic": "symbol", "kind": "ordinal"}},
+    {"input": "最后一个函数", "expected": {"target": "execute", "topic": "symbol", "kind": "ordinal"}}
+  ]
+}

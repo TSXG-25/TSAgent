@@ -210,6 +210,9 @@ class CognitiveContext:
     # Repository 上下文（代码片段/符号索引）
     repository_context: str = ""
 
+    # Repository 符号列表（file → [symbols]，有序，Ordinal 解析用；v1.2B B5）
+    repository_symbols: dict = field(default_factory=dict)
+
     # 用户长期记忆（偏好、事实）
     memory: dict = field(default_factory=dict)
 

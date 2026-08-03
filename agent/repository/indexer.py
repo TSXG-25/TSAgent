@@ -16,6 +16,7 @@ IGNORE_DIRS = {
 MAX_FILE_SIZE = 1024 * 1024  # 1MB
 INDEX_DIR_NAME = ".repo_index"
 SYMBOL_INDEX_FILE = ".symbol_index.json"
+FILE_SYMBOLS_FILE = ".file_symbols.json"
 
 
 class RepositoryIndexer:
@@ -27,6 +28,8 @@ class RepositoryIndexer:
         self.vector_store = None
 
         self.symbol_index: Dict[str, str] = {}
+
+        self.file_symbols: Dict[str, list] = {}
 
         self.splitter = None
 
@@ -40,6 +43,10 @@ class RepositoryIndexer:
     def symbol_index_path(self) -> Path:
         return self.repo_root / SYMBOL_INDEX_FILE
 
+    @property
+    def file_symbols_path(self) -> Path:
+        return self.repo_root / FILE_SYMBOLS_FILE
+
     def _load_existing_index(self) -> None:
         # Only load symbol index eagerly; vector store is lazy loaded
         if self.symbol_index_path.exists():
@@ -49,6 +56,13 @@ class RepositoryIndexer:
                 )
             except (OSError, json.JSONDecodeError):
                 self.symbol_index = {}
+        if self.file_symbols_path.exists():
+            try:
+                self.file_symbols = json.loads(
+                    self.file_symbols_path.read_text(encoding="utf-8")
+                )
+            except (OSError, json.JSONDecodeError):
+                self.file_symbols = {}
 
     def _get_embedding(self):
         if self.embedding is None:
@@ -92,8 +106,11 @@ class RepositoryIndexer:
         file_path: str,
     ) -> None:
         """
-        简单提取 Python symbol
+        简单提取 Python symbol（同时维护按文件的有序符号列表 file_symbols）。
         """
+        if file_path not in self.file_symbols:
+            self.file_symbols[file_path] = []
+
         for line in content.splitlines():
             line = line.strip()
 
@@ -104,6 +121,7 @@ class RepositoryIndexer:
                     .strip()
                 )
                 self.symbol_index[symbol] = file_path
+                self.file_symbols[file_path].append(symbol)
 
             elif line.startswith("class "):
                 symbol = (
@@ -113,6 +131,7 @@ class RepositoryIndexer:
                     .strip()
                 )
                 self.symbol_index[symbol] = file_path
+                self.file_symbols[file_path].append(symbol)
 
     def build(self) -> None:
         docs = []
@@ -131,6 +150,7 @@ class RepositoryIndexer:
             vector_dependencies_available = False
 
         self.symbol_index = {}
+        self.file_symbols = {}
 
         for file_path in self.repo_root.rglob("*"):
             if file_path.is_dir():
@@ -184,6 +204,14 @@ class RepositoryIndexer:
         self.symbol_index_path.write_text(
             json.dumps(
                 self.symbol_index,
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        self.file_symbols_path.write_text(
+            json.dumps(
+                self.file_symbols,
                 ensure_ascii=False,
                 indent=2,
             ),
@@ -244,6 +272,16 @@ class RepositoryIndexer:
             self._load_existing_index()
 
         return self.symbol_index.get(symbol)
+
+    def symbols_in_file(
+        self,
+        path: str,
+    ) -> List[str]:
+        """返回指定文件的有序符号列表（文件内定义顺序，Ordinal 解析用）。"""
+        if not self.file_symbols:
+            self._load_existing_index()
+
+        return list(self.file_symbols.get(path, []))
 
 
 # 全局单例

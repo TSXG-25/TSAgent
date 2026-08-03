@@ -18,12 +18,13 @@ Quality Gate  PASS / WARNING / FAIL
 
 Current Phase
 ──────────────
-v1.2A — Conversation Runtime（Capability 阶段）
-  Context Resolution  14/14 = 100%（目标 ≥94%）
-  Topic Continuity    2/2 = 100%（目标 ≥98%）
-  Symbol Reference    2/2 = 100%（目标 ≥90%）
-  File Reference      1/1 = 100%（目标 ≥90%）
-  Unknown Precision   2/2 = 100%（目标 ≥95%）
+v1.2B — Resolver Contract（B1..B6 完成）
+  Context Resolution       39/39 = 100%（v1.2A 目标 ≥94%）
+  Context Retention        15 轮 = 100%（MT006）
+  Reference Chains         100%（MT007）
+  Ordinal Reference        100%（MT008）
+  Repository Resolution    10/10 = 100%（Capability Reuse Ratio：零新增抽象）
+  Resolver Determinism     8/8 × 100 runs PASS（Result Hash + Trace Hash）
 
 Architecture Changes
 ──────────────

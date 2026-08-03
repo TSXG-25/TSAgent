@@ -53,7 +53,7 @@ def set_working_directory(path: str) -> str:
         Absolute path of the new working directory
     """
     global _working_directory
-    target = path.strip().rstrip("/")
+    target = str(path).strip().rstrip("/")  # 防御：工具参数可能被传 PosixPath
     full = (ROOT / target).resolve()
 
     if not full.exists() or not full.is_dir():

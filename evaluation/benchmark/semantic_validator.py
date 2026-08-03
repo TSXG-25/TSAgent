@@ -28,8 +28,8 @@ EDIT_VERBS = {"write", "modify"}
 
 
 def _normalize_target(t: str) -> str:
-    """路径归一化：去空白、去前导 ./、统一分隔符。"""
-    return (t or "").strip().replace("\\", "/").lstrip("./")
+    """路径归一化：去空白、去前导 ./、统一分隔符。强制 str 防御 PosixPath。"""
+    return str(t or "").strip().replace("\\", "/").lstrip("./")
 
 
 def _target_matches(plan_target: str, golden_target: str) -> bool:

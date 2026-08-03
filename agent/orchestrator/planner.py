@@ -151,7 +151,9 @@ class PlannerStage:
                 matches = ws.resolve(intent.target)
                 if matches:
                     best = matches[0]
-                    resolved_target = best.path if hasattr(best, 'path') else str(best)
+                    # 强制 str：PathMatch.path 是 pathlib.Path（PosixPath），
+                    # 不能泄漏给 workflow/executor（plan_executor.py 已用 str()，此处必须一致）
+                    resolved_target = str(best.path) if hasattr(best, 'path') else str(best)
                     print(f"  🎯 Workspace 解析 target: {intent.target} → {resolved_target}")
                 else:
                     resolved_target = intent.target

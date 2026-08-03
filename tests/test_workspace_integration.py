@@ -35,6 +35,33 @@ def service(workspace):
 
 
 # ═══════════════════════════════════════════════════════════
+# Case 0: PosixPath 不得泄漏到 orchestrator/workflow/executor
+# （'PosixPath' object has no attribute 'strip' 回归防护）
+# ═══════════════════════════════════════════════════════════
+
+
+class TestPosixPathLeakGuard:
+    """PathMatch.path 是 pathlib.Path；orchestrator 消费必须强制 str（与 plan_executor 一致）。"""
+
+    def test_pathmatch_path_is_posixpath(self, workspace):
+        matches = workspace.resolve("runtime")
+        assert isinstance(matches[0].path, Path), "PathMatch.path 应为 pathlib.Path"
+
+    def test_orchestrator_pattern_forces_str(self, workspace):
+        """orchestrator/planner.py:154 的消费模式（str(best.path)）必须产出 str。"""
+        best = workspace.resolve("runtime")[0]
+        resolved_target = str(best.path) if hasattr(best, 'path') else str(best)
+        assert isinstance(resolved_target, str)
+        assert resolved_target.endswith(".py")
+
+    def test_semantic_validator_accepts_posixpath(self):
+        """evaluation 层对 PosixPath target 不应崩溃（防御回归）。"""
+        from evaluation.benchmark.semantic_validator import _normalize_target
+        assert _normalize_target(Path("src/utils.py")) == "src/utils.py"
+        assert _normalize_target("parser.py") == "parser.py"
+
+
+# ═══════════════════════════════════════════════════════════
 # Case 1: 模糊文件名 — "修改 runtime 里的 run 函数"
 # ═══════════════════════════════════════════════════════════
 

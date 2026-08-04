@@ -9,12 +9,10 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent.workflow import Stage, ExecutionSpec, ExecutorType, ToolPolicy
+from agent.workflow import Stage, ExecutionSpec, ExecutorType, ToolPolicy, ToolArgument
 from agent.task import Task, Verb
 from agent.executor.contract import ExecutorFactory, executor_factory
-from agent.executor.action_resolver import resolver as action_resolver
 from agent.registry.tool_registry import registry as tool_registry
-from agent.registry.capability_registry import registry as capability_registry
 
 
 class TestExecutorContract:
@@ -37,68 +35,6 @@ class TestExecutorContract:
 
         with pytest.raises(KeyError):
             executor_factory.get("nonexistent")
-
-
-class TestActionResolverResolution:
-    """ActionResolver 解析链：CapabilityRegistry → 工具名直查 → tag 匹配。"""
-
-    def setup_method(self):
-        # 清理并注册一个测试工具
-        tool_registry._tools.clear()
-        tool_registry._categories.clear()
-        tool_registry._tags.clear()
-        capability_registry._capabilities.clear()
-        capability_registry._resolver_fns.clear()
-
-        def test_read(path: str) -> str:
-            """A test read tool."""
-            return "content of " + path
-
-        tool_registry.register(
-            test_read, name="test_read", category="test", tags=["filesystem", "read"]
-        )
-        capability_registry.register_capability("file_read", "test_read", priority=10)
-
-    def test_resolve_by_capability_name(self):
-        import asyncio
-
-        result = asyncio.run(action_resolver.resolve(
-            capabilities=["file_read"],
-            params={"path": "a.txt"},
-        ))
-        assert result["status"] == "succeeded", result
-        assert result["action"] == "test_read"
-        assert "content of a.txt" in result["summary"]
-
-    def test_resolve_by_direct_tool_name(self):
-        import asyncio
-
-        result = asyncio.run(action_resolver.resolve(
-            capabilities=["test_read"],
-            params={"path": "b.txt"},
-        ))
-        assert result["status"] == "succeeded", result
-        assert result["action"] == "test_read"
-
-    def test_resolve_by_tag_match(self):
-        import asyncio
-
-        result = asyncio.run(action_resolver.resolve(
-            capabilities=["filesystem", "read"],
-            params={"path": "c.txt"},
-        ))
-        assert result["status"] == "succeeded", result
-        assert result["action"] == "test_read"
-
-    def test_resolve_unknown_capability(self):
-        import asyncio
-
-        result = asyncio.run(action_resolver.resolve(
-            capabilities=["nonexistent_cap"],
-            params={},
-        ))
-        assert result["status"] == "failed"
-        assert "没有找到匹配" in result["summary"]
 
 
 class TestToolExecutor:
@@ -164,33 +100,6 @@ class TestToolExecutor:
         assert "execution_plan" in result.error
 
 
-class TestReactBudget:
-    """ReactExecutor budget 接入：max_steps 控制 ReAct 循环。"""
-
-    def test_budget_overrides_max_iterations(self):
-        from agent.executor.executors.react import ReactExecutor
-        from agent.workflow.budget import BudgetSpec
-
-        ex = ReactExecutor(budget=BudgetSpec(max_steps=3))
-        assert ex._max_iterations() == 3
-
-    def test_default_max_iterations(self):
-        from agent.executor.executors.react import ReactExecutor
-
-        ex = ReactExecutor()
-        assert ex._max_iterations() == 8
-
-    def test_no_budget_no_manager(self):
-        from agent.executor.executors.react import ReactExecutor
-
-        ex = ReactExecutor()
-        assert ex._budget_manager is None
-        ex2 = ReactExecutor(budget=__import__(
-            "agent.workflow.budget", fromlist=["BudgetSpec"]
-        ).BudgetSpec())
-        assert ex2._budget_manager is not None
-
-
 class TestStageToTask:
     """Stage.to_task() 投影到统一 Task 模型。"""
 
@@ -228,18 +137,6 @@ class TestStageToTask:
         assert task.policy.executor == "llm"
         assert task.verb == Verb.EXPLAIN
 
-    def test_react_stage_projection(self):
-        stage = Stage(
-            id="s3",
-            execution=ExecutionSpec(executor=ExecutorType.REACT),
-            description="验证代码",
-        )
-        task = stage.to_task(goal="验证代码并修复问题")
-
-        # react → plan executor "llm"（开放式推理走 LLMExecutor）
-        assert task.policy.executor == "llm"
-        assert task.verb == Verb.EXPLAIN
-
     def test_defaults(self):
         stage = Stage(id="s4", execution=ExecutionSpec(executor=ExecutorType.TOOL))
         task = stage.to_task()
@@ -247,3 +144,42 @@ class TestStageToTask:
         assert task.goal == "s4"  # fallback 到 stage.id
         assert task.policy.max_retries == 0
         assert task.policy.validators == []
+
+    def test_argument_bindings_are_projected_to_task(self):
+        stage = Stage(
+            id="write",
+            execution=ExecutionSpec(
+                executor=ExecutorType.TOOL,
+                tool_policy=ToolPolicy(allow=["write_file"]),
+            ),
+            arguments=[
+                ToolArgument(param="path", constant="output/example.py"),
+                ToolArgument(param="content", artifact="verified_code"),
+            ],
+        )
+
+        task = stage.to_task(goal="写入输出文件")
+
+        assert task.inputs == {
+            "path": {"constant": "output/example.py"},
+            "content": {"artifact": "verified_code"},
+        }
+
+    def test_append_intent_is_lowered_to_append_mode(self):
+        from agent.compiler.rules.write_rule import WriteRule
+
+        stage = Stage(
+            id="append",
+            execution=ExecutionSpec(executor=ExecutorType.TOOL),
+            description="追加内容到 notes.txt",
+        )
+        task = stage.to_task(goal="追加内容到 notes.txt")
+        task = task.model_copy(update={
+            "target": "notes.txt",
+            "target_type": "file",
+            "inputs": {"content": "new line"},
+        })
+
+        plan = WriteRule().build(task)
+
+        assert plan.steps[-1].args["mode"] == "append"

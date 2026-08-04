@@ -52,12 +52,19 @@ def store_summary(user_id: str, summary: str) -> None:
             "timestamp": datetime.now().isoformat(),
         },
     )
-    _get_store().add_documents([doc])
+    try:
+        _get_store().add_documents([doc])
+    except Exception:
+        # 语义记忆是可选增强；向量依赖不可用时不阻塞主 Runtime。
+        return
 
 
 def retrieve_summaries(user_id: str, query: str, k: int = 5) -> str:
     """Retrieve semantically relevant long-term summaries."""
-    store = _get_store()
+    try:
+        store = _get_store()
+    except Exception:
+        return ""
     try:
         docs_scores = store.similarity_search_with_score(
             query,
@@ -84,7 +91,10 @@ def retrieve_summaries(user_id: str, query: str, k: int = 5) -> str:
 
 def retrieve_all_summaries(user_id: str) -> list[str]:
     """Get all long-term summaries for a user."""
-    store = _get_store()
+    try:
+        store = _get_store()
+    except Exception:
+        return []
     try:
         results = store.get(where={"user_id": user_id})
     except Exception:
@@ -173,9 +183,8 @@ def get_facts_text(user_id: str) -> str:
 
 def clear_all(user_id: str) -> None:
     """Clear all long-term memories for a user."""
-    store = _get_store()
     try:
-        store.delete(where={"user_id": user_id})
+        _get_store().delete(where={"user_id": user_id})
     except Exception:
         pass
     try:

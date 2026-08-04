@@ -26,6 +26,13 @@ def add_message(user_id: str, role: str, content: str) -> None:
     """Add a message to the session stack."""
     ensure_session(user_id)
     session = _sessions[user_id]
+    # Runtime records the user message at request start and records the full
+    # exchange at finalization.  Collapse that intentional overlap so a
+    # second turn never sees a misleading duplicated/empty history.
+    if session["messages"]:
+        previous = session["messages"][-1]
+        if previous.get("role") == role and previous.get("content") == content:
+            return
     session["messages"].append({
         "role": role,
         "content": content,

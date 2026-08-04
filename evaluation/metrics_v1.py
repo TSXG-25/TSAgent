@@ -4,6 +4,19 @@
 """
 from dataclasses import dataclass, field
 from typing import Dict, Optional
+from .metrics import MetricCollector, MetricDefinition, MetricReport
+
+
+METRIC_DEFINITIONS_V1 = tuple(
+    MetricDefinition(name=name, direction="le" if name in {
+        "compile_reject_rate", "latency_ms", "cost_usd",
+    } else "ge", capability="runtime")
+    for name in (
+        "planning_success", "grounding_recall", "grounding_top1",
+        "compile_reject_rate", "execution_success", "verification_success",
+        "latency_ms", "cost_usd", "recovery_rate",
+    )
+)
 
 
 @dataclass
@@ -34,6 +47,10 @@ class MetricsV1:
             "cost_usd": round(self.cost_usd, 4),
             "recovery_rate": round(self.recovery_rate, 3),
         }
+
+    def to_report(self) -> MetricReport:
+        """统一 MetricDefinition → Collector → Report 入口。"""
+        return MetricCollector(METRIC_DEFINITIONS_V1).collect(self.to_dict())
 
     @staticmethod
     def from_dict(d: dict) -> "MetricsV1":

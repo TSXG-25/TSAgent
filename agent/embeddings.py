@@ -25,8 +25,3 @@ def get_embedding():
             model_kwargs={"local_files_only": not allow_model_downloads()},
         )
     return _embedding_instance
-
-
-def create_huggingface_embeddings():
-    """Legacy function for backward compatibility"""
-    return get_embedding()

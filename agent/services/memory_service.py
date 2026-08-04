@@ -79,38 +79,6 @@ class MemoryService:
         from agent.memory.resolution import get_resolutions as _get
         return _get(user_id, n=n)
 
-    # ===== Legacy compatibility =====
-
-    @staticmethod
-    def get_preferences(user_id: str) -> dict:
-        """Legacy: get user preferences dict."""
-        from agent.memory.preference import get_user_preferences
-        return get_user_preferences(user_id)
-
-    @staticmethod
-    def add_conversation(user_id: str, user_input: str, assistant_response: str):
-        """Legacy: add to semantic conversation memory."""
-        from agent.memory.semantic import add_conversation_memory
-        add_conversation_memory(user_id, user_input, assistant_response)
-
-    @staticmethod
-    def retrieve_semantic(user_id: str, query: str, k: int = 3) -> str:
-        """Legacy: retrieve from semantic memory."""
-        from agent.memory.semantic import retrieve_similar_memories
-        return retrieve_similar_memories(user_id, query, k=k)
-
-    @staticmethod
-    def record_conversation(user_id: str, user_input: str, assistant_response: str):
-        """Legacy: record in conversation log."""
-        from agent.memory.conversation import add_exchange as _conv_add
-        _conv_add(user_id, user_input, assistant_response)
-
-    @staticmethod
-    def get_recent_conversation(user_id: str, n: int = 5) -> str:
-        """Legacy: get recent conversation log."""
-        from agent.memory.conversation import get_recent as _get
-        return _get(user_id, n=n)
-
     # ===== Unified Interface =====
 
     @staticmethod
@@ -141,7 +109,6 @@ class MemoryService:
             "short_term": str,     # Recent conversations (always on)
             "long_term": str,      # Semantic long-term summaries (on relevance)
             "facts": str,          # Extracted user facts
-            "preferences": str,    # Legacy preferences
         }
 
         Negative results ("未找到" etc.) are filtered from all fields.
@@ -155,15 +122,7 @@ class MemoryService:
                 MemoryService.retrieve_long_term(user_id, query, k=3)
             ) or "",
             "facts": MemoryService.get_user_facts(user_id) or "",
-            "preferences": "",
         }
-
-        # Legacy preferences
-        prefs = MemoryService.get_preferences(user_id)
-        if prefs:
-            result["preferences"] = "\n".join(
-                f"{k}: {v}" for k, v in prefs.items()
-            )
 
         return result
 
@@ -193,7 +152,3 @@ class MemoryService:
 
         # Layer 2: Short-term (persistent, triggers auto-compression)
         MemoryService.add_exchange(user_id, user_input, assistant_response)
-
-        # Legacy: semantic memory + conversation log (maintain compatibility)
-        MemoryService.add_conversation(user_id, user_input, assistant_response)
-        MemoryService.record_conversation(user_id, user_input, assistant_response)

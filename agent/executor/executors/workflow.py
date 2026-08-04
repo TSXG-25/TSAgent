@@ -4,7 +4,7 @@ Workflow 不是执行体系，而是 Task Generator。
 本执行器负责：
 1. 按拓扑序迭代 Stage
 2. 每个 Stage 投影为统一 Task（stage.to_task()）
-3. 通过 Compiler（ToolSelector）编译 Task → ExecutionPlan
+3. 通过 Compiler 编译 Task → ExecutionPlan
 4. 通过 ExecutorFactory 分发：llm → LLMExecutor / tool → ToolExecutor
 5. 保留 Stage 的编排能力：Prompt 渲染、required_outputs 跳过、validator、retry、Artifact 回填
 
@@ -18,7 +18,8 @@ from typing import Any, Dict, List, Optional
 from agent.task import Task, ExecutionPlan
 from agent.workflow import Workflow, ExecutionContext, Artifact, ExecutionResult
 from agent.prompts.workflow import PromptRegistry
-from agent.compiler.tool_selector import ToolSelector
+from agent.compiler.tool_selector import Compiler
+from agent.compiler.context import CompilerContext
 from agent.compiler.rules import DEFAULT_RULES
 from agent.executor.contract import executor_factory
 from agent.registry.tool_registry import registry as _tool_registry
@@ -29,7 +30,7 @@ logger = logging.getLogger(__name__)
 class WorkflowExecutor:
 
     def __init__(self):
-        self._compiler = ToolSelector()
+        self._compiler = Compiler()
         for rule in DEFAULT_RULES:
             self._compiler.add_rule(rule)
 
@@ -72,8 +73,36 @@ class WorkflowExecutor:
             # ── Stage → Task 投影 ──
             task = stage.to_task(goal=goal)
 
+            # Resolve Stage.arguments once, then compile the canonical Task.
+            # The old executor ignored arguments entirely, which caused the
+            # generated answer to be used as a file path and dropped content.
+            resolved_inputs = {}
+            for param, binding in task.inputs.items():
+                if not isinstance(binding, dict):
+                    resolved_inputs[param] = binding
+                    continue
+                if "constant" in binding:
+                    resolved_inputs[param] = binding["constant"]
+                    continue
+                artifact_type = binding.get("artifact")
+                artifact = context.get_artifact(artifact_type) if artifact_type else None
+                if artifact is None:
+                    raise ValueError(f"阶段 {stage.id} 缺少输入产物: {artifact_type}")
+                resolved_inputs[param] = artifact.content
+
+            task = task.model_copy(update={
+                "inputs": resolved_inputs,
+                "target": str(resolved_inputs.get("path", task.target)),
+            })
+
             # ── Compiler 编译 → 决定 executor ──
-            plan = self._compiler.compile(task, workspace=context.get_var("workspace"), registry=_tool_registry)
+            plan = self._compiler.compile(
+                task,
+                context=CompilerContext(
+                    workspace=context.get_var("workspace"),
+                    registry=_tool_registry,
+                ),
+            )
 
             # ── 执行（retry 由本编排层控制）──
             max_retries = task.policy.max_retries or 0
@@ -89,16 +118,25 @@ class WorkflowExecutor:
                 content = exec_result.text
                 content = self._strip_code_blocks(content)
 
+                # Tool stages often validate or persist an input artifact;
+                # their useful output is that artifact/path, not stdout such
+                # as "syntax check passed" or "file written".
+                artifact_content = content
+                if "code" in resolved_inputs:
+                    artifact_content = str(resolved_inputs["code"])
+                elif "content" in resolved_inputs and "path" in resolved_inputs:
+                    artifact_content = str(resolved_inputs["path"])
+
                 # ── 回填 Artifact ──
                 for out in (stage.outputs or []):
-                    if content and len(content) > 3:
+                    if artifact_content and len(str(artifact_content)) > 3:
                         artifact = Artifact(
                             id=f"{stage.id}-{idx}", type=out.type,
-                            content=content, summary=content[:200], created_by=stage.id,
+                            content=artifact_content, summary=str(artifact_content)[:200], created_by=stage.id,
                         )
                         context.set_artifact(artifact)
-                        print(f"     → [{out.type}] {content[:80]}")
-                        final_outputs[out.type] = content[:200]
+                        print(f"     → [{out.type}] {str(artifact_content)[:80]}")
+                        final_outputs[out.type] = str(artifact_content)[:200]
                     else:
                         print(f"     → [{out.type}] (空)")
 
@@ -165,7 +203,7 @@ class WorkflowExecutor:
     def _build_summary(self, context: ExecutionContext) -> str:
         sol = context.get_artifact("solution_file")
         if sol and sol.content:
-            return f"已生成解题程序 → output/solution.py"
+            return f"已生成解题程序 → {sol.content}"
         code = context.get_artifact("verified_code")
         if code:
             return f"代码已验证通过"
@@ -176,4 +214,3 @@ class WorkflowExecutor:
         if q:
             return f"问题已读取: {len(q.content)} 字符"
         return "工作流执行完成"
-

@@ -10,6 +10,8 @@ Python Traceback 永不暴露到 CLI。
 """
 import logging
 import time
+import asyncio
+import os
 from enum import Enum
 from agent.services import MemoryService, RepositoryService, ArtifactService
 from agent.event_bus import event_bus
@@ -19,6 +21,10 @@ from agent.orchestrator import ExecutionOrchestrator
 from agent.bootstrap import print_timings as print_bootstrap_timings
 
 logger = logging.getLogger(__name__)
+
+MAX_RUNTIME_SECONDS = float(os.getenv("TSAGENT_MAX_RUNTIME_SECONDS", "120"))
+MAX_STATE_TRANSITIONS = int(os.getenv("TSAGENT_MAX_STATE_TRANSITIONS", "24"))
+FACT_EXTRACTION_TIMEOUT = float(os.getenv("TSAGENT_FACT_TIMEOUT", "15"))
 
 
 class RuntimeState(str, Enum):
@@ -115,10 +121,20 @@ class UniversalAgent:
         # ── 初始化 ──
         self._timings = {}
         self.orchestrator.reset_timings()
+        self.orchestrator.replan_count = 0
         ArtifactService.clear()
         t0 = time.perf_counter()
 
-        await MemoryService.extract_and_save_facts(self.user_id, user_input)
+        try:
+            await asyncio.wait_for(
+                MemoryService.extract_and_save_facts(self.user_id, user_input),
+                timeout=FACT_EXTRACTION_TIMEOUT,
+            )
+        except asyncio.TimeoutError:
+            logger.warning("事实抽取超时，继续执行主任务")
+        except Exception as exc:
+            # Do not emit a traceback from an optional memory enhancement.
+            logger.warning("事实抽取失败，继续执行主任务: %s", str(exc)[:200])
         MemoryService.record_user_message(self.user_id, user_input)
 
         from agent.query_normalizer import QueryNormalizer
@@ -137,17 +153,36 @@ class UniversalAgent:
             "plan": [],
             "current_task_index": 0,
             "artifacts": {},
-            "memory_context": context.get("short_term", ""),
+            "memory_context": "\n\n".join(
+                part for part in (context.get("session", ""), context.get("short_term", ""))
+                if part
+            ),
             "repo_context": repo_context,
             "skill_hint": skill_hint,
             "retries": 0,
             "workflow": None,
         }
         best_answer = None
+        loop_started = time.perf_counter()
+        transitions = 0
 
         # ── 状态机循环（P0.1: Runtime Recovery 最后防线）──
         try:
             while rt_state not in (RuntimeState.FINISH, RuntimeState.FAIL):
+                transitions += 1
+                if (
+                    transitions > MAX_STATE_TRANSITIONS
+                    or time.perf_counter() - loop_started > MAX_RUNTIME_SECONDS
+                ):
+                    logger.warning(
+                        "Runtime execution budget exhausted: transitions=%s elapsed=%.1fs",
+                        transitions,
+                        time.perf_counter() - loop_started,
+                    )
+                    best_answer = best_answer or "任务执行达到时间或步骤上限，已停止继续重试。"
+                    rt_state = RuntimeState.FINISH
+                    break
+
                 if rt_state == RuntimeState.INIT:
                     rt_state = RuntimeState.PLAN
 

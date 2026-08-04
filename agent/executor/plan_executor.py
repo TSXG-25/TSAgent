@@ -1,6 +1,6 @@
 """PlanExecutor — 执行 ExecutionPlan 的确定性步骤序列。
 
-接收 ToolSelector 输出的 ExecutionPlan，按顺序执行每一步：
+接收 Compiler 输出的 ExecutionPlan，按顺序执行每一步：
 1. 变量替换：$path → workspace.resolve 结果（强制 str）
 2. 通过 ToolRegistry 获取工具并调用
 3. llm 步骤特殊处理：直接调用 agent.llm.llm
@@ -10,13 +10,17 @@ Workflow ToolExecutor 消费的是 Stage，不是 ExecutionPlan。
 """
 import asyncio
 import logging
+import os
+import re
 from typing import Any, Dict, Optional
 
 from agent.task import ExecutionPlan, ExecutionStep
+from agent.security import redact_sensitive_text
 from agent.registry.tool_registry import registry as tool_registry
 from agent.services.workspace_service import WorkspaceService
 
 logger = logging.getLogger(__name__)
+LLM_STEP_TIMEOUT = float(os.getenv("TSAGENT_LLM_TIMEOUT", "45"))
 
 
 class PlanExecutor:
@@ -34,7 +38,7 @@ class PlanExecutor:
         """执行 plan 的所有 steps。
 
         Args:
-            plan: ToolSelector 输出的 ExecutionPlan
+        plan: Compiler 输出的 ExecutionPlan
             workspace: WorkspaceService 实例（用于 workspace.resolve）
 
         Returns:
@@ -47,6 +51,7 @@ class PlanExecutor:
 
         variables: Dict[str, Any] = {}
         last_output = ""
+        files_written: list = []
 
         for step_idx, step in enumerate(plan.steps):
             tool_name = step.tool
@@ -57,6 +62,12 @@ class PlanExecutor:
                     result = await self._exec_workspace(step, args, workspace, variables)
                 else:
                     result = await self._exec_tool(tool_name, args)
+
+                # ── 收集世界状态痕迹（Verifier 的唯一输入，ADR-0012）──
+                # 写入是否真正生效由 ExecutionVerifier 在 Pipeline 末端判定，
+                # Tool 的返回字符串不代表成功。
+                if tool_name == "filesystem.write":
+                    files_written.append(str(args.get("path", "")))
 
                 # 处理结果
                 for out_key in step.outputs:
@@ -80,12 +91,14 @@ class PlanExecutor:
                     "_error": error_msg,
                     "_failed_step": step_idx,
                     "_failed_tool": tool_name,
+                    "_files_written": files_written,
                     **variables,
                 }
 
         return {
             "_last_output": last_output,
             "_error": "",
+            "_files_written": files_written,
             **variables,
         }
 
@@ -111,15 +124,26 @@ class PlanExecutor:
         """执行 workspace 步骤（特殊处理：解析路径）。"""
         spec = str(args.get("spec", ""))
         if not workspace:
-            return {"path": spec, "content": spec}
+            return {"path": spec}
+
+        # A trailing slash and the project root are explicit directory
+        # requests.  Do not pass them through fuzzy file resolution.
+        if spec in ("", ".", "./") or spec.endswith(("/", "\\")):
+            try:
+                root = workspace.current_workspace().root
+                candidate = (root / spec).resolve()
+                if candidate.is_dir():
+                    return {"path": str(candidate)}
+            except Exception:
+                pass
 
         matches = workspace.resolve(spec)
         if matches:
             best = matches[0]
             resolved_path = best.path if hasattr(best, 'path') else str(best)
-            return {"path": str(resolved_path), "content": str(resolved_path)}
+            return {"path": str(resolved_path)}
         else:
-            return {"path": spec, "content": spec}
+            return {"path": spec}
 
     async def _exec_tool(self, tool_name: str, args: Dict[str, Any]) -> Dict[str, Any]:
         """通过 ToolRegistry 调用工具。
@@ -140,10 +164,15 @@ class PlanExecutor:
             content = args.get("content", "")
             if content:
                 prompt = prompt or (
-                    "你是一个代码编辑助手。根据目标与文件原文，"
+                    "你是一个代码编辑助手。根据目标、修改要求与文件原文，"
                     "输出修改后的完整文件内容（不要任何解释、不要 markdown 代码块）。"
                 )
-                user = f"目标: {args.get('target', '')}\n\n文件原文:\n{content}"
+                user = f"目标: {args.get('target', '')}\n"
+                if args.get("instruction"):
+                    user += f"修改要求: {args['instruction']}\n"
+                if args.get("description"):
+                    user += f"详细说明: {args['description']}\n"
+                user += f"\n文件原文:\n{content}"
             messages = []
             if prompt:
                 messages.append({"role": "system", "content": prompt})
@@ -152,8 +181,14 @@ class PlanExecutor:
             if not messages:
                 messages.append({"role": "user", "content": str(args)})
 
-            response = await llm_engine.ainvoke(messages)
+            response = await asyncio.wait_for(
+                llm_engine.ainvoke(messages),
+                timeout=float(args.get("timeout", LLM_STEP_TIMEOUT)),
+            )
             content = response.content if hasattr(response, 'content') else str(response)
+            if args.get("verb") in {"write", "generate", "create"}:
+                content = re.sub(r"^```[^\n]*\n", "", content.strip())
+                content = re.sub(r"\n?```\s*$", "", content)
             return {"content": content, "text": content}
 
         # ── 特殊处理：repository 语义搜索（RepositoryService）──
@@ -212,8 +247,17 @@ class PlanExecutor:
 
         # 统一返回格式
         if hasattr(result, 'content'):
-            return {"content": result.content}
-        return {"content": str(result)}
+            content = str(result.content)
+        else:
+            content = str(result)
+        content = redact_sensitive_text(content)
+
+        # Tools historically returned human-readable error strings.  Convert
+        # those into an execution failure here so ExecutionResult.success
+        # cannot be true for an operation that actually failed.
+        if content.lstrip().startswith(("错误:", "错误：", "Error:", "ERROR:")):
+            raise RuntimeError(content)
+        return {"content": content}
 
 
 # 全局单例

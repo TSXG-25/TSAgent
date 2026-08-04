@@ -2,13 +2,25 @@
 """Python execution tool.
 
 Provides a safe Python code execution environment for the agent.
-Uses the Docker sandbox when available, with a local fallback.
+Uses the Docker sandbox when available; local execution requires explicit opt-in.
 """
 import ast
-import sys
-import io
-import contextlib
+import shlex
+from pathlib import Path
 from agent.registry.tool_registry import registry
+from agent.sandbox import run_in_sandbox
+from agent.security import is_sensitive_command, is_sensitive_path
+
+ROOT = Path(__file__).parent.parent.resolve()
+
+
+_FORBIDDEN_IMPORTS = {
+    "asyncio", "ctypes", "importlib", "multiprocessing", "os", "pathlib",
+    "resource", "signal", "shutil", "socket", "subprocess", "sys",
+}
+_FORBIDDEN_CALLS = {
+    "__import__", "breakpoint", "compile", "eval", "exec", "input", "open",
+}
 
 
 def run_python(code: str, timeout: int = 10) -> str:
@@ -24,57 +36,34 @@ def run_python(code: str, timeout: int = 10) -> str:
     Returns:
         代码执行的 stdout 输出。如果发生异常，返回错误信息。
     """
-    # Security: reject imports that could be dangerous
-    # os and sys are allowed — they're needed for basic file/path operations.
-    # But dangerous os.* / subprocess invocations are blocked (os.system etc).
-    forbidden_imports = ["subprocess", "shutil", "ctypes", "signal"]
-    _dangerous_os_funcs = {
-        "system", "popen", "execl", "execle", "execlp", "execlpe",
-        "execv", "execve", "execvp", "execvpe",
-        "spawnl", "spawnle", "spawnlp", "spawnlpe",
-        "spawnv", "spawnve", "spawnvp", "spawnvpe",
-        "kill", "startfile", "remove", "unlink", "rmdir",
-    }
+    # 先做语法级拒绝，真正执行交给 sandbox，从而获得进程级 timeout。
+    if is_sensitive_command(code):
+        return "错误：代码被安全策略阻止（敏感信息访问）"
     try:
         tree = ast.parse(code)
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 for alias in node.names:
-                    if alias.name.split(".")[0] in forbidden_imports:
+                    if alias.name.split(".")[0] in _FORBIDDEN_IMPORTS:
                         return f"错误：禁止导入模块 '{alias.name}'（安全限制）"
             elif isinstance(node, ast.ImportFrom):
-                if node.module and node.module.split(".")[0] in forbidden_imports:
+                if node.module and node.module.split(".")[0] in _FORBIDDEN_IMPORTS:
                     return f"错误：禁止从模块 '{node.module}' 导入（安全限制）"
-            elif isinstance(node, ast.Attribute):
-                # 拦截 os.system / os.popen 等危险调用（os 允许导入用于路径操作）
-                if (
-                    isinstance(node.value, ast.Name)
-                    and node.value.id == "os"
-                    and node.attr in _dangerous_os_funcs
-                ):
-                    return f"错误：禁止调用 os.{node.attr}（安全限制）"
+            elif isinstance(node, ast.Call):
+                fn = node.func
+                if isinstance(fn, ast.Name) and fn.id in _FORBIDDEN_CALLS:
+                    return f"错误：禁止调用 {fn.id}（安全限制）"
     except SyntaxError as e:
         return f"语法错误: {e}"
 
-    # Capture stdout
-    stdout_capture = io.StringIO()
-    stderr_capture = io.StringIO()
-
-    namespace = {}
-
-    try:
-        with contextlib.redirect_stdout(stdout_capture), \
-             contextlib.redirect_stderr(stderr_capture):
-            exec(code, namespace)
-        output = stdout_capture.getvalue()
-        if stderr_capture.getvalue():
-            output += "\n[stderr]\n" + stderr_capture.getvalue()
-        return output.strip() if output.strip() else "代码执行成功（无输出）"
-    except Exception as e:
-        return f"执行错误: {type(e).__name__}: {e}"
+    command = f"python3 -c {shlex.quote(code)}"
+    result = run_in_sandbox(command, timeout=timeout)
+    if not result:
+        return "代码执行成功（无输出）"
+    return result
 
 
-def run_python_file(path: str) -> str:
+def run_python_file(path: str, timeout: int = 10) -> str:
     """执行指定路径的 Python 文件并返回 stdout 输出。
 
     Args:
@@ -83,9 +72,13 @@ def run_python_file(path: str) -> str:
     Returns:
         文件执行的 stdout 输出
     """
-    from pathlib import Path
-    root = Path(__file__).parent.parent.resolve()
-    full = (root / path).resolve()
+    full = (ROOT / str(path)).resolve()
+
+    if is_sensitive_path(path):
+        return "错误：出于安全原因，禁止执行敏感文件。"
+
+    if not full.is_relative_to(ROOT):
+        return f"错误：文件路径超出项目 workspace 范围: {path}"
 
     if not full.exists():
         return f"错误：文件不存在 {path}"
@@ -93,7 +86,7 @@ def run_python_file(path: str) -> str:
         return f"错误：{path} 不是 .py 文件"
 
     code = full.read_text(encoding="utf-8")
-    return run_python(code)
+    return run_python(code, timeout=timeout)
 
 
 # 注册工具

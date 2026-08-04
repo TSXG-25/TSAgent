@@ -21,7 +21,13 @@ class ModifyRule(Rule):
                 ExecutionStep(tool="filesystem.read", args={"path": "$path"}, outputs=["content"]),
                 ExecutionStep(
                     tool="llm",
-                    args={"verb": "edit", "target": task.target, "content": "$content"},
+                    args={
+                        "verb": "edit",
+                        "target": task.target,
+                        "content": "$content",
+                        "instruction": task.goal,
+                        "description": task.description,
+                    },
                     outputs=["new_content"],
                 ),
                 ExecutionStep(tool="filesystem.write", args={"path": "$path", "content": "$new_content"}, outputs=["result"]),

@@ -9,21 +9,18 @@ from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
 from typing_extensions import TypedDict
 
-# ── 向后兼容的旧 Task 类型（旧 workflow/planner 可能还在用） ──
-class LegacyTask(TypedDict):
-    goal: str
-    status: str
-    tool: Optional[str]
-    parameters: Dict[str, Any]
-    depends_on: List[int]
-    observation: str
+# ── Runtime Cache ──
+class AgentState(TypedDict, total=False):
+    """可变 Runtime Cache，不是新的 Task Source of Truth。
 
-
-# ── 新 AgentState ──
-class AgentState(TypedDict):
+    ``plan`` is the serialized projection of canonical ``agent.task.Task``
+    objects. Execution status is intentionally mutable here because this is
+    the Runtime Cache; new contracts use ``Task`` / ``ExecutionPlan`` directly.
+    """
     messages: Annotated[list[BaseMessage], add_messages]
     # Plan
-    plan: Optional[List[Dict[str, Any]]]    # Planner 输出（新 Task 模型的 dict 表示）
+    plan: Optional[List[Dict[str, Any]]]    # canonical Task 的 Runtime Cache 投影
+    execution_plans: List[Any]              # Compiler 产出的 ExecutionPlan 列表
     current_task_index: int                 # 当前执行到第几个任务
     # Artifacts
     artifacts: Dict[str, Any]               # 关键产出
@@ -34,3 +31,4 @@ class AgentState(TypedDict):
     retries: int
     workflow: Optional[str]
     reflection: Optional[Dict]
+    decision: Optional[Dict]

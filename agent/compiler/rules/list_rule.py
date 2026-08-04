@@ -29,7 +29,7 @@ class ListRule(Rule):
         target_lower = task.target.lower().strip()
 
         # Knowledge targets: list from registry
-        if target_lower in KNOWLEDGE_TARGETS or task.kind in ("workflow", "tool", "skill"):
+        if target_lower in KNOWLEDGE_TARGETS:
             return ExecutionPlan(
                 task=task,
                 steps=[

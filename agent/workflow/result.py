@@ -1,7 +1,7 @@
 """ExecutionResult — 所有 Executor 的统一返回类型。
 
 WorkflowExecutor 不判断 isinstance。
-所有 Executor（LLM/Tool/React/Workflow）都返回 ExecutionResult。
+所有 Executor（LLM/Tool/Workflow）都返回 ExecutionResult。
 """
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional

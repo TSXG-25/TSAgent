@@ -16,32 +16,45 @@
     WorkflowRouter.route（命中 → WorkflowExecutor / 未命中 → Planner）
         │
         ▼
-    ToolSelector.compile（Task → ExecutionPlan）
+    Compiler.compile（Task → ExecutionPlan）
 
 REPLAN：保留成功任务的 Facts，重新规划失败任务。
 
-Phase C.1：从 orchestrator.py 的 plan() / replan() / _dict_to_task() / _print_plan() 迁移。
+Phase C.1：从 orchestrator.py 的 plan() / replan() / _print_plan() 迁移。
 """
 import re
 import time
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Dict, Optional, Tuple
 from langchain_core.messages import SystemMessage, HumanMessage
 
 from agent.state import AgentState
 from agent.executor.executors.workflow import WorkflowExecutor
-from agent.planner.planner import generate_plan
-from agent.services import (
-    MemoryService, RepositoryService, ArtifactService,
-)
-from agent.services.workspace_service import get_workspace_service
+from agent.planner.planner import plan_with_metadata
+from agent.services import MemoryService
 from agent.registry.skill_registry import skill_registry
 from agent.router.workflow_router import router as workflow_router
 from agent.cognition.intent_engine import engine as intent_engine
-from agent.cognition.intent_schema import IntentResult, DOMAIN_CHAT
-from agent.workflow import ExecutionContext, Artifact
-from agent.task import Task, Verb, ExecutionPlan
+from agent.workflow import ExecutionContext, Artifact, Workflow
+from agent.task import Task, Verb
+from agent.compiler.context import CompilerContext
 from agent.registry.tool_registry import registry as _tool_registry
+from agent.cognition.intent_schema import DOMAIN_MEMORY
+
+
+def _extract_workflow_output_path(user_input: str) -> str:
+    """Extract an explicit output file for the question-code workflow."""
+    candidates = re.findall(
+        r"(?<![\w/])(?:[\w.-]+/)*[\w.-]+\.(?:py|txt|csv|json|xlsx|xls|docx|pptx)",
+        user_input or "",
+        flags=re.IGNORECASE,
+    )
+    for candidate in reversed(candidates):
+        normalized = candidate.replace("\\", "/")
+        if normalized.lower().startswith("input/") or normalized.lower().endswith("question.docx"):
+            continue
+        return normalized
+    return "output/solution.py"
 
 
 class PlannerStage:
@@ -82,6 +95,10 @@ class PlannerStage:
                 system_content += f"\n\n{skill_prompt}"
             skill_hint = skill.planner_hint
 
+        planning_memory = "\n\n".join(
+            part for part in (context.get("session", ""), context.get("short_term", ""))
+            if part
+        )
         state: AgentState = {
             "messages": [
                 SystemMessage(content=system_content),
@@ -90,7 +107,7 @@ class PlannerStage:
             "plan": [],
             "current_task_index": 0,
             "artifacts": {},
-            "memory_context": context.get("short_term", ""),
+            "memory_context": planning_memory,
             "repo_context": repo_context,
             "skill_hint": skill_hint,
             "retries": 0,
@@ -99,23 +116,23 @@ class PlannerStage:
         }
 
         # ── Stage 0: 构建 CognitiveContext ──
-        cognitive_context = self._orch._context_builder.build(
+        planner_context = self._orch._context_builder.build(
             user_input=user_input,
             user_id=user_id,
             context=context,
             repo_context=repo_context,
             state=state,
         )
-        print(f"  🧠 认知上下文: {cognitive_context.short_summary()}")
+        print(f"  🧠 规划上下文: {planner_context.short_summary()}")
 
         # ── Stage 0.5: ReferenceResolver 消歧（v1.2B：产出 ResolutionResult）──
-        resolved = self._orch._reference_resolver.resolve(user_input, cognitive_context)
-        cognitive_context.resolved_query = resolved.to_resolved_query()
+        resolved = self._orch._reference_resolver.resolve(user_input, planner_context)
+        planner_context.resolved_query = resolved.to_resolved_query()
         if resolved.resolution_trace:
             print(f"  🔍 引用消歧: {resolved.resolution_trace}")
 
         # ── Stage 1: IntentEngine 意图理解（消费 CognitiveContext）──
-        intent = intent_engine.analyze(cognitive_context)
+        intent = intent_engine.analyze(planner_context)
         print(f"  🧠 意图: {intent}")
 
         # 更新跨轮对话状态（State = Cache：timeline 写入；last_* 为 Deprecated 双写）
@@ -132,6 +149,18 @@ class PlannerStage:
 
         # 不要求执行（chat / translation / math / creation / identity 等）→ 直接 LLM 回答
         if not intent.requires_execution:
+            if intent.domain == DOMAIN_MEMORY:
+                _facts = ""
+                try:
+                    _facts = MemoryService.get_user_facts(user_id)
+                except Exception:
+                    pass
+                if _facts:
+                    system_content += (
+                        "\n\n## 用户事实（回答个人/偏好问题时必须优先使用）\n"
+                        f"{_facts}\n"
+                        "规则：只能基于上述事实回答；事实中不存在则如实说明未记录，禁止编造。"
+                    )
             try:
                 response = await llm.ainvoke([
                     SystemMessage(content=system_content),
@@ -143,27 +172,6 @@ class PlannerStage:
             MemoryService.record_full_exchange(user_id, user_input, answer)
             return state, "FINISH", answer
 
-        # ── Stage 1.5: Workspace 解析 target（Planner 前介入） ──
-        resolved_target = None
-        if intent.has_target:
-            try:
-                ws = get_workspace_service()
-                matches = ws.resolve(intent.target)
-                if matches:
-                    best = matches[0]
-                    # 强制 str：PathMatch.path 是 pathlib.Path（PosixPath），
-                    # 不能泄漏给 workflow/executor（plan_executor.py 已用 str()，此处必须一致）
-                    resolved_target = str(best.path) if hasattr(best, 'path') else str(best)
-                    print(f"  🎯 Workspace 解析 target: {intent.target} → {resolved_target}")
-                else:
-                    resolved_target = intent.target
-                    print(f"  🎯 target 未在 Workspace 找到匹配，使用原始值: {resolved_target}")
-            except Exception as e:
-                print(f"  ⚠️ Workspace 解析失败: {e}，使用原始 target")
-                resolved_target = intent.target
-        else:
-            resolved_target = None
-
         # ── Stage 2: WorkflowRouter 执行路由（接收完整 IntentResult）──
         wf_obj, wf_reason = workflow_router.route(intent)
 
@@ -174,8 +182,8 @@ class PlannerStage:
             # 更新 ConversationState
             self._orch._conversation_state.last_workflow = wf_name
 
-            if hasattr(wf_obj, 'stages'):
-                # 新式 Workflow（stages）→ WorkflowExecutor v2
+            if isinstance(wf_obj, Workflow):
+                # Canonical Workflow → WorkflowExecutor
                 state["workflow"] = wf_name
                 ctx = ExecutionContext(
                     workflow_id=wf_obj.id,
@@ -190,72 +198,51 @@ class PlannerStage:
                 path_match = re.search(r'input/([\w.]+)', user_input)
                 qpath = f"input/{path_match.group(1)}" if path_match else "input/question.docx"
                 ctx.set_artifact(Artifact(id="p", type="question_path", content=qpath, summary=qpath))
+                output_path = _extract_workflow_output_path(user_input)
+                ctx.set_artifact(Artifact(
+                    id="output-path",
+                    type="output_path",
+                    content=output_path,
+                    summary=output_path,
+                ))
 
-                result = await WorkflowExecutor().execute(wf_obj, ctx)
+                try:
+                    result = await WorkflowExecutor().execute(wf_obj, ctx)
+                except Exception as exc:
+                    print(f"  ⚠️ 专用 Workflow 异常，降级到通用 Planner: {str(exc)[:160]}")
+                    result = None
                 self._orch._timings["plan_llm"] = round(time.perf_counter() - t0, 3)
 
-                if result.success and result.outputs.get("_summary"):
+                if result and result.success and result.outputs.get("_summary"):
                     best_answer = result.outputs["_summary"]
                     MemoryService.record_full_exchange(user_id, user_input, best_answer)
                     return state, "FINISH", best_answer
                 else:
-                    best_answer = f"工作流执行{'成功' if result.success else '失败'}"
-                    if result.error:
-                        best_answer += f"：{result.error[:100]}"
-                    MemoryService.record_full_exchange(user_id, user_input, best_answer)
-                    return state, "FINISH", best_answer
+                    reason = result.error[:160] if result else "Workflow 异常"
+                    print(f"  ⚠️ 专用 Workflow 未完成（{reason}），降级到通用 Planner")
+                    return await self._fallback_to_generic_planner(
+                        user_input=user_input,
+                        context=context,
+                        repo_context=repo_context,
+                        skill_hint=skill_hint,
+                        planner_context=planner_context,
+                        intent=intent,
+                        state=state,
+                        planning_memory=planning_memory,
+                        started_at=t0,
+                    )
             else:
-                # 旧式 async 函数 → 获取 plan（传入 resolved_target）
-                wf_kwargs = {"memory_context": context.get("short_term", "")}
-                if resolved_target:
-                    wf_kwargs["resolved_target"] = resolved_target
-                plan = await wf_obj(user_input, **wf_kwargs)
-                for i, t in enumerate(plan):
-                    t.setdefault("id", f"task-{i+1}")
-                    t.setdefault("status", "pending")
-                    t.setdefault("observations", [])
-                    t.setdefault("error", "")
-                    t.setdefault("children", [])
-                    t.setdefault("description", "")
-                    t.setdefault("dependencies", [])
-                    t.setdefault("verb", "")
-                    t.setdefault("target", "")
-                self._print_plan(plan)
-
-                # 同样走 ToolSelector（确保 Workflow 输出的 plan 也受益）
-                ws_service = None
-                try:
-                    ws_service = get_workspace_service()
-                except Exception:
-                    pass
-                execution_plans = []
-                for t in plan:
-                    task_obj = self._dict_to_task(t)
-                    try:
-                        ep = self._orch._selector.select(task_obj, workspace=ws_service, registry=_tool_registry)
-                    except Exception:
-                        ep = ExecutionPlan(task=task_obj)
-                    execution_plans.append(ep)
-                state["execution_plans"] = execution_plans
-
-                state["plan"] = plan
-                state["current_task_index"] = 0
-                self._orch._timings["plan_llm"] = round(time.perf_counter() - t0, 3)
-                return state, "EXECUTE", None
+                raise TypeError(
+                    f"WorkflowRegistry 只能返回 canonical Workflow，收到 {type(wf_obj).__name__}"
+                )
         else:
             # 未命中 Workflow → Planner 兜底（带契约校验 + Retry + Grounding，PR-7）
             print(f"\n📋 无匹配 Workflow（{wf_reason}），使用 Planner 生成计划。")
-            ws_service = None
-            try:
-                ws_service = get_workspace_service()
-            except Exception:
-                pass
-
             # ── Grounding：缩小 Planner 搜索空间（基于 intent 检索键）──
             grounding_ctx = None
             try:
                 from agent.grounding import Grounder, GroundingInput
-                ws_ctx = cognitive_context.workspace
+                ws_ctx = planner_context.workspace
                 grounding_ctx = Grounder().ground(GroundingInput(
                     query=user_input,
                     intent=intent,
@@ -271,11 +258,12 @@ class PlannerStage:
             planner_input = user_input
             for attempt in range(3):
                 try:
-                    plan = await generate_plan(
-                        planner_input, context.get("short_term", ""),
+                    plan_output = await plan_with_metadata(
+                        planner_input, planning_memory,
                         repo_context, skill_hint, None,
                         grounding=grounding_ctx,
                     )
+                    plan = plan_output.tasks
                     for i, t in enumerate(plan):
                         t.setdefault("id", f"task-{i+1}")
                         t.setdefault("status", "pending")
@@ -284,14 +272,22 @@ class PlannerStage:
                         t.setdefault("children", [])
                         t.setdefault("description", "")
                         t.setdefault("dependencies", [])
+                    # 追加写入：显式"追加"请求 → 写任务 inputs.mode=append（确定性）
+                    if any(tok in user_input.lower() for tok in ("追加", "附加", "append")):
+                        for _t in plan:
+                            if _t.get("verb") == "write":
+                                _t.setdefault("inputs", {})["mode"] = "append"
                     self._print_plan(plan)
 
                     # 契约校验 + 编译（编译期错误 → retry）
                     execution_plans = []
                     for t in plan:
-                        task_obj = self._dict_to_task(t)
-                        ep = self._orch._selector.select(
-                            task_obj, workspace=ws_service, registry=_tool_registry,
+                        task_obj = Task.from_dict(t)
+                        ep = self._orch._selector.compile(
+                            task_obj,
+                            context=CompilerContext(
+                                registry=_tool_registry,
+                            ),
                         )
                         execution_plans.append(ep)
                     break
@@ -325,11 +321,80 @@ class PlannerStage:
             self._orch._timings["plan_llm"] = round(time.perf_counter() - t0, 3)
             return state, "EXECUTE", None
 
-            state["execution_plans"] = execution_plans
-            state["plan"] = plan
-            state["current_task_index"] = 0
-            self._orch._timings["plan_llm"] = round(time.perf_counter() - t0, 3)
-            return state, "EXECUTE", None
+    async def _fallback_to_generic_planner(
+        self,
+        user_input: str,
+        context: Dict,
+        repo_context: str,
+        skill_hint: str,
+        planner_context,
+        intent,
+        state: AgentState,
+        planning_memory: str,
+        started_at: float,
+    ) -> Tuple[AgentState, str, Optional[str]]:
+        """Recover from a specialized workflow failure without false success."""
+        grounding_ctx = None
+        try:
+            from agent.grounding import Grounder, GroundingInput
+
+            ws_ctx = planner_context.workspace
+            grounding_ctx = Grounder().ground(GroundingInput(
+                query=user_input,
+                intent=intent,
+                current_file=getattr(ws_ctx, "current_file", "") or "",
+                opened_files=list(getattr(ws_ctx, "opened_files", []) or []),
+            )).context
+        except Exception as exc:
+            print(f"  ⚠️ 通用 Planner Grounding 失败（忽略）: {str(exc)[:120]}")
+
+        fallback_input = (
+            "专用工作流未完成。请改用通用任务计划，直接围绕用户原始需求规划，"
+            "不要使用 code_generation 工作流，也不要声称未验证的文件已写入。\n"
+            f"原始需求：{user_input}"
+        )
+        plan = None
+        execution_plans = []
+        for attempt in range(2):
+            try:
+                plan_output = await plan_with_metadata(
+                    fallback_input,
+                    planning_memory,
+                    repo_context,
+                    skill_hint,
+                    None,
+                    grounding=grounding_ctx,
+                )
+                plan = plan_output.tasks
+                for i, task_data in enumerate(plan):
+                    task_data.setdefault("id", f"task-{i + 1}")
+                    task_data.setdefault("status", "pending")
+                    task_data.setdefault("observations", [])
+                    task_data.setdefault("error", "")
+                    task_data.setdefault("children", [])
+                    task_data.setdefault("description", "")
+                    task_data.setdefault("dependencies", [])
+                execution_plans = [
+                    self._orch._selector.compile(
+                        Task.from_dict(task_data),
+                        context=CompilerContext(registry=_tool_registry),
+                    )
+                    for task_data in plan
+                ]
+                break
+            except Exception as exc:
+                print(f"  ⚠️ 通用 Planner 输出不合法（{attempt + 1}/2）: {str(exc)[:160]}")
+                plan = None
+
+        if not plan:
+            return state, "FINISH", "任务未完成：专用工作流失败，通用 Planner 也未能生成可执行计划。"
+
+        self._print_plan(plan)
+        state["execution_plans"] = execution_plans
+        state["plan"] = plan
+        state["current_task_index"] = 0
+        self._orch._timings["plan_llm"] = round(time.perf_counter() - started_at, 3)
+        return state, "EXECUTE", None
 
     # ── REPLAN ──
 
@@ -358,11 +423,16 @@ class PlannerStage:
             f"原始需求: {user_input}\n\n以下任务执行失败，需要重新规划：\n"
             + "\n".join(failed_info)
         )
-        new_plan = await generate_plan(replan_input, "", "", "", None)
+        new_plan = (await plan_with_metadata(replan_input, "", "", "", None)).tasks
         for t in new_plan:
             t.setdefault("status", "pending")
             t.setdefault("observations", [])
             t.setdefault("error", "")
+        if any(tok in user_input.lower() for tok in ("追加", "附加", "append")):
+            for _t in new_plan:
+                if _t.get("verb") == "write":
+                    _t.setdefault("inputs", {})["mode"] = "append"
+
 
         preserved_facts = {}
         for t in state.get("plan", []):
@@ -378,19 +448,15 @@ class PlannerStage:
             t["facts"].update(preserved_facts)
 
         # 重新生成 ExecutionPlan
-        ws_service = None
-        try:
-            ws_service = get_workspace_service()
-        except Exception:
-            pass
-
         execution_plans = []
         for t in new_plan:
-            task_obj = self._dict_to_task(t)
-            try:
-                ep = self._orch._selector.select(task_obj, workspace=ws_service, registry=_tool_registry)
-            except Exception:
-                ep = ExecutionPlan(task=task_obj)
+            task_obj = Task.from_dict(t)
+            ep = self._orch._selector.compile(
+                task_obj,
+                context=CompilerContext(
+                    registry=_tool_registry,
+                ),
+            )
             execution_plans.append(ep)
 
         state["execution_plans"] = execution_plans + state.get("execution_plans", [])[len(old_unfinished):]
@@ -399,76 +465,6 @@ class PlannerStage:
         print(f"  🔄 重新规划，共 {len(state['plan'])} 个任务（保留 {len(preserved_facts)} 个 Facts）")
         self._orch._timings["replan_llm"] = round(time.perf_counter() - t_replan, 3)
         return state, "EXECUTE"
-
-    # ── Task 转换 ──
-
-    def _dict_to_task(self, d: dict) -> Task:
-        """将 Planner 输出的 dict 转为 Task 对象。
-
-        支持新旧两种格式：
-        - 新格式: {"verb": "read", "target": "solution.py", "goal": "..."}
-        - 旧格式: {"goal": "读取 solution.py"} → 从 goal 提取 verb+target
-        """
-        goal = d.get("goal", "")
-
-        # 尝试直接读取 verb/target（新格式）
-        verb_str = d.get("verb", "")
-        target = d.get("target", "")
-
-        # 如果是旧格式（无 verb/target），从 goal 提取
-        if not verb_str or not target:
-            if goal:
-                verb_hints = {
-                    "read": ["读取", "读", "阅读", "打开", "查看", "read"],
-                    "write": ["写入", "写", "创建", "输出", "保存", "write", "create"],
-                    "modify": ["修改", "编辑", "更新", "更改", "重构", "优化", "modify", "edit", "update", "optimize", "refactor"],
-                    "execute": ["运行", "执行", "run", "execute"],
-                    "search": ["搜索", "查找", "查询", "search", "find"],
-                    "list": ["列出", "列表", "浏览", "list"],
-                    "explain": ["解释", "说明", "分析", "总结", "explain", "analyze"],
-                    "design": ["设计", "规划", "design", "plan"],
-                    "verify": ["验证", "测试", "检查", "verify", "test", "check"],
-                }
-                goal_lower = goal.lower()
-                for v, hints in verb_hints.items():
-                    if any(h in goal_lower for h in hints):
-                        verb_str = v
-                        break
-                if not verb_str:
-                    verb_str = "read"  # 默认
-
-                # 从 goal 提取 target：优先找文件名
-                if not target:
-                    file_match = re.search(r'[\w./\\-]+\.\w+', goal, re.ASCII)
-                    if file_match:
-                        target = file_match.group(0)
-                    else:
-                        target = ""
-            else:
-                verb_str = verb_str or "read"
-                target = target or ""
-
-        # 解析 verb（严格契约：planner 显式输出的非法 verb 必须抛错触发 retry）
-        if verb_str:
-            try:
-                verb = Verb(verb_str.lower())
-            except ValueError:
-                raise ValueError(
-                    f"task {d.get('id', '?')}: 非法 verb {verb_str!r}。"
-                    f"合法值: {[v.value for v in Verb]}"
-                ) from None
-        else:
-            verb = Verb.READ
-
-        return Task(
-            id=d.get("id", "task-1"),
-            verb=verb,
-            target=target,
-            target_type=d.get("target_type") or Task._infer_target_type(target),
-            goal=goal,
-            dependencies=d.get("dependencies", []),
-            status=d.get("status", "pending"),
-        )
 
     # ── 辅助 ──
 
@@ -494,4 +490,3 @@ class PlannerStage:
             child_cnt = f" [{len(children)} 子任务]" if children else ""
             print(f"  {tid}: {label}{dep}{child_cnt}")
         print("=" * 60 + "\n")
-

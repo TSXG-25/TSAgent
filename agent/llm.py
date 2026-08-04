@@ -5,6 +5,7 @@
 """
 import os
 import logging
+from typing import Final
 from datetime import datetime
 from dotenv import load_dotenv
 
@@ -23,6 +24,7 @@ DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
 # Ollama (local fallback)
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3:8b")
+LLM_REQUEST_TIMEOUT: Final[float] = float(os.getenv("TSAGENT_LLM_TIMEOUT", "45"))
 
 
 def _inject_time_to_system(messages: list[BaseMessage]) -> list[BaseMessage]:
@@ -83,6 +85,8 @@ class LLMRouter:
                 openai_api_key=DEEPSEEK_API_KEY,
                 openai_api_base=DEEPSEEK_BASE_URL,
                 temperature=0,
+                timeout=LLM_REQUEST_TIMEOUT,
+                max_retries=0,
             )
         return self._deepseek
 
@@ -94,6 +98,8 @@ class LLMRouter:
                 openai_api_key="ollama",
                 openai_api_base=OLLAMA_BASE_URL,
                 temperature=0,
+                timeout=LLM_REQUEST_TIMEOUT,
+                max_retries=0,
             )
         return self._ollama
 

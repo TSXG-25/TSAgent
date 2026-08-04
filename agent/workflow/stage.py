@@ -40,8 +40,8 @@ class Stage:
             goal: 任务目标描述（默认用 stage.description 或 id）
         """
         # 从 executor_type 映射到统一执行器名
-        executor_name = self.execution.executor.value  # "llm" | "tool" | "react" | "pipeline"
-        if executor_name in ("llm", "react"):
+        executor_name = self.execution.executor.value  # "llm" | "tool" | "pipeline"
+        if executor_name == "llm":
             plan_executor = "llm"
         else:
             plan_executor = "tool"
@@ -75,13 +75,22 @@ class Stage:
         if verb == Verb.READ and executor_name == "llm":
             verb = Verb.EXPLAIN
 
+        # Preserve Stage argument bindings at the canonical Task boundary.
+        # WorkflowExecutor resolves artifact references before compilation.
+        input_bindings: Dict[str, Any] = {}
+        for argument in self.arguments:
+            if argument.constant is not None:
+                input_bindings[argument.param] = {"constant": argument.constant}
+            elif argument.artifact:
+                input_bindings[argument.param] = {"artifact": argument.artifact}
+
         return Task(
             id=self.id,
             verb=verb,
             target="",
-            kind="",
             goal=goal or self.description or self.id,
             dependencies=list(self.depends or []),
+            inputs=input_bindings,
             policy=TaskPolicy(
                 executor=plan_executor,
                 max_retries=self.execution.max_retries or 0,

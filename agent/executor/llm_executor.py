@@ -2,15 +2,17 @@
 
 消费统一 Task 模型。职责：LLM reasoning only。
 - 不发起工具调用
-- 不接触 ToolRegistry / CapabilityRegistry / ActionResolver
+- 不接触 ToolRegistry / CapabilityRegistry
 - 输入：Task.goal（已渲染的完整 prompt 或目标描述）+ 可选上下文
 - 输出：ExecutionResult
 
-这是"开放式推理执行器"（ReAct 的纯推理形态）：
+这是开放式推理执行器：
 对于 design/analyze/explain 类 Task（无确定性工具链），
 Compiler 返回 ExecutionPlan(executor="llm")，本执行器接管。
 """
 import time
+import asyncio
+import os
 from typing import Any, Dict, Optional
 
 from langchain_core.messages import SystemMessage, HumanMessage
@@ -18,6 +20,8 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from agent.llm import llm
 from agent.task import Task
 from agent.workflow import ExecutionContext, ExecutionResult
+
+LLM_EXECUTION_TIMEOUT = float(os.getenv("TSAGENT_LLM_TIMEOUT", "45"))
 
 
 class LLMExecutor:
@@ -71,7 +75,10 @@ class LLMExecutor:
         ]
 
         try:
-            response = await llm.ainvoke(messages)
+            response = await asyncio.wait_for(
+                llm.ainvoke(messages),
+                timeout=float(task.policy.timeout or LLM_EXECUTION_TIMEOUT),
+            )
             elapsed = time.time() - t0
             content = response.content.strip() if hasattr(response, 'content') else str(response)
 

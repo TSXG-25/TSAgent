@@ -75,7 +75,6 @@ class WorkspaceContext:
     recent_symbols: list[str] = field(default_factory=list)  # recent symbols
     active_directory: str = ""             # relative path
     git_branch: Optional[str] = None
-    last_symbol: Optional[str] = None      # legacy alias
 
     def record_open(self, path: str) -> None:
         self.current_file = path
@@ -96,7 +95,6 @@ class WorkspaceContext:
         Called by tools when user reads code containing specific symbols.
         """
         self.current_symbol = symbol
-        self.last_symbol = symbol  # keep legacy alias in sync
         if symbol not in self.recent_symbols:
             self.recent_symbols.append(symbol)
         if len(self.recent_symbols) > 10:

@@ -163,7 +163,7 @@ def evaluate_dataset() -> tuple:
 
 
 def evaluate_real_planner(scenarios: list = None) -> tuple:
-    """真实 Planner 评估（Stage 3 验收）：generate_plan 对每个 dataset 场景跑一遍。
+    """真实 Planner 评估（Stage 3 验收）：plan_with_metadata 对每个 dataset 场景跑一遍。
 
     Planner 输出 PlanOutput → 转成 plan dict → evaluate_plan 评估。
     全部确定性校验（ADR-0009）。Abstain 场景：空 plan + abstain → abstention PASS。
@@ -332,4 +332,3 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
-

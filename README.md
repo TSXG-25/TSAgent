@@ -18,18 +18,27 @@ Quality Gate  PASS / WARNING / FAIL
 
 Current Phase
 ──────────────
-v2.0-D — Agent Intelligence: Decision（Policy → Confidence Gate → Next Action）
+v2.0 RC1 — Release Candidate（Stability → Reproducibility → Release Gate）
+  RC Scope               暂停 Capability 扩展，完成 Context Boundary / Dependency Lock / CI / Demo
+  Offline Regression     149 passed（当前本地基线）
+  Tool Regression        17 passed / 3 deselected（网络工具离线排除）
+  Contract Verification  PASS
+  Reflection / Decision  PASS（10/10 benchmarks）
+  Architecture Verify   PASS
+  Trend Gate             PASS
+
+v2.0-D — Agent Intelligence: Decision（Policy → Confidence Gate → Next Action，已完成）
   Decision              10/10 = 100%（Recovery Rate 1.000 / Wrong Recovery 0.000）
   Decision Policy       retry/switch/ask/finish 四动作，PolicyRegistry（v2.1 可动态更新）
   Decision Confidence   组合置信（诊断置信 + 重试耗尽 + 动作风险 + 证据完整度）< 0.5 → ASK
   DecisionTrace         决策可解释性（rule/confidence/rejected）→ Wrong Recovery 分析
-  接入 ReAct            失败 → Reflection → Decision → next action（策略性停止不无限重试）
+  接入 Runtime          失败 → Reflection → Decision → next action（策略性停止不无限重试）
   Trend Gate            PASS（planning + reflection + decision 三基线）
 
 v2.0-C — Agent Intelligence: Reflection（Diagnosis → Correction Proposal，已完成）
   Reflection              10/10 = 100%（Diagnosis Accuracy / Correction Proposal / False Dx 0.000）
   Reflection Contract     reflect(event: FailureEvent) 唯一入口（只消费 Fail Board Evidence）
-  Correction              Proposal（不执行，Executor 决定采纳）→ 已接入 ReAct 失败路径
+  Correction              Proposal（不执行，Executor 决定采纳）→ 已接入统一失败路径
   Determinism Gate        10 场景 × 100 次 Diagnosis 完全一致
   FixCommit               FIXED(commit) 生命周期闭环（REGRESSION 可关联首次修复）
   Long Horizon            drift 0.333 → 0.0（Reflection 改善目标保持）
@@ -56,16 +65,19 @@ Architecture Changes
 New Runtime Layers: only if Architecture Gate triggered (ADR-0005)
 ```
 
-## 核心模型（v1 冻结，ADR-0001..0004）
+## 核心模型（v2.0 RC，ADR-0001..0011）
 
 ```
-Intent → Task → ExecutionPlan → ExecutionResult
+Intent → Task → ExecutionPlan → ExecutorFactory → ExecutionResult
+                                      │
+                                      └→ FailureEvent → Reflection → Decision
 ```
 
 - 四个模型系统唯一，禁止平行模型。
 - Compiler 四阶段：Normalize → Semantic Check → Lower → Static Check（Pure Function）。
 - Grounder 只缩搜索空间（Search Space Reduction），不替 Planner 决策。
 - Executor 只消费 ExecutionPlan，不知道用户问题。
+- Runtime 使用 PlannerContext / ExecutorContext / ReflectionContext 做阶段边界。
 - Runtime 是唯一协调者。
 
 ## 目录
@@ -75,7 +87,11 @@ agent/         # Intent / Grounding / Planner / Compiler / Executor / Runtime
 evaluation/    # Dataset / Benchmark / Regression / Metrics / History / Factory
 docs/adr/      # ADR-0001..0011（架构决策记录 + v2 开发纪律）
 benchmarks/    # 既有 benchmark 执行器（runner / report）
+.github/       # RC 自动门禁
+requirements-lock.txt  # RC 依赖锁
 ```
+
+RC 架构总览见 [docs/architecture.md](docs/architecture.md)。
 
 ## 工程循环（ADR-0005）
 

@@ -289,3 +289,13 @@ class CognitiveContext:
         if self.conversation:
             parts.append(f"对话轮次: 最近{len(self.conversation)}轮")
         return " | ".join(parts) if parts else "无上下文"
+
+
+@dataclass
+class PlannerContext(CognitiveContext):
+    """Canonical PLAN phase view.
+
+    This compatibility subtype keeps the frozen CognitiveContext contract
+    valid for existing Resolver/Intent callers while making the Runtime's
+    phase boundary explicit.
+    """

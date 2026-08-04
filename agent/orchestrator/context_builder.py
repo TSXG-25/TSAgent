@@ -13,7 +13,8 @@ from typing import Dict, Optional
 from agent.state import AgentState
 from agent.services import MemoryService
 from agent.services.workspace_service import get_workspace_service
-from agent.cognition.cognitive_context import CognitiveContext, ConversationState
+from agent.cognition.cognitive_context import ConversationState
+from agent.context.contracts import PlannerContext
 from agent.cognition.intent_schema import IntentResult
 
 
@@ -33,11 +34,11 @@ class ContextBuilder:
         context: dict,
         repo_context: str,
         state: AgentState,
-    ) -> CognitiveContext:
-        """构建 CognitiveContext（认知层统一入口）。
+    ) -> PlannerContext:
+        """构建 PlannerContext（认知层统一入口）。
 
         从 MemoryService、WorkspaceService 等来源聚合数据。
-        CognitiveContext 是纯数据容器，下游模块不 import 任何 Service。
+        PlannerContext 是纯数据容器，下游模块不 import 任何 Service。
         """
         # Workspace 上下文
         ws_context = None
@@ -75,9 +76,8 @@ class ContextBuilder:
         # Artifacts
         artifacts = state.get("artifacts", {})
 
-        # Memory（偏好、事实）
+        # Memory facts
         memory = {
-            "preferences": context.get("preferences", ""),
             "facts": context.get("facts", ""),
         }
 
@@ -99,7 +99,7 @@ class ContextBuilder:
         except Exception:
             pass
 
-        return CognitiveContext(
+        return PlannerContext(
             query=user_input,
             conversation=conversation,
             conversation_state=self._orch._conversation_state,
@@ -144,9 +144,6 @@ class ContextBuilder:
         facts = context.get("facts", "")
         if facts:
             parts.append(f"\n## 关于用户的事实\n{facts}")
-        prefs = context.get("preferences", "")
-        if prefs:
-            parts.append(f"\n## 用户偏好\n{prefs}")
         parts.append(
             "\n## 回答规则\n- 如果用户询问个人信息或时间，优先使用会话记录回答。\n"
             "- 禁止编造不存在的历史。\n- 不要描述执行过程。\n"

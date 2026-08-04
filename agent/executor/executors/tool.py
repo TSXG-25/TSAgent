@@ -7,7 +7,7 @@
 内部委托 plan_executor 按序执行 ExecutionStep（变量替换 → 工具调用 → 结果传递）。
 不创建 Artifact（由上层 WorkflowExecutor / orchestrator 处理）。
 
-这是并列执行器之一，与 LLMExecutor / ReactExecutor / WorkflowExecutor 平级。
+这是并列执行器之一，与 LLMExecutor / WorkflowExecutor 平级。
 """
 import time
 from typing import Any, Dict, Optional
@@ -15,6 +15,7 @@ from typing import Any, Dict, Optional
 from agent.task import Task
 from agent.workflow import ExecutionContext, ExecutionResult
 from agent.executor.plan_executor import plan_executor
+from agent.executor.verifier import ExecutionArtifacts, execution_verifier
 
 
 class ToolExecutor:
@@ -45,6 +46,24 @@ class ToolExecutor:
                 metadata={"executor": "tool", "task_id": target.id},
             )
 
+        # ── Verifier 阶段（ADR-0012）：success 只能由 ExecutionVerifier 产生 ──
+        artifacts = ExecutionArtifacts(
+            files_written=list(result.get("_files_written", []) or []),
+        )
+        verification = execution_verifier.verify(plan, artifacts, task=target)
+        if not verification.success:
+            return ExecutionResult(
+                success=False,
+                error=verification.detail,
+                outputs={},
+                metadata={
+                    "executor": "tool",
+                    "task_id": target.id,
+                    "verifier": verification.verifier,
+                    "verifier_checks": verification.checks,
+                },
+            )
+
         content = result.get("_last_output", "")
         return ExecutionResult(
             success=True,
@@ -53,6 +72,8 @@ class ToolExecutor:
                 "executor": "tool",
                 "task_id": target.id,
                 "time_s": round(time.time() - t0, 2),
+                "verifier": verification.verifier,
+                "verifier_checks": verification.checks,
                 # 中间变量（供上层提取 facts）
                 "variables": {
                     k: str(v)[:300]

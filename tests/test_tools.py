@@ -132,23 +132,6 @@ def test_patch_tool():
     print("[PASS] test_patch_tool")
 
 
-def test_executor_decider():
-    """Test that the ReAct executor exposes the ReAct loop structure.
-
-    ToolDecider was removed during the Phase 1 architecture refactor
-    (tool selection is now handled by ToolSelector / Compiler).
-    """
-    _reload_all_tools()
-
-    from agent.executor.executors.react import ReactExecutor as Executor
-    # Verify executor has ReAct loop structure
-    assert hasattr(Executor, "_execute_task_react")
-    assert hasattr(Executor, "_think")
-    assert hasattr(Executor, "_execute_action")
-
-    print("[PASS] test_executor_decider")
-
-
 def test_tool_registry_imports():
     """Test all tool modules can be imported without errors."""
     import importlib
@@ -222,7 +205,6 @@ def run_all_tests():
         test_category_and_tags,
         test_web_tool_descriptions,
         test_patch_tool,
-        test_executor_decider,
         test_tool_registry_imports,
         test_sandbox_import,
     ]

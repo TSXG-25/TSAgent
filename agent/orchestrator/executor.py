@@ -1,18 +1,17 @@
 """ExecutionStage — EXECUTE 阶段编排。
 
-Compiler 已决定执行器（plan.executor），通过 ExecutorFactory 分发：
-- plan.executor == "tool" → ToolExecutor（确定性 ExecutionPlan 步骤序列）
-- 其他（"llm"）→ ReactExecutor（开放式任务，Phase B.3 迁移完成前保持现状）
-
-Phase C.1：从 orchestrator.py 的 execute() 迁移。
+唯一执行链：Task → ExecutionPlan → ExecutorFactory → ExecutionResult。
 """
 import time
+from dataclasses import replace
 from typing import Tuple
 
 from agent.state import AgentState
-from agent.executor.executors.react import ReactExecutor
 from agent.executor.contract import executor_factory
 from agent.workflow import ExecutionContext
+from agent.task import Task, ExecutionPlan, Verb
+from agent.compiler.context import CompilerContext
+from agent.registry.tool_registry import registry as _tool_registry
 from agent.services.workspace_service import get_workspace_service
 
 
@@ -28,68 +27,64 @@ class ExecutionStage:
     async def run(self, state: AgentState) -> Tuple[AgentState, str]:
         """EXECUTE 阶段：通过 ExecutorFactory 分发执行。
 
-        对于每个 Task：
-        - Compiler 编译的 plan.executor == "tool" → ToolExecutor
-        - 其他 → ReactExecutor（开放式 ReAct）
+        对于每个 Task，先确保存在 Compiler 产出的 ExecutionPlan，
+        再按 ``plan.executor`` 通过 ExecutorFactory 分发。
         """
         t_exec = time.perf_counter()
         tasks = state.get("plan", [])
-        execution_plans = state.get("execution_plans", [])
+        execution_plans = list(state.get("execution_plans", []) or [])
 
-        if not execution_plans:
-            # 无 ExecutionPlan（旧 Workflow 路径），走老 ReAct
-            executor = ReactExecutor()
-            state = await executor.execute(state, tasks)
-        else:
-            # 新路径：Compiler 已决定执行器（plan.executor），ExecutorFactory 分发
-            for idx, task_dict in enumerate(tasks):
-                task_obj = self._orch._planner._dict_to_task(task_dict) if idx < len(tasks) else None
-                plan = execution_plans[idx] if idx < len(execution_plans) else None
+        # AgentState is a runtime cache; compile when a plan has not been cached.
+        ws_service = None
+        try:
+            ws_service = get_workspace_service()
+        except Exception:
+            pass
 
-                if plan is not None and plan.executor == "tool":
-                    # ToolExecutor（确定性 ExecutionPlan 步骤序列）
-                    print(f"  🔀 Compiler: {task_dict.get('id', '?')} → tool_executor")
-                    ws_service = None
-                    try:
-                        ws_service = get_workspace_service()
-                    except Exception:
-                        pass
-                    context = ExecutionContext(task=task_obj, variables={})
-                    if ws_service:
-                        context.set_var("workspace", ws_service)
-                    context.set_var("execution_plan", plan)
-
-                    tool_executor = executor_factory.get("tool")
-                    exec_result = await tool_executor.execute(task_obj, context)
-
-                    if not exec_result.success:
-                        task_dict["status"] = "failed"
-                        task_dict["error"] = exec_result.error
-                    else:
-                        task_dict["status"] = "succeeded"
-                        exec_meta = exec_result.metadata or {}
-                        task_dict["observations"].append({
-                            "action": "tool_executor",
-                            "tool": "tool_executor",
-                            "status": "succeeded",
-                            "summary": exec_result.text[:300],
-                            "artifact_ids": [],
-                            "time_s": round(exec_meta.get("time_s", 0), 2),
-                        })
-                        # 保存变量供后续任务使用
-                        task_dict["facts"] = exec_meta.get("variables", {})
+        for idx, task_dict in enumerate(tasks):
+            task_obj = Task.from_dict(task_dict)
+            plan = execution_plans[idx] if idx < len(execution_plans) else None
+            if not isinstance(plan, ExecutionPlan):
+                plan = self._orch._selector.compile(
+                    task_obj,
+                    context=CompilerContext(workspace=ws_service, registry=_tool_registry),
+                )
+                if idx < len(execution_plans):
+                    execution_plans[idx] = plan
                 else:
-                    # ReactExecutor 执行开放式任务（Phase B.3 迁移到统一契约后接入 factory）
-                    print(f"  🔀 Compiler: {task_dict.get('id', '?')} → react_executor")
-                    executor = ReactExecutor()
-                    sub_state = await executor.execute(state, [task_dict])
-                    # 合并回主 state
-                    updated = sub_state.get("plan", [])
-                    if updated:
-                        task_dict["status"] = updated[0].get("status", "failed")
-                        task_dict["observations"] = updated[0].get("observations", [])
-                        task_dict["error"] = updated[0].get("error", "")
-                        task_dict["facts"] = updated[0].get("facts", {})
+                    execution_plans.append(plan)
+
+            print(f"  🔀 Compiler: {task_dict.get('id', '?')} → {plan.executor}_executor")
+            context = ExecutionContext(
+                task=task_obj,
+                user_input=state.get("messages", [])[-1].content
+                if state.get("messages") and hasattr(state["messages"][-1], "content")
+                else "",
+                facts=dict(task_dict.get("facts", {}) or {}),
+                variables={},
+            )
+            if ws_service:
+                context.set_var("workspace", ws_service)
+            context.set_var("execution_plan", plan)
+
+            try:
+                executor = executor_factory.get(plan.executor)
+                exec_result = await executor.execute(task_obj, context)
+            except Exception as exc:
+                exec_result = self._failed_result(plan, exc)
+
+            if exec_result.success:
+                verification_error = self._verify_completion(task_obj)
+                if verification_error:
+                    exec_result = replace(
+                        exec_result,
+                        success=False,
+                        error=verification_error,
+                    )
+
+            self._apply_result(task_dict, plan, exec_result)
+
+        state["execution_plans"] = execution_plans
 
         self._orch._timings["executor"] = round(time.perf_counter() - t_exec, 3)
 
@@ -98,3 +93,57 @@ class ExecutionStage:
         if not failed:
             return state, "NEXT_TASK"
         return state, "RECOVER"
+
+    @staticmethod
+    def _failed_result(plan: ExecutionPlan, exc: Exception):
+        """将路由/执行异常收敛为统一 ExecutionResult。"""
+        from agent.workflow import ExecutionResult
+
+        return ExecutionResult(
+            success=False,
+            error=f"{plan.executor} executor failed: {exc}",
+            metadata={"executor": plan.executor},
+        )
+
+    @staticmethod
+    def _verify_completion(task: Task) -> str:
+        """Verify file mutations before allowing a task to be reported done."""
+        if task.verb not in (Verb.WRITE, Verb.MODIFY):
+            return ""
+        if task.target_type != "file" or not task.target.strip():
+            return ""
+
+        try:
+            from tools.filesystem import ROOT, _resolve_path
+
+            full = _resolve_path(task.target)
+            if not full.is_relative_to(ROOT):
+                return f"文件写入未验证：目标超出 workspace 范围: {task.target}"
+            if not full.exists() or not full.is_file():
+                return f"文件写入未验证：文件不存在: {task.target}"
+            if full.stat().st_size == 0:
+                return f"文件写入未验证：文件为空: {task.target}"
+        except Exception as exc:
+            return f"文件写入未验证: {task.target} ({exc})"
+        return ""
+
+    @staticmethod
+    def _apply_result(task_dict: dict, plan: ExecutionPlan, result) -> None:
+        """把统一 ExecutionResult 投影回 AgentState 的 Runtime Cache。"""
+        task_dict.setdefault("observations", [])
+        metadata = result.metadata or {}
+        summary = (result.text or result.error or "")[:300]
+        task_dict["status"] = "succeeded" if result.success else "failed"
+        task_dict["error"] = "" if result.success else result.error
+        task_dict["observations"].append({
+            "action": f"{plan.executor}_executor",
+            "tool": metadata.get("executor", plan.executor),
+            "status": "succeeded" if result.success else "failed",
+            "summary": summary,
+            "artifact_ids": [a.id for a in result.artifacts],
+            "time_s": round(float(metadata.get("time_s", 0) or 0), 2),
+        })
+
+        variables = metadata.get("variables")
+        if variables:
+            task_dict.setdefault("facts", {}).update(variables)

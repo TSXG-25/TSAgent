@@ -112,20 +112,37 @@ class WorkflowRouter:
 router = WorkflowRouter()
 
 # 注册默认路由规则（模块导入时自动执行）
+# code_generation 是“根据题目生成 Python 解题文件”的专用流程，
+# 不能作为所有 development/code 请求的 domain 兜底。
+def _is_question_code_generation(intent: IntentResult) -> bool:
+    """仅在明确的题目解题请求下启用专用 Workflow。"""
+    raw = (intent.raw_input or "").lower()
+    target = (intent.target or "").lower()
+    explicit_question = any(token in raw for token in (
+        "题目", "解题", "算法题", "编程题", "question.docx", "question file",
+    ))
+    if not explicit_question:
+        return False
+
+    # 专用流程产出 Python 解题文件；显式 xlsx/docx/pptx 等目标走通用 Planner。
+    output_suffixes = (".xlsx", ".xls", ".docx", ".pptx", ".csv", ".txt")
+    if target.endswith(output_suffixes):
+        return False
+    return intent.domain == DOMAIN_DEVELOPMENT and intent.action == "code"
+
+
+router.register_condition(_is_question_code_generation, "code_generation")
+
 # development domain
-router.register(DOMAIN_DEVELOPMENT, "code", "code_generation")
-router.register(DOMAIN_DEVELOPMENT, "review", "code_review")
-router.register(DOMAIN_DEVELOPMENT, "feature", "feature_dev")
 # v2.0-B：modify 类（改现有代码）→ 不路由 workflow，走 Planner（多步：读→改→测试→文档）
 # code_generation 只适合"生成新代码文件"（write output/solution.py），不适合修改仓库
 router.register(DOMAIN_DEVELOPMENT, "modify", "__none__")
-router.register_domain(DOMAIN_DEVELOPMENT, "feature_dev")
+router.register_domain(DOMAIN_DEVELOPMENT, None)
 
 # knowledge domain
-router.register(DOMAIN_KNOWLEDGE, "research", "research")
 router.register(DOMAIN_KNOWLEDGE, "weather", None)  # weather → no workflow, handled by Planner
 router.register(DOMAIN_KNOWLEDGE, "search", None)    # search → no workflow, handled by Planner
-router.register_domain(DOMAIN_KNOWLEDGE, "research")
+router.register_domain(DOMAIN_KNOWLEDGE, None)
 
 # 注册条件路由示例：修改 .py 文件走 code_generation
 # v2.0-B：移除 —— code_generation 是"生成新代码"模板，modify/refactor（改现有代码）

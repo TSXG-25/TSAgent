@@ -63,7 +63,7 @@ code_generation_workflow = Workflow(
                 tool_policy=ToolPolicy(allow=["write_file"]),
             ),
             arguments=[
-                ToolArgument(param="path", constant="output/solution.py"),
+                ToolArgument(param="path", artifact="output_path"),
                 ToolArgument(param="content", artifact="verified_code"),
             ],
             outputs=[OutputArtifact(type="solution_file")],
@@ -74,25 +74,3 @@ code_generation_workflow = Workflow(
 )
 
 workflow_registry.register("code_generation", code_generation_workflow)
-
-# 注册到 WorkflowRouter（embedding 路由）
-from agent.services.workflow_router import router
-router.register_workflow(
-    workflow_id="code_generation",
-    examples=[
-        "写一个 Python 程序解题",
-        "生成代码实现排序算法",
-        "阅读题目并输出解题代码",
-        "用 python 实现这个功能",
-        "编写一个二分查找函数的代码",
-        "做这道算法题写出解法",
-        "实现快速排序算法",
-        "写 leetcode 第42题的解法",
-    ],
-    keywords=[
-        "写代码", "生成代码", "编程题", "算法题", "解题",
-        "solution.py", "leetcode", "algorithm",
-        "python 程序", "实现算法",
-    ],
-    workflow_obj=code_generation_workflow,
-)

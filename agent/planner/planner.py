@@ -14,6 +14,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from agent.llm import llm
 from agent.planner.constraint_extractor import extract_constraints, detect_abstention
 from agent.planner.schemas import TaskList
+from agent.task import Task
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +23,7 @@ logger = logging.getLogger(__name__)
 class PlanOutput:
     """v2 Planner 完整输出（Planning Quality 可评估载体）。
 
-    - tasks: 分解后的任务列表（与 generate_plan 兼容格式）
+    - tasks: 分解后的 canonical Task dictionaries
     - constraints: 确定性提取的显式约束
     - abstain: 信息不足 → 应 Ask User / 不猜
     - abstain_reason: abstain 原因（缺少什么信息）
@@ -64,6 +65,8 @@ PLANNER_PROMPT = """你是一个目标分解专家。将用户请求分解为子
 - target: 操作对象
 - target_type: 目标类型（枚举值）: file(文件路径) / symbol(符号名) / text(自由文本) / none
 - goal: 简短的描述
+- children: 子任务对象数组；每个元素都必须是完整 Task 对象，不能填写 task id 字符串。
+  如果没有子任务，必须输出空数组 []。
 
 target_type 规则（严格遵守）：
 - file: target 必须是具体文件路径，含扩展名（如 "output/solution.py"）
@@ -129,23 +132,6 @@ Always output 具体路径: src/user.py, database.py, output/solution.py
 - 在 metadata.reasoning 中说明缺少什么信息
 "乱猜一个目标"比"承认信息不足"更糟糕（False Confidence）。
 """
-
-
-async def generate_plan(
-    user_input: str,
-    memory_context: str = "",
-    repo_context: str = "",
-    skill_hint: str = "",
-    intent=None,
-    grounding=None,
-) -> list[dict]:
-    """向后兼容入口：只返回 tasks 列表（orchestrator 消费）。
-
-    信息不足（Abstain）时返回空列表 —— 调用方应触发 Ask User / 不猜。
-    """
-    out = await plan_with_metadata(user_input, memory_context, repo_context,
-                                   skill_hint, intent, grounding)
-    return out.tasks
 
 
 async def plan_with_metadata(
@@ -221,7 +207,7 @@ async def plan_with_metadata(
                 if tasks_out:
                     logger.info(f"Planner: {len(tasks_out)} tasks")
                     return PlanOutput(
-                        tasks=_ensure_fields(tasks_out),
+                        tasks=_normalize_tasks(tasks_out),
                         constraints=constraints,
                         raw={"tasks": tasks_out},
                     )
@@ -251,7 +237,7 @@ async def plan_with_metadata(
                     ]
                     continue
                 return PlanOutput(
-                    tasks=_ensure_fields(result["tasks"]),
+                    tasks=_normalize_tasks(result["tasks"]),
                     constraints=constraints,
                     raw=result,
                 )
@@ -274,43 +260,20 @@ async def plan_with_metadata(
         }], constraints=constraints)
 
 
-def _ensure_fields(tasks: list) -> list:
-    for t in tasks:
-        t.setdefault("status", "pending")
-        t.setdefault("observations", [])
-        t.setdefault("error", "")
-        t.setdefault("children", [])
-        t.setdefault("description", "")
-        t.setdefault("dependencies", [])
-        # 新格式: verb + target
-        t.setdefault("verb", "")
-        t.setdefault("target", "")
-        # 旧格式向后兼容: 如果没有 verb/target，从 goal 猜
-        if not t.get("verb") and t.get("goal"):
-            goal_lower = t["goal"].lower()
-            # 尝试从 goal 推断 verb
-            verb_hints = {
-                "read": ["读取", "读", "阅读", "打开", "查看", "read"],
-                "write": ["写入", "写", "创建", "输出", "保存", "write", "create"],
-                "modify": ["修改", "编辑", "更新", "更改", "重构", "优化", "modify", "edit", "update", "optimize", "refactor"],
-                "execute": ["运行", "执行", "run", "execute"],
-                "search": ["搜索", "查找", "查询", "search", "find"],
-                "list": ["列出", "列表", "浏览", "list"],
-                "explain": ["解释", "说明", "分析", "总结", "explain", "analyze"],
-                "design": ["设计", "规划", "design", "plan"],
-                "verify": ["验证", "测试", "检查", "verify", "test", "check"],
-            }
-            for verb, hints in verb_hints.items():
-                if any(h in goal_lower for h in hints):
-                    t["verb"] = verb
-                    break
-            if not t.get("verb"):
-                t["verb"] = "read"  # 默认
-        # 旧格式向后兼容: 如果没有 goal，从 verb + target 生成
-        if not t.get("goal") and t.get("verb"):
-            target_str = t.get("target", "") or ""
-            t["goal"] = f"{t['verb']} {target_str}".strip()
-    return tasks
+def _normalize_tasks(tasks: list) -> list:
+    """Validate and serialize Planner output through the canonical Task model."""
+    normalized = []
+    for index, raw in enumerate(tasks):
+        data = dict(raw)
+        data.setdefault("id", f"task-{index + 1}")
+        data.setdefault("status", "pending")
+        data.setdefault("observations", [])
+        data.setdefault("error", "")
+        data.setdefault("children", [])
+        data.setdefault("description", "")
+        data.setdefault("dependencies", [])
+        normalized.append(Task.from_dict(data).to_dict())
+    return normalized
 
 
 def _parse_json(content: str):

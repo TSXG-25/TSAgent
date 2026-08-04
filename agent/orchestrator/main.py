@@ -15,7 +15,7 @@ from typing import Any, Dict, Optional, Tuple
 from agent.state import AgentState
 from agent.cognition.cognitive_context import ConversationState
 from agent.cognition.reference_resolver import ReferenceResolver
-from agent.compiler.tool_selector import ToolSelector
+from agent.compiler.tool_selector import Compiler
 from agent.compiler.rules import DEFAULT_RULES
 
 from .context_builder import ContextBuilder
@@ -36,8 +36,8 @@ class ExecutionOrchestrator:
     def __init__(self):
         self._timings: Dict[str, float] = {}
         self.replan_count = 0
-        # 初始化 ToolSelector（注册所有规则）
-        self._selector = ToolSelector()
+        # 初始化 Compiler（注册所有 lowering rules）
+        self._selector = Compiler()
         for rule in DEFAULT_RULES:
             self._selector.add_rule(rule)
 

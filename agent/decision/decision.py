@@ -73,6 +73,29 @@ class DecisionInput:
     state: ExecutionState = field(default_factory=ExecutionState)
     event_id: str = ""
 
+    @classmethod
+    def from_reflection_context(
+        cls,
+        context,
+        diagnosis: str,
+        diagnosis_confidence: float,
+    ) -> "DecisionInput":
+        """Build Decision input from the minimal ReflectionContext view."""
+        from agent.context.contracts import ReflectionContext
+
+        if not isinstance(context, ReflectionContext):
+            raise TypeError("DecisionInput 只接受 ReflectionContext 作为上下文来源")
+        return cls(
+            diagnosis=diagnosis,
+            diagnosis_confidence=diagnosis_confidence,
+            state=ExecutionState(
+                retry_count=context.retry_count,
+                same_tool=bool(context.last_action),
+                evidence_completeness=1.0 if context.evidence else 0.5,
+            ),
+            event_id=context.task_id,
+        )
+
 
 @dataclass(frozen=True)
 class Decision:

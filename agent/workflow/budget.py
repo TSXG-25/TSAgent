@@ -1,7 +1,7 @@
 """BudgetManager — 资源预算管控。
 
-每个 Node 绑定 BudgetSpec，Executor 每步检查是否超限。
-避免 ReAct 无限循环、减少 Token 浪费。
+每个 Stage/Task 绑定 BudgetSpec，Executor 每步检查是否超限。
+避免执行循环失控、减少 Token 浪费。
 """
 from dataclasses import dataclass, field
 from typing import Optional
@@ -13,7 +13,7 @@ class BudgetSpec:
     """预算规格。
     
     Attributes:
-        max_steps: 最大步骤数（如 ReAct 循环的最大 Think 次数）
+        max_steps: 最大执行步骤数
         max_retries: 最大重试次数
         max_tokens: 最大 Token 消耗
         max_cost: 最大费用（USD）

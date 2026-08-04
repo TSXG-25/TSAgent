@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Optional
 
 from agent.registry.tool_registry import registry
+from agent.security import is_sensitive_path, redact_sensitive_text
 
 # ── Constants ──
 
@@ -21,6 +22,17 @@ _path_cache: dict = {}
 
 # Cache for the workspace service instance
 _workspace_service = None
+
+
+def _ensure_workspace_path(path: Path, requested: str = "") -> Path:
+    """所有文件工具统一限制在当前 workspace 根目录内。"""
+    resolved = path.resolve()
+    try:
+        resolved.relative_to(ROOT)
+    except ValueError as exc:
+        label = requested or str(path)
+        raise PermissionError(f"路径超出 workspace 范围: {label}") from exc
+    return resolved
 
 
 def _get_workspace_service():
@@ -54,7 +66,7 @@ def set_working_directory(path: str) -> str:
     """
     global _working_directory
     target = str(path).strip().rstrip("/")  # 防御：工具参数可能被传 PosixPath
-    full = (ROOT / target).resolve()
+    full = _ensure_workspace_path(ROOT / target, target)
 
     if not full.exists() or not full.is_dir():
         return f"错误：目录不存在 {path}（项目根目录: {ROOT}）"
@@ -80,8 +92,10 @@ def _resolve_path(path: str) -> Path:
     3. Relative to project root
     4. Common prefixes (input/, src/, output/, docs/)
     5. Fuzzy match via Workspace (best match if unique)
-    6. Recursive search (legacy fallback)
+    6. Recursive search fallback
     """
+    path = str(path).strip()
+
     # Check cache first
     if path in _path_cache:
         cached = _path_cache[path]
@@ -94,10 +108,21 @@ def _resolve_path(path: str) -> Path:
     if path in ("", ".", "./"):
         return ROOT
 
+    # Absolute paths produced by Workspace resolution are already canonical.
+    # Check them before fuzzy resolution, otherwise a directory such as
+    # ``/project/tests`` may be mistaken for ``tests/__init__.py``.
+    absolute = Path(path)
+    if absolute.is_absolute():
+        return absolute.resolve()
+
     # Strategy 1: Workspace resolution (exact + fuzzy)
     ws = _get_workspace_service()
     if ws is not None:
-        matches = ws.resolve(path)
+        try:
+            matches = ws.resolve(path)
+        except Exception:
+            # 工具可在 bootstrap 前被单独调用；回退到确定性路径解析。
+            matches = []
         if matches:
             # Use highest-scored match
             best = matches[0]
@@ -142,7 +167,7 @@ def _resolve_path(path: str) -> Path:
             _path_cache[path] = alt
             return alt
 
-    # Strategy 5: Recursive search (max 2 levels deep, legacy fallback)
+    # Strategy 5: Recursive search (max 2 levels deep)
     path_name = Path(path).name
     search_roots = [ROOT]
     if _working_directory != ".":
@@ -187,7 +212,16 @@ def read_file(path: str) -> str:
     Returns:
         File content as string
     """
-    full = _resolve_path(path)
+    if is_sensitive_path(path):
+        return "错误：出于安全原因，禁止读取敏感文件。"
+
+    try:
+        full = _ensure_workspace_path(_resolve_path(path), str(path))
+    except PermissionError as e:
+        return f"错误：{e}"
+
+    if is_sensitive_path(full):
+        return "错误：出于安全原因，禁止读取敏感文件。"
 
     if not full.exists():
         cwd_hint = f"（当前目录: {_working_directory}）" if _working_directory != "." else ""
@@ -217,7 +251,7 @@ def read_file(path: str) -> str:
             all_text = "\n".join(paragraphs)
             if tables_text:
                 all_text += "\n\n[表格内容]\n" + "\n".join(tables_text)
-            return all_text.strip() if all_text.strip() else "文档内容为空"
+            return redact_sensitive_text(all_text.strip()) if all_text.strip() else "文档内容为空"
         except ImportError:
             return "错误：python-docx 未安装，无法读取 .docx 文件。请运行: pip install python-docx"
         except Exception as e:
@@ -243,7 +277,7 @@ def read_file(path: str) -> str:
                             cells = [cell.text for cell in row.cells]
                             slide_lines.append(" | ".join(cells))
                 slides_text.append("\n\n".join(slide_lines))
-            return "\n\n".join(slides_text) if slides_text else "PPT 内容为空"
+            return redact_sensitive_text("\n\n".join(slides_text)) if slides_text else "PPT 内容为空"
         except ImportError:
             return "错误：python-pptx 未安装，无法读取 .pptx 文件。请运行: pip install python-pptx"
         except Exception as e:
@@ -251,10 +285,10 @@ def read_file(path: str) -> str:
 
     # Plain text
     try:
-        return full.read_text(encoding="utf-8")
+        return redact_sensitive_text(full.read_text(encoding="utf-8"))
     except UnicodeDecodeError:
         try:
-            return full.read_text(encoding="gbk")
+            return redact_sensitive_text(full.read_text(encoding="gbk"))
         except Exception:
             return f"错误：无法解码文件 {path}，请确保文件是文本格式"
 
@@ -270,7 +304,21 @@ def write_file(path: str, content: str, mode: str = "overwrite") -> str:
     Returns:
         Operation result description
     """
-    full = _resolve_path(path)
+    if is_sensitive_path(path):
+        return "错误：出于安全原因，禁止写入敏感文件。"
+
+    if Path(str(path)).suffix.lower() in {".docx", ".xlsx", ".xls", ".pptx"}:
+        return (
+            "错误：Office 二进制文件不能通过文本 write_file 生成；"
+            "请在可用沙箱中运行生成脚本，或先生成可审阅的 Python 脚本。"
+        )
+
+    try:
+        full = _ensure_workspace_path(_resolve_path(path), str(path))
+    except PermissionError as e:
+        return f"错误：{e}"
+    if is_sensitive_path(full):
+        return "错误：出于安全原因，禁止写入敏感文件。"
     full.parent.mkdir(parents=True, exist_ok=True)
 
     if mode == "append":
@@ -310,11 +358,20 @@ def list_directory(path: str = ".") -> str:
     else:
         full = _resolve_path(path)
 
+    try:
+        full = _ensure_workspace_path(full, str(path))
+    except PermissionError as e:
+        return f"错误：{e}"
+
     if not full.exists() or not full.is_dir():
         cwd_hint = f"（当前目录: {_working_directory}）" if _working_directory != "." else ""
         return f"错误：{path} 不是有效目录{cwd_hint}"
 
-    items = [f"{p.name}{'/' if p.is_dir() else ''}" for p in full.iterdir()]
+    items = [
+        f"{p.name}{'/' if p.is_dir() else ''}"
+        for p in full.iterdir()
+        if not is_sensitive_path(p)
+    ]
     display_path = str(full.relative_to(ROOT)) if str(full).startswith(str(ROOT)) else str(full)
     result = f"📁 {display_path}/ ({len(items)} 项)\n"
     result += "\n".join(sorted(items))
@@ -334,6 +391,8 @@ def find_file(name: str) -> str:
     if ws is not None:
         matches = ws.find(name)
         if matches:
+            matches = [m for m in matches if not is_sensitive_path(m.path)]
+        if matches:
             result_str = "\n".join(
                 f"  [{m.score:.2f}] {m.path}  ({m.reason})"
                 for m in matches[:10]
@@ -342,10 +401,14 @@ def find_file(name: str) -> str:
                 result_str += f"\n  ... 及另外 {len(matches) - 10} 个匹配"
             return f"找到 {len(matches)} 个文件:\n{result_str}"
 
-    # Legacy fallback
+    # Filesystem fallback when Workspace is unavailable
     results = []
     for p in ROOT.rglob(name):
-        if p.is_file() and not any(part.startswith(".") for part in p.parts):
+        if (
+            p.is_file()
+            and not is_sensitive_path(p)
+            and not any(part.startswith(".") for part in p.parts)
+        ):
             try:
                 rel = p.relative_to(ROOT)
                 results.append(str(rel))

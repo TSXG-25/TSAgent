@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from typing import List
 
 from evaluation.benchmark.failboard_v2 import FailureEvent, Evidence, SYMPTOM_MAP
+from agent.context.contracts import ReflectionContext
 
 
 @dataclass(frozen=True)
@@ -148,3 +149,23 @@ def reflect(event: FailureEvent) -> ReflectionResult:
     diagnosis = diagnose(event)
     correction = correction_strategy(diagnosis)
     return ReflectionResult(diagnosis=diagnosis, correction=correction)
+
+
+def reflect_context(context: ReflectionContext) -> ReflectionResult:
+    """ReflectionContext → frozen FailureEvent → canonical reflect().
+
+    Runtime 只提交最小失败证据，Reflection 不读取 ExecutionContext、
+    AgentState、messages 或 memory。``reflect`` 仍保持 v2.0-C 的冻结入口。
+    """
+    if not isinstance(context, ReflectionContext):
+        raise TypeError("reflect_context() 只接受 ReflectionContext")
+    event = FailureEvent(
+        benchmark="runtime",
+        scenario=context.task_id or "task",
+        layer="runtime",
+        dimension="execution",
+        failure=context.failure,
+        evidence=list(context.evidence),
+        symptom=context.symptom,
+    )
+    return reflect(event)

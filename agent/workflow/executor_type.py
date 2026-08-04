@@ -12,7 +12,6 @@ class ExecutorType(str, Enum):
     
     LLM: 纯 LLM 推理，不调用任何工具
     TOOL: 单次工具调用
-    REACT: 局部 ReAct Loop（验证→修复循环）
     PIPELINE: 子工作流（嵌套执行另一个 Workflow）
     
     # 未来扩展
@@ -23,5 +22,4 @@ class ExecutorType(str, Enum):
     """
     LLM = "llm"
     TOOL = "tool"
-    REACT = "react"
     PIPELINE = "pipeline"

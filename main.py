@@ -6,7 +6,7 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 import asyncio
 from pathlib import Path
-from agent.runtime import UniversalAgent
+from agent import TSAgent
 from agent.bootstrap import load_all, load_all_async
 from agent.services.repository_service import RepositoryService
 from agent.event_bus import event_bus
@@ -84,7 +84,7 @@ async def main():
     cli = StreamingCLI()
     cli.setup_event_listeners()
 
-    agent = UniversalAgent(user_id)
+    agent = TSAgent(user_id)
     while True:
         user_input = input("\n你: ")
         if user_input.lower() in ["exit", "quit"]:

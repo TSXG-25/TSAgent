@@ -2,7 +2,7 @@
 
 所有执行器遵循 execute(target, context) -> ExecutionResult。
 target 类型由 ExecutionTarget 联合类型约束：
-- Task（Tool / LLM / React 执行器消费单个任务）
+- Task（Tool / LLM 执行器消费单个任务）
 - Workflow（Workflow 执行器消费整个工作流 DAG）
 
 ExecutorFactory 按 ExecutionPlan.executor_type 解析执行器实例，
@@ -39,7 +39,6 @@ class ExecutorFactory:
     注册方式：
         ExecutorFactory.register("tool", ToolExecutor)
         ExecutorFactory.register("llm", LLMExecutor)
-        ExecutorFactory.register("react", ReactExecutor)
         ExecutorFactory.register("workflow", WorkflowExecutor)
 
     使用方式：

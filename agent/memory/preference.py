@@ -5,42 +5,15 @@ Uses LLM to extract user facts from every input.
 Facts are stored in long_term.py SQLite store for persistence.
 """
 import json
+import os
 import re
-from pathlib import Path
+import asyncio
 from langchain_core.messages import SystemMessage, HumanMessage
+
 from agent.llm import llm
 
-# Legacy: keep old preferences table for backward compatibility
-import sqlite3
-DB_PATH = Path(__file__).parent.parent.parent / "data" / "prefs.db"
-DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-
-def _init_legacy_db():
-    with sqlite3.connect(DB_PATH) as conn:
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS preferences (
-                user_id TEXT PRIMARY KEY,
-                data TEXT
-            )
-        """)
-_init_legacy_db()
-
-def get_user_preferences(user_id: str) -> dict:
-    """Legacy: get user preferences dict."""
-    try:
-        with sqlite3.connect(DB_PATH) as conn:
-            cur = conn.execute("SELECT data FROM preferences WHERE user_id = ?", (user_id,))
-            row = cur.fetchone()
-            return json.loads(row[0]) if row else {}
-    except Exception:
-        return {}
-
-def save_user_preference(user_id: str, key: str, value):
-    """Legacy: save single preference."""
-    prefs = get_user_preferences(user_id)
-    prefs[key] = value
-    with sqlite3.connect(DB_PATH) as conn:
-        conn.execute("REPLACE INTO preferences (user_id, data) VALUES (?, ?)", (user_id, json.dumps(prefs)))
+# LLM 事实抽取的本地超时：超时后立即走确定性兜底，避免被上层 wait_for 整体取消。
+LLM_EXTRACT_TIMEOUT = float(os.getenv("TSAGENT_LLM_EXTRACT_TIMEOUT", "10"))
 
 
 # ========== LLM-based fact extraction (always on) ==========
@@ -121,12 +94,49 @@ async def extract_facts_with_llm(text: str) -> dict:
         return {"personal": facts} if facts else {}
 
 
+# ── 确定性抽取兜底（LLM 不可用/超时时保证常见事实仍被保存，ADR-0009） ──
+_DETERMINISTIC_PATTERNS = [
+    (re.compile(r"我(?:叫|是)(?P<name>[^，。！？；;\n]{1,12})"), "personal", "name"),
+    (re.compile(r"我(?:住在|居住于|居住在|来自)(?P<location>[^，。！？；;\n]{1,16})"), "personal", "location"),
+    (re.compile(r"(?:记住[:：]?(?:这个)?(?:项目)?|(?:这个)?项目)(?:叫|是|为)(?P<project>[^，。！？；;\n]{1,24})"), "misc", "project"),
+    (re.compile(r"我(?:最)?喜欢(?:的)?(?:编程语言|语言)[是为:：]?(?P<lang>[^，。！？；;\n]{1,12})"), "programming", "language"),
+    (re.compile(r"我(?:最)?喜欢(?P<hobby>[^，。！？；;\n]{1,12})"), "hobby", "preference"),
+]
+_INTERROGATIVE_RE = re.compile(r"什么|哪个|哪一|哪儿|哪里|谁|怎么|为什么|吗|呢|？|\?")
+
+
+def _deterministic_extract(text: str) -> dict:
+    """不依赖 LLM 的常见事实抽取。
+
+    只处理陈述句；含疑问词时返回 {}，避免把"你喜欢什么颜色"误存为事实。
+    """
+    if _INTERROGATIVE_RE.search(text):
+        return {}
+    skip_hobby = ("编程语言" in text) or ("语言" in text)
+    found: dict = {}
+    for pattern, category, key in _DETERMINISTIC_PATTERNS:
+        if key == "preference" and skip_hobby:
+            continue
+        m = pattern.search(text)
+        if m and m.group(1) and m.group(1).strip():
+            found.setdefault(category, {})[key] = m.group(1).strip()
+    return found
+
+
 async def async_extract_and_save_facts(user_id: str, text: str) -> dict:
     """Always attempt to extract facts from user input."""
     if not text or len(text) < 3:
         return {}
 
-    facts = await extract_facts_with_llm(text)
+    try:
+        facts = await asyncio.wait_for(
+            extract_facts_with_llm(text), timeout=LLM_EXTRACT_TIMEOUT
+        )
+    except Exception:
+        facts = {}
+    if not facts:
+        # LLM 失败/超时 → 确定性兜底，保证关键事实仍落库
+        facts = _deterministic_extract(text)
     if not facts:
         return {}
 
@@ -138,12 +148,5 @@ async def async_extract_and_save_facts(user_id: str, text: str) -> dict:
             for key, value in items.items():
                 if value and str(value).strip():
                     save_fact(user_id, str(category), str(key), str(value).strip())
-
-    # Also keep legacy compatibility
-    for category, items in facts.items():
-        if isinstance(items, dict):
-            for key, value in items.items():
-                if value and str(value).strip():
-                    save_user_preference(user_id, f"{category}.{key}", str(value).strip())
 
     return facts

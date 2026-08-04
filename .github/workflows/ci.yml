@@ -1,0 +1,48 @@
+name: TSAgent RC Gate
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  rc-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TSAGENT_ALLOW_LOCAL_EXECUTION: "1"
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-lock.txt
+
+      - name: Install locked dependencies
+        run: python -m pip install --upgrade pip && python -m pip install -r requirements-lock.txt
+
+      - name: Offline regression tests
+        run: python -m pytest -q tests --ignore=tests/test_tools_execution.py
+
+      - name: Offline tool tests
+        run: python -m pytest -q tests/test_tools_execution.py -k "not web_search and not web_fetch"
+
+      - name: Contract Verification
+        run: python evaluation/benchmark/contract_verification.py
+
+      - name: Architecture Verification
+        run: python evaluation/architecture_verification.py
+
+      - name: Reflection and Decision benchmarks
+        run: |
+          python evaluation/benchmark/eval_reflection.py
+          python evaluation/benchmark/eval_decision.py
+
+      - name: Trend Gate
+        run: python evaluation/benchmark/trend_gate.py

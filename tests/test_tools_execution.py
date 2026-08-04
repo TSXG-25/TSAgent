@@ -7,11 +7,22 @@ These tests require dependencies to be installed and may need network access.
 import sys
 import os
 import importlib
+import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 # Global setup: load tools once
 from agent.registry.tool_registry import registry
+
+
+@pytest.fixture(autouse=True)
+def trusted_local_execution(monkeypatch):
+    """Tool behavior tests opt in to local execution explicitly.
+
+    Production/default behavior remains fail-closed when Docker is unavailable;
+    these tests exercise the controlled development fallback.
+    """
+    monkeypatch.setenv("TSAGENT_ALLOW_LOCAL_EXECUTION", "1")
 
 
 def setup_module():

@@ -4,11 +4,14 @@
 超过窗口的对话自动触发 LLM 压缩总结，并将摘要写入长时记忆。
 """
 import json
+import logging
 from pathlib import Path
 from typing import Optional, Any
 
 from langchain_core.messages import SystemMessage, HumanMessage
 from agent.llm import llm
+
+logger = logging.getLogger(__name__)
 
 # Config
 SHORT_TERM_WINDOW = 6  # Keep last 6 exchanges (12 messages)
@@ -104,7 +107,6 @@ async def compress_history(user_id: str, entries: list[dict]) -> str:
 def _trigger_compression(user_id: str, entries: list[dict]) -> None:
     """Fire-and-forget compression. Stores result in long-term memory."""
     import asyncio
-    import traceback
 
     async def _do_compress():
         try:
@@ -113,8 +115,10 @@ def _trigger_compression(user_id: str, entries: list[dict]) -> None:
                 # Store in long-term memory
                 from agent.memory.long_term import store_summary
                 store_summary(user_id, summary)
-        except Exception:
-            traceback.print_exc()
+        except Exception as exc:
+            # Compression is optional; never leak a provider traceback into
+            # the CLI or API response.
+            logger.warning("短期记忆压缩失败: %s", str(exc)[:200])
 
     try:
         loop = asyncio.get_running_loop()

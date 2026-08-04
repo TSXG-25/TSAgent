@@ -1,7 +1,7 @@
 """Task Model — Planner output and Execution Plan.
 
 Task represents a goal. ExecutionPlan represents how to achieve it.
-Task does NOT know about tools. Compiler (ToolSelector) maps Task → ExecutionPlan.
+Task does NOT know about tools. Compiler maps Task → ExecutionPlan.
 
 One level, one model (ADR-0001):
 - Planning layer: Task (Pydantic, the ONLY task model in the system)
@@ -25,7 +25,7 @@ from pydantic import BaseModel, Field, model_validator
 class Verb(Enum):
     """Fixed set of verbs that Planner can output.
 
-    Each verb maps to a specific capability in Compiler (ToolSelector).
+    Each verb maps to a specific capability in Compiler.
     No free-form strings — ensures deterministic tool selection.
     """
     RESOLVE = "resolve"       # workspace.resolve() — always first step
@@ -42,6 +42,16 @@ class Verb(Enum):
 
 # target_type 契约值（ADR-0002: Semantic Check 依据）
 TARGET_TYPES = ("file", "symbol", "text", "none")
+
+
+class Observation(BaseModel):
+    """一次执行观察，作为 Task 的运行时事实记录。"""
+    action: str = ""
+    status: str = "succeeded"
+    summary: str = ""
+    artifact_ids: List[str] = Field(default_factory=list)
+    tool_used: str = ""
+    time_s: float = 0.0
 
 
 class TaskPolicy(BaseModel):
@@ -81,21 +91,31 @@ class Task(BaseModel):
         id: Unique task ID (e.g. "task-1")
         verb: Action verb (fixed enum, not free-form)
         target: What to act on (file path / symbol name / free text)
-        kind: Legacy target kind — kept for compat; prefer target_type
         target_type: Contract type: "file" | "symbol" | "text" | "none"
         goal: Human-readable description
+        description: Detailed task description for the executor
+        success_condition: Deterministic success condition
         dependencies: IDs of tasks that must complete first
+        children: Nested task templates, kept in the same canonical model
+        inputs: Resolved argument bindings supplied by workflow stages
+        observations: Runtime observations produced by the executor
         status: runtime state (pending/running/succeeded/failed/skipped)
+        error: Last execution error, if any
         policy: Execution policy (retry/budget/validator/tool_policy/executor)
     """
     id: str
     verb: Verb = Verb.READ
     target: str = ""
-    kind: str = ""                     # legacy; prefer target_type
     target_type: Literal["file", "symbol", "text", "none"] = "none"
     goal: str = ""
+    description: str = ""
+    success_condition: str = ""
     dependencies: list[str] = Field(default_factory=list)
+    children: List["Task"] = Field(default_factory=list)
+    inputs: Dict[str, Any] = Field(default_factory=dict)
     status: str = "pending"            # runtime state, not part of plan
+    observations: List[Observation] = Field(default_factory=list)
+    error: str = ""
     policy: TaskPolicy = Field(default_factory=TaskPolicy)
 
     @model_validator(mode="after")
@@ -109,19 +129,20 @@ class Task(BaseModel):
         return self
 
     def to_dict(self) -> dict:
-        """Serialize to dict for LLM output parsing backward compat."""
+        """Serialize the canonical Task for planner/runtime boundaries."""
         d = self.model_dump()
         d["verb"] = self.verb.value
+        d["children"] = [child.to_dict() for child in self.children]
+        d["observations"] = [observation.model_dump() for observation in self.observations]
         return d
 
     @staticmethod
     def from_dict(d: dict) -> "Task":
-        """Deserialize from dict (Planner JSON output / legacy task dicts)."""
+        """Deserialize a canonical Task payload."""
         data = dict(d)
         data.setdefault("target", "")
-        data.setdefault("kind", "")
         data.setdefault("status", "pending")
-        # target_type 推断：planner 旧输出可能不含该字段
+        # target_type 推断只处理 canonical payloads that omit an optional field.
         if "target_type" not in data:
             data["target_type"] = Task._infer_target_type(data.get("target", ""))
         verb_str = data.get("verb", "read")
@@ -145,6 +166,11 @@ class Task(BaseModel):
         if "/" in target or "\\" in target or re.search(r"\.\w+", target):
             return "file"
         return "symbol"
+
+
+# Resolve the recursive children field once, so every boundary uses the same
+# canonical Task model instead of planner-specific recursive schemas.
+Task.model_rebuild()
 
 
 @dataclass

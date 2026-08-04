@@ -4,7 +4,6 @@
 Provides tools to query and manage the agent's three-layer memory system:
 - Layer 2: Short-term (recent conversations)
 - Layer 3: Long-term (semantic summaries + user facts)
-- Legacy: Semantic memory + preferences
 """
 from agent.registry.tool_registry import registry
 
@@ -42,11 +41,6 @@ def query_memory(query: str, k: int = 5, user_id: str = "default") -> str:
     if long_term:
         parts.append("【历史摘要】\n" + long_term)
 
-    # Legacy semantic
-    legacy = MemoryService.retrieve_semantic(user_id, query, k=k)
-    if legacy:
-        parts.append("【语义记忆】\n" + legacy)
-
     if not parts:
         return "未找到相关记忆。"
 
@@ -69,12 +63,6 @@ def get_user_preference(user_id: str = "default") -> str:
     result_parts = []
     if facts:
         result_parts.append("已知事实：\n" + facts)
-
-    # Legacy preferences
-    prefs = MemoryService.get_preferences(user_id)
-    if prefs:
-        lines = [f"{k}: {v}" for k, v in prefs.items()]
-        result_parts.append("偏好设置：\n" + "\n".join(lines))
 
     if not result_parts:
         return f"用户 {user_id} 暂无事实或偏好设置。"

@@ -8,13 +8,18 @@
 - IntentEngine: 意图理解引擎
 - IntentResult: 结构化意图结果
 """
-from .cognitive_context import CognitiveContext, ConversationState, ResolvedQuery
+from .cognitive_context import (
+    CognitiveContext,
+    PlannerContext,
+    ConversationState,
+    ResolvedQuery,
+)
 from .intent_schema import IntentResult, ALL_DOMAINS, DOMAIN_DESCRIPTIONS
 from .intent_engine import IntentEngine
 from .reference_resolver import ReferenceResolver
 
 __all__ = [
-    "CognitiveContext", "ConversationState", "ResolvedQuery",
+    "CognitiveContext", "PlannerContext", "ConversationState", "ResolvedQuery",
     "IntentResult", "ALL_DOMAINS", "DOMAIN_DESCRIPTIONS",
     "IntentEngine", "ReferenceResolver",
 ]

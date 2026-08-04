@@ -5,68 +5,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
-def test_dag_scheduler():
-    """Test DAG scheduling resolves tasks in correct order."""
-    from agent.executor.dag import resolve_dag
-
-    tasks = [
-        {"id": "task-1", "dependencies": [], "status": "pending", "goal": "A"},
-        {"id": "task-2", "dependencies": ["task-1"], "status": "pending", "goal": "B"},
-        {"id": "task-3", "dependencies": ["task-1"], "status": "pending", "goal": "C"},
-        {"id": "task-4", "dependencies": ["task-2", "task-3"], "status": "pending", "goal": "D"},
-    ]
-
-    batches = []
-    for batch in resolve_dag(tasks):
-        batches.append(batch)
-        # resolve_dag 契约：调用方执行 batch 后必须更新任务状态
-        for t in batch:
-            t["status"] = "succeeded"
-
-    assert len(batches) == 3
-    assert [t["goal"] for t in batches[0]] == ["A"]
-    assert set(t["goal"] for t in batches[1]) == {"B", "C"}
-    assert [t["goal"] for t in batches[2]] == ["D"]
-    print("✓ DAG scheduling OK")
-
-
-def test_dag_deadlock():
-    """Test DAG deadlock detection."""
-    from agent.executor.dag import resolve_dag
-
-    tasks = [
-        {"id": "task-1", "dependencies": ["task-2"], "status": "pending", "goal": "A"},
-        {"id": "task-2", "dependencies": ["task-1"], "status": "pending", "goal": "B"},
-    ]
-
-    list(resolve_dag(tasks))
-    assert tasks[0]["status"] == "failed"
-    assert tasks[1]["status"] == "failed"
-    print("✓ Deadlock detection OK")
-
-
-def test_flatten_tree():
-    """Test flattening hierarchical tasks into DAG."""
-    from agent.executor.dag import flatten_tree
-
-    tasks = [{
-        "id": "task-1", "goal": "Parent", "dependencies": [],
-        "children": [
-            {"id": "task-1-1", "goal": "Child 1", "dependencies": []},
-            {"id": "task-1-2", "goal": "Child 2", "dependencies": []},
-        ],
-    }]
-
-    flat = flatten_tree(tasks)
-    assert len(flat) == 3
-    child = [t for t in flat if t["id"] == "task-1-1"][0]
-    assert "task-1" in child["dependencies"]
-    print("✓ Tree flattening OK")
-
-
 def test_task_schema():
     """Test the new simplified Task Pydantic schema."""
-    from agent.planner.schemas import Task, TaskList, Observation
+    from agent.planner.schemas import TaskList
+    from agent.task import Observation, Task
 
     task = Task(
         id="task-1", goal="测试目标", description="描述",
@@ -161,30 +103,11 @@ def test_tool_registry_capability():
     print("✓ Tool Registry capability OK")
 
 
-def test_executor_no_tool_decider():
-    """Verify Executor no longer exports ToolDecider."""
-    from agent.executor.executors.react import ReactExecutor as Executor
-
-    assert hasattr(Executor, "execute")
-    assert not hasattr(Executor, "ToolDecider")  # ToolDecider removed
-
-    # Verify executor has ReAct loop structure
-    assert hasattr(Executor, "_execute_task_react")
-    assert hasattr(Executor, "_think")
-    assert hasattr(Executor, "_execute_action")
-
-    print("✓ Executor ReAct structure OK")
-
-
 def run_all_tests():
     tests = [
-        test_dag_scheduler,
-        test_dag_deadlock,
-        test_flatten_tree,
         test_task_schema,
         test_artifact_service,
         test_tool_registry_capability,
-        test_executor_no_tool_decider,
     ]
 
     passed = 0

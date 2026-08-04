@@ -25,7 +25,7 @@ Relation:   dependencies
 Execution:  policy
 ```
 
-- `kind` 已 deprecated（被 `target_type` 取代）。
+- `kind` 已从 canonical Task 删除，由 `target_type` 统一表达目标类型。
 - 任何新需求进入 `policy`：`policy.parallel` / `policy.timeout` / `policy.permission` ...
 - **禁止给 Task 直接加字段**。
 

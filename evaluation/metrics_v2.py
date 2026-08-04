@@ -18,6 +18,28 @@ v1.x 指标（metrics_v1）不迁移、不修改 —— 两个模型并存，互
 """
 from dataclasses import dataclass, field
 from typing import Dict
+from .metrics import MetricCollector, MetricDefinition, MetricReport, TrendGate
+
+
+_LOWER_IS_BETTER_V2 = {
+    "false_diagnosis_rate", "false_confidence", "recovery_count",
+    "context_drift", "latency_ms",
+}
+METRIC_DEFINITIONS_V2 = tuple(
+    MetricDefinition(
+        name=name,
+        direction="le" if name in _LOWER_IS_BETTER_V2 else "ge",
+        capability="intelligence",
+    )
+    for name in (
+        "goal_coverage", "constraint_detection", "task_completeness",
+        "dependency_correctness", "execution_order", "tool_accuracy",
+        "retry_accuracy", "finish_accuracy", "clarification_accuracy",
+        "diagnosis_accuracy", "false_diagnosis_rate", "correction_success",
+        "recovery_improvement", "correct_abstention", "false_confidence",
+        "completion_rate", "recovery_count", "context_drift", "latency_ms",
+    )
+)
 
 
 @dataclass
@@ -56,6 +78,10 @@ class MetricsV2:
     def to_dict(self) -> dict:
         return {k: round(v, 3) for k, v in self.__dict__.items()}
 
+    def to_report(self) -> MetricReport:
+        """统一 MetricDefinition → Collector → Report 入口。"""
+        return MetricCollector(METRIC_DEFINITIONS_V2).collect(self.to_dict())
+
     @staticmethod
     def from_dict(d: dict) -> "MetricsV2":
         base = MetricsV2()
@@ -89,12 +115,13 @@ def trend_gate(current: MetricsV2, previous: MetricsV2) -> tuple:
     Returns:
         (passes: bool, failures: list[str])：failures 列出下降的指标。
     """
-    failures = []
-    for k, spec in INTELLIGENCE_BUDGET.items():
-        cur = getattr(current, k, 0.0)
-        prev = getattr(previous, k, 0.0)
-        if spec["op"] == "ge" and cur < prev - 1e-9:
-            failures.append(f"{k}: {prev:.3f} → {cur:.3f}（下降）")
-        elif spec["op"] == "le" and cur > prev + 1e-9:
-            failures.append(f"{k}: {prev:.3f} → {cur:.3f}（上升，应为 0）")
-    return (len(failures) == 0, failures)
+    # 保持原有 INTELLIGENCE_BUDGET 的范围，只把比较委托给统一 TrendGate。
+    definitions = tuple(
+        definition for definition in METRIC_DEFINITIONS_V2
+        if definition.name in INTELLIGENCE_BUDGET
+    )
+    result = TrendGate.evaluate(
+        MetricCollector(definitions).collect(current.to_dict()),
+        MetricCollector(definitions).collect(previous.to_dict()),
+    )
+    return (result.passes, list(result.failures))

@@ -1,4 +1,4 @@
-"""Compiler (ToolSelector) — stateless compiler: Task → ExecutionPlan.
+"""Compiler — stateless compiler: Task → ExecutionPlan.
 
 ADR-0002 Compiler Boundary — four stages, responsibilities must not mix:
 
@@ -21,7 +21,7 @@ ADR-0002 Compiler Boundary — four stages, responsibilities must not mix:
 
 Compiler is a pure function (Principle 7): compile(task, context) has no side effects.
 Zero tolerance: no guessing, no fixing, no fallback-repair of illegal tasks.
-ToolSelector is the lowering layer: each Rule is a lowering rule.
+Compiler is the lowering layer: each Rule is a lowering rule.
 """
 import re
 from abc import ABC, abstractmethod
@@ -90,14 +90,12 @@ class Compiler:
         self,
         task: Task,
         context: Optional[CompilerContext] = None,
-        **kwargs,
     ) -> ExecutionPlan:
         """Compile a Task into an ExecutionPlan (four stages).
 
         Args:
             task: Planner task (verb + target + target_type + policy)
             context: CompilerContext (workspace/registry/repository) — sole env input.
-            **kwargs: legacy compat (workspace=...) → merged into context.
 
         Returns:
             ExecutionPlan (executor="tool" | "llm")
@@ -106,11 +104,7 @@ class Compiler:
             CompileError: task violates contract or plan fails static check.
         """
         if context is None:
-            context = CompilerContext(**kwargs)
-        elif kwargs:
-            for k, v in kwargs.items():
-                if getattr(context, k, None) is None:
-                    setattr(context, k, v)
+            context = CompilerContext()
 
         # Task policy may force an executor (Stage 投影时已声明)
         if task.policy.executor == "llm":
@@ -123,10 +117,6 @@ class Compiler:
         plan = self._lower(task, context)
         self._static_check(plan, context)
         return plan
-
-    def select(self, task: Task, **services) -> ExecutionPlan:
-        """Backward-compat alias for compile()."""
-        return self.compile(task, **services)
 
     # ── Stage 1: Normalize（只做文本规范化，不猜）──
 
@@ -164,6 +154,14 @@ class Compiler:
     # ── Stage 3: Lower（按 target_type 分派规则 → ExecutionPlan）──
 
     def _lower(self, task: Task, context: CompilerContext) -> ExecutionPlan:
+        # Workflow stages arrive here with resolved Task.inputs and an
+        # explicit tool policy.  Lower those bindings into the same
+        # ExecutionPlan consumed by PlanExecutor; do not create a second
+        # workflow execution path.
+        bound_plan = self._lower_bound_tool(task)
+        if bound_plan is not None:
+            return bound_plan
+
         # 契约内开放任务：text/none → LLM 推理
         if task.target_type in ("text", "none"):
             return ExecutionPlan(task=task, steps=[], executor="llm")
@@ -184,6 +182,57 @@ class Compiler:
             return fallback
 
         return ExecutionPlan(task=task, steps=[], executor="llm")
+
+    @staticmethod
+    def _lower_bound_tool(task: Task) -> Optional[ExecutionPlan]:
+        policy = task.policy.tool_policy or {}
+        allowed = list(policy.get("allow", []) or [])
+        inputs = task.inputs or {}
+        if task.policy.executor != "tool" or not allowed or not inputs:
+            return None
+
+        def value(name: str):
+            return inputs.get(name)
+
+        if "read_file" in allowed and value("path") is not None:
+            return ExecutionPlan(
+                task=task,
+                steps=[ExecutionStep(
+                    tool="filesystem.read",
+                    args={"path": str(value("path"))},
+                    outputs=["content"],
+                )],
+            )
+        if "run_python" in allowed and value("code") is not None:
+            return ExecutionPlan(
+                task=task,
+                steps=[ExecutionStep(
+                    tool="run_python",
+                    args={"code": str(value("code"))},
+                    outputs=["result"],
+                )],
+            )
+        if "write_file" in allowed and value("path") is not None and value("content") is not None:
+            return ExecutionPlan(
+                task=task,
+                steps=[
+                    ExecutionStep(
+                        tool="workspace",
+                        args={"spec": str(value("path"))},
+                        outputs=["path"],
+                    ),
+                    ExecutionStep(
+                        tool="filesystem.write",
+                        args={
+                            "path": "$path",
+                            "content": str(value("content")),
+                            "mode": str(value("mode") or "overwrite"),
+                        },
+                        outputs=["result"],
+                    ),
+                ],
+            )
+        return None
 
     def _fallback(self, task: Task, **services) -> ExecutionPlan:
         """Fallback plan: resolve target, then try to read it."""
@@ -271,17 +320,3 @@ class Compiler:
             return registry.get(actual) is not None
         except Exception:
             return True  # registry 不可用时跳过（防御）
-
-    # ── Legacy SPI（保留测试兼容）──
-
-    def _legacy_select(self, task: Task, **services) -> ExecutionPlan:
-        """Original select() behavior: raises on no match, fallback always tool."""
-        for rule in self._rules:
-            if rule.matches(task):
-                return rule.build(task, **services)
-        return self._fallback(task, **services)
-
-
-# 兼容别名：ToolSelector == Compiler（Lowering 层语义）
-ToolSelector = Compiler
-

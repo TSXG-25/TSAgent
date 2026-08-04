@@ -1,4 +1,4 @@
-"""All ToolSelector rules. Imported to register themselves.
+"""All Compiler lowering rules. Imported to register themselves.
 
 New capability = new rule file + import here.
 """

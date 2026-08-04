@@ -2,7 +2,7 @@
 """ExecutionContext — 统一运行时上下文。
 
 ExecutionContext 是 Agent 执行过程中所有数据的统一容器。
-Executor、WorkflowExecutor、ReAct Executor 都共享同一个 Context。
+Executor、WorkflowExecutor 都共享同一个 Context。
 合并了旧 ContextService 的 Prompt 组装能力。
 
 包含:
@@ -32,11 +32,11 @@ class ExecutionContext:
         messages: 消息历史
         workflow_id: 当前 Workflow 标识
         stage_id: 当前 Stage 标识
-        facts: 当前 Facts（来自 ReAct 阶段）
+        facts: 当前执行 Facts
         action_history: 操作历史（紧凑格式）
         failure_history: 失败记录（含 signature 去重）
         user_input: 用户原始输入
-        task: 当前 Task/Node
+        task: 当前 Task
         memory: 附加运行时变量
         budget: 资源预算管理器
         variables: 运行环境变量（workspace, working_directory, env）
@@ -148,3 +148,54 @@ class ExecutionContext:
             "action_history": list(self.action_history[-5:]),
             "user_input": self.user_input,
         }
+
+    def runtime_view(self, user_id: str = "", request_id: str = ""):
+        """返回共享 RuntimeContext 快照，不暴露可变执行容器。"""
+        from agent.context.contracts import RuntimeContext
+
+        return RuntimeContext(
+            request_id=request_id,
+            user_id=user_id,
+            query=self.user_input,
+            metadata={
+                "workflow_id": self.workflow_id,
+                "stage_id": self.stage_id,
+            },
+        )
+
+    def executor_view(self, user_id: str = "", request_id: str = ""):
+        """返回 ExecutorContext 的只读投影。"""
+        from agent.context.contracts import ExecutorContext
+
+        if self.task is None:
+            raise ValueError("ExecutionContext.task 为空，无法创建 ExecutorContext")
+        return ExecutorContext(
+            runtime=self.runtime_view(user_id=user_id, request_id=request_id),
+            task=self.task,
+            artifacts=self.artifacts,
+            facts=self.facts,
+            action_history=self.action_history,
+            failure_history=self.failure_history,
+            variables=self.variables,
+        )
+
+    def reflection_view(
+        self,
+        task_id: str = "",
+        failure: str = "",
+        evidence: Optional[list] = None,
+        symptom: str = "",
+    ):
+        """返回 ReflectionContext，仅携带失败证据而非整个 Runtime。"""
+        from agent.context.contracts import ReflectionContext
+
+        return ReflectionContext(
+            runtime=self.runtime_view(),
+            task_id=task_id or (self.task.id if self.task else ""),
+            failure=failure,
+            evidence=evidence or [],
+            symptom=symptom,
+            retry_count=len(self.failure_history),
+            last_action=(self.action_history[-1].get("task", "")
+                          if self.action_history else ""),
+        )

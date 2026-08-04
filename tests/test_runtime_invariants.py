@@ -67,21 +67,19 @@ class TestInv4_NoTracebackLeak:
         assert "TypeError" not in out
 
 
-class TestInv3_UnifiedWorkflowResult:
-    """所有 workflow 签名统一（resolved_target + **kwargs 兼容）。"""
+class TestInv3_CanonicalWorkflowRegistry:
+    """WorkflowRegistry 只接受 canonical Workflow 定义。"""
 
-    def test_all_workflows_have_unified_signature(self):
-        import inspect
-        import workflows.bug_fix
-        import workflows.code_review
-        import workflows.research
+    def test_all_registered_workflows_are_canonical(self):
+        import workflows.code_generation
+        from agent.registry.workflow_registry import workflow_registry
+        from agent.workflow import Workflow
 
-        for mod in (workflows.bug_fix, workflows.code_review, workflows.research):
-            funcs = [f for n, f in vars(mod).items() if n.endswith("workflow")]
-            for fn in funcs:
-                sig = inspect.signature(fn)
-                assert "**kwargs" in str(sig) or "resolved_target" in str(sig), \
-                    f"{mod.__name__}.{fn.__name__} 未统一签名"
+        assert workflow_registry.list()
+        assert all(
+            isinstance(workflow_registry.get(name), Workflow)
+            for name in workflow_registry.list()
+        )
 
 
 class TestInv5_PlannerIsolation:
@@ -102,9 +100,9 @@ class TestInv5_PlannerIsolation:
             "Planner 直接调用 workspace.resolve"
 
     def test_planner_gets_grounding_not_raw(self):
-        # generate_plan 的 grounding 参数是 GroundingContext（整理后世界）
+        # plan_with_metadata 的 grounding 参数是 GroundingContext（整理后世界）
         import inspect
-        from agent.planner.planner import generate_plan
+        from agent.planner.planner import plan_with_metadata
 
-        params = inspect.signature(generate_plan).parameters
-        assert "grounding" in params, "generate_plan 缺少 grounding（Planner Isolation）"
+        params = inspect.signature(plan_with_metadata).parameters
+        assert "grounding" in params, "plan_with_metadata 缺少 grounding（Planner Isolation）"

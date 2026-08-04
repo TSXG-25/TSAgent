@@ -27,6 +27,7 @@ from agent.llm import llm as default_llm
 from langchain_core.messages import SystemMessage, HumanMessage
 
 from .cognitive_context import CognitiveContext, ResolvedQuery
+from .execution_need import analyze_execution_need
 from .intent_schema import (
     IntentResult,
     DOMAIN_CHAT, DOMAIN_KNOWLEDGE, DOMAIN_CREATION,
@@ -73,6 +74,13 @@ _KEYWORD_MAP: list[tuple[re.Pattern, str, str, bool]] = [
 
     # 创作（精确短语，避免"大小写/拼写"的"写"作为语素时误判为创作）
     (re.compile(r'写[一首篇个段]{0,2}[诗故事小说剧本文案]|作诗|赋诗|创作|生成.*[诗故事文案]'), DOMAIN_CREATION, "generate", False),
+
+    # 记忆查询必须早于“编程/开发”关键词，否则“我最喜欢什么编程语言”
+    # 会被误判为代码开发并进入执行链。
+    (re.compile(r'我.*(?:住|居住|来自|所在).*(?:城市|哪里|哪儿|地点)?|'
+                r'我的.*(?:编程语言|语言|城市|所在地|职业|编辑器|框架|项目)|'
+                r'我.*(?:喜欢|最喜欢).*(?:编程语言|语言|框架|编辑器|IDE)'),
+     DOMAIN_MEMORY, "query", False),
 
     # 代码开发
     (re.compile(r'写.*[代码程序函数类]|编程|开发|实现.*功能|写.*[接口模块]|修复.*bug|debug|重构'), DOMAIN_DEVELOPMENT, "code", True),
@@ -312,6 +320,10 @@ class IntentEngine:
         # 先提取 target（从原始输入）
         raw_target = _extract_target(user_input)
 
+        # 执行需求分析（World State Change → 确定性 requires_execution；v2.1A）。
+        # LLM 不参与"是否执行"决策（ADR-0009），regex 规则也不堆在 Intent 里。
+        need = analyze_execution_need(user_input)
+
         # Stage 1: 关键词快速匹配
         for pattern, domain, action, requires_exec in _KEYWORD_MAP:
             if pattern.search(text):
@@ -324,7 +336,7 @@ class IntentEngine:
                     entities=_merge_entities([], context),
                     current_file=context.current_file or "",
                     confidence=0.85,
-                    requires_execution=requires_exec,
+                    requires_execution=need if need is not None else requires_exec,
                     summary=f"{domain}: {action}",
                     raw_input=user_input,
                 )
@@ -339,6 +351,10 @@ class IntentEngine:
         result.target = final_target
         result.entities = _merge_entities(result.entities, context)
         result.current_file = context.current_file or ""
+
+        # 确定性覆盖：World State Change / 明确信息类请求优先于 LLM 判定
+        if need is not None:
+            result.requires_execution = need
 
         return result
 
@@ -409,11 +425,12 @@ class IntentEngine:
             )
 
         except Exception as e:
-            # LLM 失败时保守处理：走 Planner
+            # LLM 失败时保守处理：走 Planner（World State Change 仍优先于保守默认）
+            _need = analyze_execution_need(user_input)
             return IntentResult(
                 domain=DOMAIN_UNKNOWN,
                 confidence=0.3,
-                requires_execution=True,
+                requires_execution=_need if _need is not None else True,
                 summary=f"意图理解失败 ({e})，默认走执行路径",
                 raw_input=user_input,
             )

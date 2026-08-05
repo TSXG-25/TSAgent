@@ -72,6 +72,18 @@ RULES = (
             "agent.services.memory_service",
         ),
     ),
+    BoundaryRule(
+        "checkpoint",
+        "agent/checkpoint",
+        (
+            "agent.runtime",
+            "agent.services",
+            "agent.orchestrator",
+            "agent.planner",
+            "agent.executor",
+            "agent.workflow",
+        ),
+    ),
 )
 
 

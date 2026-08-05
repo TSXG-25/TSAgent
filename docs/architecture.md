@@ -180,5 +180,30 @@ python3 -m venv .venv
 - 不开启 Replay、REST/SDK、AST/LSP 等 v2.1 Runtime Evolution。
 - 不扩大 `AgentState` 责任，不把 Runtime Cache 重新升级为领域模型。
 
+## 8. v2.2A Run Checkpoint Contract
+
+v2.2A 将可恢复执行的事实从零散 Runtime evidence 收敛为不可变
+`RunCheckpoint` 链。它是 Runtime 的事实边界，不是新的 Orchestrator：
+
+```mermaid
+flowchart LR
+    R[RunCheckpoint] --> V[ResumeValidator]
+    C[Current Context] --> V
+    G[External State Evidence] --> V
+    K[Compatibility Registry] --> V
+    V --> D[ResumeDecision]
+    R --> P[pending_target projection]
+    P --> CV[Conversation Runtime]
+```
+
+边界规则：
+
+- `RunCheckpoint` 只记录不可变事实；每次状态变化创建新的 parent-linked snapshot。
+- `ResumeDisposition`（Allow / Clarification / Reject）与 `ResumeAction` 分离。
+- `ResumeValidator` 只消费结构化当前事实，不查询文件、API、数据库或 Tool。
+- `pending_target` 只能由 Checkpoint 单向投影，不能反向重建 Run。
+- v2.2A 只冻结 schema、codec、lifecycle、compatibility、validator 和 Oracle；
+  Workflow Runtime 接入属于 v2.2B，跨 Workflow 寻址属于 v2.2C。
+
 v2.0 RC 的目标不是功能更多，而是：依赖可复现、边界可解释、门禁可自动执行、
 真实 Demo 可验收，并最终能够安全打 `v2.0.0` Tag。

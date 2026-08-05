@@ -33,3 +33,5 @@ python-docx
 torch
 torchvision
 torchaudio
+# Static cross-module contract verification (CI and local development)
+mypy==1.17.1

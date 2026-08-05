@@ -36,8 +36,14 @@ jobs:
       - name: Contract Verification
         run: python evaluation/benchmark/contract_verification.py
 
+      - name: Run Checkpoint Contract Validation
+        run: python -m benchmarks.checkpoint.validate
+
       - name: Architecture Verification
         run: python evaluation/architecture_verification.py
+
+      - name: Static cross-module contract checks
+        run: python -m mypy --config-file mypy.ini agent/conversation/state.py agent/conversation/__init__.py agent/orchestrator/planner.py
 
       - name: Reflection and Decision benchmarks
         run: |

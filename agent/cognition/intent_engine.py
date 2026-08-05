@@ -68,6 +68,19 @@ _KEYWORD_MAP: list[tuple[re.Pattern, str, str, bool]] = [
     # 翻译
     (re.compile(r'翻译|译成|用.*怎么说|英文.*意思|中文.*意思'), DOMAIN_TRANSLATION, "translate", False),
 
+    # Conversation Runtime continuation contract（ADR-0013）。
+    # 裸“继续”留给 Planner 根据 runtime_pending 分流；这些显式短语可在认知层
+    # 确定地表达行为，不依赖一次 LLM 分类。
+    (re.compile(r'^(继续执行(?:任务|未完成的任务|未完成任务)?|继续任务|继续做|继续处理|继续完成|完成剩余任务|恢复任务|接着做|接着执行)$'),
+     DOMAIN_DEVELOPMENT, "continue_plan", True),
+    (re.compile(r'^(继续讲|继续解释|继续回答|接着说|展开说|再详细一点|详细一点)$'),
+     DOMAIN_CHAT, "continue_chat", False),
+    (re.compile(r'^(那个呢|这个呢|上一个呢|前面那个|继续那个|继续这个)$'),
+     DOMAIN_MEMORY, "reference", False),
+
+    # 代码生成（先于数学"函数"，避免"写一个判断素数的函数"被判成 math）
+    (re.compile(r'写.{0,14}[代码程序函数脚本类]|写.{0,12}(排序|快排|查找|遍历|递归|接口|模块)'), DOMAIN_DEVELOPMENT, "code", True),
+
     # 数学（简单计算走 LLM 直答；复杂计算/脚本才用工具）
     (re.compile(r'计算|算一下|算算|等于|方程|求导|积分|函数|公式|解.*方程'), DOMAIN_MATH, "calculate", False),
     (re.compile(r'^\d+[+\-*/]\d+|^\d+\.\d+'), DOMAIN_MATH, "calculate", False),
@@ -96,6 +109,7 @@ _KEYWORD_MAP: list[tuple[re.Pattern, str, str, bool]] = [
 
     # 文件操作
     (re.compile(r'读取.*文件|打开.*文件|写入.*文件|创建.*文件|删除.*文件|列出.*目录|浏览.*目录'), DOMAIN_FILE, "operate", True),
+    (re.compile(r'保存到|保存为|写入到|写到|追加到|另存为'), DOMAIN_FILE, "write", True),
     (re.compile(r'^读取\s+\S+|^读\s+\S+|^打开\s+\S+|^查看\s+\S+|^阅读\s+\S+'), DOMAIN_FILE, "operate", True),
     (re.compile(r'read.*file|write.*file|list.*dir'), DOMAIN_FILE, "operate", True),
 
@@ -108,6 +122,45 @@ _KEYWORD_MAP: list[tuple[re.Pattern, str, str, bool]] = [
     # 日程
     (re.compile(r'提醒|闹钟|待办|日程|计划|安排'), DOMAIN_SCHEDULING, "remind", True),
 ]
+
+# ── 引用问题字段判定（Intent Engine 职责；Conversation 层只做纯映射）──
+_REFERENCE_KIND_PATTERNS = [
+    (re.compile(r"答案|回答|结果|多少|等于|算出|得数"), "answer"),
+    (re.compile(r"(?:继续|接着).*(?:刚才|上一个|前面|那个|这个|第[一二三四五六七八九十\d]+个)"), "instruction"),
+    (re.compile(r"(?:刚才|上一个|前面|那个|这个).*(?:函数|方法|类|文件|任务|指令)?"), "instruction"),
+    (re.compile(r"继续|接着|恢复|接着做|继续做"), "runtime"),
+    (re.compile(r"做什么|干什么|任务|目标|要求|指令|让我|建议|方案|上一条|之前.*什么"), "instruction"),
+]
+
+
+def _detect_reference_kind(text: str) -> str:
+    """判定引用类问题指向的字段。仅用于 reference 语义；非引用输入返回空。"""
+    for pattern, kind in _REFERENCE_KIND_PATTERNS:
+        if pattern.search(text):
+            return kind
+    if re.fullmatch(r"(?:那个呢|这个呢|上一个呢|前面那个|继续那个|继续这个)", text.strip()):
+        return "instruction"
+    return ""
+
+
+# ── Domain Upgrade（v2.1B-3，ADR-0013 关联）──
+# ExecutionNeedAnalysis 判定 World State Change（need=True）时，非执行域
+# （chat/math/translation/creation）不得保持原域——否则"写一个判断素数的函数"
+# 会被判成 math（函数关键词）而永远进不了执行链/目标判定。
+_NON_EXEC_DOMAINS = frozenset({
+    DOMAIN_CHAT, DOMAIN_MATH, DOMAIN_TRANSLATION, DOMAIN_CREATION,
+})
+
+
+def _upgrade_domain(domain: str, need: Optional[bool]) -> str:
+    """need=True（World State Change）时，非执行域 → development。
+
+    这是 Runtime Compiler 的确定性规则（ADR-0009），不是 regex。
+    """
+    if need is True and domain in _NON_EXEC_DOMAINS:
+        return DOMAIN_DEVELOPMENT
+    return domain
+
 
 # ── LLM 分析 Prompt ──
 LLM_INTENT_PROMPT = """你是一个 Agent 意图理解引擎。分析用户输入，结合上下文信息，输出结构化意图。
@@ -330,7 +383,7 @@ class IntentEngine:
                 # 合并 target
                 final_target = _merge_target(raw_target, context)
                 return IntentResult(
-                    domain=domain,
+                    domain=_upgrade_domain(domain, need),
                     action=action,
                     target=final_target,
                     entities=_merge_entities([], context),
@@ -339,6 +392,7 @@ class IntentEngine:
                     requires_execution=need if need is not None else requires_exec,
                     summary=f"{domain}: {action}",
                     raw_input=user_input,
+                    reference_kind=_detect_reference_kind(user_input),
                 )
 
         # Stage 2: LLM 1-shot 分析（domain/action 可 LLM 判定）
@@ -351,6 +405,8 @@ class IntentEngine:
         result.target = final_target
         result.entities = _merge_entities(result.entities, context)
         result.current_file = context.current_file or ""
+        result.reference_kind = _detect_reference_kind(user_input)
+        result.domain = _upgrade_domain(result.domain, need)
 
         # 确定性覆盖：World State Change / 明确信息类请求优先于 LLM 判定
         if need is not None:

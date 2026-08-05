@@ -4,6 +4,7 @@ Integrations should depend on ``TSAgent`` rather than the internal runtime
 orchestrator classes.  The runtime remains replaceable behind this facade.
 """
 from agent.runtime import UniversalAgent
+from agent.session_runtime import SessionRuntime
 
 
 class TSAgent:
@@ -21,3 +22,6 @@ class TSAgent:
         if not isinstance(user_input, str) or not user_input.strip():
             raise ValueError("user_input must be a non-empty string")
         return await self._runtime.run(user_input)
+
+
+__all__ = ["TSAgent", "SessionRuntime"]

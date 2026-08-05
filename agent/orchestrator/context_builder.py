@@ -106,6 +106,7 @@ class ContextBuilder:
             workspace=ws_context,
             plan=plan,
             task=current_task,
+            runtime_pending_target=str(context.get("runtime_pending_target", "") or ""),
             repository_context=repo_context,
             repository_symbols=repository_symbols,
             memory=memory,

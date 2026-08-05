@@ -181,14 +181,24 @@ def get_facts_text(user_id: str) -> str:
 
 # === Clear ===
 
-def clear_all(user_id: str) -> None:
-    """Clear all long-term memories for a user."""
+def clear_summaries(user_id: str) -> None:
+    """Clear semantic summaries for one user namespace."""
     try:
         _get_store().delete(where={"user_id": user_id})
     except Exception:
         pass
+
+
+def clear_facts(user_id: str) -> None:
+    """Clear extracted facts for one user namespace."""
     try:
         with sqlite3.connect(FACTS_DB_PATH) as conn:
             conn.execute("DELETE FROM facts WHERE user_id = ?", (user_id,))
     except Exception:
         pass
+
+
+def clear_all(user_id: str) -> None:
+    """Clear summaries and facts for one user namespace."""
+    clear_summaries(user_id)
+    clear_facts(user_id)

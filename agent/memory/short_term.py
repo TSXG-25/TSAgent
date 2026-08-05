@@ -155,3 +155,16 @@ def get_history(user_id: str, n: int | None = None) -> str:
 def get_latest_exchanges(user_id: str, n: int = 3) -> Optional[str]:
     """Get the latest N exchanges for quick recall (always injected)."""
     return get_history(user_id, n=n)
+
+
+def clear_history(user_id: str) -> None:
+    """Delete the short-term history for one namespace.
+
+    Lifecycle code calls this with an exact user/session namespace; it never
+    removes the whole short-term store.
+    """
+    path = _store_path(user_id)
+    try:
+        path.unlink(missing_ok=True)
+    except OSError:
+        logger.warning("清理短期记忆失败: %s", path)

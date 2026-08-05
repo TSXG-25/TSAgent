@@ -66,6 +66,9 @@ class ExecutionStage:
             if ws_service:
                 context.set_var("workspace", ws_service)
             context.set_var("execution_plan", plan)
+            context.set_var("conversation_snapshot", state.get("conversation_snapshot"))
+            context.set_var("conversation_reference_type", state.get("conversation_reference_type"))
+            context.set_var("conversation_runtime_continuation", state.get("conversation_runtime_continuation"))
 
             try:
                 executor = executor_factory.get(plan.executor)

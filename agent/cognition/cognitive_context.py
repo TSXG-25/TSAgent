@@ -207,6 +207,9 @@ class CognitiveContext:
     # 当前正在执行的任务
     task: Optional[dict] = None
 
+    # Runtime 对未完成执行目标的只读投影；ConversationState 不保存 plan/task。
+    runtime_pending_target: str = ""
+
     # Repository 上下文（代码片段/符号索引）
     repository_context: str = ""
 

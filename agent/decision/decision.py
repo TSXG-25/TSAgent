@@ -16,7 +16,7 @@ PolicyRegistry：可被 v2.1 Failure Learning 动态更新（Policy Suggestion �
 设计纪律（ADR-0009）：全部确定性，无 LLM。
 """
 from dataclasses import dataclass, field
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 # ── Action 集合（v2.0-D 固定四个动作） ──
 RETRY, SWITCH, ASK, FINISH = "retry", "switch", "ask", "finish"
@@ -67,11 +67,16 @@ POLICY_TABLE = {
 
 @dataclass(frozen=True)
 class DecisionInput:
-    """Decision 输入（三件套，严格边界）。"""
+    """Decision 输入（三件套，严格边界）。
+
+    conversation: 可选会话快照（ConversationSnapshot，纯数据）。仅用于
+    "存在最近目标 → 自动恢复而非 Ask User"（v2.1B-1 / ADR-0013）。
+    """
     diagnosis: str
     diagnosis_confidence: float
     state: ExecutionState = field(default_factory=ExecutionState)
     event_id: str = ""
+    conversation: Optional[object] = None  # ConversationSnapshot（不 import，避免耦合）
 
     @classmethod
     def from_reflection_context(
@@ -162,7 +167,20 @@ def decide(inp: DecisionInput) -> Tuple[Decision, DecisionTrace]:
         action = ASK
         conf = _decision_confidence(inp.diagnosis_confidence, ASK, st, policy)
 
-    rule = _rule_name(inp.diagnosis, action, st, policy, inp.diagnosis_confidence)
+    # v2.1B-1（ADR-0013）：存在会话上下文（recent_goal）且策略允许重试 → 自动恢复
+    resume_rule = None
+    conv = getattr(inp, "conversation", None)
+    if action == ASK and conv is not None and getattr(conv, "recent_goal", ""):
+        if RETRY in allowed and st.retry_count < policy.max_retry:
+            action = RETRY
+            conf = _decision_confidence(inp.diagnosis_confidence, RETRY, st, policy)
+            resume_rule = "conversation_resume"
+        elif SWITCH in allowed:
+            action = SWITCH
+            conf = _decision_confidence(inp.diagnosis_confidence, SWITCH, st, policy)
+            resume_rule = "conversation_resume_switch"
+
+    rule = resume_rule or _rule_name(inp.diagnosis, action, st, policy, inp.diagnosis_confidence)
     rejected = [a for a in policy.allowed if a != action]
 
     decision = Decision(action=action, confidence=conf,

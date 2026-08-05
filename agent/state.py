@@ -30,5 +30,9 @@ class AgentState(TypedDict, total=False):
     skill_hint: str
     retries: int
     workflow: Optional[str]
+    conversation_intent: str
     reflection: Optional[Dict]
     decision: Optional[Dict]
+    diagnostics: List[Dict[str, Any]]
+    resolved_target: str
+    conversation_clarification_required: bool

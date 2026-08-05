@@ -80,3 +80,11 @@ def record_resolution(
 def get_resolutions(user_id: str, n: int = 20) -> list:
     """最近 N 条跨会话解析事实（旧 → 新）。"""
     return _load(user_id)[-n:]
+
+
+def clear_resolutions(user_id: str) -> None:
+    """删除一个 user/session namespace 的解析记忆。"""
+    try:
+        _path(user_id).unlink(missing_ok=True)
+    except OSError:
+        pass

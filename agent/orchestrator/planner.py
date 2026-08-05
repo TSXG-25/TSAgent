@@ -36,10 +36,102 @@ from agent.registry.skill_registry import skill_registry
 from agent.router.workflow_router import router as workflow_router
 from agent.cognition.intent_engine import engine as intent_engine
 from agent.workflow import ExecutionContext, Artifact, Workflow
-from agent.task import Task, Verb
+from agent.task import ExecutionPlan, Task, Verb
 from agent.compiler.context import CompilerContext
 from agent.registry.tool_registry import registry as _tool_registry
-from agent.cognition.intent_schema import DOMAIN_MEMORY
+from agent.cognition.intent_schema import DOMAIN_CHAT, DOMAIN_DEVELOPMENT, DOMAIN_MEMORY
+
+
+def _render_runtime_continuation(state: AgentState) -> str:
+    """CONTINUE_PLAN（继续）：从 Runtime 状态恢复当前执行，不占 Conversation 边界。
+
+    Conversation 负责 recent_goal/last_answer；当前 plan/task 属于 Runtime。
+    """
+    plan = state.get("plan", []) or []
+    active = [t for t in plan if t.get("status") in ("pending", "running")]
+    if not active:
+        return ""
+    parts = ["## 当前执行（继续此前的任务，必须基于此回答）"]
+    for t in active[:3]:
+        goal = str(t.get("goal", "")).strip()
+        if goal:
+            parts.append(f"- 进行中任务: {goal}")
+    return "\n".join(parts) if len(parts) > 1 else ""
+
+
+def _normalize_continuation_target(target: str) -> str:
+    return str(target or "").strip().replace("\\", "/").casefold().rstrip("/")
+
+
+def _record_contract_diagnostic(state: AgentState, operation: str, error: Exception) -> None:
+    from agent.diagnostics import handle_contract_violation
+
+    event = handle_contract_violation(
+        boundary="planner",
+        operation=operation,
+        expected="ConversationRetrieverProtocol.get/snapshot/runtime_pending/events",
+        error=error,
+    )
+    state.setdefault("diagnostics", []).append({
+        "type": "contract_violation",
+        "event_id": event.id,
+        "failure": event.failure,
+    })
+
+
+def _apply_conversation_contract(
+    intent,
+    user_id: str,
+    user_input: str,
+    *,
+    pending_target: str = "",
+    reference_target: str = "",
+):
+    """Apply ADR-0013 continuation semantics before routing.
+
+    The Conversation Runtime supplies only the previous ``runtime_pending`` bit;
+    it does not own or reconstruct a plan.  Explicit continuation phrases are
+    classified by IntentEngine, while a bare "继续" is resolved against that bit.
+    """
+    from agent.conversation import (
+        ConversationIntent,
+        classify_conversation_intent,
+        conversation_retriever,
+    )
+
+    kind = classify_conversation_intent(
+        intent,
+        user_input,
+        runtime_pending=conversation_retriever.runtime_pending(user_id),
+    )
+    if kind is ConversationIntent.CONTINUE_PLAN:
+        intent.domain = DOMAIN_DEVELOPMENT
+        intent.action = "continue_plan"
+        intent.requires_execution = True
+        intent.reference_kind = "runtime"
+    elif kind is ConversationIntent.CONTINUE_CHAT:
+        intent.domain = DOMAIN_CHAT
+        intent.action = "continue_chat"
+        intent.requires_execution = False
+        intent.reference_kind = "answer"
+    elif kind is ConversationIntent.CONTINUE_REFERENCE:
+        if (
+            pending_target
+            and reference_target
+            and _normalize_continuation_target(pending_target)
+            != _normalize_continuation_target(reference_target)
+        ):
+            intent.domain = DOMAIN_CHAT
+            intent.action = "clarify"
+            intent.requires_execution = False
+            intent.reference_kind = "instruction"
+            intent.summary = "引用目标与未完成执行目标冲突，需要澄清"
+            return kind
+        intent.domain = DOMAIN_MEMORY
+        intent.action = "reference"
+        intent.requires_execution = False
+        intent.reference_kind = "instruction"
+    return kind
 
 
 def _extract_workflow_output_path(user_input: str) -> str:
@@ -128,12 +220,32 @@ class PlannerStage:
         # ── Stage 0.5: ReferenceResolver 消歧（v1.2B：产出 ResolutionResult）──
         resolved = self._orch._reference_resolver.resolve(user_input, planner_context)
         planner_context.resolved_query = resolved.to_resolved_query()
+        state["resolved_target"] = resolved.target or ""
         if resolved.resolution_trace:
             print(f"  🔍 引用消歧: {resolved.resolution_trace}")
 
         # ── Stage 1: IntentEngine 意图理解（消费 CognitiveContext）──
         intent = intent_engine.analyze(planner_context)
         print(f"  🧠 意图: {intent}")
+
+        # v2.1B-1/2：记录本轮 intent + 会话快照 + 引用类型 + Runtime 续接
+        self._orch.last_intent = intent
+        try:
+            from agent.conversation import conversation_retriever, resolve_reference_type
+            conversation_kind = _apply_conversation_contract(
+                intent,
+                user_id,
+                user_input,
+                pending_target=getattr(planner_context, "runtime_pending_target", ""),
+                reference_target=resolved.target,
+            )
+            state["conversation_intent"] = conversation_kind.value
+            state["conversation_snapshot"] = conversation_retriever.snapshot(user_id)
+            state["conversation_reference_type"] = resolve_reference_type(intent).value
+            state["conversation_runtime_continuation"] = _render_runtime_continuation(state)
+            state["conversation_clarification_required"] = intent.action == "clarify"
+        except (AttributeError, ImportError, KeyError, TypeError) as exc:
+            _record_contract_diagnostic(state, "conversation_contract", exc)
 
         # 更新跨轮对话状态（State = Cache：timeline 写入；last_* 为 Deprecated 双写）
         self._orch._context_builder.update_conversation_state(intent, resolution=resolved)
@@ -149,6 +261,13 @@ class PlannerStage:
 
         # 不要求执行（chat / translation / math / creation / identity 等）→ 直接 LLM 回答
         if not intent.requires_execution:
+            if intent.action == "clarify":
+                answer = (
+                    "你提到的引用目标与当前未完成任务可能不是同一个对象。"
+                    "请明确要继续当前未完成任务，还是继续你刚才提到的引用目标。"
+                )
+                MemoryService.record_full_exchange(user_id, user_input, answer)
+                return state, "FINISH", answer
             if intent.domain == DOMAIN_MEMORY:
                 _facts = ""
                 try:
@@ -161,6 +280,24 @@ class PlannerStage:
                         f"{_facts}\n"
                         "规则：只能基于上述事实回答；事实中不存在则如实说明未记录，禁止编造。"
                     )
+            # v2.1B-2（ADR-0013）：Conversation Reference Resolver —— 只注入对应字段
+            try:
+                from agent.conversation import (
+                    conversation_retriever, resolve_reference_type,
+                    ReferenceType, render_reference,
+                )
+                _ref_type = resolve_reference_type(intent)
+                if _ref_type is ReferenceType.LAST_RUNTIME:
+                    _cont = state.get("conversation_runtime_continuation", "") or ""
+                    if _cont:
+                        system_content += f"\n\n{_cont}"
+                elif _ref_type is not ReferenceType.UNKNOWN:
+                    _inj = render_reference(
+                        conversation_retriever.snapshot(user_id), _ref_type)
+                    if _inj:
+                        system_content += f"\n\n{_inj}"
+            except (AttributeError, ImportError, KeyError, TypeError) as exc:
+                _record_contract_diagnostic(state, "conversation_reference_injection", exc)
             try:
                 response = await llm.ainvoke([
                     SystemMessage(content=system_content),
@@ -253,7 +390,7 @@ class PlannerStage:
                 print(f"  ⚠️ Grounding 失败（忽略）: {e}")
 
             plan = None
-            execution_plans = []
+            execution_plans: list[ExecutionPlan] = []
             last_error = ""
             planner_input = user_input
             for attempt in range(3):
@@ -354,7 +491,7 @@ class PlannerStage:
             f"原始需求：{user_input}"
         )
         plan = None
-        execution_plans = []
+        execution_plans: list[ExecutionPlan] = []
         for attempt in range(2):
             try:
                 plan_output = await plan_with_metadata(
@@ -448,7 +585,7 @@ class PlannerStage:
             t["facts"].update(preserved_facts)
 
         # 重新生成 ExecutionPlan
-        execution_plans = []
+        execution_plans: list[ExecutionPlan] = []
         for t in new_plan:
             task_obj = Task.from_dict(t)
             ep = self._orch._selector.compile(

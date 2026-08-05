@@ -68,6 +68,23 @@ class LLMExecutor:
         user_content = task.goal
         if extra_parts:
             user_content += "\n\n" + "\n\n".join(extra_parts)
+        # v2.1B-2（ADR-0013）：Conversation Reference Resolver —— 只注入对应字段
+        if context is not None:
+            _snap = context.get_var("conversation_snapshot")
+            _ref = context.get_var("conversation_reference_type")
+            _cont = context.get_var("conversation_runtime_continuation")
+            if _snap:
+                try:
+                    from agent.conversation import ReferenceType, render_reference
+                    _ref_type = ReferenceType(_ref) if _ref in ReferenceType._value2member_map_ else ReferenceType.UNKNOWN
+                    if _ref_type is ReferenceType.LAST_RUNTIME and _cont:
+                        user_content += "\n\n" + str(_cont)
+                    elif _ref_type is not ReferenceType.UNKNOWN:
+                        _txt = render_reference(_snap, _ref_type)
+                        if _txt:
+                            user_content += "\n\n" + _txt
+                except Exception:
+                    pass
 
         messages = [
             SystemMessage(content=system_prompt),

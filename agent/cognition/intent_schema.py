@@ -70,6 +70,7 @@ class IntentResult:
     requires_execution: bool = True
     summary: str = ""
     raw_input: str = ""
+    reference_kind: str = ""   # 引用类意图的目标字段提示（answer/instruction/runtime/goal）；Intent Engine 判定
 
     @property
     def is_chat(self) -> bool:

@@ -33,6 +33,7 @@ SYMPTOM_MAP: Dict[str, dict] = {
     "missing_constraint": {"root_cause": "planning",   "correction": "replanning"},
     "hallucination":      {"root_cause": "grounding",  "correction": "re_ground"},
     "context_drift":      {"root_cause": "planning",   "correction": "replanning"},
+    "contract_violation": {"root_cause": "integration", "correction": "repair_contract"},
     "unknown":            {"root_cause": "unknown",    "correction": "ask_user"},
 }
 VALID_SYMPTOMS = set(SYMPTOM_MAP.keys())
@@ -273,4 +274,3 @@ def main():
 if __name__ == "__main__":
     import sys
     sys.exit(main())
-

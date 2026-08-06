@@ -41,6 +41,30 @@ It proves the verified Checkpoint, Artifact metadata, committed idempotency
 result, RunResume revision and Run Head become visible as one SQLite commit;
 it does not yet switch the WorkflowExecutor to this Store.
 
-The future implementation gate must execute the same cases against a real
-SQLite database with WAL, `synchronous=FULL`, process restart, injected crash
-points, revision conflicts, fencing, and idempotency retries.
+v2.3B-4 now adds the production-path and crash gate:
+
+```bash
+pytest -q \
+  tests/test_durable_runtime_migration.py \
+  tests/test_v23b_crash_harness.py \
+  tests/test_v23b_architecture_gate.py
+```
+
+This gate exercises the configured `ApplicationContext`/`RunContext` SQLite
+view, the Coordinator → WorkflowExecutor prepare/finalize boundary, and eight
+real subprocess cases (R01–R08).  The subprocesses use independent SQLite
+connections and `os._exit` for process-crash windows.  The execution-stage
+Checkpoint facts are held in an explicit staging buffer and are published
+only by the Finalization Bundle; there is no production JSON/InMemory writer.
+
+The B-4 acceptance condition is:
+
+```text
+production durable path       PASS
+prepare-before-effect         PASS
+atomic finalization           PASS
+crash/restart R01-R08         8/8 PASS
+duplicate side effects        0
+stale writer acceptance       0
+architecture boundary         PASS
+```

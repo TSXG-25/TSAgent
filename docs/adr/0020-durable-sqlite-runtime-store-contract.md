@@ -1,6 +1,6 @@
 # ADR-0020: Durable SQLite Runtime Store Contract（v2.3B）
 
-- 状态: Proposed — Transaction Contract and Crash Dataset
+- 状态: Accepted — v2.3B-4 Implemented and Verified
 - 日期: 2026-08
 - 关联: ADR-0016（Run Checkpoint）、ADR-0018（Run-Level Workflow Resume）、ADR-0019（Runtime Context Ownership）
 
@@ -48,8 +48,9 @@ artifact metadata 未发布
 ```
 
 因此 v2.3B 不再增加另一个 facade，而是定义一个共享数据库和事务边界；现有
-`CheckpointStore` / `RunResumeStore` Protocol 继续作为兼容接口，SQLite 实现同时满足
-两者。
+`CheckpointStore` / `RunResumeStore` Protocol 继续作为兼容读取接口；生产写入通过
+scoped SQLite view 的 Preparation / Finalization API 完成，不允许兼容 Store 形成第二
+套事实源。
 
 ## 三、Ownership 与数据库边界
 
@@ -482,8 +483,8 @@ External side-effect unknown                    0% auto-resume
 Process restart rehydration                     PASS
 ```
 
-本 ADR 的 Dataset / Oracle PASS 只证明事务合同和评测器正确，不宣称 SQLite 生产实现
-已经完成。生产能力必须由 v2.3B implementation gate 另外证明。
+Dataset / Oracle PASS 只证明事务合同和评测器正确；生产能力由下列 v2.3B-4
+implementation gate 另外证明。
 
 当前修订后的 Dataset / Oracle 基线为：
 
@@ -498,6 +499,25 @@ oracle_validation: PASS
 该基线特别包含 Preparation intent、Run Head CAS、单调 fence takeover、same-key
 digest 冲突和 different-key 独立操作；修改这些语义时必须递增 benchmark version，
 不能把新旧结果直接合并到同一条 Trend。
+
+v2.3B-4 implementation evidence:
+
+```text
+Scoped SQLite production migration                  PASS
+RunContext → Coordinator → WorkflowExecutor         PASS
+Prepare-before-external-effect                      PASS
+Finalization Bundle Checkpoint chain                PASS
+R01–R08 subprocess crash/restart harness             8/8 PASS
+Duplicate side-effect acceptance                    0
+Stale-writer acceptance                              0
+Architecture boundary gate                          PASS
+Checkpoint / Artifact / Index / Ledger rehydration   PASS
+```
+
+执行期 Checkpoint 可以在进程内 staging，但只有 Finalization Bundle 才能将完整链、
+Artifact metadata、RunResumeIndex、Idempotency result 和 Run Head 一次发布到 SQLite。
+pending → active 的激活事务另行原子提交初始 Checkpoint；两者都不调用 Provider、Tool
+或文件 I/O。
 
 ## 十二、v2.3B 明确不做
 

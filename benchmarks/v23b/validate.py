@@ -126,7 +126,8 @@ def main() -> int:
     )
     print(
         "Scope: transaction/crash contract and oracle only; "
-        "runtime migration and crash harness are deferred to v2.3B-4"
+        "production migration and subprocess crash harness are validated by "
+        "the v2.3B-4 pytest gate"
     )
     return 0
 

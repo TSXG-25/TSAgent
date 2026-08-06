@@ -9,7 +9,7 @@ from typing import Mapping
 class StoreErrorCode(str, Enum):
     """Machine-readable Store failures.
 
-    These values are part of the B-2 contract.  SQLite exception text is an
+    These values are part of the v2.3B Store contract.  SQLite exception text is an
     implementation detail and must not leak into callers as the error model.
     """
 
@@ -23,6 +23,15 @@ class StoreErrorCode(str, Enum):
     SCHEMA_INCOMPATIBLE = "SCHEMA_INCOMPATIBLE"
     FENCE_CONFLICT = "FENCE_CONFLICT"
     IDEMPOTENCY_CONFLICT = "IDEMPOTENCY_CONFLICT"
+    PREPARED_INTENT_NOT_FOUND = "PREPARED_INTENT_NOT_FOUND"
+    EFFECT_STATE_CONFLICT = "EFFECT_STATE_CONFLICT"
+    FINALIZATION_CONFLICT = "FINALIZATION_CONFLICT"
+    CHECKPOINT_LINEAGE_CONFLICT = "CHECKPOINT_LINEAGE_CONFLICT"
+    ARTIFACT_VERIFICATION_FAILED = "ARTIFACT_VERIFICATION_FAILED"
+    ARTIFACT_DIGEST_MISMATCH = "ARTIFACT_DIGEST_MISMATCH"
+    RUN_INDEX_CONFLICT = "RUN_INDEX_CONFLICT"
+    TERMINAL_OUTPUT_MISSING = "TERMINAL_OUTPUT_MISSING"
+    FINALIZATION_INJECTED_FAILURE = "FINALIZATION_INJECTED_FAILURE"
     STORE_CLOSED = "STORE_CLOSED"
     INVALID_ARGUMENT = "INVALID_ARGUMENT"
 

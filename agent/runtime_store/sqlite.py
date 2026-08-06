@@ -18,11 +18,23 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator, Mapping, Sequence
 
-from .contracts import FenceGrant, PreparedOperation, RevisionRecord, RunHead
+from agent.checkpoint.codec import checkpoint_digest, serialize_checkpoint
+from agent.run_resume.codec import run_index_digest, serialize_run_index
+
+from .contracts import (
+    ArtifactCommitFact,
+    FenceGrant,
+    FinalizationBundle,
+    FinalizationFailurePoint,
+    FinalizationResult,
+    PreparedOperation,
+    RevisionRecord,
+    RunHead,
+)
 from .errors import DurableStoreError, StoreErrorCode
 
 
-SCHEMA_VERSION = "v2.3B-2"
+SCHEMA_VERSION = "v2.3B-3"
 DEFAULT_BUSY_TIMEOUT_MS = 5_000
 DEFAULT_WAL_AUTOCHECKPOINT = 1_000
 _MAX_BUSY_TIMEOUT_MS = 60_000
@@ -355,8 +367,10 @@ class SqliteRuntimeStore:
                     reference TEXT NOT NULL,
                     exists_flag INTEGER NOT NULL CHECK (exists_flag IN (0, 1)),
                     verified INTEGER NOT NULL CHECK (verified IN (0, 1)),
+                    verification_evidence_digest TEXT NOT NULL DEFAULT '',
                     producer_workflow_id TEXT NOT NULL,
                     producer_stage_id TEXT NOT NULL,
+                    producer_task_id TEXT NOT NULL DEFAULT '',
                     created_revision INTEGER NOT NULL,
                     last_updated_revision INTEGER NOT NULL,
                     request_id TEXT NOT NULL,
@@ -1361,6 +1375,586 @@ class SqliteRuntimeStore:
                 created_at=now,
                 updated_at=now,
             )
+
+    def finalize_bundle(
+        self,
+        bundle: FinalizationBundle,
+        *,
+        failure_point: FinalizationFailurePoint | str | None = None,
+    ) -> FinalizationResult:
+        """Atomically commit one verified external result and its projections.
+
+        Verification and all external I/O must happen before this method is
+        called.  The method only performs synchronous SQLite work.  A
+        committed idempotency record is returned without consulting the stale
+        caller revision, which is what makes an after-commit response retry
+        safe.
+        """
+
+        point: FinalizationFailurePoint | None
+        if failure_point is None or failure_point == "":
+            point = None
+        else:
+            try:
+                point = FinalizationFailurePoint(failure_point)
+            except ValueError as exc:
+                raise DurableStoreError(
+                    StoreErrorCode.INVALID_ARGUMENT,
+                    f"unknown finalization failure point: {failure_point}",
+                ) from exc
+
+        tenant_id = _require_text(bundle.tenant_id, "tenant_id")
+        session_id = _require_text(bundle.session_id, "session_id")
+        run_id = _require_text(bundle.run_id, "run_id")
+        workflow_id = _require_text(bundle.workflow_id, "workflow_id")
+        request_id = _require_text(bundle.request_id, "request_id")
+        writer_id = _require_text(bundle.writer_id, "writer_id")
+        idempotency_key = _require_text(bundle.idempotency_key, "idempotency_key")
+        operation_type = _require_text(bundle.operation_type, "operation_type")
+        request_digest = _require_text(bundle.request_digest, "request_digest")
+        external_result_digest = _require_text(
+            bundle.external_result_digest,
+            "external_result_digest",
+        )
+        if bundle.fence_epoch <= 0 or bundle.expected_revision < 0:
+            raise DurableStoreError(
+                StoreErrorCode.INVALID_ARGUMENT,
+                "fence_epoch must be > 0 and expected_revision must be >= 0",
+            )
+
+        with self._write_transaction() as connection:
+            head = self._fetch_head_tx(
+                connection,
+                tenant_id,
+                run_id,
+                session_id=session_id,
+            )
+            intent = connection.execute(
+                """
+                SELECT tenant_id, session_id, run_id, operation_id,
+                       idempotency_key, operation_type, request_digest,
+                       expected_effect_digest, effect_state, fence_token,
+                       external_reference, result_json, result_digest,
+                       prepared_revision, committed_revision, request_id,
+                       created_at, updated_at
+                FROM idempotency_ledger
+                WHERE tenant_id = ? AND run_id = ? AND idempotency_key = ?
+                """,
+                (tenant_id, run_id, idempotency_key),
+            ).fetchone()
+            if intent is None:
+                raise DurableStoreError(
+                    StoreErrorCode.PREPARED_INTENT_NOT_FOUND,
+                    "finalization requires a durable Preparation intent",
+                )
+            if (
+                str(intent["operation_type"]) != operation_type
+                or str(intent["request_digest"]) != request_digest
+            ):
+                raise DurableStoreError(
+                    StoreErrorCode.IDEMPOTENCY_CONFLICT,
+                    "finalization request does not match the Preparation intent",
+                )
+            effect_state = str(intent["effect_state"])
+            if effect_state == "COMMITTED":
+                if str(intent["result_digest"]) != external_result_digest:
+                    raise DurableStoreError(
+                        StoreErrorCode.FINALIZATION_CONFLICT,
+                        "same idempotency key has a different final result digest",
+                    )
+                return self._committed_result_from_intent(
+                    intent,
+                    store_generation=self.store_generation,
+                )
+            if effect_state not in {"PREPARED", "STARTED"}:
+                raise DurableStoreError(
+                    StoreErrorCode.EFFECT_STATE_CONFLICT,
+                    f"intent effect state cannot be finalized: {effect_state}",
+                )
+            expected_effect_digest = str(intent["expected_effect_digest"])
+            if expected_effect_digest and expected_effect_digest != external_result_digest:
+                raise DurableStoreError(
+                    StoreErrorCode.FINALIZATION_CONFLICT,
+                    "external result digest differs from the prepared expectation",
+                )
+
+            self._validate_finalization_bundle(
+                bundle,
+                tenant_id=tenant_id,
+                session_id=session_id,
+                run_id=run_id,
+                workflow_id=workflow_id,
+                head=head,
+            )
+            validated = self._validate_write_head_tx(
+                connection,
+                tenant_id,
+                session_id,
+                run_id,
+                writer_id=writer_id,
+                fence_token=bundle.fence_epoch,
+                expected_revision=bundle.expected_revision,
+                expected_parent_digest=bundle.expected_parent_digest,
+            )
+
+            checkpoint = bundle.checkpoint
+            checkpoint_json = serialize_checkpoint(checkpoint)
+            checkpoint_hash = checkpoint_digest(checkpoint)
+            index = bundle.next_run_index
+            index_json = serialize_run_index(index)
+            index_hash = run_index_digest(index)
+            revision = int(validated["current_revision"]) + 1
+            now = _now()
+            parent_checkpoint_id = self._validate_checkpoint_lineage_tx(
+                connection,
+                tenant_id,
+                run_id,
+                workflow_id,
+                checkpoint,
+            )
+
+            connection.execute(
+                """
+                INSERT INTO checkpoints
+                    (tenant_id, session_id, run_id, workflow_id, checkpoint_id,
+                     sequence_number, parent_checkpoint_id, activation_attempt_id,
+                     payload_json, payload_digest, request_id, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    tenant_id,
+                    session_id,
+                    run_id,
+                    workflow_id,
+                    checkpoint.checkpoint_id,
+                    checkpoint.sequence_number,
+                    parent_checkpoint_id,
+                    checkpoint.activation_attempt_id,
+                    checkpoint_json,
+                    checkpoint_hash,
+                    request_id,
+                    now,
+                ),
+            )
+            self._maybe_inject_finalization_failure(point, FinalizationFailurePoint.AFTER_CHECKPOINT_INSERT)
+
+            for artifact in bundle.artifacts:
+                existing_artifact = connection.execute(
+                    """
+                    SELECT digest, reference, artifact_type, producer_workflow_id,
+                           producer_stage_id, producer_task_id, exists_flag, verified
+                    FROM artifact_metadata
+                    WHERE tenant_id = ? AND run_id = ? AND artifact_id = ?
+                    """,
+                    (tenant_id, run_id, artifact.artifact_id),
+                ).fetchone()
+                if existing_artifact is not None and (
+                    str(existing_artifact["digest"]) != artifact.digest
+                    or str(existing_artifact["reference"]) != artifact.reference
+                ):
+                    raise DurableStoreError(
+                        StoreErrorCode.ARTIFACT_DIGEST_MISMATCH,
+                        f"artifact already has a different digest/reference: {artifact.artifact_id}",
+                    )
+                if existing_artifact is None:
+                    connection.execute(
+                        """
+                        INSERT INTO artifact_metadata
+                            (tenant_id, session_id, run_id, artifact_id,
+                             artifact_type, digest, reference, exists_flag, verified,
+                             verification_evidence_digest, producer_workflow_id,
+                             producer_stage_id, producer_task_id, created_revision,
+                             last_updated_revision, request_id, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            tenant_id,
+                            session_id,
+                            run_id,
+                            artifact.artifact_id,
+                            artifact.artifact_type,
+                            artifact.digest,
+                            artifact.reference,
+                            int(artifact.exists),
+                            int(artifact.verified),
+                            artifact.verification_evidence_digest,
+                            artifact.producer_workflow_id,
+                            artifact.producer_stage_id,
+                            artifact.producer_task_id,
+                            revision,
+                            revision,
+                            request_id,
+                            now,
+                        ),
+                    )
+                else:
+                    connection.execute(
+                        """
+                        UPDATE artifact_metadata
+                        SET artifact_type = ?, exists_flag = ?, verified = ?,
+                            verification_evidence_digest = ?,
+                            producer_workflow_id = ?, producer_stage_id = ?,
+                            producer_task_id = ?, last_updated_revision = ?,
+                            request_id = ?, updated_at = ?
+                        WHERE tenant_id = ? AND run_id = ? AND artifact_id = ?
+                        """,
+                        (
+                            artifact.artifact_type,
+                            int(artifact.exists),
+                            int(artifact.verified),
+                            artifact.verification_evidence_digest,
+                            artifact.producer_workflow_id,
+                            artifact.producer_stage_id,
+                            artifact.producer_task_id,
+                            revision,
+                            request_id,
+                            now,
+                            tenant_id,
+                            run_id,
+                            artifact.artifact_id,
+                        ),
+                    )
+            self._maybe_inject_finalization_failure(point, FinalizationFailurePoint.AFTER_ARTIFACT_METADATA)
+
+            result = FinalizationResult(
+                tenant_id=tenant_id,
+                session_id=session_id,
+                run_id=run_id,
+                workflow_id=workflow_id,
+                idempotency_key=idempotency_key,
+                operation_id=str(intent["operation_id"]),
+                effect_state="COMMITTED",
+                result_digest=external_result_digest,
+                checkpoint_id=checkpoint.checkpoint_id,
+                checkpoint_digest=checkpoint_hash,
+                run_revision=revision,
+                run_index_digest=index_hash,
+                artifact_ids=tuple(artifact.artifact_id for artifact in bundle.artifacts),
+                committed_at=now,
+                store_generation=self.store_generation,
+            )
+            result_json = _canonical_json(result.to_dict())
+            cursor = connection.execute(
+                """
+                UPDATE idempotency_ledger
+                SET effect_state = 'COMMITTED', result_json = ?,
+                    result_digest = ?, committed_revision = ?,
+                    request_id = ?, updated_at = ?
+                WHERE tenant_id = ? AND run_id = ? AND idempotency_key = ?
+                  AND effect_state IN ('PREPARED', 'STARTED')
+                """,
+                (
+                    result_json,
+                    external_result_digest,
+                    revision,
+                    request_id,
+                    now,
+                    tenant_id,
+                    run_id,
+                    idempotency_key,
+                ),
+            )
+            if cursor.rowcount != 1:
+                raise DurableStoreError(
+                    StoreErrorCode.EFFECT_STATE_CONFLICT,
+                    "Preparation intent changed before finalization update",
+                )
+            self._maybe_inject_finalization_failure(point, FinalizationFailurePoint.AFTER_LEDGER_UPDATE)
+
+            connection.execute(
+                """
+                INSERT INTO run_resume_revisions
+                    (tenant_id, session_id, run_id, revision, parent_digest,
+                     payload_json, payload_digest, request_id, writer_id,
+                     fence_token, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    tenant_id,
+                    session_id,
+                    run_id,
+                    revision,
+                    bundle.expected_parent_digest,
+                    index_json,
+                    index_hash,
+                    request_id,
+                    writer_id,
+                    bundle.fence_epoch,
+                    now,
+                ),
+            )
+            self._maybe_inject_finalization_failure(point, FinalizationFailurePoint.AFTER_INDEX_INSERT)
+
+            run_status = "COMPLETED" if not index.active_workflow_id and not index.pending_workflow_ids else "RUNNING"
+            cursor = connection.execute(
+                """
+                UPDATE run_heads
+                SET current_revision = ?, current_digest = ?,
+                    current_writer_id = ?, request_id = ?, run_status = ?,
+                    updated_at = ?
+                WHERE tenant_id = ? AND run_id = ?
+                  AND current_revision = ? AND current_digest = ?
+                  AND current_fence_token = ? AND current_writer_id = ?
+                """,
+                (
+                    revision,
+                    index_hash,
+                    writer_id,
+                    request_id,
+                    run_status,
+                    now,
+                    tenant_id,
+                    run_id,
+                    bundle.expected_revision,
+                    bundle.expected_parent_digest,
+                    bundle.fence_epoch,
+                    writer_id,
+                ),
+            )
+            if cursor.rowcount != 1:
+                raise DurableStoreError(
+                    StoreErrorCode.REVISION_CONFLICT,
+                    "finalization Run Head CAS did not update exactly one row",
+                )
+            self._maybe_inject_finalization_failure(point, FinalizationFailurePoint.BEFORE_COMMIT)
+            return result
+
+    def _validate_finalization_bundle(
+        self,
+        bundle: FinalizationBundle,
+        *,
+        tenant_id: str,
+        session_id: str,
+        run_id: str,
+        workflow_id: str,
+        head: sqlite3.Row,
+    ) -> None:
+        checkpoint = bundle.checkpoint
+        index = bundle.next_run_index
+        if checkpoint.run_id != run_id or checkpoint.workflow_id != workflow_id:
+            raise DurableStoreError(
+                StoreErrorCode.CHECKPOINT_LINEAGE_CONFLICT,
+                "checkpoint Run/Workflow identity does not match the Bundle",
+            )
+        if checkpoint.session_id != session_id:
+            raise DurableStoreError(
+                StoreErrorCode.IDENTITY_MISMATCH,
+                "checkpoint session identity does not match the Bundle",
+            )
+        if not checkpoint.activation_attempt_id.strip():
+            raise DurableStoreError(
+                StoreErrorCode.CHECKPOINT_LINEAGE_CONFLICT,
+                "finalization checkpoint must identify an activation attempt",
+            )
+        if bundle.verifier_status.strip().upper() != "VERIFIED" or checkpoint.verifier_status.strip().upper() != "VERIFIED":
+            raise DurableStoreError(
+                StoreErrorCode.ARTIFACT_VERIFICATION_FAILED,
+                "only VERIFIED external evidence can be finalized",
+            )
+        if len({artifact.artifact_id for artifact in bundle.artifacts}) != len(bundle.artifacts):
+            raise DurableStoreError(
+                StoreErrorCode.ARTIFACT_VERIFICATION_FAILED,
+                "finalization artifact ids must be unique",
+            )
+        for artifact in bundle.artifacts:
+            if artifact.producer_workflow_id != workflow_id:
+                raise DurableStoreError(
+                    StoreErrorCode.ARTIFACT_VERIFICATION_FAILED,
+                    "artifact producer must be the finalized Workflow",
+                )
+            if not artifact.exists or not artifact.verified or not artifact.digest.strip():
+                raise DurableStoreError(
+                    StoreErrorCode.ARTIFACT_VERIFICATION_FAILED,
+                    f"artifact is not verified: {artifact.artifact_id}",
+                )
+            if not artifact.verification_evidence_digest.strip():
+                raise DurableStoreError(
+                    StoreErrorCode.ARTIFACT_VERIFICATION_FAILED,
+                    f"artifact evidence digest is missing: {artifact.artifact_id}",
+                )
+        checkpoint_artifacts = {item.artifact_id: item for item in checkpoint.artifacts}
+        for artifact in bundle.artifacts:
+            checkpoint_artifact = checkpoint_artifacts.get(artifact.artifact_id)
+            if (
+                checkpoint_artifact is None
+                or checkpoint_artifact.digest != artifact.digest
+                or checkpoint_artifact.reference != artifact.reference
+                or not checkpoint_artifact.exists
+            ):
+                raise DurableStoreError(
+                    StoreErrorCode.ARTIFACT_DIGEST_MISMATCH,
+                    f"Checkpoint artifact differs from commit fact: {artifact.artifact_id}",
+                )
+        if index.run_id != run_id or index.session_id != session_id:
+            raise DurableStoreError(
+                StoreErrorCode.RUN_INDEX_CONFLICT,
+                "RunResumeIndex identity does not match the Bundle",
+            )
+        if index.store_generation != self.store_generation:
+            raise DurableStoreError(
+                StoreErrorCode.STORE_GENERATION_MISMATCH,
+                "RunResumeIndex belongs to another store generation",
+            )
+        if index.revision != bundle.expected_revision + 1:
+            raise DurableStoreError(
+                StoreErrorCode.RUN_INDEX_CONFLICT,
+                "RunResumeIndex revision must be the next Run revision",
+            )
+        if index.parent_digest != bundle.expected_parent_digest:
+            raise DurableStoreError(
+                StoreErrorCode.RUN_INDEX_CONFLICT,
+                "RunResumeIndex parent digest does not match the Run Head",
+            )
+        summary = index.workflow(workflow_id)
+        if summary is None:
+            raise DurableStoreError(
+                StoreErrorCode.RUN_INDEX_CONFLICT,
+                "finalized Workflow is absent from RunResumeIndex",
+            )
+        if checkpoint.workflow_version != summary.workflow_version:
+            raise DurableStoreError(
+                StoreErrorCode.CHECKPOINT_LINEAGE_CONFLICT,
+                "checkpoint workflow version differs from RunResumeIndex",
+            )
+        if summary.activation_attempt_id != checkpoint.activation_attempt_id:
+            raise DurableStoreError(
+                StoreErrorCode.CHECKPOINT_LINEAGE_CONFLICT,
+                "Checkpoint activation attempt differs from RunResumeIndex",
+            )
+        index_artifacts = {item.artifact_id: item for item in index.artifacts}
+        for artifact in bundle.artifacts:
+            projected = index_artifacts.get(artifact.artifact_id)
+            if (
+                projected is None
+                or projected.digest != artifact.digest
+                or projected.reference != artifact.reference
+                or not projected.exists
+                or not projected.verified
+            ):
+                raise DurableStoreError(
+                    StoreErrorCode.RUN_INDEX_CONFLICT,
+                    f"RunResumeIndex artifact projection differs: {artifact.artifact_id}",
+                )
+        terminal = summary.status.value == "COMPLETED" or workflow_id in index.completed_workflow_ids
+        if terminal:
+            if checkpoint.status.value != "COMPLETED":
+                raise DurableStoreError(
+                    StoreErrorCode.RUN_INDEX_CONFLICT,
+                    "completed Workflow requires a COMPLETED checkpoint",
+                )
+            if index.active_workflow_id or index.active_checkpoint_id:
+                raise DurableStoreError(
+                    StoreErrorCode.RUN_INDEX_CONFLICT,
+                    "completed Workflow cannot remain active in the next Run index",
+                )
+            if summary.checkpoint_id != checkpoint.checkpoint_id:
+                raise DurableStoreError(
+                    StoreErrorCode.RUN_INDEX_CONFLICT,
+                    "completed Workflow must point at the finalized checkpoint",
+                )
+            if not bundle.artifacts:
+                raise DurableStoreError(
+                    StoreErrorCode.TERMINAL_OUTPUT_MISSING,
+                    "completed Workflow requires at least one verified terminal artifact",
+                )
+        else:
+            if index.active_workflow_id != workflow_id or index.active_checkpoint_id != checkpoint.checkpoint_id:
+                raise DurableStoreError(
+                    StoreErrorCode.RUN_INDEX_CONFLICT,
+                    "active Run index must point to the finalized checkpoint",
+                )
+            if summary.checkpoint_id != checkpoint.checkpoint_id:
+                raise DurableStoreError(
+                    StoreErrorCode.RUN_INDEX_CONFLICT,
+                    "active Workflow must point at the finalized checkpoint",
+                )
+            if checkpoint.status.value == "COMPLETED":
+                raise DurableStoreError(
+                    StoreErrorCode.RUN_INDEX_CONFLICT,
+                    "a COMPLETED checkpoint must complete its Workflow projection",
+                )
+        if int(head["current_revision"]) != bundle.expected_revision or str(head["current_digest"]) != bundle.expected_parent_digest:
+            raise DurableStoreError(
+                StoreErrorCode.REVISION_CONFLICT,
+                "finalization Bundle parent does not match the current Run Head",
+            )
+
+    @staticmethod
+    def _validate_checkpoint_lineage_tx(
+        connection: sqlite3.Connection,
+        tenant_id: str,
+        run_id: str,
+        workflow_id: str,
+        checkpoint: Any,
+    ) -> str | None:
+        latest = connection.execute(
+            """
+            SELECT checkpoint_id, sequence_number, activation_attempt_id
+            FROM checkpoints
+            WHERE tenant_id = ? AND run_id = ? AND workflow_id = ?
+            ORDER BY sequence_number DESC
+            LIMIT 1
+            """,
+            (tenant_id, run_id, workflow_id),
+        ).fetchone()
+        if latest is None:
+            if checkpoint.sequence_number != 0 or checkpoint.parent_checkpoint_id is not None:
+                raise DurableStoreError(
+                    StoreErrorCode.CHECKPOINT_LINEAGE_CONFLICT,
+                    "first checkpoint must have sequence=0 and no parent",
+                )
+            return None
+        if str(latest["activation_attempt_id"]) != checkpoint.activation_attempt_id:
+            raise DurableStoreError(
+                StoreErrorCode.CHECKPOINT_LINEAGE_CONFLICT,
+                "checkpoint activation attempt changed within one Workflow chain",
+            )
+        expected_sequence = int(latest["sequence_number"]) + 1
+        if checkpoint.sequence_number != expected_sequence or checkpoint.parent_checkpoint_id != str(latest["checkpoint_id"]):
+            raise DurableStoreError(
+                StoreErrorCode.CHECKPOINT_LINEAGE_CONFLICT,
+                "checkpoint sequence/parent does not extend the latest chain",
+            )
+        return str(latest["checkpoint_id"])
+
+    @staticmethod
+    def _maybe_inject_finalization_failure(
+        requested: FinalizationFailurePoint | None,
+        point: FinalizationFailurePoint,
+    ) -> None:
+        if requested is point:
+            raise DurableStoreError(
+                StoreErrorCode.FINALIZATION_INJECTED_FAILURE,
+                f"deterministic failure injected at {point.value}",
+            )
+
+    @staticmethod
+    def _committed_result_from_intent(
+        row: sqlite3.Row,
+        *,
+        store_generation: str,
+    ) -> FinalizationResult:
+        try:
+            payload = json.loads(str(row["result_json"]))
+            if not isinstance(payload, dict):
+                raise ValueError("finalization result must be an object")
+            result = FinalizationResult.from_dict(payload, idempotent=True)
+        except (TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise DurableStoreError(
+                StoreErrorCode.FINALIZATION_CONFLICT,
+                "committed finalization result is not recoverable JSON",
+            ) from exc
+        if result.result_digest != str(row["result_digest"]):
+            raise DurableStoreError(
+                StoreErrorCode.FINALIZATION_CONFLICT,
+                "committed finalization result digest is inconsistent",
+            )
+        if result.store_generation != store_generation:
+            raise DurableStoreError(
+                StoreErrorCode.STORE_GENERATION_MISMATCH,
+                "committed finalization belongs to another store generation",
+            )
+        return result
 
     def get_idempotency(
         self,

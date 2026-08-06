@@ -6,7 +6,16 @@ schema bootstrap, writer fencing, revision CAS, idempotency and preparation
 intents.
 """
 
-from .contracts import FenceGrant, PreparedOperation, RevisionRecord, RunHead
+from .contracts import (
+    ArtifactCommitFact,
+    FenceGrant,
+    FinalizationBundle,
+    FinalizationFailurePoint,
+    FinalizationResult,
+    PreparedOperation,
+    RevisionRecord,
+    RunHead,
+)
 from .errors import DurableStoreError, StoreErrorCode
 from .sqlite import (
     DEFAULT_BUSY_TIMEOUT_MS,
@@ -19,7 +28,11 @@ __all__ = [
     "DEFAULT_BUSY_TIMEOUT_MS",
     "DEFAULT_WAL_AUTOCHECKPOINT",
     "DurableStoreError",
+    "ArtifactCommitFact",
     "FenceGrant",
+    "FinalizationBundle",
+    "FinalizationFailurePoint",
+    "FinalizationResult",
     "PreparedOperation",
     "RevisionRecord",
     "RunHead",

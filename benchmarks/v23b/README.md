@@ -31,7 +31,15 @@ mypy agent/runtime_store tests/test_sqlite_runtime_store.py
 
 That gate covers bootstrap, fence, revision CAS, idempotency and Preparation
 intent.  Checkpoint/Artifact finalization and crash injection remain deferred
-to v2.3B-3/B-4.
+to v2.3B-4.  The B-3 Finalization Bundle gate is:
+
+```bash
+pytest -q tests/test_sqlite_finalization.py
+```
+
+It proves the verified Checkpoint, Artifact metadata, committed idempotency
+result, RunResume revision and Run Head become visible as one SQLite commit;
+it does not yet switch the WorkflowExecutor to this Store.
 
 The future implementation gate must execute the same cases against a real
 SQLite database with WAL, `synchronous=FULL`, process restart, injected crash

@@ -126,7 +126,7 @@ def main() -> int:
     )
     print(
         "Scope: transaction/crash contract and oracle only; "
-        "full SQLite finalization bundle is deferred to v2.3B-3/B-4"
+        "runtime migration and crash harness are deferred to v2.3B-4"
     )
     return 0
 

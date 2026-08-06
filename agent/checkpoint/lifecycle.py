@@ -98,6 +98,51 @@ def advance_checkpoint(
     return replace(checkpoint, **values)
 
 
+def append_checkpoint(
+    checkpoint: RunCheckpoint,
+    *,
+    checkpoint_id: str,
+    updated_at: str,
+    status: CheckpointStatus | str | None = None,
+    **changes,
+) -> RunCheckpoint:
+    """Append a fact snapshot, allowing the lifecycle status to stay unchanged.
+
+    A Stage completing while a Workflow remains ``RUNNING`` is a real state
+    change even though the lifecycle status does not change.  v2.2A's
+    transition table still governs status changes; this helper only adds the
+    immutable child-snapshot operation needed by v2.2B progress recording.
+    """
+    target_status = CheckpointStatus(status or checkpoint.status)
+    if target_status is not checkpoint.status:
+        validate_transition(checkpoint.status, target_status)
+    protected = {
+        "run_id", "session_id", "conversation_id", "user_scope",
+        "workflow_id", "workflow_version", "plan_version",
+        "checkpoint_id", "parent_checkpoint_id", "sequence_number",
+        "updated_at",
+    }
+    changed_protected = protected.intersection(changes)
+    if changed_protected:
+        raise ValueError(
+            "Checkpoint 链身份/版本字段不可由 append_checkpoint 改写: "
+            + ", ".join(sorted(changed_protected))
+        )
+    if not checkpoint_id.strip():
+        raise ValueError("新的 checkpoint_id 不能为空")
+    if checkpoint_id == checkpoint.checkpoint_id:
+        raise ValueError("新 checkpoint_id 必须与 parent 不同")
+    values = dict(changes)
+    values.update({
+        "checkpoint_id": checkpoint_id,
+        "parent_checkpoint_id": checkpoint.checkpoint_id,
+        "sequence_number": checkpoint.sequence_number + 1,
+        "status": target_status,
+        "updated_at": updated_at,
+    })
+    return replace(checkpoint, **values)
+
+
 def lifecycle_contract() -> dict[str, list[str]]:
     """Serializable transition table used by the benchmark oracle."""
     return {
@@ -109,6 +154,7 @@ def lifecycle_contract() -> dict[str, list[str]]:
 __all__ = [
     "ALLOWED_TRANSITIONS",
     "InvalidCheckpointTransition",
+    "append_checkpoint",
     "advance_checkpoint",
     "allowed_transition",
     "lifecycle_contract",

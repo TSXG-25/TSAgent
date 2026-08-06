@@ -1,9 +1,4 @@
-"""v2.2A Run Checkpoint Contract (ADR-0016).
-
-This package is a fact/validation boundary only.  It does not create a
-Workflow runtime, execute tools, or rebuild a checkpoint from a conversation
-projection.
-"""
+"""Run Checkpoint contracts and the v2.2B Workflow recording boundary."""
 
 from .codec import (
     CheckpointCodecError,
@@ -31,12 +26,25 @@ from .contracts import (
 from .lifecycle import (
     ALLOWED_TRANSITIONS,
     InvalidCheckpointTransition,
+    append_checkpoint,
     advance_checkpoint,
     allowed_transition,
     lifecycle_contract,
     validate_transition,
 )
 from .projection import PendingTarget, project_pending_target
+from .recorder import (
+    CheckpointRecorder,
+    WorkflowCheckpointRequest,
+    checkpoint_result_metadata,
+    effect_state_for_task,
+    fact_digest,
+    failure_snapshot,
+    json_fact,
+    new_checkpoint_id,
+    snapshot_artifacts,
+    utc_timestamp,
+)
 from .reason_codes import (
     CheckpointStatus,
     GuardStatus,
@@ -45,19 +53,24 @@ from .reason_codes import (
     ResumeReasonCode,
     SideEffectState,
 )
+from .store import CheckpointStore, CheckpointStoreError, InMemoryCheckpointStore
 from .validator import validate_resume
 
 __all__ = [
     "ALLOWED_TRANSITIONS",
     "ArtifactSnapshot",
     "CheckpointCodecError",
+    "CheckpointRecorder",
     "CheckpointStatus",
+    "CheckpointStore",
+    "CheckpointStoreError",
     "CompatibilityAssessment",
     "CompatibilityRegistry",
     "ExternalStateGuard",
     "FailureEventSnapshot",
     "GuardStatus",
     "InvalidCheckpointTransition",
+    "InMemoryCheckpointStore",
     "PendingTarget",
     "ResumeAction",
     "ResumeContext",
@@ -69,15 +82,25 @@ __all__ = [
     "SideEffectState",
     "TaskEffectRecord",
     "WorkflowMigration",
+    "WorkflowCheckpointRequest",
+    "append_checkpoint",
     "advance_checkpoint",
     "allowed_transition",
     "assess_compatibility",
     "checkpoint_digest",
+    "checkpoint_result_metadata",
     "deserialize_checkpoint",
+    "effect_state_for_task",
+    "fact_digest",
+    "failure_snapshot",
+    "json_fact",
     "lifecycle_contract",
     "major_version",
     "project_pending_target",
     "serialize_checkpoint",
+    "new_checkpoint_id",
+    "snapshot_artifacts",
+    "utc_timestamp",
     "validate_resume",
     "validate_transition",
 ]

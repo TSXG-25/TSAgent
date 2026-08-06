@@ -351,9 +351,13 @@ def validate_resume(
                 status="REJECTED",
             ))
             return _reject(checkpoint, ResumeReasonCode.NON_IDEMPOTENT_STAGE, evidence)
+        # Replay starts at the active task.  Committed effects belonging to
+        # already-completed tasks are intentionally outside the replay
+        # boundary and must not block a safe replay of the current stage.
         replay_blocking = [
             record for record in checkpoint.task_effect_records
-            if record.effect_state in _REPLAY_BLOCKING_EFFECTS
+            if record.task_id == checkpoint.active_task_id
+            and record.effect_state in _REPLAY_BLOCKING_EFFECTS
         ]
         if replay_blocking:
             state_names = ",".join(sorted({record.effect_state.value for record in replay_blocking}))

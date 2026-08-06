@@ -13,7 +13,19 @@ Phase B.4：从 agent/executor/work 草稿正式化；_execute_plan 统一走 Ex
 """
 import logging
 import re
-from typing import Any, Dict, List, Optional
+from dataclasses import replace
+from typing import Any, Dict
+
+from agent.checkpoint import (
+    CheckpointRecorder,
+    ResumeAction,
+    ResumeContext,
+    ResumeDisposition,
+    RunCheckpoint,
+    WorkflowCheckpointRequest,
+    checkpoint_result_metadata,
+    validate_resume,
+)
 
 from agent.task import Task, ExecutionPlan
 from agent.workflow import Workflow, ExecutionContext, Artifact, ExecutionResult
@@ -38,16 +50,79 @@ class WorkflowExecutor:
         self,
         workflow: Workflow,
         context: ExecutionContext,
+        *,
+        checkpoint_request: WorkflowCheckpointRequest | None = None,
     ) -> ExecutionResult:
         """迭代执行 Workflow 的所有 Stage。
 
         Stage → Task → Compiler → ExecutionPlan → Executor。
         所有 Stage 能力（validator/retry/artifact）在此编排层保留。
+
+        ``checkpoint_request`` 是 v2.2B 的可选运行时接线。启用后，
+        WorkflowExecutor 在 Stage 边界记录 Checkpoint，并在恢复前消费
+        ResumeValidator 的决定；默认路径不改变既有行为。
         """
         sorted_stages = workflow.topological_sort()
         total = len(sorted_stages)
-        errors = []
+        errors: list[str] = []
         final_outputs: Dict[str, str] = {}
+        recorder: CheckpointRecorder | None = None
+        current_checkpoint: RunCheckpoint | None = None
+        resume_decision = None
+        completed_stage_ids: set[str] = set()
+
+        if checkpoint_request is not None:
+            recorder = CheckpointRecorder(checkpoint_request)
+            if checkpoint_request.checkpoint is None:
+                first_stage = sorted_stages[0] if sorted_stages else None
+                current_checkpoint = recorder.start(
+                    workflow_id=workflow.id,
+                    workflow_version=workflow.version,
+                    active_stage_id=first_stage.id if first_stage else "",
+                    active_task_id=first_stage.id if first_stage else "",
+                    execution_plan=self._workflow_plan_fact(workflow),
+                    target_summary=(
+                        checkpoint_request.target_summary
+                        or workflow.description
+                        or workflow.id
+                    ),
+                )
+            else:
+                resume_context = self._effective_resume_context(
+                    workflow, checkpoint_request
+                )
+                if resume_context is None:
+                    return self._checkpoint_blocked_result(
+                        checkpoint_request.checkpoint,
+                        "恢复请求缺少 ResumeContext；未进入 Executor。",
+                    )
+                resume_decision = validate_resume(
+                    checkpoint_request.checkpoint,
+                    resume_context,
+                    external_state_evidence=(
+                        checkpoint_request.external_state_evidence or None
+                    ),
+                    compatibility_registry=checkpoint_request.compatibility_registry,
+                )
+                if resume_decision.disposition is not ResumeDisposition.ALLOW:
+                    return self._checkpoint_blocked_result(
+                        checkpoint_request.checkpoint,
+                        f"恢复未获准：{resume_decision.reason_code.value}",
+                        resume_decision,
+                    )
+                resume_action = resume_decision.action
+                if resume_action not in {
+                    ResumeAction.RESUME_EXACT,
+                    ResumeAction.REPLAY_FROM_STAGE,
+                }:
+                    return self._checkpoint_blocked_result(
+                        checkpoint_request.checkpoint,
+                        "v2.2B 暂不消费恢复动作："
+                        f"{resume_action.value if resume_action else 'None'}",
+                        resume_decision,
+                    )
+                current_checkpoint = recorder.resume(resume_decision)
+                completed_stage_ids = set(current_checkpoint.completed_stage_ids)
 
         print(f"\n{'='*50}")
         print(f"🚀 工作流: {workflow.id}")
@@ -58,6 +133,10 @@ class WorkflowExecutor:
         for idx, stage in enumerate(sorted_stages):
             stage_num = idx + 1
             print(f"  [{stage_num}/{total}] {stage.id} — {stage.description or stage.execution.executor.value}")
+
+            if stage.id in completed_stage_ids:
+                print("     ⏭️ Checkpoint 已确认完成，跳过执行")
+                continue
 
             # ── 依赖检查：required_outputs 跳过 ──
             if stage.required_outputs:
@@ -114,7 +193,13 @@ class WorkflowExecutor:
                 if attempt < max_retries:
                     print(f"     🔄 重试 ({attempt+1}/{max_retries})")
 
-            if exec_result and exec_result.success:
+            stage_checkpoint_success = bool(exec_result and exec_result.success)
+            stage_error = (
+                exec_result.error[:100]
+                if exec_result and not exec_result.success
+                else ""
+            )
+            if stage_checkpoint_success and exec_result is not None:
                 content = exec_result.text
                 content = self._strip_code_blocks(content)
 
@@ -148,24 +233,93 @@ class WorkflowExecutor:
                             sol_path = sol_art.content if sol_art else ""
                             v, r = validator_obj.validate({}, {"path": sol_path})
                             if not v:
+                                stage_checkpoint_success = False
+                                stage_error = f"[{stage.id}] {r}"
                                 errors.append(f"[{stage.id}] {r}")
                                 print(f"     ⚠️ Validator: {r}")
             else:
-                err = exec_result.error[:100] if exec_result else "unknown"
+                err = stage_error or "unknown"
+                stage_error = err
                 errors.append(f"[{stage.id}] {err}")
                 print(f"     ✗ 失败: {err}")
 
             context.record_action({
                 "stage": stage.id,
                 "executor": plan.executor,
-                "success": exec_result.success if exec_result else False,
+                "success": stage_checkpoint_success,
             })
 
+            if recorder is not None:
+                completed_for_next = set(completed_stage_ids)
+                if stage_checkpoint_success:
+                    completed_for_next.add(stage.id)
+                next_stage = next(
+                    (
+                        candidate
+                        for candidate in sorted_stages[idx + 1:]
+                        if candidate.id not in completed_for_next
+                    ),
+                    None,
+                )
+                current_checkpoint = recorder.record_stage(
+                    stage_id=stage.id,
+                    task_id=task.id,
+                    execution_plan=plan.to_dict(),
+                    success=stage_checkpoint_success,
+                    result_error=stage_error,
+                    result_metadata=exec_result.metadata if exec_result else {},
+                    task_verb=task.verb.value,
+                    next_stage_id=next_stage.id if next_stage else "",
+                    next_task_id=next_stage.id if next_stage else "",
+                    artifacts=context.artifacts.values(),
+                    target_summary=(
+                        checkpoint_request.target_summary
+                        if checkpoint_request else ""
+                    ),
+                )
+                if not stage_checkpoint_success:
+                    summary = self._build_summary(context)
+                    result = ExecutionResult(
+                        success=False,
+                        outputs=final_outputs,
+                        error=stage_error or "Workflow Stage 执行失败",
+                        metadata=checkpoint_result_metadata(
+                            current_checkpoint, resume_decision
+                        ),
+                    )
+                    result.outputs["_summary"] = summary
+                    return result
+                completed_stage_ids.add(stage.id)
+                if (
+                    checkpoint_request is not None
+                    and checkpoint_request.interrupt_after_stage_id == stage.id
+                ):
+                    current_checkpoint = recorder.suspend()
+                    summary = self._build_summary(context)
+                    result = ExecutionResult(
+                        success=False,
+                        outputs=final_outputs,
+                        error=f"Workflow 在 Stage {stage.id} 后暂停",
+                        metadata=checkpoint_result_metadata(
+                            current_checkpoint, resume_decision
+                        ),
+                    )
+                    result.outputs["_summary"] = summary
+                    return result
+
         summary = self._build_summary(context)
+        if recorder is not None and current_checkpoint is not None:
+            current_checkpoint = recorder.complete(
+                artifacts=context.artifacts.values(),
+                summary=summary,
+            )
         result = ExecutionResult(
             success=len(errors) == 0,
             outputs=final_outputs,
             error="; ".join(errors) if errors else "",
+            metadata=checkpoint_result_metadata(
+                current_checkpoint, resume_decision
+            ),
         )
         print(f"\n{'='*50}")
         print(f"{'✅' if result.success else '⚠️'} 工作流完成: {workflow.id}")
@@ -176,6 +330,58 @@ class WorkflowExecutor:
         print(f"{'='*50}\n")
         result.outputs["_summary"] = summary
         return result
+
+    @staticmethod
+    def _workflow_plan_fact(workflow: Workflow) -> dict[str, Any]:
+        """Build a JSON-only Workflow fact for the initial Checkpoint."""
+        return {
+            "workflow_id": workflow.id,
+            "workflow_version": workflow.version,
+            "stages": [
+                {
+                    "id": stage.id,
+                    "depends": list(stage.depends or []),
+                    "executor": stage.execution.executor.value,
+                    "idempotent": bool(stage.idempotent),
+                }
+                for stage in workflow.stages
+            ],
+        }
+
+    @staticmethod
+    def _effective_resume_context(
+        workflow: Workflow,
+        request: WorkflowCheckpointRequest,
+    ) -> ResumeContext | None:
+        context = request.resume_context
+        checkpoint = request.checkpoint
+        if context is None or checkpoint is None:
+            return context
+        if context.requested_action is not ResumeAction.REPLAY_FROM_STAGE:
+            return context
+        stage = workflow.get_stage(checkpoint.active_stage_id)
+        if stage is None:
+            return context
+        # Stage declaration is the current fact; callers cannot override it
+        # with a stale boolean in ResumeContext.
+        return replace(
+            context,
+            stage_idempotent=stage.idempotent,
+            requested_stage_id=context.requested_stage_id or stage.id,
+        )
+
+    @staticmethod
+    def _checkpoint_blocked_result(
+        checkpoint: RunCheckpoint,
+        error: str,
+        decision: Any = None,
+    ) -> ExecutionResult:
+        """Return a visible non-execution result for an unsafe resume."""
+        return ExecutionResult(
+            success=False,
+            error=error,
+            metadata=checkpoint_result_metadata(checkpoint, decision),
+        )
 
     # ── 统一执行分发（ExecutorFactory，无 if/elif 选择逻辑）──
 

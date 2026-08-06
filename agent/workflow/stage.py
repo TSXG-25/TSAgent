@@ -29,6 +29,7 @@ class Stage:
     description: str = ""
     validators: Optional[List[Any]] = None
     required_outputs: Optional[List[str]] = None
+    idempotent: bool = False
 
     def to_task(self, goal: str = "") -> Task:
         """投影到统一 Task 模型（带 policy）。

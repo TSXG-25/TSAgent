@@ -205,5 +205,29 @@ flowchart LR
 - v2.2A 只冻结 schema、codec、lifecycle、compatibility、validator 和 Oracle；
   Workflow Runtime 接入属于 v2.2B，跨 Workflow 寻址属于 v2.2C。
 
+## 9. v2.2B Single-Workflow Resume Runtime
+
+v2.2B 通过可选的 `WorkflowCheckpointRequest` 将 Checkpoint 接入现有
+`WorkflowExecutor`，不新增 Resume Orchestrator：
+
+```mermaid
+flowchart LR
+    W[WorkflowExecutor] -->|Stage/Task/Result facts| R[CheckpointRecorder]
+    R --> S[CheckpointStore]
+    S --> CP[latest RunCheckpoint]
+    CP --> V[ResumeValidator]
+    V -->|ALLOW exact/replay| W
+    V -->|clarify/reject| STOP[No Executor call]
+```
+
+运行时边界：
+
+- Stage 完成、显式中断、可恢复失败和最终完成均追加不可变 Checkpoint。
+- `completed_stage_ids` 是恢复时的安全边界；已确认完成的 Stage 不得再次执行。
+- `RESUME_EXACT` 和通过幂等声明校验的 `REPLAY_FROM_STAGE` 才能进入现有
+  WorkflowExecutor；`REPLAN_FROM_CHECKPOINT` 留给后续 Planner Bridge。
+- v2.2B 当前提供内存 Store 和单 Workflow 集成验证；跨 Run/跨 Workflow Resume
+  属于 v2.2C。
+
 v2.0 RC 的目标不是功能更多，而是：依赖可复现、边界可解释、门禁可自动执行、
 真实 Demo 可验收，并最终能够安全打 `v2.0.0` Tag。

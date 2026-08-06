@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 from types import MappingProxyType
-from typing import Any, Mapping, Optional
+from typing import Any, Mapping, Optional, cast
 
 from .reason_codes import (
     CheckpointStatus,
@@ -151,7 +151,7 @@ class TaskEffectRecord:
             "evidence",
             tuple(
                 item if isinstance(item, RuntimeEvidence)
-                else RuntimeEvidence.from_dict(item)
+                else RuntimeEvidence.from_dict(cast(Mapping[str, Any], item))
                 for item in (self.evidence or ())
             ),
         )
@@ -240,7 +240,7 @@ class FailureEventSnapshot:
             "evidence",
             tuple(
                 item if isinstance(item, RuntimeEvidence)
-                else RuntimeEvidence.from_dict(item)
+                else RuntimeEvidence.from_dict(cast(Mapping[str, Any], item))
                 for item in (self.evidence or ())
             ),
         )
@@ -298,7 +298,7 @@ class ResumeContext:
             "external_state_evidence",
             tuple(
                 item if isinstance(item, ExternalStateGuard)
-                else ExternalStateGuard.from_dict(item)
+                else ExternalStateGuard.from_dict(cast(Mapping[str, Any], item))
                 for item in (self.external_state_evidence or ())
             ),
         )
@@ -425,7 +425,7 @@ class RunCheckpoint:
             "artifacts",
             tuple(
                 item if isinstance(item, ArtifactSnapshot)
-                else ArtifactSnapshot.from_dict(item)
+                else ArtifactSnapshot.from_dict(cast(Mapping[str, Any], item))
                 for item in (self.artifacts or ())
             ),
         )
@@ -434,7 +434,7 @@ class RunCheckpoint:
             "task_effect_records",
             tuple(
                 item if isinstance(item, TaskEffectRecord)
-                else TaskEffectRecord.from_dict(item)
+                else TaskEffectRecord.from_dict(cast(Mapping[str, Any], item))
                 for item in (self.task_effect_records or ())
             ),
         )
@@ -453,7 +453,7 @@ class RunCheckpoint:
             "external_state_guards",
             tuple(
                 item if isinstance(item, ExternalStateGuard)
-                else ExternalStateGuard.from_dict(item)
+                else ExternalStateGuard.from_dict(cast(Mapping[str, Any], item))
                 for item in (self.external_state_guards or ())
             ),
         )
@@ -462,7 +462,7 @@ class RunCheckpoint:
             "runtime_evidence",
             tuple(
                 item if isinstance(item, RuntimeEvidence)
-                else RuntimeEvidence.from_dict(item)
+                else RuntimeEvidence.from_dict(cast(Mapping[str, Any], item))
                 for item in (self.runtime_evidence or ())
             ),
         )
@@ -598,7 +598,7 @@ class ResumeDecision:
             "evidence",
             tuple(
                 item if isinstance(item, RuntimeEvidence)
-                else RuntimeEvidence.from_dict(item)
+                else RuntimeEvidence.from_dict(cast(Mapping[str, Any], item))
                 for item in (self.evidence or ())
             ),
         )

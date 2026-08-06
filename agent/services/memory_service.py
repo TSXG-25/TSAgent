@@ -68,7 +68,13 @@ class MemoryService:
     # ===== Layer 4: Cross-Session Resolution Memory（v1.2C）=====
 
     @staticmethod
-    def record_resolution(user_id: str, utterance: str, resolved_target: str, kind: str, metadata: dict = None) -> None:
+    def record_resolution(
+        user_id: str,
+        utterance: str,
+        resolved_target: str,
+        kind: str,
+        metadata: Optional[dict] = None,
+    ) -> None:
         """记录跨会话解析事实（Facts，非 ResolutionResult）。"""
         from agent.memory.resolution import record_resolution as _record
         _record(user_id, utterance, resolved_target, kind, metadata)
@@ -152,3 +158,101 @@ class MemoryService:
 
         # Layer 2: Short-term (persistent, triggers auto-compression)
         MemoryService.add_exchange(user_id, user_input, assistant_response)
+
+
+class ScopedMemoryView:
+    """Session-owned projection over the shared memory implementation.
+
+    The underlying stores may remain process/application scoped, but callers
+    using this view cannot omit or replace the namespace. This is the narrow
+    dependency passed through ``SessionContext`` during v2.3A migration.
+    """
+
+    def __init__(self, namespace: str) -> None:
+        namespace = str(namespace or "").strip()
+        if not namespace:
+            raise ValueError("memory namespace must be non-empty")
+        self.namespace = namespace
+        self._closed = False
+
+    @property
+    def closed(self) -> bool:
+        return self._closed
+
+    def _ensure_open(self) -> None:
+        if self._closed:
+            raise RuntimeError(f"memory view is closed: {self.namespace}")
+
+    def record_user_message(self, content: str) -> None:
+        self._ensure_open()
+        MemoryService.record_user_message(self.namespace, content)
+
+    def record_assistant_message(self, content: str) -> None:
+        self._ensure_open()
+        MemoryService.record_assistant_message(self.namespace, content)
+
+    def get_session_context(self, n: int = 10) -> str:
+        self._ensure_open()
+        return MemoryService.get_session_context(self.namespace, n=n)
+
+    def add_exchange(self, user_input: str, assistant_response: str) -> None:
+        self._ensure_open()
+        MemoryService.add_exchange(self.namespace, user_input, assistant_response)
+
+    def get_short_term_history(self, n: int = 6) -> str:
+        self._ensure_open()
+        return MemoryService.get_short_term_history(self.namespace, n=n)
+
+    def retrieve_long_term(self, query: str, k: int = 5) -> str:
+        self._ensure_open()
+        return MemoryService.retrieve_long_term(self.namespace, query, k=k)
+
+    def store_summary(self, summary: str) -> None:
+        self._ensure_open()
+        MemoryService.store_summary(self.namespace, summary)
+
+    def get_user_facts(self) -> str:
+        self._ensure_open()
+        return MemoryService.get_user_facts(self.namespace)
+
+    def record_resolution(
+        self,
+        utterance: str,
+        resolved_target: str,
+        kind: str,
+        metadata: dict | None = None,
+    ) -> None:
+        self._ensure_open()
+        MemoryService.record_resolution(
+            self.namespace,
+            utterance,
+            resolved_target,
+            kind,
+            metadata,
+        )
+
+    def get_resolutions(self, n: int = 20) -> list:
+        self._ensure_open()
+        return MemoryService.get_resolutions(self.namespace, n=n)
+
+    def get_context(self, query: str) -> dict:
+        self._ensure_open()
+        return MemoryService.get_context(self.namespace, query)
+
+    async def extract_and_save_facts(self, text: str) -> dict:
+        self._ensure_open()
+        return await MemoryService.extract_and_save_facts(self.namespace, text)
+
+    def record_full_exchange(self, user_input: str, assistant_response: str) -> None:
+        self._ensure_open()
+        MemoryService.record_full_exchange(
+            self.namespace,
+            user_input,
+            assistant_response,
+        )
+
+    def close(self) -> None:
+        self._closed = True
+
+
+__all__ = ["MemoryService", "ScopedMemoryView"]

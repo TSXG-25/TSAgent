@@ -17,7 +17,8 @@ from agent.workspace import FileNode, PathMatch, MatchSource, WorkspaceContext, 
 from agent.workspace.index import ProjectIndex
 from agent.workspace.resolver import PathResolver
 from agent.workspace.cache import FileCache
-from agent.event_bus import event_bus
+from agent.event_bus import EventBus
+from agent.compat.event_bus import get_legacy_event_bus
 
 
 class Workspace:
@@ -26,8 +27,10 @@ class Workspace:
     Never performs file I/O. Delegates to ProjectIndex and PathResolver.
     """
 
-    def __init__(self, root: Path):
+    def __init__(self, root: Path, *, event_bus: Optional[EventBus] = None):
         self._root = root.resolve()
+        self._event_bus = event_bus or get_legacy_event_bus()
+        self._closed = False
 
         # Internal components
         self._index = ProjectIndex(self._root)
@@ -52,12 +55,21 @@ class Workspace:
     def root(self) -> Path:
         return self._root
 
+    @property
+    def closed(self) -> bool:
+        return self._closed
+
+    def _ensure_open(self) -> None:
+        if self._closed:
+            raise RuntimeError(f"workspace is closed: {self._root}")
+
     def resolve(self, spec: str) -> list[PathMatch]:
         """Resolve a path spec string to ranked candidate PathMatch list.
 
         Combines exact → recent → symbol → prefix → fuzzy matching.
         Sorted by score DESC → source priority → path ASC.
         """
+        self._ensure_open()
         return self._resolver.resolve(spec)
 
     def find(self, name: str) -> list[PathMatch]:
@@ -65,6 +77,7 @@ class Workspace:
 
         Equivalent to resolve() but explicitly for filename search.
         """
+        self._ensure_open()
         return self._resolver.resolve(name)
 
     def lookup(self, path: str) -> Optional[FileNode]:
@@ -73,14 +86,17 @@ class Workspace:
         Only matches exact relative paths (e.g. 'agent/runtime.py').
         For fuzzy matching, use resolve() or find().
         """
+        self._ensure_open()
         return self._index.lookup(path)
 
     def file_count(self) -> int:
         """Number of files in the project index."""
+        self._ensure_open()
         return self._index.file_count()
 
     def indexed_files(self) -> list[str]:
         """所有已索引文件的相对路径列表（Grounding 层检索用）。"""
+        self._ensure_open()
         return self._index.all_files()
 
     def current_context(self) -> WorkspaceContext:
@@ -88,19 +104,22 @@ class Workspace:
 
         Contains: current_file, opened_files, edited_files, active_directory, etc.
         """
+        self._ensure_open()
         return self._context
 
     def refresh(self) -> None:
         """Incremental refresh: scan for changed files."""
+        self._ensure_open()
         self._index.refresh()
-        event_bus.emit(WorkspaceEvent.INDEX_REBUILT, {"root": str(self._root)})
+        self._event_bus.emit(WorkspaceEvent.INDEX_REBUILT, {"root": str(self._root)})
 
     # ── Lifecycle ──
 
     def build_index(self) -> None:
         """Stage 1: fast file tree scan."""
+        self._ensure_open()
         self._index.build()
-        event_bus.emit(WorkspaceEvent.INDEX_REBUILT, {"root": str(self._root)})
+        self._event_bus.emit(WorkspaceEvent.INDEX_REBUILT, {"root": str(self._root)})
 
     async def build_symbols_async(self) -> None:
         """Stage 2: extract symbols in background.
@@ -108,23 +127,26 @@ class Workspace:
         Call this after build_index() in an async task.
         Does not block startup — symbols are a slow enrichment.
         """
+        self._ensure_open()
         if self._symbols_built:
             return
         self._index.build_symbols()
         self._symbols_built = True
-        event_bus.emit(WorkspaceEvent.SYMBOL_UPDATED, {"root": str(self._root)})
+        self._event_bus.emit(WorkspaceEvent.SYMBOL_UPDATED, {"root": str(self._root)})
 
     # ── Context tracking (called by tools) ──
 
     def record_open(self, path: str) -> None:
         """Record a file open event (called by filesystem tool)."""
+        self._ensure_open()
         self._context.record_open(path)
-        event_bus.emit(WorkspaceEvent.FILE_OPENED, {"path": path, "root": str(self._root)})
+        self._event_bus.emit(WorkspaceEvent.FILE_OPENED, {"path": path, "root": str(self._root)})
 
     def record_edit(self, path: str) -> None:
         """Record a file edit event (called by filesystem tool)."""
+        self._ensure_open()
         self._context.record_edit(path)
-        event_bus.emit(WorkspaceEvent.FILE_CHANGED, {"path": path, "root": str(self._root)})
+        self._event_bus.emit(WorkspaceEvent.FILE_CHANGED, {"path": path, "root": str(self._root)})
         self._cache.invalidate(path)  # clear cached content on edit
 
     def record_symbol(self, symbol: str) -> None:
@@ -132,17 +154,20 @@ class Workspace:
 
         Called by tools when code reading reveals specific symbols.
         """
+        self._ensure_open()
         self._context.record_symbol(symbol)
-        event_bus.emit(WorkspaceEvent.SYMBOL_UPDATED, {"symbol": symbol, "root": str(self._root)})
+        self._event_bus.emit(WorkspaceEvent.SYMBOL_UPDATED, {"symbol": symbol, "root": str(self._root)})
 
     # ── Trace ──
 
     def enable_trace(self, enabled: bool = True) -> None:
         """Enable debug tracing for resolve() calls."""
+        self._ensure_open()
         self._resolver.enable_trace(enabled)
 
     def last_trace(self) -> Optional[ResolveTrace]:
         """Get the last resolve() trace, or None if tracing is off."""
+        self._ensure_open()
         return self._resolver.last_trace()
 
     # ── Related files ──
@@ -161,6 +186,7 @@ class Workspace:
         Returns:
             Sorted list of related PathMatch objects
         """
+        self._ensure_open()
         node = self._index.lookup(path)
         if node is None:
             return []
@@ -217,7 +243,15 @@ class Workspace:
 
     @property
     def cache(self) -> FileCache:
+        self._ensure_open()
         return self._cache
+
+    def close(self) -> None:
+        """Release process-local indexes and caches without deleting files."""
+        if self._closed:
+            return
+        self._cache.clear()
+        self._closed = True
 
     def __repr__(self) -> str:
         files = self._index.file_count()

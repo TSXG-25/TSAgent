@@ -106,6 +106,37 @@ class RunReadSnapshot:
 
 
 @dataclass(frozen=True)
+class DurableEventRecord:
+    """Immutable JSON record returned by the durable event table."""
+
+    event_id: str
+    sequence_number: int
+    tenant_id: str
+    session_id: str
+    run_id: str
+    workflow_id: str | None
+    stage_id: str | None
+    task_id: str | None
+    event_type: str
+    timestamp: str
+    payload_json: str
+    payload_digest: str
+    run_revision: int
+
+
+@dataclass(frozen=True)
+class DurableEventHead:
+    """Cursor metadata for one Run's durable event stream."""
+
+    tenant_id: str
+    session_id: str
+    run_id: str
+    latest_sequence: int
+    retained_from_sequence: int
+    terminal_sequence: int | None
+
+
+@dataclass(frozen=True)
 class ArtifactCommitFact:
     """Verified, JSON-only artifact fact committed beside a checkpoint."""
 
@@ -274,6 +305,8 @@ __all__ = [
     "PreparedOperation",
     "RevisionRecord",
     "RunReadSnapshot",
+    "DurableEventRecord",
+    "DurableEventHead",
     "ServiceStartReservation",
     "RunHead",
 ]

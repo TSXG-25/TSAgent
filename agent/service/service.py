@@ -18,7 +18,7 @@ from .contracts import (
     StartRunRequest,
 )
 from .errors import AgentServiceError, ServiceErrorCode
-from .event_repository import EmptyEventRepository, EventRepository
+from .event_repository import EventRepository, SqliteEventRepository
 from .execution_launcher import ExecutionLauncher
 from .run_projector import (
     RunProjector,
@@ -47,7 +47,11 @@ class AgentService:
         self._store = runtime_store
         self._launcher = launcher
         self._contexts = context_factory or ServiceContextFactory(runtime_store)
-        self._events = event_repository or EmptyEventRepository()
+        # Durable SQLite events are the default Source of Truth in C-3.  A
+        # caller may still inject an explicit repository for deterministic
+        # tests or a future adapter, but the Service no longer silently falls
+        # back to an in-memory/empty stream.
+        self._events = event_repository or SqliteEventRepository(runtime_store)
         self._projector = RunProjector()
         self._runs: dict[str, _ManagedRun] = {}
         self._task_errors: dict[str, AgentServiceError] = {}

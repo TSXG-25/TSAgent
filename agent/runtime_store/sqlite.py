@@ -33,6 +33,8 @@ from agent.run_resume.codec import (
 
 from .contracts import (
     ArtifactCommitFact,
+    DurableEventHead,
+    DurableEventRecord,
     FenceGrant,
     FinalizationBundle,
     FinalizationFailurePoint,
@@ -46,7 +48,8 @@ from .contracts import (
 from .errors import DurableStoreError, StoreErrorCode
 
 
-SCHEMA_VERSION = "v2.3B-3"
+SCHEMA_VERSION = "v2.3C-3"
+_PREVIOUS_SCHEMA_VERSION = "v2.3B-3"
 DEFAULT_BUSY_TIMEOUT_MS = 5_000
 DEFAULT_WAL_AUTOCHECKPOINT = 1_000
 _MAX_BUSY_TIMEOUT_MS = 60_000
@@ -434,10 +437,47 @@ class SqliteRuntimeStore:
                         REFERENCES run_heads (tenant_id, run_id)
                 );
 
+                CREATE TABLE IF NOT EXISTS run_event_heads (
+                    tenant_id TEXT NOT NULL,
+                    session_id TEXT NOT NULL,
+                    run_id TEXT NOT NULL,
+                    latest_sequence INTEGER NOT NULL CHECK (latest_sequence >= 0),
+                    retained_from_sequence INTEGER NOT NULL CHECK (
+                        retained_from_sequence >= 0
+                    ),
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY (tenant_id, run_id),
+                    FOREIGN KEY (tenant_id, run_id)
+                        REFERENCES run_heads (tenant_id, run_id)
+                );
+
+                CREATE TABLE IF NOT EXISTS run_events (
+                    tenant_id TEXT NOT NULL,
+                    session_id TEXT NOT NULL,
+                    run_id TEXT NOT NULL,
+                    sequence_number INTEGER NOT NULL CHECK (sequence_number > 0),
+                    event_id TEXT NOT NULL,
+                    event_type TEXT NOT NULL,
+                    workflow_id TEXT,
+                    stage_id TEXT,
+                    task_id TEXT,
+                    timestamp TEXT NOT NULL,
+                    payload_json TEXT NOT NULL,
+                    payload_digest TEXT NOT NULL,
+                    run_revision INTEGER NOT NULL CHECK (run_revision >= 0),
+                    created_at TEXT NOT NULL,
+                    PRIMARY KEY (tenant_id, run_id, sequence_number),
+                    UNIQUE (tenant_id, run_id, event_id),
+                    FOREIGN KEY (tenant_id, run_id)
+                        REFERENCES run_heads (tenant_id, run_id)
+                );
+
                 CREATE INDEX IF NOT EXISTS idx_run_revisions_latest
                     ON run_resume_revisions (tenant_id, run_id, revision DESC);
                 CREATE INDEX IF NOT EXISTS idx_run_fences_current
                     ON run_fences (tenant_id, run_id, fence_token DESC);
+                CREATE INDEX IF NOT EXISTS idx_run_events_replay
+                    ON run_events (tenant_id, run_id, sequence_number ASC);
                 """
             )
             connection.execute("BEGIN IMMEDIATE")
@@ -464,10 +504,27 @@ class SqliteRuntimeStore:
                 stored_schema = str(row["schema_version"])
                 generation = str(row["store_generation"])
                 if stored_schema != schema_version:
-                    raise DurableStoreError(
-                        StoreErrorCode.SCHEMA_INCOMPATIBLE,
-                        f"schema version mismatch: stored={stored_schema} expected={schema_version}",
-                    )
+                    if (
+                        stored_schema == _PREVIOUS_SCHEMA_VERSION
+                        and schema_version == SCHEMA_VERSION
+                    ):
+                        # C-3 only adds tables and indexes.  DDL above is
+                        # idempotent, so upgrading the metadata in this
+                        # transaction is sufficient and preserves all B data.
+                        stored_schema = schema_version
+                        connection.execute(
+                            """
+                            UPDATE runtime_meta
+                            SET schema_version = ?, updated_at = ?
+                            WHERE meta_id = 1
+                            """,
+                            (schema_version, now),
+                        )
+                    else:
+                        raise DurableStoreError(
+                            StoreErrorCode.SCHEMA_INCOMPATIBLE,
+                            f"schema version mismatch: stored={stored_schema} expected={schema_version}",
+                        )
                 if expected_store_generation is not None and generation != expected_store_generation:
                     raise DurableStoreError(
                         StoreErrorCode.STORE_GENERATION_MISMATCH,
@@ -2647,6 +2704,386 @@ class SqliteRuntimeStore:
                 if self._connection.in_transaction:
                     self._connection.execute("ROLLBACK")
                 raise
+
+    @staticmethod
+    def _event_contract(row: sqlite3.Row) -> DurableEventRecord:
+        return DurableEventRecord(
+            event_id=str(row["event_id"]),
+            sequence_number=int(row["sequence_number"]),
+            tenant_id=str(row["tenant_id"]),
+            session_id=str(row["session_id"]),
+            run_id=str(row["run_id"]),
+            workflow_id=(
+                None if row["workflow_id"] is None else str(row["workflow_id"])
+            ),
+            stage_id=None if row["stage_id"] is None else str(row["stage_id"]),
+            task_id=None if row["task_id"] is None else str(row["task_id"]),
+            event_type=str(row["event_type"]),
+            timestamp=str(row["timestamp"]),
+            payload_json=str(row["payload_json"]),
+            payload_digest=str(row["payload_digest"]),
+            run_revision=int(row["run_revision"]),
+        )
+
+    @staticmethod
+    def _event_columns() -> str:
+        return (
+            "tenant_id, session_id, run_id, sequence_number, event_id, "
+            "event_type, workflow_id, stage_id, task_id, timestamp, "
+            "payload_json, payload_digest, run_revision, created_at"
+        )
+
+    def append_event(
+        self,
+        tenant_id: str,
+        session_id: str,
+        run_id: str,
+        *,
+        event_id: str,
+        event_type: str,
+        timestamp: str,
+        payload: Mapping[str, Any],
+        workflow_id: str | None = None,
+        stage_id: str | None = None,
+        task_id: str | None = None,
+        run_revision: int = 0,
+        expected_store_generation: str | None = None,
+    ) -> DurableEventRecord:
+        """Append one event with per-Run sequence and event-id idempotency.
+
+        Sequence allocation and the event insert occur inside the same short
+        ``BEGIN IMMEDIATE`` transaction.  No caller-provided sequence is
+        accepted, so concurrent connections cannot race on ``MAX + 1``.
+        """
+
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        session_id = _require_text(session_id, "session_id")
+        run_id = _require_text(run_id, "run_id")
+        event_id = _require_text(event_id, "event_id")
+        event_type_value = getattr(event_type, "value", event_type)
+        event_type_value = _require_text(str(event_type_value), "event_type")
+        timestamp = _require_text(timestamp, "timestamp")
+        if isinstance(run_revision, bool) or run_revision < 0:
+            raise DurableStoreError(
+                StoreErrorCode.INVALID_ARGUMENT,
+                "run_revision must be a non-negative integer",
+            )
+        if not isinstance(payload, Mapping):
+            raise DurableStoreError(
+                StoreErrorCode.INVALID_ARGUMENT,
+                "event payload must be a JSON object",
+            )
+        optional_ids = {
+            "workflow_id": None if workflow_id is None else _require_text(workflow_id, "workflow_id"),
+            "stage_id": None if stage_id is None else _require_text(stage_id, "stage_id"),
+            "task_id": None if task_id is None else _require_text(task_id, "task_id"),
+        }
+        payload_json = _canonical_json(payload)
+        payload_digest = _digest_text(payload_json)
+        self._check_generation(expected_store_generation)
+
+        with self._write_transaction() as connection:
+            self._fetch_head_tx(
+                connection,
+                tenant_id,
+                run_id,
+                session_id=session_id,
+            )
+            existing = connection.execute(
+                f"SELECT {self._event_columns()} FROM run_events "
+                "WHERE tenant_id = ? AND run_id = ? AND event_id = ?",
+                (tenant_id, run_id, event_id),
+            ).fetchone()
+            if existing is not None:
+                same_identity = (
+                    str(existing["session_id"]) == session_id
+                    and str(existing["event_type"]) == event_type_value
+                    and existing["workflow_id"] == optional_ids["workflow_id"]
+                    and existing["stage_id"] == optional_ids["stage_id"]
+                    and existing["task_id"] == optional_ids["task_id"]
+                    and str(existing["timestamp"]) == timestamp
+                    and str(existing["payload_digest"]) == payload_digest
+                    and int(existing["run_revision"]) == run_revision
+                )
+                if not same_identity:
+                    raise DurableStoreError(
+                        StoreErrorCode.IDEMPOTENCY_CONFLICT,
+                        "event_id is bound to a different event payload",
+                    )
+                return self._event_contract(existing)
+
+            latest = connection.execute(
+                "SELECT event_type FROM run_events "
+                "WHERE tenant_id = ? AND run_id = ? "
+                "ORDER BY sequence_number DESC LIMIT 1",
+                (tenant_id, run_id),
+            ).fetchone()
+            if latest is not None and str(latest["event_type"]) in {
+                "run_completed",
+                "run_failed",
+                "run_blocked",
+            }:
+                raise DurableStoreError(
+                    StoreErrorCode.INVALID_ARGUMENT,
+                    "a terminal Run event cannot be followed by another event",
+                )
+
+            now = _now()
+            connection.execute(
+                """
+                INSERT OR IGNORE INTO run_event_heads
+                    (tenant_id, session_id, run_id, latest_sequence,
+                     retained_from_sequence, updated_at)
+                VALUES (?, ?, ?, 0, 0, ?)
+                """,
+                (tenant_id, session_id, run_id, now),
+            )
+            event_head = connection.execute(
+                """
+                SELECT latest_sequence
+                FROM run_event_heads
+                WHERE tenant_id = ? AND run_id = ?
+                """,
+                (tenant_id, run_id),
+            ).fetchone()
+            if event_head is None:
+                raise DurableStoreError(
+                    StoreErrorCode.INVALID_ARGUMENT,
+                    "event head could not be initialized",
+                )
+            sequence = int(event_head["latest_sequence"]) + 1
+            connection.execute(
+                """
+                INSERT INTO run_events
+                    (tenant_id, session_id, run_id, sequence_number, event_id,
+                     event_type, workflow_id, stage_id, task_id, timestamp,
+                     payload_json, payload_digest, run_revision, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    tenant_id,
+                    session_id,
+                    run_id,
+                    sequence,
+                    event_id,
+                    event_type_value,
+                    optional_ids["workflow_id"],
+                    optional_ids["stage_id"],
+                    optional_ids["task_id"],
+                    timestamp,
+                    payload_json,
+                    payload_digest,
+                    run_revision,
+                    now,
+                ),
+            )
+            cursor = connection.execute(
+                """
+                UPDATE run_event_heads
+                SET latest_sequence = ?, updated_at = ?
+                WHERE tenant_id = ? AND run_id = ?
+                  AND latest_sequence = ?
+                """,
+                (sequence, now, tenant_id, run_id, sequence - 1),
+            )
+            if cursor.rowcount != 1:
+                raise DurableStoreError(
+                    StoreErrorCode.REVISION_CONFLICT,
+                    "event head CAS did not update exactly one row",
+                )
+            row = connection.execute(
+                f"SELECT {self._event_columns()} FROM run_events "
+                "WHERE tenant_id = ? AND run_id = ? AND sequence_number = ?",
+                (tenant_id, run_id, sequence),
+            ).fetchone()
+            if row is None:
+                raise DurableStoreError(
+                    StoreErrorCode.INVALID_ARGUMENT,
+                    "newly appended event could not be reloaded",
+                )
+            return self._event_contract(row)
+
+    def get_event_head(
+        self,
+        tenant_id: str,
+        run_id: str,
+        *,
+        session_id: str | None = None,
+    ) -> DurableEventHead:
+        """Read cursor and terminal metadata from one SQLite snapshot."""
+
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        run_id = _require_text(run_id, "run_id")
+        if session_id is not None:
+            session_id = _require_text(session_id, "session_id")
+        with self._lock:
+            self._ensure_open()
+            try:
+                self._connection.execute("BEGIN")
+                head = self._fetch_head_tx(
+                    self._connection,
+                    tenant_id,
+                    run_id,
+                    session_id=session_id,
+                )
+                row = self._connection.execute(
+                    """
+                    SELECT latest_sequence, retained_from_sequence
+                    FROM run_event_heads
+                    WHERE tenant_id = ? AND run_id = ?
+                    """,
+                    (tenant_id, run_id),
+                ).fetchone()
+                latest_sequence = int(row["latest_sequence"]) if row is not None else 0
+                retained_from_sequence = int(row["retained_from_sequence"]) if row is not None else 0
+                terminal = self._connection.execute(
+                    """
+                    SELECT sequence_number
+                    FROM run_events
+                    WHERE tenant_id = ? AND run_id = ?
+                      AND event_type IN ('run_completed', 'run_failed', 'run_blocked')
+                    ORDER BY sequence_number ASC
+                    LIMIT 1
+                    """,
+                    (tenant_id, run_id),
+                ).fetchone()
+                self._connection.execute("COMMIT")
+                return DurableEventHead(
+                    tenant_id=tenant_id,
+                    session_id=str(head["session_id"]),
+                    run_id=run_id,
+                    latest_sequence=latest_sequence,
+                    retained_from_sequence=retained_from_sequence,
+                    terminal_sequence=(
+                        None if terminal is None else int(terminal["sequence_number"])
+                    ),
+                )
+            except Exception:
+                if self._connection.in_transaction:
+                    self._connection.execute("ROLLBACK")
+                raise
+
+    def read_events(
+        self,
+        tenant_id: str,
+        run_id: str,
+        *,
+        session_id: str,
+        after_sequence: int = 0,
+        limit: int | None = None,
+    ) -> tuple[DurableEventRecord, ...]:
+        """Read events using an exclusive, per-Run cursor."""
+
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        session_id = _require_text(session_id, "session_id")
+        run_id = _require_text(run_id, "run_id")
+        if isinstance(after_sequence, bool) or after_sequence < 0:
+            raise DurableStoreError(
+                StoreErrorCode.INVALID_ARGUMENT,
+                "after_sequence must be a non-negative integer",
+            )
+        if limit is not None and (isinstance(limit, bool) or limit < 1):
+            raise DurableStoreError(
+                StoreErrorCode.INVALID_ARGUMENT,
+                "limit must be a positive integer",
+            )
+        with self._lock:
+            self._ensure_open()
+            try:
+                self._connection.execute("BEGIN")
+                self._fetch_head_tx(
+                    self._connection,
+                    tenant_id,
+                    run_id,
+                    session_id=session_id,
+                )
+                event_head = self._connection.execute(
+                    """
+                    SELECT latest_sequence, retained_from_sequence
+                    FROM run_event_heads
+                    WHERE tenant_id = ? AND run_id = ?
+                    """,
+                    (tenant_id, run_id),
+                ).fetchone()
+                latest_sequence = int(event_head["latest_sequence"]) if event_head is not None else 0
+                retained_from_sequence = int(event_head["retained_from_sequence"]) if event_head is not None else 0
+                if after_sequence < retained_from_sequence:
+                    raise DurableStoreError(
+                        StoreErrorCode.EVENT_CURSOR_EXPIRED,
+                        "event cursor is older than the retained event floor",
+                    )
+                if after_sequence > latest_sequence:
+                    rows: list[sqlite3.Row] = []
+                else:
+                    limit_sql = "" if limit is None else " LIMIT ?"
+                    params: tuple[Any, ...]
+                    if limit is None:
+                        params = (tenant_id, run_id, after_sequence)
+                    else:
+                        params = (tenant_id, run_id, after_sequence, limit)
+                    rows = list(
+                        self._connection.execute(
+                            f"SELECT {self._event_columns()} FROM run_events "
+                            "WHERE tenant_id = ? AND run_id = ? "
+                            "AND sequence_number > ? "
+                            "ORDER BY sequence_number ASC" + limit_sql,
+                            params,
+                        ).fetchall()
+                    )
+                self._connection.execute("COMMIT")
+                return tuple(self._event_contract(row) for row in rows)
+            except Exception:
+                if self._connection.in_transaction:
+                    self._connection.execute("ROLLBACK")
+                raise
+
+    def set_event_retention_floor(
+        self,
+        tenant_id: str,
+        session_id: str,
+        run_id: str,
+        retained_from_sequence: int,
+    ) -> None:
+        """Set a test/maintenance cursor floor without deleting event rows."""
+
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        session_id = _require_text(session_id, "session_id")
+        run_id = _require_text(run_id, "run_id")
+        if isinstance(retained_from_sequence, bool) or retained_from_sequence < 0:
+            raise DurableStoreError(
+                StoreErrorCode.INVALID_ARGUMENT,
+                "retained_from_sequence must be non-negative",
+            )
+        with self._write_transaction() as connection:
+            self._fetch_head_tx(connection, tenant_id, run_id, session_id=session_id)
+            row = connection.execute(
+                """
+                SELECT latest_sequence, retained_from_sequence
+                FROM run_event_heads
+                WHERE tenant_id = ? AND run_id = ?
+                """,
+                (tenant_id, run_id),
+            ).fetchone()
+            latest_sequence = int(row["latest_sequence"]) if row is not None else 0
+            previous_floor = int(row["retained_from_sequence"]) if row is not None else 0
+            if retained_from_sequence > latest_sequence or retained_from_sequence < previous_floor:
+                raise DurableStoreError(
+                    StoreErrorCode.INVALID_ARGUMENT,
+                    "retention floor must be monotonic and not exceed latest sequence",
+                )
+            now = _now()
+            connection.execute(
+                """
+                INSERT INTO run_event_heads
+                    (tenant_id, session_id, run_id, latest_sequence,
+                     retained_from_sequence, updated_at)
+                VALUES (?, ?, ?, 0, ?, ?)
+                ON CONFLICT (tenant_id, run_id) DO UPDATE SET
+                    retained_from_sequence = excluded.retained_from_sequence,
+                    updated_at = excluded.updated_at
+                """,
+                (tenant_id, session_id, run_id, retained_from_sequence, now),
+            )
 
     @staticmethod
     def _prepared_contract(

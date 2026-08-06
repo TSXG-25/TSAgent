@@ -29,6 +29,8 @@ from .event_repository import (
     EmptyEventRepository,
     EventRepository,
     InMemoryEventRepository,
+    PendingRunEvent,
+    SqliteEventRepository,
 )
 from .execution_launcher import ExecutionLauncher
 from .events import EventOrderingOracle
@@ -50,6 +52,8 @@ __all__ = [
     "EventOrderingOracle",
     "EventRepository",
     "EmptyEventRepository",
+    "PendingRunEvent",
+    "SqliteEventRepository",
     "EventStreamRequest",
     "EventType",
     "FailureSummary",

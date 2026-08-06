@@ -1,13 +1,15 @@
-"""Durable SQLite primitives for the v2.3B Runtime Store.
+"""Durable SQLite primitives for the v2.3B/v2.3C Runtime Store.
 
-This package owns the durable Runtime Store boundary for v2.3B.  It provides
-schema bootstrap, writer fencing, revision CAS, idempotency, preparation
-intents, atomic Checkpoint/Artifact/RunIndex finalization, and the scoped view
-used by production Runtime contexts.
+This package owns the durable Runtime Store boundary for v2.3B and v2.3C.  It
+provides schema bootstrap, writer fencing, revision CAS, idempotency,
+preparation intents, atomic Checkpoint/Artifact/RunIndex finalization,
+durable Run events, and the scoped view used by production Runtime contexts.
 """
 
 from .contracts import (
     ArtifactCommitFact,
+    DurableEventHead,
+    DurableEventRecord,
     FenceGrant,
     FinalizationBundle,
     FinalizationFailurePoint,
@@ -37,6 +39,8 @@ __all__ = [
     "DEFAULT_WAL_AUTOCHECKPOINT",
     "DurableStoreError",
     "ArtifactCommitFact",
+    "DurableEventHead",
+    "DurableEventRecord",
     "CheckpointStagingBuffer",
     "FenceGrant",
     "FinalizationBundle",

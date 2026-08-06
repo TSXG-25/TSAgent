@@ -3,7 +3,7 @@
 The implementation deliberately contains no Provider, Tool, Workspace or
 asyncio calls.  Every write transaction is short, synchronous and uses
 ``BEGIN IMMEDIATE``.  External side effects belong after a PREPARED intent and
-before a later finalization transaction (v2.3B-3).
+before a later Finalization Bundle transaction (v2.3B-3/B-4).
 """
 
 from __future__ import annotations
@@ -18,8 +18,18 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator, Mapping, Sequence
 
-from agent.checkpoint.codec import checkpoint_digest, serialize_checkpoint
-from agent.run_resume.codec import run_index_digest, serialize_run_index
+from agent.checkpoint.codec import (
+    CheckpointCodecError,
+    checkpoint_digest,
+    deserialize_checkpoint,
+    serialize_checkpoint,
+)
+from agent.run_resume.codec import (
+    RunResumeCodecError,
+    deserialize_run_index,
+    run_index_digest,
+    serialize_run_index,
+)
 
 from .contracts import (
     ArtifactCommitFact,
@@ -1136,6 +1146,162 @@ class SqliteRuntimeStore:
                 created_at=created_at,
             )
 
+    def activate_workflow_with_checkpoint(
+        self,
+        tenant_id: str,
+        session_id: str,
+        run_id: str,
+        workflow_id: str,
+        *,
+        request_id: str,
+        writer_id: str,
+        fence_token: int,
+        expected_revision: int,
+        expected_parent_digest: str,
+        initial_checkpoint: Any,
+        next_run_index: Any,
+        expected_store_generation: str | None = None,
+    ) -> Any:
+        """Atomically publish pending -> active and its initial Checkpoint."""
+
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        session_id = _require_text(session_id, "session_id")
+        run_id = _require_text(run_id, "run_id")
+        workflow_id = _require_text(workflow_id, "workflow_id")
+        request_id = _require_text(request_id, "request_id")
+        writer_id = _require_text(writer_id, "writer_id")
+        self._check_generation(expected_store_generation)
+        with self._write_transaction() as connection:
+            head = self._validate_write_head_tx(
+                connection,
+                tenant_id,
+                session_id,
+                run_id,
+                writer_id=writer_id,
+                fence_token=fence_token,
+                expected_revision=expected_revision,
+                expected_parent_digest=expected_parent_digest,
+                expected_store_generation=expected_store_generation,
+            )
+            if (
+                initial_checkpoint.run_id != run_id
+                or initial_checkpoint.session_id != session_id
+                or initial_checkpoint.workflow_id != workflow_id
+                or initial_checkpoint.sequence_number != 0
+                or initial_checkpoint.parent_checkpoint_id is not None
+                or not initial_checkpoint.activation_attempt_id.strip()
+            ):
+                raise DurableStoreError(
+                    StoreErrorCode.CHECKPOINT_LINEAGE_CONFLICT,
+                    "activation checkpoint identity or initial lineage is invalid",
+                )
+            if initial_checkpoint.status.value != "RUNNING":
+                raise DurableStoreError(
+                    StoreErrorCode.RUN_INDEX_CONFLICT,
+                    "activation checkpoint must start in RUNNING status",
+                )
+            summary = next_run_index.workflow(workflow_id)
+            if summary is None or summary.status.value != "RUNNING":
+                raise DurableStoreError(
+                    StoreErrorCode.RUN_INDEX_CONFLICT,
+                    "activation index must mark the Workflow RUNNING",
+                )
+            if (
+                next_run_index.run_id != run_id
+                or next_run_index.session_id != session_id
+                or next_run_index.active_workflow_id != workflow_id
+                or next_run_index.active_checkpoint_id != initial_checkpoint.checkpoint_id
+                or summary.checkpoint_id != initial_checkpoint.checkpoint_id
+                or summary.activation_attempt_id != initial_checkpoint.activation_attempt_id
+                or next_run_index.revision != expected_revision + 1
+                or next_run_index.parent_digest != expected_parent_digest
+                or next_run_index.store_generation != self.store_generation
+            ):
+                raise DurableStoreError(
+                    StoreErrorCode.RUN_INDEX_CONFLICT,
+                    "activation index does not match the initial Checkpoint",
+                )
+            checkpoint_json = serialize_checkpoint(initial_checkpoint)
+            checkpoint_hash = checkpoint_digest(initial_checkpoint)
+            index_json = serialize_run_index(next_run_index)
+            index_hash = run_index_digest(next_run_index)
+            revision = expected_revision + 1
+            now = _now()
+            connection.execute(
+                """
+                INSERT INTO checkpoints
+                    (tenant_id, session_id, run_id, workflow_id, checkpoint_id,
+                     sequence_number, parent_checkpoint_id, activation_attempt_id,
+                     payload_json, payload_digest, request_id, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)
+                """,
+                (
+                    tenant_id,
+                    session_id,
+                    run_id,
+                    workflow_id,
+                    initial_checkpoint.checkpoint_id,
+                    initial_checkpoint.sequence_number,
+                    initial_checkpoint.activation_attempt_id,
+                    checkpoint_json,
+                    checkpoint_hash,
+                    request_id,
+                    now,
+                ),
+            )
+            connection.execute(
+                """
+                INSERT INTO run_resume_revisions
+                    (tenant_id, session_id, run_id, revision, parent_digest,
+                     payload_json, payload_digest, request_id, writer_id,
+                     fence_token, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    tenant_id,
+                    session_id,
+                    run_id,
+                    revision,
+                    expected_parent_digest,
+                    index_json,
+                    index_hash,
+                    request_id,
+                    writer_id,
+                    fence_token,
+                    now,
+                ),
+            )
+            cursor = connection.execute(
+                """
+                UPDATE run_heads
+                SET current_revision = ?, current_digest = ?,
+                    current_writer_id = ?, request_id = ?, run_status = 'RUNNING',
+                    updated_at = ?
+                WHERE tenant_id = ? AND run_id = ?
+                  AND current_revision = ? AND current_digest = ?
+                  AND current_fence_token = ? AND current_writer_id = ?
+                """,
+                (
+                    revision,
+                    index_hash,
+                    writer_id,
+                    request_id,
+                    now,
+                    tenant_id,
+                    run_id,
+                    expected_revision,
+                    expected_parent_digest,
+                    fence_token,
+                    writer_id,
+                ),
+            )
+            if cursor.rowcount != 1:
+                raise DurableStoreError(
+                    StoreErrorCode.REVISION_CONFLICT,
+                    "activation Run Head CAS did not update exactly one row",
+                )
+            return next_run_index
+
     def get_latest_revision(
         self,
         tenant_id: str,
@@ -1170,6 +1336,176 @@ class SqliteRuntimeStore:
                     "session does not match the revision identity",
                 )
             return self._revision_contract(row)
+
+    def get_checkpoint(
+        self,
+        tenant_id: str,
+        run_id: str,
+        checkpoint_id: str,
+        *,
+        session_id: str | None = None,
+    ) -> Any | None:
+        """Load one durable Checkpoint without exposing SQLite rows."""
+
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        run_id = _require_text(run_id, "run_id")
+        checkpoint_id = _require_text(checkpoint_id, "checkpoint_id")
+        with self._lock:
+            self._ensure_open()
+            row = self._connection.execute(
+                """
+                SELECT tenant_id, session_id, run_id, checkpoint_id,
+                       payload_json, payload_digest
+                FROM checkpoints
+                WHERE tenant_id = ? AND run_id = ? AND checkpoint_id = ?
+                """,
+                (tenant_id, run_id, checkpoint_id),
+            ).fetchone()
+            if row is None:
+                return None
+            if session_id is not None and str(row["session_id"]) != session_id:
+                raise DurableStoreError(
+                    StoreErrorCode.IDENTITY_MISMATCH,
+                    "session does not match the checkpoint identity",
+                )
+            try:
+                checkpoint = deserialize_checkpoint(str(row["payload_json"]))
+            except CheckpointCodecError as exc:
+                raise DurableStoreError(
+                    StoreErrorCode.CHECKPOINT_LINEAGE_CONFLICT,
+                    "durable checkpoint payload is not recoverable",
+                ) from exc
+            if checkpoint_digest(checkpoint) != str(row["payload_digest"]):
+                raise DurableStoreError(
+                    StoreErrorCode.CHECKPOINT_LINEAGE_CONFLICT,
+                    "durable checkpoint digest is inconsistent",
+                )
+            return checkpoint
+
+    def checkpoint_history(
+        self,
+        tenant_id: str,
+        run_id: str,
+        *,
+        session_id: str | None = None,
+        workflow_id: str | None = None,
+        activation_attempt_id: str | None = None,
+    ) -> tuple[Any, ...]:
+        """Return a decoded immutable Checkpoint lineage for a Run."""
+
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        run_id = _require_text(run_id, "run_id")
+        clauses = ["tenant_id = ?", "run_id = ?"]
+        parameters: list[Any] = [tenant_id, run_id]
+        if session_id is not None:
+            clauses.append("session_id = ?")
+            parameters.append(_require_text(session_id, "session_id"))
+        if workflow_id is not None:
+            clauses.append("workflow_id = ?")
+            parameters.append(_require_text(workflow_id, "workflow_id"))
+        if activation_attempt_id is not None:
+            clauses.append("activation_attempt_id = ?")
+            parameters.append(str(activation_attempt_id))
+        query = (
+            "SELECT payload_json, payload_digest FROM checkpoints WHERE "
+            + " AND ".join(clauses)
+            + " ORDER BY created_at ASC, sequence_number ASC, checkpoint_id ASC"
+        )
+        with self._lock:
+            self._ensure_open()
+            rows = self._connection.execute(query, tuple(parameters)).fetchall()
+            decoded: list[Any] = []
+            for row in rows:
+                try:
+                    checkpoint = deserialize_checkpoint(str(row["payload_json"]))
+                except CheckpointCodecError as exc:
+                    raise DurableStoreError(
+                        StoreErrorCode.CHECKPOINT_LINEAGE_CONFLICT,
+                        "durable checkpoint payload is not recoverable",
+                    ) from exc
+                if checkpoint_digest(checkpoint) != str(row["payload_digest"]):
+                    raise DurableStoreError(
+                        StoreErrorCode.CHECKPOINT_LINEAGE_CONFLICT,
+                        "durable checkpoint digest is inconsistent",
+                    )
+                decoded.append(checkpoint)
+            return tuple(decoded)
+
+    def latest_checkpoint(
+        self,
+        tenant_id: str,
+        run_id: str,
+        *,
+        session_id: str | None = None,
+        workflow_id: str | None = None,
+        activation_attempt_id: str | None = None,
+    ) -> Any | None:
+        history = self.checkpoint_history(
+            tenant_id,
+            run_id,
+            session_id=session_id,
+            workflow_id=workflow_id,
+            activation_attempt_id=activation_attempt_id,
+        )
+        return history[-1] if history else None
+
+    def get_run_index(
+        self,
+        tenant_id: str,
+        run_id: str,
+        *,
+        session_id: str | None = None,
+    ) -> Any | None:
+        """Decode the latest RunResumeIndex revision.
+
+        Preparation rows share the revision ledger with index rows.  They are
+        intentionally skipped here; the index remains the latest valid
+        coordination projection until a Finalization Bundle publishes its
+        successor.
+        """
+
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        run_id = _require_text(run_id, "run_id")
+        with self._lock:
+            self._ensure_open()
+            if session_id is not None:
+                session_id = _require_text(session_id, "session_id")
+            rows = self._connection.execute(
+                """
+                SELECT session_id, revision, payload_json, payload_digest
+                FROM run_resume_revisions
+                WHERE tenant_id = ? AND run_id = ?
+                ORDER BY revision DESC
+                """,
+                (tenant_id, run_id),
+            ).fetchall()
+            for row in rows:
+                if session_id is not None and str(row["session_id"]) != session_id:
+                    raise DurableStoreError(
+                        StoreErrorCode.IDENTITY_MISMATCH,
+                        "session does not match the Run index identity",
+                    )
+                try:
+                    index = deserialize_run_index(str(row["payload_json"]))
+                except RunResumeCodecError:
+                    continue
+                if index.run_id != run_id or index.session_id != str(row["session_id"]):
+                    raise DurableStoreError(
+                        StoreErrorCode.RUN_INDEX_CONFLICT,
+                        "durable RunResumeIndex identity is inconsistent",
+                    )
+                if index.revision != int(row["revision"]):
+                    raise DurableStoreError(
+                        StoreErrorCode.RUN_INDEX_CONFLICT,
+                        "durable RunResumeIndex revision is inconsistent",
+                    )
+                if run_index_digest(index) != str(row["payload_digest"]):
+                    raise DurableStoreError(
+                        StoreErrorCode.RUN_INDEX_CONFLICT,
+                        "durable RunResumeIndex digest is inconsistent",
+                    )
+                return index
+            return None
 
     @staticmethod
     def _revision_contract(row: sqlite3.Row) -> RevisionRecord:
@@ -1498,45 +1834,45 @@ class SqliteRuntimeStore:
             )
 
             checkpoint = bundle.checkpoint
-            checkpoint_json = serialize_checkpoint(checkpoint)
-            checkpoint_hash = checkpoint_digest(checkpoint)
             index = bundle.next_run_index
             index_json = serialize_run_index(index)
             index_hash = run_index_digest(index)
             revision = int(validated["current_revision"]) + 1
             now = _now()
-            parent_checkpoint_id = self._validate_checkpoint_lineage_tx(
-                connection,
-                tenant_id,
-                run_id,
-                workflow_id,
-                checkpoint,
-            )
-
-            connection.execute(
-                """
-                INSERT INTO checkpoints
-                    (tenant_id, session_id, run_id, workflow_id, checkpoint_id,
-                     sequence_number, parent_checkpoint_id, activation_attempt_id,
-                     payload_json, payload_digest, request_id, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
+            for chain_checkpoint in bundle.checkpoint_chain:
+                parent_checkpoint_id = self._validate_checkpoint_lineage_tx(
+                    connection,
                     tenant_id,
-                    session_id,
                     run_id,
                     workflow_id,
-                    checkpoint.checkpoint_id,
-                    checkpoint.sequence_number,
-                    parent_checkpoint_id,
-                    checkpoint.activation_attempt_id,
-                    checkpoint_json,
-                    checkpoint_hash,
-                    request_id,
-                    now,
-                ),
-            )
+                    chain_checkpoint,
+                )
+                connection.execute(
+                    """
+                    INSERT INTO checkpoints
+                        (tenant_id, session_id, run_id, workflow_id, checkpoint_id,
+                         sequence_number, parent_checkpoint_id, activation_attempt_id,
+                         payload_json, payload_digest, request_id, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        tenant_id,
+                        session_id,
+                        run_id,
+                        workflow_id,
+                        chain_checkpoint.checkpoint_id,
+                        chain_checkpoint.sequence_number,
+                        parent_checkpoint_id,
+                        chain_checkpoint.activation_attempt_id,
+                        serialize_checkpoint(chain_checkpoint),
+                        checkpoint_digest(chain_checkpoint),
+                        request_id,
+                        now,
+                    ),
+                )
             self._maybe_inject_finalization_failure(point, FinalizationFailurePoint.AFTER_CHECKPOINT_INSERT)
+
+            checkpoint_hash = checkpoint_digest(checkpoint)
 
             for artifact in bundle.artifacts:
                 existing_artifact = connection.execute(
@@ -1731,6 +2067,39 @@ class SqliteRuntimeStore:
     ) -> None:
         checkpoint = bundle.checkpoint
         index = bundle.next_run_index
+        chain = bundle.checkpoint_chain
+        if not chain or chain[-1] != checkpoint:
+            raise DurableStoreError(
+                StoreErrorCode.CHECKPOINT_LINEAGE_CONFLICT,
+                "checkpoint_chain 必须以 final checkpoint 结束",
+            )
+        for chain_checkpoint in chain:
+            if (
+                chain_checkpoint.run_id != run_id
+                or chain_checkpoint.workflow_id != workflow_id
+            ):
+                raise DurableStoreError(
+                    StoreErrorCode.CHECKPOINT_LINEAGE_CONFLICT,
+                    "checkpoint chain Run/Workflow identity does not match the Bundle",
+                )
+            if chain_checkpoint.session_id != session_id:
+                raise DurableStoreError(
+                    StoreErrorCode.IDENTITY_MISMATCH,
+                    "checkpoint chain session identity does not match the Bundle",
+                )
+            if not chain_checkpoint.activation_attempt_id.strip():
+                raise DurableStoreError(
+                    StoreErrorCode.CHECKPOINT_LINEAGE_CONFLICT,
+                    "checkpoint chain must identify an activation attempt",
+                )
+        if any(
+            current.activation_attempt_id != chain[0].activation_attempt_id
+            for current in chain
+        ):
+            raise DurableStoreError(
+                StoreErrorCode.CHECKPOINT_LINEAGE_CONFLICT,
+                "checkpoint chain cannot change activation attempt",
+            )
         if checkpoint.run_id != run_id or checkpoint.workflow_id != workflow_id:
             raise DurableStoreError(
                 StoreErrorCode.CHECKPOINT_LINEAGE_CONFLICT,

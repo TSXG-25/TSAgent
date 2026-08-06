@@ -1,9 +1,9 @@
 """Durable SQLite primitives for the v2.3B Runtime Store.
 
-This package intentionally stops below the Checkpoint/Artifact finalization
-bundle.  It provides the durable facts that later runtime layers can compose:
-schema bootstrap, writer fencing, revision CAS, idempotency and preparation
-intents.
+This package owns the durable Runtime Store boundary for v2.3B.  It provides
+schema bootstrap, writer fencing, revision CAS, idempotency, preparation
+intents, atomic Checkpoint/Artifact/RunIndex finalization, and the scoped view
+used by production Runtime contexts.
 """
 
 from .contracts import (
@@ -16,6 +16,7 @@ from .contracts import (
     RevisionRecord,
     RunHead,
 )
+from .buffer import CheckpointStagingBuffer
 from .errors import DurableStoreError, StoreErrorCode
 from .sqlite import (
     DEFAULT_BUSY_TIMEOUT_MS,
@@ -23,12 +24,18 @@ from .sqlite import (
     SCHEMA_VERSION,
     SqliteRuntimeStore,
 )
+from .view import (
+    DurableRuntimeStoreView,
+    SqliteCheckpointStoreAdapter,
+    SqliteRunResumeStoreAdapter,
+)
 
 __all__ = [
     "DEFAULT_BUSY_TIMEOUT_MS",
     "DEFAULT_WAL_AUTOCHECKPOINT",
     "DurableStoreError",
     "ArtifactCommitFact",
+    "CheckpointStagingBuffer",
     "FenceGrant",
     "FinalizationBundle",
     "FinalizationFailurePoint",
@@ -38,5 +45,8 @@ __all__ = [
     "RunHead",
     "SCHEMA_VERSION",
     "SqliteRuntimeStore",
+    "DurableRuntimeStoreView",
+    "SqliteCheckpointStoreAdapter",
+    "SqliteRunResumeStoreAdapter",
     "StoreErrorCode",
 ]

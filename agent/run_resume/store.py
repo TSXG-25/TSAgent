@@ -1,8 +1,8 @@
-"""Append-only/latest Store for Run-level resume indexes.
+"""Legacy Store protocol for Run-level resume indexes.
 
-The JSON implementation is intentionally small and single-process.  It gives
-v2.2C a real process-restart boundary without introducing a database or a
-distributed coordinator.
+The JSON implementation remains a compatibility/test adapter for v2.2C.  The
+production v2.3B path reads through the scoped SQLite view and publishes index
+revisions only as part of a Finalization Bundle.
 """
 from __future__ import annotations
 

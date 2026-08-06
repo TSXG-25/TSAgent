@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Mapping
+from typing import TYPE_CHECKING, Any, Mapping
 
 from agent.checkpoint.contracts import RunCheckpoint
-from agent.run_resume.contracts import RunResumeIndex
+
+if TYPE_CHECKING:
+    from agent.run_resume.contracts import RunResumeIndex
 
 
 @dataclass(frozen=True)
@@ -158,9 +160,24 @@ class FinalizationBundle:
     next_run_index: RunResumeIndex
     external_result_digest: str
     verifier_status: str
+    checkpoint_chain: tuple[RunCheckpoint, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "artifacts", tuple(self.artifacts or ()))
+        chain = tuple(self.checkpoint_chain or ())
+        if not chain:
+            chain = (self.checkpoint,)
+        # ``dataclasses.replace(bundle, checkpoint=...)`` is used by callers
+        # to mutate the single-checkpoint legacy form.  Treat that form as an
+        # implicit chain; an explicitly supplied multi-checkpoint chain must
+        # still end in the declared final checkpoint.
+        if len(chain) == 1 and chain[0] != self.checkpoint:
+            chain = (self.checkpoint,)
+        if chain[-1] != self.checkpoint:
+            raise ValueError(
+                "FinalizationBundle.checkpoint 必须是 checkpoint_chain 的最后一项"
+            )
+        object.__setattr__(self, "checkpoint_chain", chain)
         if self.fence_epoch <= 0:
             raise ValueError("FinalizationBundle.fence_epoch must be > 0")
         if self.expected_revision < 0:

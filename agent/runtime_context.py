@@ -26,6 +26,8 @@ from agent.diagnostics import RunDiagnosticsSink
 from agent.event_bus import EventBus
 from agent.services.artifact_service import ArtifactStore
 from agent.services.memory_service import ScopedMemoryView
+from agent.runtime_store import SqliteRuntimeStore
+from agent.runtime_store.view import DurableRuntimeStoreView
 
 
 class ContextClosedError(RuntimeError):
@@ -49,9 +51,21 @@ class ApplicationContext:
         *,
         config: Optional[Mapping[str, Any]] = None,
         workspace_root: Optional[Path] = None,
+        runtime_store: Optional[SqliteRuntimeStore] = None,
+        runtime_store_path: Optional[Path] = None,
+        runtime_writer_id: Optional[str] = None,
     ) -> None:
+        if runtime_store is not None and runtime_store_path is not None:
+            raise ValueError("runtime_store 与 runtime_store_path 只能提供一个")
         self.config = MappingProxyType(dict(config or {}))
         self.workspace_root = workspace_root.resolve() if workspace_root else None
+        self.runtime_store = runtime_store
+        if runtime_store_path is not None:
+            self.runtime_store = SqliteRuntimeStore.open(runtime_store_path)
+        self.runtime_writer_id = _identifier(
+            runtime_writer_id or f"writer-{uuid.uuid4().hex}",
+            "runtime_writer_id",
+        )
         self._sessions: dict[str, SessionContext] = {}
         self._closed = False
 
@@ -91,6 +105,8 @@ class ApplicationContext:
         for session in list(self._sessions.values()):
             session.close()
         self._sessions.clear()
+        if self.runtime_store is not None:
+            self.runtime_store.close()
         self._closed = True
 
 
@@ -147,6 +163,7 @@ class SessionContext:
         request_id: Optional[str] = None,
         checkpoint_store: Any = None,
         run_resume_store: Any = None,
+        writer_id: Optional[str] = None,
     ) -> "RunContext":
         if self._closed:
             raise ContextClosedError("session context is closed")
@@ -161,6 +178,7 @@ class SessionContext:
             request_id=request_id,
             checkpoint_store=checkpoint_store,
             run_resume_store=run_resume_store,
+            writer_id=writer_id,
         )
         self._runs[rid] = run
         self._current_run_id = rid
@@ -215,6 +233,7 @@ class RunContext:
         request_id: Optional[str] = None,
         checkpoint_store: Any = None,
         run_resume_store: Any = None,
+        writer_id: Optional[str] = None,
     ) -> None:
         self.session = session
         self.application = session.application
@@ -227,8 +246,25 @@ class RunContext:
             "request_id",
         )
         self.workspace = workspace
-        self.checkpoint_store = checkpoint_store
-        self.run_resume_store = run_resume_store
+        self.durable_store_view: DurableRuntimeStoreView | None = None
+        if self.application.runtime_store is not None:
+            if checkpoint_store is not None or run_resume_store is not None:
+                raise ValueError(
+                    "durable Runtime Store 模式禁止同时注入 legacy Checkpoint/RunResume Store"
+                )
+            self.durable_store_view = DurableRuntimeStoreView(
+                self.application.runtime_store,
+                tenant_id=self.tenant_id,
+                session_id=self.session_id,
+                run_id=self.run_id,
+                request_id=self.request_id,
+                writer_id=writer_id or self.application.runtime_writer_id,
+            )
+            self.checkpoint_store = self.durable_store_view.checkpoint_store
+            self.run_resume_store = self.durable_store_view.run_resume_store
+        else:
+            self.checkpoint_store = checkpoint_store
+            self.run_resume_store = run_resume_store
         self.scope_id = f"{self.tenant_id}:{self.session_id}:{self.run_id}"
         self.artifacts = ArtifactStore(scope_id=f"run:{self.scope_id}")
         self.event_bus = EventBus(scope_id=f"run:{self.scope_id}")
@@ -262,6 +298,8 @@ class RunContext:
         self.event_bus.close()
         self.artifacts.close()
         self.diagnostics.close()
+        if self.durable_store_view is not None:
+            self.durable_store_view.close()
         if self._owns_workspace and self.workspace is not None:
             self.workspace.close()
         self._closed = True
@@ -275,6 +313,8 @@ class RunContext:
         self.event_bus.close()
         self.artifacts.destroy()
         self.diagnostics.close()
+        if self.durable_store_view is not None:
+            self.durable_store_view.close()
         if self._owns_workspace and self.workspace is not None:
             self.workspace.close()
         self._closed = True

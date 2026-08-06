@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 import uuid
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from agent.memory.lifecycle import MemoryRuntime, MemoryResetReport
 from agent.runtime_context import ApplicationContext, RunContext, SessionContext
@@ -44,6 +44,9 @@ class SessionRuntime:
         tenant_id: str = "default",
         persistent: bool = False,
         workspace=None,
+        runtime_store: Any = None,
+        runtime_store_path: Optional[Path] = None,
+        runtime_writer_id: Optional[str] = None,
     ) -> None:
         self._session_id = _validate_id(session_id, "session_id")
         self._user_id = _validate_id(user_id, "user_id")
@@ -53,6 +56,9 @@ class SessionRuntime:
         self._closed = False
         self._application_context = ApplicationContext(
             workspace_root=(workspace if isinstance(workspace, Path) else DEFAULT_WORKSPACE_ROOT),
+            runtime_store=runtime_store,
+            runtime_store_path=runtime_store_path,
+            runtime_writer_id=runtime_writer_id,
         )
         self._context = self._application_context.create_session(
             self._session_id,
@@ -75,6 +81,9 @@ class SessionRuntime:
         tenant_id: str = "default",
         persistent: bool = False,
         workspace=None,
+        runtime_store: Any = None,
+        runtime_store_path: Optional[Path] = None,
+        runtime_writer_id: Optional[str] = None,
     ) -> "SessionRuntime":
         """Create a session and establish its initial lifecycle boundary."""
         sid = _validate_id(session_id or f"session-{uuid.uuid4().hex}", "session_id")
@@ -87,6 +96,9 @@ class SessionRuntime:
             tenant_id=tenant_id,
             persistent=persistent,
             workspace=workspace,
+            runtime_store=runtime_store,
+            runtime_store_path=runtime_store_path,
+            runtime_writer_id=runtime_writer_id,
         )
         runtime.reset(
             conversation=True,

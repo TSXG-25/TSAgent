@@ -1,0 +1,99 @@
+{
+  "round": "v2.2C-smoke-1",
+  "date": "2026-08-06",
+  "provider": "deepseek-v4-flash",
+  "topology": "A(spec)->B(impl)->C(verify)",
+  "summary": {
+    "cases_total": 4,
+    "raw_e2e_pass": 2,
+    "raw_e2e_rate": 0.5,
+    "correct_workflow_resume": "2/2 (C01 n/a, C02 PASS, C03 action=RESUME_EXACT but vacuum-complete, C07 wrong restart)",
+    "completed_workflow_skip_rate": "C02 100%, C03 100%, C07 100% (A never re-run)",
+    "duplicate_side_effect_rate": "C02 0%, C03 0% (vacuum), C07 >0% (solution.py rewritten with different content)",
+    "unsafe_resume_acceptance_rate": "C07 100% (restarted B from scratch after crash window)",
+    "artifact_integrity_rate": "C01 3/3, C02 3/3, C03 0/3 (no files), C07 solution.py overwritten",
+    "process_restart_recovery": "C02 PASS, C03 false-success, C07 unsafe restart",
+    "provider_error_rate": 0.0
+  },
+  "cases": {
+    "c01": {
+      "result": "PASS",
+      "workflow_success": {"spec": true, "impl": true, "verify": true},
+      "files_exist": {"spec.md": true, "solution.py": true, "report.md": true},
+      "solution_runs": true,
+      "solution_run_note": "rc=0 stdout='49'",
+      "provider_calls": {"spec": 1, "impl": 1, "verify": 1},
+      "side_effect_counts": {"run-c01/spec": 1, "run-c01/impl": 1, "run-c01/verify": 1}
+    },
+    "c02": {
+      "result": "PASS",
+      "phase_a": {
+        "spec_success": true,
+        "spec_workflow_executions": 1,
+        "completed_workflow_ids": ["spec"]
+      },
+      "phase_resume": {
+        "a_checkpoint_loaded": true,
+        "b_success": true,
+        "c_success": true,
+        "workflow_counts": {"impl": 1, "verify": 1},
+        "execution_counts": {"impl": 3, "verify": 2},
+        "provider_calls": {"impl": 1, "verify": 1},
+        "spec_md_unchanged": true,
+        "solution_exists": true,
+        "report_exists": true,
+        "duplicate_side_effects": {},
+        "completed_workflow_ids": ["spec", "impl", "verify"],
+        "active_workflow_id": ""
+      },
+      "completed_workflow_skip": true,
+      "duplicate_side_effect": false
+    },
+    "c03": {
+      "result": "FAIL",
+      "root_cause": "artifact-rehydration-gap / vacuum-complete",
+      "phase_a": {"spec_success": true, "spec_workflow_executions": 1},
+      "phase_b_interrupt": {
+        "checkpoint_active_stage_id": "gen_code",
+        "checkpoint_completed_stage_ids": ["read_spec"],
+        "b_workflow_executions": 1
+      },
+      "phase_resume": {
+        "b_success": true,
+        "c_success": true,
+        "workflow_counts": {"impl": 1, "verify": 1},
+        "execution_counts": {},
+        "provider_calls": {"impl": 0, "verify": 0},
+        "solution_exists": false,
+        "report_exists": false,
+        "completed_workflow_ids": ["spec", "impl", "verify"],
+        "b_decision_workflow_action": "RESUME_EXACT",
+        "b_decision_skipped": ["spec"]
+      },
+      "finding": "B resumed with RESUME_EXACT but all stages skipped (read_spec from checkpoint; gen_code/write_code skipped due to missing spec_content/python_code). Run index marked impl/verify COMPLETED despite no artifacts -> false success."
+    },
+    "c07": {
+      "result": "FAIL",
+      "root_cause": "crash-window-index-no-checkpoint-reference / restart-from-scratch",
+      "phase_a": {"spec_success": true, "spec_workflow_executions": 1},
+      "crash_phase": {
+        "simulated_crash_rc": 70,
+        "solution_written_before_crash": true,
+        "solution_hash_before_crash": "164705c821fa97626841e35fd19367d1d87895a7a25a29c305c896a630911653"
+      },
+      "phase_resume": {
+        "b_success": true,
+        "c_success": true,
+        "workflow_counts": {"impl": 1, "verify": 1},
+        "execution_counts": {"impl": 3, "verify": 2},
+        "provider_calls": {"impl": 1, "verify": 1},
+        "solution_exists": true,
+        "solution_hash_after": "7ffd21d6bbf13bb2dd97ae13e089d12f8c186f97d13eb6922c588df6e28724f4",
+        "solution_unchanged": false
+      },
+      "duplicate_side_effect_detected": true,
+      "unsafe_resume_acceptance": true,
+      "finding": "B restarted from scratch after crash window: provider B called again, solution.py overwritten with different content. Index had activation without checkpoint reference, coordinator took activation-retry path."
+    }
+  }
+}

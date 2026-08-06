@@ -365,6 +365,7 @@ class RunCheckpoint:
     status: CheckpointStatus
     execution_plan: Mapping[str, Any]
     target_summary: str = ""
+    activation_attempt_id: str = ""
     completed_stage_ids: tuple[str, ...] = ()
     completed_task_ids: tuple[str, ...] = ()
     artifacts: tuple[ArtifactSnapshot, ...] = ()
@@ -496,6 +497,7 @@ class RunCheckpoint:
             "status": self.status.value,
             "execution_plan": _thaw(self.execution_plan),
             "target_summary": self.target_summary,
+            "activation_attempt_id": self.activation_attempt_id,
             "completed_stage_ids": list(self.completed_stage_ids),
             "completed_task_ids": list(self.completed_task_ids),
             "artifacts": [item.to_dict() for item in self.artifacts],
@@ -536,6 +538,7 @@ class RunCheckpoint:
             ),
             execution_plan=value.get("execution_plan", {}) or {},
             target_summary=str(value.get("target_summary", "")),
+            activation_attempt_id=str(value.get("activation_attempt_id", "")),
             completed_stage_ids=tuple(value.get("completed_stage_ids", []) or ()),
             completed_task_ids=tuple(value.get("completed_task_ids", []) or ()),
             artifacts=tuple(

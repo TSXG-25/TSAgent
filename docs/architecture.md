@@ -231,3 +231,25 @@ flowchart LR
 
 v2.0 RC 的目标不是功能更多，而是：依赖可复现、边界可解释、门禁可自动执行、
 真实 Demo 可验收，并最终能够安全打 `v2.0.0` Tag。
+
+## 10. v2.2C Run-Level Workflow Resume
+
+当前 v2.2C-A 生产边界位于 `agent/run_resume/`：
+
+```mermaid
+flowchart LR
+    S[RunResumeStore] --> I[RunResumeIndex]
+    I --> R[RunResumeResolver]
+    R --> C[RunResumeCoordinator]
+    C -->|active Workflow only| W[WorkflowExecutor]
+    W -->|latest Checkpoint| S2[CheckpointStore]
+```
+
+Run-level index 只保存 Workflow 顺序、完成/active/pending 投影、依赖和 Artifact
+摘要；Stage/Task 事实仍由 `RunCheckpoint` 管理。Coordinator 在调用
+`WorkflowExecutor` 之前，必须先通过 Store 原子提交 pending→active；激活提交后即使
+尚未生成 checkpoint，重启也只能恢复这个 active Workflow。每个 Workflow 在
+CheckpointStore 中使用独立的 `(run_id, workflow_id)` 追加链，避免 A 的最后一个
+checkpoint 成为 B 的初始 parent。Coordinator 不能绕过 v2.2B `ResumeValidator`，也不会
+重新执行已完成 Workflow。离线 A→B→C E2E 已验证依赖 Artifact、重启恢复、终态收口和
+exactly-once 执行边界；并发/分布式恢复与真实 Provider smoke 仍不在当前切片。

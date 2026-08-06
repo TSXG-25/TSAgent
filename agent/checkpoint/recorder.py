@@ -149,6 +149,7 @@ class WorkflowCheckpointRequest:
     user_scope: str = "default-user"
     plan_version: str = "1.0"
     target_summary: str = ""
+    activation_attempt_id: str = ""
     checkpoint: RunCheckpoint | None = None
     resume_context: ResumeContext | None = None
     external_state_evidence: tuple[ExternalStateGuard, ...] = ()
@@ -226,6 +227,7 @@ class CheckpointRecorder:
         active_task_id: str,
         execution_plan: Mapping[str, Any],
         target_summary: str = "",
+        activation_attempt_id: str = "",
     ) -> RunCheckpoint:
         if self.current is not None:
             raise ValueError("CheckpointRecorder 已经绑定一个既有 Run")
@@ -245,6 +247,9 @@ class CheckpointRecorder:
             status=CheckpointStatus.CREATED,
             execution_plan=json_fact(execution_plan),
             target_summary=target_summary or self.request.target_summary,
+            activation_attempt_id=(
+                activation_attempt_id or self.request.activation_attempt_id
+            ),
             created_at=self.request.clock(),
             updated_at=self.request.clock(),
         )

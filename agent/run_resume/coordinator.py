@@ -1,0 +1,461 @@
+"""Minimal v2.2C Run-level resume entry.
+
+The coordinator selects one Workflow from a Run and delegates Stage/Task
+execution to the existing v2.2B ``WorkflowExecutor``.  It does not plan,
+schedule concurrently, or implement a second Workflow executor.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass, replace
+from typing import Any, Callable, Mapping
+
+from agent.checkpoint import (
+    CheckpointStatus,
+    CheckpointStore,
+    ResumeContext,
+    WorkflowCheckpointRequest,
+)
+from agent.executor.executors.workflow import WorkflowExecutor
+from agent.workflow import (
+    ExecutionContext,
+    ExecutionResult,
+    Workflow,
+    hydrate_run_artifacts,
+)
+
+from .codec import run_index_digest
+from .contracts import (
+    RunArtifactFact,
+    RunResumeDisposition,
+    RunResumeIndex,
+    RunResumeReasonCode,
+    RunResumeRequest,
+    RunWorkflowStatus,
+)
+from .resolver import RunResumeDecision, RunResumeResolver
+from .store import RunResumeActivationError, RunResumeStore
+
+
+@dataclass(frozen=True)
+class RunResumeExecution:
+    decision: RunResumeDecision
+    execution_result: ExecutionResult | None
+    index: RunResumeIndex
+
+
+class RunResumeCoordinator:
+    """Select and resume the active Workflow of one Run."""
+
+    def __init__(
+        self,
+        *,
+        run_store: RunResumeStore,
+        checkpoint_store: CheckpointStore,
+        workflows: Mapping[str, Workflow],
+        workflow_executor: WorkflowExecutor | None = None,
+        clock: Any | None = None,
+    ) -> None:
+        self._run_store = run_store
+        self._checkpoint_store = checkpoint_store
+        self._workflows = dict(workflows)
+        self._workflow_executor = workflow_executor or WorkflowExecutor()
+        self._clock = clock or self._timestamp
+
+    async def resume_active(
+        self,
+        run_id: str,
+        context: ExecutionContext,
+        *,
+        request: RunResumeRequest | None = None,
+    ) -> RunResumeExecution:
+        index = self._run_store.get(run_id)
+        if index is None:
+            raise ValueError(f"Run 不存在: {run_id}")
+        if request is None:
+            resume_request = RunResumeRequest(
+                requested_run_id=run_id,
+                candidate_run_ids=(run_id,),
+                observed_artifacts=index.artifacts,
+                rehydrated_from_store=True,
+            )
+        elif not request.observed_artifacts and index.artifacts:
+            resume_request = replace(
+                request,
+                observed_artifacts=index.artifacts,
+                rehydrated_from_store=True,
+            )
+        else:
+            resume_request = request
+        decision = RunResumeResolver.resolve(index, resume_request)
+        if decision.disposition is not RunResumeDisposition.ALLOW:
+            return RunResumeExecution(decision, None, index)
+
+        workflow_id = decision.selected_workflow_id
+        checkpoint_id = decision.selected_checkpoint_id
+        workflow = self._workflows.get(workflow_id or "")
+        if workflow is None:
+            blocked = self._blocked(
+                index,
+                RunResumeReasonCode.RUN_INDEX_INCONSISTENT,
+                "active Workflow definition 不存在",
+            )
+            return RunResumeExecution(blocked, None, index)
+        summary = index.workflow(workflow.id)
+        if summary is None:
+            blocked = self._blocked(
+                index,
+                RunResumeReasonCode.RUN_INDEX_INCONSISTENT,
+                "active Workflow summary 不存在",
+            )
+            return RunResumeExecution(blocked, None, index)
+
+        run_hydration = hydrate_run_artifacts(index.artifacts, context)
+        required_artifact_ids = {
+            requirement.artifact_id
+            for requirement in summary.required_artifacts
+        }
+        required_types = {
+            artifact.artifact_type
+            for artifact in index.artifacts
+            if artifact.artifact_id in required_artifact_ids
+        }
+        if required_types.intersection(
+            set(run_hydration.missing_types) | set(run_hydration.mismatched_types)
+        ):
+            blocked = self._blocked(
+                index,
+                RunResumeReasonCode.UPSTREAM_ARTIFACT_CHANGED,
+                "Run Artifact 无法通过当前文件 digest 校验",
+            )
+            return RunResumeExecution(blocked, None, index)
+
+        checkpoint = self._checkpoint_store.get(checkpoint_id or "") if checkpoint_id else None
+        if checkpoint is None and not checkpoint_id:
+            latest_for_workflow = getattr(
+                self._checkpoint_store,
+                "latest_for_workflow",
+                None,
+            )
+            latest = (
+                latest_for_workflow(
+                    run_id,
+                    workflow.id,
+                    activation_attempt_id=summary.activation_attempt_id,
+                )
+                if callable(latest_for_workflow)
+                else None
+            )
+            if latest is not None:
+                checkpoint = latest
+                checkpoint_id = latest.checkpoint_id
+                decision = replace(
+                    decision,
+                    selected_checkpoint_id=checkpoint_id,
+                    evidence=decision.evidence + (
+                        self._lineage_evidence(str(checkpoint_id)),
+                    ),
+                )
+        if checkpoint_id and checkpoint is None:
+            blocked = self._blocked(
+                index,
+                RunResumeReasonCode.CHECKPOINT_NOT_FOUND,
+                "active Workflow 的 checkpoint 不存在",
+            )
+            return RunResumeExecution(blocked, None, index)
+        if checkpoint is not None and (
+            checkpoint.run_id != run_id or checkpoint.workflow_id != workflow.id
+        ):
+            blocked = self._blocked(
+                index,
+                RunResumeReasonCode.ACTIVE_CHECKPOINT_MISMATCH,
+                "checkpoint 的 Run/Workflow identity 与 Run index 不一致",
+            )
+            return RunResumeExecution(blocked, None, index)
+        if (
+            checkpoint is not None
+            and summary.activation_attempt_id
+            and checkpoint.activation_attempt_id != summary.activation_attempt_id
+        ):
+            blocked = self._blocked(
+                index,
+                RunResumeReasonCode.ACTIVE_CHECKPOINT_MISMATCH,
+                "checkpoint activation attempt 与 active Workflow 不一致",
+            )
+            return RunResumeExecution(blocked, None, index)
+
+        if checkpoint is None and (
+            summary.status is not RunWorkflowStatus.RUNNING
+            or not summary.activation_attempt_id
+        ):
+            blocked = self._blocked(
+                index,
+                RunResumeReasonCode.CHECKPOINT_NOT_FOUND,
+                "active Workflow 尚未拥有 checkpoint 或 activation attempt",
+            )
+            return RunResumeExecution(blocked, None, index)
+
+        plan_version = checkpoint.plan_version if checkpoint is not None else "1.0"
+        target_summary = (
+            checkpoint.target_summary
+            if checkpoint is not None
+            else workflow.description or workflow.id
+        )
+        resume_context = None
+        if checkpoint is not None:
+            resume_context = ResumeContext(
+                workflow_id=workflow.id,
+                workflow_version=workflow.version,
+                plan_version=plan_version,
+                requested_action=decision.workflow_action,
+                requested_target=target_summary,
+                candidate_run_ids=(run_id,),
+                requested_stage_id=checkpoint.active_stage_id,
+                requested_task_id=checkpoint.active_task_id,
+                stage_idempotent=summary.active_stage_idempotent,
+                external_state_evidence=resume_request.external_state_evidence,
+            )
+        checkpoint_request = WorkflowCheckpointRequest(
+            store=self._checkpoint_store,
+            run_id=run_id,
+            session_id=checkpoint.session_id if checkpoint else index.session_id,
+            conversation_id=(
+                checkpoint.conversation_id if checkpoint else index.conversation_id
+            ),
+            user_scope=checkpoint.user_scope if checkpoint else index.user_scope,
+            plan_version=plan_version,
+            target_summary=target_summary,
+            activation_attempt_id=summary.activation_attempt_id,
+            checkpoint=checkpoint,
+            resume_context=resume_context,
+            external_state_evidence=resume_request.external_state_evidence,
+        )
+        result = await self._workflow_executor.execute(
+            workflow,
+            context,
+            checkpoint_request=checkpoint_request,
+        )
+        updated_index = self._record_result(index, result)
+        if updated_index is not index:
+            self._run_store.save(updated_index)
+        return RunResumeExecution(decision, result, updated_index)
+
+    async def execute_or_resume(
+        self,
+        run_id: str,
+        context_factory: Callable[[Workflow], ExecutionContext],
+        *,
+        attempt_id: str,
+        request: RunResumeRequest | None = None,
+    ) -> RunResumeExecution:
+        """Activate the next eligible Workflow, or resume the existing active one.
+
+        Activation is committed by ``RunResumeStore`` before this method calls
+        ``WorkflowExecutor``.  If the process dies between those operations,
+        the next invocation takes the active-without-checkpoint path above.
+        """
+        index = self._run_store.get(run_id)
+        if index is None:
+            raise ValueError(f"Run 不存在: {run_id}")
+        if index.active_workflow_id:
+            workflow = self._workflows.get(index.active_workflow_id)
+            if workflow is None:
+                blocked = self._blocked(
+                    index,
+                    RunResumeReasonCode.RUN_INDEX_INCONSISTENT,
+                    "active Workflow definition 不存在",
+                )
+                return RunResumeExecution(blocked, None, index)
+            return await self.resume_active(
+                run_id,
+                context_factory(workflow),
+                request=request,
+            )
+
+        pending = next(
+            (workflow_id for workflow_id in index.workflow_sequence
+             if workflow_id in index.pending_workflow_ids),
+            None,
+        )
+        if pending is None:
+            return RunResumeExecution(self._completed(index), None, index)
+        try:
+            activated = self._run_store.activate_workflow(
+                run_id,
+                pending,
+                expected_revision=index.revision,
+                attempt_id=attempt_id,
+            )
+        except RunResumeActivationError as exc:
+            blocked_reason = {
+                "UPSTREAM_WORKFLOW_INCOMPLETE": RunResumeReasonCode.UPSTREAM_WORKFLOW_INCOMPLETE,
+                "UPSTREAM_ARTIFACT_MISSING": RunResumeReasonCode.UPSTREAM_ARTIFACT_MISSING,
+                "UPSTREAM_ARTIFACT_CHANGED": RunResumeReasonCode.UPSTREAM_ARTIFACT_CHANGED,
+                "REVISION_CONFLICT": RunResumeReasonCode.RUN_INDEX_INCONSISTENT,
+            }.get(exc.code, RunResumeReasonCode.RUN_INDEX_INCONSISTENT)
+            blocked = self._blocked(index, blocked_reason, str(exc))
+            return RunResumeExecution(blocked, None, index)
+
+        workflow = self._workflows.get(pending)
+        if workflow is None:
+            blocked = self._blocked(
+                activated,
+                RunResumeReasonCode.RUN_INDEX_INCONSISTENT,
+                "pending Workflow definition 不存在",
+            )
+            return RunResumeExecution(blocked, None, activated)
+        return await self.resume_active(
+            run_id,
+            context_factory(workflow),
+            request=request,
+        )
+
+    def _record_result(
+        self,
+        index: RunResumeIndex,
+        result: ExecutionResult,
+    ) -> RunResumeIndex:
+        metadata = result.metadata or {}
+        checkpoint_id = str(metadata.get("checkpoint_id", ""))
+        if not checkpoint_id:
+            return index
+        checkpoint_status = str(metadata.get("checkpoint_status", ""))
+        completion_gate_ok = bool(metadata.get("terminal_outputs_verified", True))
+        unresolved = tuple(metadata.get("unresolved_resume_diagnostics", ()) or ())
+        if (
+            checkpoint_status == CheckpointStatus.COMPLETED.value
+            and result.success
+            and completion_gate_ok
+            and not unresolved
+        ):
+            checkpoint = self._checkpoint_store.get(checkpoint_id)
+            active_workflow_id = index.active_workflow_id
+            checkpoint_verified = (
+                checkpoint is not None
+                and checkpoint.verifier_status == "VERIFIED"
+            )
+            published_artifacts = tuple(
+                RunArtifactFact(
+                    artifact_id=artifact.artifact_id,
+                    producer_workflow_id=active_workflow_id,
+                    digest=artifact.digest,
+                    exists=artifact.exists,
+                    verified=(
+                        artifact.exists
+                        and checkpoint_verified
+                    ),
+                    artifact_type=artifact.artifact_type,
+                    reference=artifact.reference,
+                    encoding=dict(artifact.metadata).get("encoding", "utf-8"),
+                    producer_stage_id=dict(artifact.metadata).get(
+                        "producer_stage_id", ""
+                    ),
+                    producer_task_id=dict(artifact.metadata).get(
+                        "producer_task_id", ""
+                    ),
+                )
+                for artifact in (checkpoint.artifacts if checkpoint is not None else ())
+            )
+            return index.complete_active(
+                checkpoint_id,
+                updated_at=self._clock(),
+                parent_digest=run_index_digest(index),
+                artifacts=published_artifacts,
+            )
+        if (
+            checkpoint_status == CheckpointStatus.COMPLETED.value
+            and (not completion_gate_ok or unresolved)
+        ):
+            return index.with_active_checkpoint(
+                checkpoint_id,
+                status=RunWorkflowStatus.FAILED_RECOVERABLE,
+                verifier_status="FAILED",
+                updated_at=self._clock(),
+                parent_digest=run_index_digest(index),
+            )
+        status_map = {
+            CheckpointStatus.SUSPENDED.value: RunWorkflowStatus.SUSPENDED,
+            CheckpointStatus.WAITING_USER.value: RunWorkflowStatus.WAITING_USER,
+            CheckpointStatus.FAILED_RECOVERABLE.value: RunWorkflowStatus.FAILED_RECOVERABLE,
+            CheckpointStatus.RUNNING.value: RunWorkflowStatus.RUNNING,
+        }
+        status = status_map.get(
+            checkpoint_status,
+            RunWorkflowStatus.FAILED_RECOVERABLE,
+        )
+        return index.with_active_checkpoint(
+            checkpoint_id,
+            status=status,
+            verifier_status="VERIFIED" if result.success else "FAILED",
+            updated_at=self._clock(),
+            parent_digest=run_index_digest(index),
+        )
+
+    @staticmethod
+    def _completed(index: RunResumeIndex) -> RunResumeDecision:
+        from agent.checkpoint import RuntimeEvidence
+
+        return RunResumeDecision(
+            disposition=RunResumeDisposition.REJECT,
+            run_id=index.run_id,
+            workflow_action=None,
+            selected_workflow_id=None,
+            selected_checkpoint_id=None,
+            skipped_workflow_ids=index.completed_workflow_ids,
+            remaining_workflow_ids=(),
+            resulting_status="COMPLETED",
+            reason_code=RunResumeReasonCode.RUN_COMPLETED,
+            evidence=(RuntimeEvidence(
+                source="run_resume_coordinator",
+                kind="run_lifecycle",
+                expected="no pending Workflow",
+                observed="completed",
+                status="VERIFIED",
+            ),),
+        )
+
+    @staticmethod
+    def _lineage_evidence(checkpoint_id: str):
+        from agent.checkpoint import RuntimeEvidence
+
+        return RuntimeEvidence(
+            source="run_resume_coordinator",
+            kind="checkpoint_lineage_fallback",
+            expected="latest active Workflow checkpoint",
+            observed=checkpoint_id,
+            status="VERIFIED",
+        )
+
+    @staticmethod
+    def _blocked(
+        index: RunResumeIndex,
+        reason: RunResumeReasonCode,
+        detail: str,
+    ) -> RunResumeDecision:
+        from agent.checkpoint import RuntimeEvidence
+
+        return RunResumeDecision(
+            disposition=RunResumeDisposition.REJECT,
+            run_id=index.run_id,
+            workflow_action=None,
+            selected_workflow_id=None,
+            selected_checkpoint_id=None,
+            skipped_workflow_ids=(),
+            remaining_workflow_ids=index.pending_workflow_ids,
+            resulting_status="REJECTED",
+            reason_code=reason,
+            evidence=(RuntimeEvidence(
+                source="run_resume_coordinator",
+                kind="integration_boundary",
+                observed=detail,
+                status="MISMATCH",
+            ),),
+        )
+
+    @staticmethod
+    def _timestamp() -> str:
+        from datetime import datetime, timezone
+
+        return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+__all__ = ["RunResumeCoordinator", "RunResumeExecution"]

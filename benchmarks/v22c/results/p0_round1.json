@@ -1,0 +1,78 @@
+{
+  "suite": "v2.2C-P0",
+  "round": 1,
+  "date": "2026-08-06",
+  "provider": "deepseek-v4-flash",
+  "topology": "A(spec)->B(impl)->C(verify)",
+  "gate_met": true,
+  "metrics": {
+    "raw_e2e_rate": 1.0,
+    "runtime_capability_rate": 1.0,
+    "provider_error_rate": 0.0,
+    "correct_workflow_resume_rate": 1.0,
+    "completed_workflow_skip_rate": 1.0,
+    "duplicate_side_effect_rate": 0.0,
+    "unsafe_resume_acceptance_rate": 0.0,
+    "artifact_integrity_rate": 1.0,
+    "process_restart_recovery": 1.0
+  },
+  "cases": [
+    {
+      "case": "c01",
+      "scenario": "无中断基线 A→B→C",
+      "raw_e2e": true,
+      "capability": true,
+      "evidence": "三工作流 success、3 文件存在、solution.py 真实运行 rc=0 stdout='49'、Provider 各 1"
+    },
+    {
+      "case": "c02",
+      "scenario": "A 完成后进程重启，跨 Workflow 恢复 B→C",
+      "raw_e2e": true,
+      "capability": true,
+      "evidence": "A 执行 1 次且 resume 不再执行；spec.md hash 跨进程不变；B/C 各 1 次；Duplicate=0"
+    },
+    {
+      "case": "c03",
+      "scenario": "B 在 read_spec 后中断，EXACT resume",
+      "raw_e2e": true,
+      "capability": true,
+      "evidence": "RESUME_EXACT + skipped=[spec]；read_spec 不重跑（exec.impl=2）；spec_content 从 spec.md 水合；solution/report 生成"
+    },
+    {
+      "case": "c04",
+      "scenario": "B 幂等 Stage REPLAY_FROM_STAGE",
+      "raw_e2e": true,
+      "capability": true,
+      "evidence": "REPLAY_FROM_STAGE；read_spec 不重跑；gen_code 重放 LLM=1；write_code 1 次；Duplicate=0"
+    },
+    {
+      "case": "c05",
+      "scenario": "A/B 已完成、C ACTIVE，只恢复 C",
+      "raw_e2e": true,
+      "capability": true,
+      "evidence": "resume 中 A/B execution=0；三文件 hash 不变；C 经对账完成；再次调用 RUN_COMPLETED 无执行"
+    },
+    {
+      "case": "c06",
+      "scenario": "上游 spec.md 被篡改，恢复 B 必须阻断",
+      "raw_e2e": true,
+      "capability": true,
+      "evidence": "REJECT UPSTREAM_ARTIFACT_CHANGED；B Provider/Tool=0；无 solution.py；B 未标 completed"
+    },
+    {
+      "case": "c07",
+      "scenario": "B 写盘后 checkpoint 前崩溃（副作用窗口）",
+      "raw_e2e": true,
+      "capability": true,
+      "evidence": "checkpoint_lineage_fallback + committed-file 对账；B LLM 未再调用；solution.py hash 不变；Duplicate=0"
+    },
+    {
+      "case": "c08",
+      "scenario": "错误 run_id / workflow_id 身份校验",
+      "raw_e2e": true,
+      "capability": true,
+      "evidence": "wrong_run REJECT RUN_MISMATCH；wrong_flow REQUIRE_CLARIFICATION；无执行；revision/checkpoint/workspace 不变"
+    }
+  ],
+  "note": "P0 8/8 满足 v2.2C 收口硬门槛：Correct Resume 100%、Skip 100%、Duplicate 0%、Unsafe 0%、Artifact Integrity 100%、跨进程恢复 PASS。P1 C09-C12 作为增强证据，可后续补跑。"
+}

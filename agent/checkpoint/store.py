@@ -1,9 +1,10 @@
-"""Append-only Checkpoint storage boundary for v2.2B.
+"""Append-only Checkpoint storage boundary for v2.2B/v2.2C.
 
 The first Workflow integration uses an in-memory implementation so the
 runtime contract can be verified without introducing a database or a new
 orchestration service.  A durable implementation can satisfy the same
-protocol later.
+protocol later.  v2.2C keeps an independent append-only chain for each
+``(run_id, workflow_id)`` while retaining a Run-wide insertion history.
 """
 from __future__ import annotations
 
@@ -28,18 +29,28 @@ class CheckpointStore(Protocol):
         """Return a Checkpoint by identity."""
 
     def latest(self, run_id: str) -> RunCheckpoint | None:
-        """Return the latest Checkpoint in a Run."""
+        """Return the latest inserted Checkpoint in a Run."""
+
+    def latest_for_workflow(
+        self,
+        run_id: str,
+        workflow_id: str,
+        *,
+        activation_attempt_id: str = "",
+    ) -> RunCheckpoint | None:
+        """Return the latest checkpoint for one Run/Workflow lineage."""
 
     def history(self, run_id: str) -> tuple[RunCheckpoint, ...]:
         """Return the complete ordered Checkpoint chain for a Run."""
 
 
 class InMemoryCheckpointStore:
-    """Strict append-only store used by v2.2B runtime and tests."""
+    """Strict append-only store used by v2.2B runtime and v2.2C tests."""
 
     def __init__(self) -> None:
         self._checkpoints: dict[str, RunCheckpoint] = {}
         self._run_history: dict[str, list[str]] = {}
+        self._workflow_history: dict[tuple[str, str], list[str]] = {}
 
     def save(self, checkpoint: RunCheckpoint) -> RunCheckpoint:
         existing = self._checkpoints.get(checkpoint.checkpoint_id)
@@ -50,10 +61,14 @@ class InMemoryCheckpointStore:
                 )
             return existing
 
-        history = self._run_history.setdefault(checkpoint.run_id, [])
+        history = self._workflow_history.setdefault(
+            (checkpoint.run_id, checkpoint.workflow_id), []
+        )
         if not history:
             if checkpoint.sequence_number != 0 or checkpoint.parent_checkpoint_id is not None:
-                raise CheckpointStoreError("Run 的第一个 Checkpoint 必须是 sequence=0 且无 parent")
+                raise CheckpointStoreError(
+                    "Workflow 的第一个 Checkpoint 必须是 sequence=0 且无 parent"
+                )
         else:
             latest = self._checkpoints[history[-1]]
             if checkpoint.parent_checkpoint_id != latest.checkpoint_id:
@@ -67,6 +82,9 @@ class InMemoryCheckpointStore:
 
         self._checkpoints[checkpoint.checkpoint_id] = checkpoint
         history.append(checkpoint.checkpoint_id)
+        self._run_history.setdefault(checkpoint.run_id, []).append(
+            checkpoint.checkpoint_id
+        )
         return checkpoint
 
     def get(self, checkpoint_id: str) -> RunCheckpoint | None:
@@ -77,6 +95,23 @@ class InMemoryCheckpointStore:
         if not history:
             return None
         return self._checkpoints[history[-1]]
+
+    def latest_for_workflow(
+        self,
+        run_id: str,
+        workflow_id: str,
+        *,
+        activation_attempt_id: str = "",
+    ) -> RunCheckpoint | None:
+        history = self._workflow_history.get((run_id, workflow_id), [])
+        for checkpoint_id in reversed(history):
+            checkpoint = self._checkpoints[checkpoint_id]
+            if (
+                not activation_attempt_id
+                or checkpoint.activation_attempt_id == activation_attempt_id
+            ):
+                return checkpoint
+        return None
 
     def history(self, run_id: str) -> tuple[RunCheckpoint, ...]:
         return tuple(

@@ -10,11 +10,19 @@ from .context import ExecutionContext
 from .argument import ToolArgument
 from .tool_result import ToolResult
 from .result import ExecutionResult
+from .hydration import (
+    ArtifactHydrationReport,
+    hydrate_checkpoint_artifacts,
+    hydrate_declared_file_inputs,
+    hydrate_run_artifacts,
+)
 from .budget import BudgetSpec, BudgetState, BudgetManager
 
 __all__ = [
     "ExecutorType", "ToolPolicy", "Artifact", "InputArtifact", "OutputArtifact",
     "ExecutionSpec", "Stage", "Workflow", "ExecutionContext",
     "ToolArgument", "ToolResult", "ExecutionResult",
+    "ArtifactHydrationReport", "hydrate_checkpoint_artifacts",
+    "hydrate_declared_file_inputs", "hydrate_run_artifacts",
     "BudgetSpec", "BudgetState", "BudgetManager",
 ]

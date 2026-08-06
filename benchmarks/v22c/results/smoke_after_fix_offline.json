@@ -1,0 +1,44 @@
+{
+  "round": "v2.2C-smoke-1-after-fix-offline",
+  "date": "2026-08-06",
+  "provider_validation": "deferred",
+  "provider_deferred_reason": "当前环境 Provider connection error；未将真实 API 结果计为 PASS",
+  "offline_command": "PYTHONPATH=. python -B benchmarks/v22c/offline_dryrun.py",
+  "offline_summary": {
+    "cases_total": 3,
+    "raw_e2e_pass": 3,
+    "raw_e2e_rate": 1.0,
+    "duplicate_side_effect_rate": 0.0,
+    "unsafe_resume_acceptance_rate": 0.0
+  },
+  "cases": {
+    "c02": {
+      "result": "PASS",
+      "evidence": [
+        "A 不重跑",
+        "B/C 跨进程恢复",
+        "副作用不重复",
+        "Run index revision 推进"
+      ]
+    },
+    "c03": {
+      "result": "PASS",
+      "evidence": [
+        "RESUME_EXACT",
+        "read_spec 不重跑",
+        "spec_content 通过 file reference + digest 水合",
+        "solution.py/report.md 真实落盘",
+        "terminal output gate 阻止空完成"
+      ]
+    },
+    "c07": {
+      "result": "PASS",
+      "evidence": [
+        "写盘后 checkpoint 前崩溃",
+        "按 run/workflow/activation attempt 回退最新 checkpoint",
+        "已提交文件 COMMITTED reconcile",
+        "恢复时 B LLM 与 write_file 均不重复调用"
+      ]
+    }
+  }
+}

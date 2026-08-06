@@ -1,0 +1,99 @@
+{
+  "round": "v2.2C-smoke-2",
+  "date": "2026-08-06",
+  "provider": "deepseek-v4-flash",
+  "topology": "A(spec)->B(impl)->C(verify)",
+  "runtime_fix_applied": true,
+  "note": "第一轮 smoke 之后 Runtime 完成 Artifact 水合 + checkpoint_lineage_fallback + 副作用对账修复，本轮为复跑。",
+  "summary": {
+    "cases_total": 4,
+    "raw_e2e_pass": 4,
+    "raw_e2e_rate": 1.0,
+    "correct_workflow_resume_rate": "4/4",
+    "completed_workflow_skip_rate": "100% (A never re-run in any resume)",
+    "duplicate_side_effect_rate": "0%",
+    "unsafe_resume_acceptance_rate": "0%",
+    "artifact_integrity_rate": "4/4 (C03/C07 solution.py hash preserved)",
+    "process_restart_recovery": "C02/C03/C07 PASS",
+    "provider_error_rate": 0.0
+  },
+  "cases": {
+    "c01": {
+      "result": "PASS",
+      "workflow_success": {"spec": true, "impl": true, "verify": true},
+      "files_exist": {"spec.md": true, "solution.py": true, "report.md": true},
+      "solution_runs": true,
+      "solution_run_note": "rc=0 stdout='49'",
+      "provider_calls": {"spec": 1, "impl": 1, "verify": 1}
+    },
+    "c02": {
+      "result": "PASS",
+      "mechanism": "cross-workflow resume",
+      "phase_a": {"spec_success": true, "spec_workflow_executions": 1},
+      "phase_resume": {
+        "b_success": true,
+        "c_success": true,
+        "workflow_counts": {"impl": 1, "verify": 1},
+        "execution_counts": {"impl": 3, "verify": 2},
+        "provider_calls": {"impl": 1, "verify": 1},
+        "spec_md_unchanged": true,
+        "solution_exists": true,
+        "report_exists": true,
+        "duplicate_side_effects": {},
+        "completed_workflow_ids": ["spec", "impl", "verify"],
+        "active_workflow_id": ""
+      }
+    },
+    "c03": {
+      "result": "PASS",
+      "mechanism": "RESUME_EXACT + file-backed artifact hydration",
+      "phase_a": {"spec_success": true, "spec_workflow_executions": 1},
+      "phase_b_interrupt": {
+        "checkpoint_active_stage_id": "gen_code",
+        "checkpoint_completed_stage_ids": ["read_spec"],
+        "b_workflow_executions": 1
+      },
+      "phase_resume": {
+        "b_success": true,
+        "c_success": true,
+        "workflow_counts": {"impl": 1, "verify": 1},
+        "execution_counts": {"impl": 2, "verify": 2},
+        "provider_calls": {"impl": 1, "verify": 1},
+        "solution_exists": true,
+        "report_exists": true,
+        "duplicate_side_effects": {},
+        "completed_workflow_ids": ["spec", "impl", "verify"],
+        "active_workflow_id": "",
+        "b_decision_workflow_action": "RESUME_EXACT",
+        "b_decision_skipped": ["spec"]
+      },
+      "note": "read_spec 不重跑（tool 仅 write_code 1 次）；spec_content 从 spec.md 水合后 gen_code/write_code 在 resume 进程内正常执行。"
+    },
+    "c07": {
+      "result": "PASS",
+      "mechanism": "checkpoint_lineage_fallback + committed-file reconciliation",
+      "phase_a": {"spec_success": true, "spec_workflow_executions": 1},
+      "crash_phase": {
+        "simulated_crash_rc": 70,
+        "solution_written_before_crash": true,
+        "solution_hash_before_crash": "164705c821fa97626841e35fd19367d1d87895a7a25a29c305c896a630911653"
+      },
+      "phase_resume": {
+        "b_success": true,
+        "c_success": true,
+        "workflow_counts": {"impl": 1, "verify": 1},
+        "execution_counts": {"verify": 2},
+        "provider_calls": {"impl": 0, "verify": 1},
+        "solution_exists": true,
+        "solution_hash_after": "164705c821fa97626841e35fd19367d1d87895a7a25a29c305c896a630911653",
+        "solution_unchanged": true,
+        "report_exists": true,
+        "duplicate_side_effects": {},
+        "completed_workflow_ids": ["spec", "impl", "verify"],
+        "active_workflow_id": "",
+        "b_decision_evidence_sources": ["run_resume_resolver", "run_resume_coordinator:checkpoint_lineage_fallback"]
+      },
+      "note": "B 的 LLM 未再次调用、solution.py 未被重写；write_code 经 _recover_committed_file_effect 判定 COMMITTED 后跳过执行，只补 verify。"
+    }
+  }
+}

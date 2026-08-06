@@ -24,6 +24,10 @@ class Finalizer:
     def __init__(self, orchestrator):
         self._orch = orchestrator
 
+    def _memory(self):
+        session_context = getattr(self._orch, "session_context", None)
+        return getattr(session_context, "memory_view", None) or MemoryService
+
     async def run(
         self,
         state: AgentState,
@@ -34,14 +38,14 @@ class Finalizer:
         """生成最终答案并提交记忆。"""
         failure_answer = self._failure_answer(state)
         if failure_answer and not best_answer:
-            MemoryService.record_full_exchange(user_id, user_input, failure_answer)
+            self._memory().record_full_exchange(user_input, failure_answer)
             return failure_answer
         if best_answer:
             checked = self._verify_written_files(state, best_answer)
             if checked is not None:
-                MemoryService.record_full_exchange(user_id, user_input, checked)
+                self._memory().record_full_exchange(user_input, checked)
                 return checked
-            MemoryService.record_full_exchange(user_id, user_input, best_answer)
+            self._memory().record_full_exchange(user_input, best_answer)
             return best_answer
 
         t_answer = time.perf_counter()
@@ -49,7 +53,7 @@ class Finalizer:
         checked = self._verify_written_files(state, final_answer)
         if checked is not None:
             final_answer = checked
-        MemoryService.record_full_exchange(user_id, user_input, final_answer)
+        self._memory().record_full_exchange(user_input, final_answer)
         self._orch._timings["answer_gen"] = round(time.perf_counter() - t_answer, 3)
         return final_answer
 

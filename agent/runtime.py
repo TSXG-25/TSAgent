@@ -13,18 +13,27 @@ import time
 import asyncio
 import os
 from enum import Enum
-from agent.services import MemoryService, RepositoryService, ArtifactService
-from agent.event_bus import event_bus
+from pathlib import Path
+from typing import Any, Optional
+
+from agent.services import RepositoryService
+from agent.event_bus import Subscription
 from agent.registry.skill_registry import skill_registry
 from agent.state import AgentState
 from agent.orchestrator import ExecutionOrchestrator
 from agent.bootstrap import print_timings as print_bootstrap_timings
+from agent.runtime_context import (
+    ApplicationContext,
+    RunContext,
+    SessionContext,
+)
 
 logger = logging.getLogger(__name__)
 
 MAX_RUNTIME_SECONDS = float(os.getenv("TSAGENT_MAX_RUNTIME_SECONDS", "120"))
 MAX_STATE_TRANSITIONS = int(os.getenv("TSAGENT_MAX_STATE_TRANSITIONS", "24"))
 FACT_EXTRACTION_TIMEOUT = float(os.getenv("TSAGENT_FACT_TIMEOUT", "15"))
+DEFAULT_WORKSPACE_ROOT = Path(__file__).resolve().parent.parent
 
 
 def _runtime_has_unfinished_work(state: AgentState) -> bool:
@@ -118,13 +127,116 @@ class UniversalAgent:
     4. 耗时统计和输出
     """
 
-    def __init__(self, user_id: str = "default"):
+    def __init__(
+        self,
+        user_id: str = "default",
+        *,
+        tenant_id: str = "default",
+        session_context: Optional[SessionContext] = None,
+        run_context: Optional[RunContext] = None,
+        workspace: Optional[Any] = None,
+    ):
         self.user_id = user_id
-        self.orchestrator = ExecutionOrchestrator()
+        if session_context is None:
+            self._application_context = ApplicationContext(
+                workspace_root=(
+                    workspace
+                    if isinstance(workspace, Path)
+                    else DEFAULT_WORKSPACE_ROOT
+                ),
+            )
+            self._session_context = self._application_context.create_session(
+                user_id=user_id,
+                tenant_id=tenant_id,
+            )
+            self._owns_session_context = True
+        else:
+            self._application_context = session_context.application
+            self._session_context = session_context
+            self._owns_session_context = False
+        self._memory_namespace = self._session_context.memory_namespace
+        self._memory_view = self._session_context.memory_view
+        self._workspace = (
+            workspace
+            if workspace is not None
+            else self._application_context.workspace_root
+        )
+        self.orchestrator = ExecutionOrchestrator(
+            session_context=self._session_context,
+        )
         self._timings: dict = {}
         self.last_run_evidence: dict = {}
         self._pending_execution_target = ""
-        event_bus.subscribe("task_end", self._on_task_end)
+        self._run_context: Optional[RunContext] = None
+        self._task_subscription: Optional[Subscription] = None
+        if run_context is not None:
+            self.attach_run(run_context)
+
+    @property
+    def session_context(self) -> SessionContext:
+        return self._session_context
+
+    @property
+    def run_context(self) -> Optional[RunContext]:
+        return self._run_context
+
+    def close(self) -> None:
+        """Release process resources for the attached logical Run."""
+        run_context = self._run_context
+        self.detach_run()
+        if run_context is not None and not run_context.closed:
+            run_context.close()
+        if self._owns_session_context:
+            self._session_context.close()
+            self._application_context.close()
+
+    def attach_run(self, run_context: RunContext) -> None:
+        """Attach this Agent to an existing logical RunContext."""
+        run_context.ensure_open()
+        if run_context.session is not self._session_context:
+            raise ValueError("RunContext belongs to another SessionContext")
+        self._session_context.activate_run(run_context.run_id)
+        if self._run_context is not None and self._run_context is not run_context:
+            raise RuntimeError("agent is already attached to another RunContext")
+        self._run_context = run_context
+        bind_run_context = getattr(self.orchestrator, "bind_run_context", None)
+        if callable(bind_run_context):
+            bind_run_context(run_context)
+
+    def detach_run(self) -> None:
+        """Detach the Agent without closing the logical Run or its stores."""
+        run_context = self._run_context
+        if self._task_subscription is not None:
+            self._task_subscription.close()
+            self._task_subscription = None
+        clear_run_context = getattr(self.orchestrator, "clear_run_context", None)
+        if callable(clear_run_context):
+            clear_run_context()
+        self._run_context = None
+        if run_context is not None:
+            self._session_context.deactivate_run(run_context.run_id)
+
+    def _ensure_run_subscription(self) -> RunContext:
+        """Create or reuse the logical Run and bind its event subscription."""
+        run_context = self._run_context
+        if run_context is None:
+            run_context = self._session_context.create_run(workspace=self._workspace)
+            self.attach_run(run_context)
+        else:
+            run_context.ensure_open()
+            bind_run_context = getattr(self.orchestrator, "bind_run_context", None)
+            if callable(bind_run_context):
+                bind_run_context(run_context)
+        if self._task_subscription is None:
+            self._task_subscription = run_context.event_bus.subscribe(
+                "task_end", self._on_task_end,
+            )
+        return run_context
+
+    def _emit(self, event_type: str, data: object) -> None:
+        if self._run_context is None:
+            raise RuntimeError("agent has no active RunContext")
+        self._run_context.event_bus.emit(event_type, data)
 
     async def _on_task_end(self, data):
         print(f"[EVENT] Task {data['task']} ended with {data['status']}")
@@ -155,12 +267,12 @@ class UniversalAgent:
         layer, code, friendly = self._classify(e)
         logger.error("Runtime recovered: layer=%s code=%s error=%s", layer, code, e)
         # 结构化记录（供 Recovery Dataset / Metrics）
-        event_bus.emit("runtime_recovered", {
+        self._emit("runtime_recovered", {
             "layer": layer, "error_code": code, "error": str(e)[:300],
         })
         answer = f"抱歉，刚才在处理「{user_input[:30]}」时遇到了一点问题（{friendly}），请换一种说法再试试。"
         try:
-            MemoryService.record_full_exchange(user_id, user_input, answer)
+            self._memory_view.record_full_exchange(user_input, answer)
         except Exception:
             pass
         return answer
@@ -181,17 +293,21 @@ class UniversalAgent:
         return "runtime", f"{name.upper()}", "内部错误"
 
     async def run(self, user_input: str) -> str:
-        """主入口：状态机循环。"""
+        """Run one message inside the attached logical RunContext."""
+        self._ensure_run_subscription()
+        return await self._run_in_context(user_input)
+
+    async def _run_in_context(self, user_input: str) -> str:
+        """State machine body; caller owns the RunContext lifecycle."""
         # ── 初始化 ──
         self._timings = {}
         self.orchestrator.reset_timings()
         self.orchestrator.replan_count = 0
-        ArtifactService.clear()
         t0 = time.perf_counter()
 
         try:
             await asyncio.wait_for(
-                MemoryService.extract_and_save_facts(self.user_id, user_input),
+                self._memory_view.extract_and_save_facts(user_input),
                 timeout=FACT_EXTRACTION_TIMEOUT,
             )
         except asyncio.TimeoutError:
@@ -199,11 +315,11 @@ class UniversalAgent:
         except Exception as exc:
             # Do not emit a traceback from an optional memory enhancement.
             logger.warning("事实抽取失败，继续执行主任务: %s", str(exc)[:200])
-        MemoryService.record_user_message(self.user_id, user_input)
+        self._memory_view.record_user_message(user_input)
 
         from agent.query_normalizer import QueryNormalizer
-        normalized_input = QueryNormalizer.process(user_input, self.user_id)
-        context = MemoryService.get_context(self.user_id, normalized_input)
+        normalized_input = QueryNormalizer.process(user_input, self._memory_namespace)
+        context = self._memory_view.get_context(normalized_input)
         context["runtime_pending_target"] = self._pending_execution_target
         repo_context = _build_repo_context(normalized_input)
         skill = skill_registry.select(normalized_input)
@@ -255,7 +371,7 @@ class UniversalAgent:
                     # 委托 Orchestrator
                     state, next_state, answer = await self.orchestrator.plan(
                         user_input=normalized_input,
-                        user_id=self.user_id,
+                        user_id=self._memory_namespace,
                         context=context,
                         repo_context=repo_context,
                         skill_hint=skill_hint,
@@ -271,7 +387,7 @@ class UniversalAgent:
 
                 elif rt_state == RuntimeState.RECOVER:
                     state, next_state = await self.orchestrator.replan(
-                        state, normalized_input, self.user_id,
+                        state, normalized_input, self._memory_namespace,
                     )
                     rt_state = RuntimeState[next_state] if isinstance(next_state, str) else next_state
 
@@ -279,7 +395,7 @@ class UniversalAgent:
                     best_answer = await self.orchestrator.finalize(
                         state=state,
                         user_input=user_input,
-                        user_id=self.user_id,
+                        user_id=self._memory_namespace,
                     )
                     rt_state = RuntimeState.FINISH
 
@@ -289,22 +405,22 @@ class UniversalAgent:
         except Exception as e:
             # P0.1: Runtime Recovery —— 不暴露 Traceback，Session 继续
             print(f"  ⚠️ Runtime 捕获异常并恢复: {type(e).__name__}")
-            best_answer = self._recover(e, user_input, self.user_id)
+            best_answer = self._recover(e, user_input, self._memory_namespace)
             rt_state = RuntimeState.FINISH
 
         # ── 最终输出 ──
         final_answer = await self.orchestrator.finalize(
             state=state,
             user_input=user_input,
-            user_id=self.user_id,
+            user_id=self._memory_namespace,
             best_answer=best_answer,
         )
         # ── v2.1B-1：会话状态更新（ADR-0013；每轮 answer 后）──
         conversation_diagnostic = None
         try:
-            from agent.conversation import conversation_tracker
+            conversation_tracker = self._session_context.conversation_tracker
             conversation_tracker.update(
-                user_id=self.user_id,
+                user_id=self._memory_namespace,
                 user_input=user_input,
                 assistant_answer=final_answer,
                 intent=getattr(self.orchestrator, "last_intent", None),
@@ -318,6 +434,12 @@ class UniversalAgent:
                 operation="conversation_tracker.update",
                 expected="ConversationTracker.update(user_id/user_input/assistant_answer/intent/runtime_pending)",
                 error=exc,
+                event_bus_instance=(
+                    self._run_context.event_bus if self._run_context is not None else None
+                ),
+                diagnostics=(
+                    self._run_context.diagnostics if self._run_context is not None else None
+                ),
             )
             conversation_diagnostic = {
                 "type": "contract_violation",

@@ -37,6 +37,7 @@ class GroundingInput:
     opened_files: List[str] = field(default_factory=list)
     recent_artifacts: List[str] = field(default_factory=list)
     recent_messages: List[str] = field(default_factory=list)
+    workspace: Optional[Any] = None
 
     def retrieval_keys(self) -> List[str]:
         """检索键：优先 intent 的结构化信息，而非自然语言全文。
@@ -99,11 +100,15 @@ class Grounder:
 
     def _ground_files(self, input: GroundingInput, keys: List[str],
                       stats: GroundingStats, trace: GroundingTrace) -> List[Candidate]:
-        from agent.services.workspace_service import get_workspace_service
+        from agent.compat.workspace import get_legacy_workspace_service
 
         results: List[Candidate] = []
         try:
-            ws = get_workspace_service()
+            ws = (
+                input.workspace
+                if input.workspace is not None
+                else get_legacy_workspace_service()
+            )
         except Exception:
             return results
 
@@ -135,7 +140,11 @@ class Grounder:
         # 路径段展开：key 作为路径段匹配所有 index 文件（补 find 文件名局限，
         # 如内容含 add 函数但文件名不含的 calculator/core.py）
         try:
-            ws_obj = ws.current_workspace()
+            ws_obj = (
+                ws.current_workspace()
+                if hasattr(ws, "current_workspace")
+                else ws
+            )
             all_files = ws_obj.indexed_files()
         except Exception:
             all_files = []
@@ -163,17 +172,25 @@ class Grounder:
     def _ground_symbols(self, input: GroundingInput, keys: List[str],
                         stats: GroundingStats, trace: GroundingTrace) -> List[Candidate]:
         results: List[Candidate] = []
+        if input.workspace is not None:
+            # Workspace indexes expose file discovery, not repository symbol
+            # search. A scoped runtime must not silently consult the global
+            # WorkspaceManager for this optional enrichment.
+            return results
         for key in keys:
             if stats.symbols_checked >= self._budget.max_candidates * 2:
                 break
             if not key or not key[0].isupper():
                 continue  # 符号名通常驼峰开头
             try:
-                from agent.workspace.manager import WorkspaceManager
-                ws = WorkspaceManager.current_workspace()
+                from agent.compat.workspace import get_legacy_workspace_service
+                ws = get_legacy_workspace_service().current_workspace()
                 if ws is None:
                     continue
-                paths = ws.find_symbol(key)
+                find_symbol = getattr(ws, "find_symbol", None)
+                if not callable(find_symbol):
+                    continue
+                paths = find_symbol(key)
             except Exception:
                 paths = []
             stats.symbols_checked += len(paths)
@@ -198,8 +215,12 @@ class Grounder:
             if not stem:
                 continue
             try:
-                from agent.services.workspace_service import get_workspace_service
-                ws = get_workspace_service()
+                from agent.compat.workspace import get_legacy_workspace_service
+                ws = (
+                    input.workspace
+                    if input.workspace is not None
+                    else get_legacy_workspace_service()
+                )
                 matches = ws.find(stem)
             except Exception:
                 matches = []
@@ -231,5 +252,3 @@ class Grounder:
         if intent is None:
             return ""
         return f"{getattr(intent, 'domain', '')}/{getattr(intent, 'action', '')} target={getattr(intent, 'target', '')}"
-
-

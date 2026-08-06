@@ -12,7 +12,7 @@ from agent.workflow import ExecutionContext
 from agent.task import Task, ExecutionPlan, Verb
 from agent.compiler.context import CompilerContext
 from agent.registry.tool_registry import registry as _tool_registry
-from agent.services.workspace_service import get_workspace_service
+from agent.compat.workspace import get_legacy_workspace_service
 
 
 class ExecutionStage:
@@ -37,7 +37,12 @@ class ExecutionStage:
         # AgentState is a runtime cache; compile when a plan has not been cached.
         ws_service = None
         try:
-            ws_service = get_workspace_service()
+            run_context = getattr(self._orch, "run_context", None)
+            if run_context is not None:
+                if run_context.workspace is not None:
+                    ws_service = run_context.workspace
+            else:
+                ws_service = get_legacy_workspace_service()
         except Exception:
             pass
 
@@ -65,6 +70,10 @@ class ExecutionStage:
             )
             if ws_service:
                 context.set_var("workspace", ws_service)
+            run_context = getattr(self._orch, "run_context", None)
+            if run_context is not None:
+                context.set_var("artifact_store", run_context.artifacts)
+                context.set_var("event_bus", run_context.event_bus)
             context.set_var("execution_plan", plan)
             context.set_var("conversation_snapshot", state.get("conversation_snapshot"))
             context.set_var("conversation_reference_type", state.get("conversation_reference_type"))

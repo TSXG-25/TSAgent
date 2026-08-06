@@ -12,7 +12,7 @@ from typing import Dict, Optional
 
 from agent.state import AgentState
 from agent.services import MemoryService
-from agent.services.workspace_service import get_workspace_service
+from agent.compat.workspace import get_legacy_workspace_service
 from agent.cognition.cognitive_context import ConversationState
 from agent.context.contracts import PlannerContext
 from agent.cognition.intent_schema import IntentResult
@@ -40,18 +40,30 @@ class ContextBuilder:
         从 MemoryService、WorkspaceService 等来源聚合数据。
         PlannerContext 是纯数据容器，下游模块不 import 任何 Service。
         """
+        session_context = getattr(self._orch, "session_context", None)
+        memory_view = getattr(session_context, "memory_view", None)
+
         # Workspace 上下文
         ws_context = None
         try:
-            ws = get_workspace_service()
-            ws_context = ws.current_context()
+            run_context = self._orch.run_context
+            if run_context is not None:
+                if run_context.workspace is not None:
+                    ws_context = run_context.workspace.current_context()
+            else:
+                ws = get_legacy_workspace_service()
+                ws_context = ws.current_context()
         except Exception:
             pass
 
         # 从 MemoryService 获取最近对话
         conversation = []
         try:
-            session_text = MemoryService.get_session_context(user_id, n=8)
+            session_text = (
+                memory_view.get_session_context(n=8)
+                if memory_view is not None
+                else MemoryService.get_session_context(user_id, n=8)
+            )
             if session_text:
                 lines = session_text.strip().split("\n")
                 for line in lines[-10:]:
@@ -84,7 +96,11 @@ class ContextBuilder:
         # 跨会话解析事实（Memory Facts，v1.2C；Resolver 纯函数）
         memory_resolutions = []
         try:
-            memory_resolutions = MemoryService.get_resolutions(user_id, n=20)
+            memory_resolutions = (
+                memory_view.get_resolutions(n=20)
+                if memory_view is not None
+                else MemoryService.get_resolutions(user_id, n=20)
+            )
         except Exception:
             pass
 

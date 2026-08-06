@@ -17,6 +17,7 @@ from agent.cognition.cognitive_context import ConversationState
 from agent.cognition.reference_resolver import ReferenceResolver
 from agent.compiler.tool_selector import Compiler
 from agent.compiler.rules import DEFAULT_RULES
+from agent.runtime_context import RunContext, SessionContext
 
 from .context_builder import ContextBuilder
 from .planner import PlannerStage
@@ -33,9 +34,11 @@ class ExecutionOrchestrator:
     Orchestrator 不知道状态机，只返回处理结果。
     """
 
-    def __init__(self):
+    def __init__(self, *, session_context: Optional[SessionContext] = None):
         self._timings: Dict[str, float] = {}
         self.replan_count = 0
+        self._run_context: Optional[RunContext] = None
+        self._session_context = session_context
         # 初始化 Compiler（注册所有 lowering rules）
         self._selector = Compiler()
         for rule in DEFAULT_RULES:
@@ -50,6 +53,25 @@ class ExecutionOrchestrator:
         self._planner = PlannerStage(self)
         self._executor = ExecutionStage(self)
         self._finalizer = Finalizer(self)
+
+    @property
+    def run_context(self) -> Optional[RunContext]:
+        """The currently bound RunContext, if this orchestrator is executing."""
+        return self._run_context
+
+    @property
+    def session_context(self) -> Optional[SessionContext]:
+        """The SessionContext owning this orchestrator, if explicitly bound."""
+        return self._session_context
+
+    def bind_run_context(self, run_context: RunContext) -> None:
+        """Bind one execution scope without creating a new orchestrator."""
+        run_context.ensure_open()
+        self._run_context = run_context
+
+    def clear_run_context(self) -> None:
+        """Drop the current execution binding after RunContext teardown."""
+        self._run_context = None
 
     def reset_timings(self):
         self._timings = {}

@@ -7,7 +7,8 @@ no global "clear everything" operation here.
 The layers have different lifetimes:
 
 * conversation=True clears session messages, short-term history, semantic
-  summaries, resolution memory, and the Conversation Runtime snapshot;
+  summaries, resolution memory, and the calling Session's Conversation Runtime
+  snapshot;
 * facts=True additionally clears extracted user facts;
 * execution artifacts are owned by ``SessionRuntime`` and are not handled here.
 """
@@ -43,13 +44,16 @@ class MemoryRuntime:
         *,
         conversation: bool = True,
         facts: bool = False,
+        conversation_tracker=None,
     ) -> MemoryResetReport:
         """Reset memory for exactly one user/session namespace.
 
         ``conversation`` is intentionally broader than the in-process message
         buffer: persistent short-term/summary/resolution data can otherwise
-        leak into a repeated benchmark case.  Facts are independent and are
-        opt-in because they normally represent user-level persistence.
+        leak into a repeated benchmark case. ``conversation_tracker`` is an
+        explicit Session-owned tracker; omitted callers use the legacy global
+        tracker for compatibility. Facts are independent and are opt-in
+        because they normally represent user-level persistence.
         """
         namespace = _validate_namespace(user_id)
 
@@ -58,13 +62,16 @@ class MemoryRuntime:
             from agent.memory.short_term import clear_history
             from agent.memory.long_term import clear_summaries
             from agent.memory.resolution import clear_resolutions
-            from agent.conversation import conversation_tracker
+            tracker = conversation_tracker
+            if tracker is None:
+                from agent.compat.conversation import get_legacy_conversation_tracker
+                tracker = get_legacy_conversation_tracker()
 
             clear_session(namespace)
             clear_history(namespace)
             clear_summaries(namespace)
             clear_resolutions(namespace)
-            conversation_tracker.reset(namespace)
+            tracker.reset(namespace)
 
         if facts:
             from agent.memory.long_term import clear_facts

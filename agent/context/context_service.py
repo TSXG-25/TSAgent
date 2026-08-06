@@ -34,6 +34,7 @@ class ContextService:
         cls,
         task: Dict,
         system_prompt: str = "",
+        artifact_store=None,
     ) -> List:
         """为 Executor Think 步骤组装完整 Prompt。"""
         system_content = (
@@ -67,7 +68,7 @@ class ContextService:
         sections.append(scope_section)
 
         # 6. Available Artifacts
-        art_section = cls._build_artifact_section(task)
+        art_section = cls._build_artifact_section(task, artifact_store=artifact_store)
         if art_section:
             sections.append(art_section)
 
@@ -236,16 +237,23 @@ class ContextService:
         return "\n".join(lines)
 
     @classmethod
-    def _build_artifact_section(cls, task: Dict) -> str:
+    def _build_artifact_section(cls, task: Dict, *, artifact_store=None) -> str:
         """Fix: 从 ArtifactService 加载当前 Task 可用的 Artifact。"""
-        from agent.services.artifact_service import ArtifactService
-        
+        if artifact_store is None:
+            artifact_store = task.get("_artifact_store")
+        if artifact_store is None:
+            from agent.compat.artifact import get_legacy_artifact_service
+            artifact_store = get_legacy_artifact_service()
+
         task_id = task.get("id", "")
-        artifacts = ArtifactService.get_by_task(task_id)
-        
+        artifacts = artifact_store.get_by_task(task_id)
+
         if not artifacts:
-            # Also check for global artifacts by type
-            all_artifacts = list(ArtifactService._store.values()) if hasattr(ArtifactService, '_store') else []
+            # Also check for artifacts visible in the current explicit scope.
+            if hasattr(artifact_store, "items"):
+                all_artifacts = list(artifact_store.items())
+            else:
+                all_artifacts = list(getattr(artifact_store, "_store", {}).values())
             # Show last few useful artifacts
             useful = [a for a in all_artifacts if a.visibility in ("intermediate", "final")]
             if not useful:
@@ -425,8 +433,6 @@ class ContextService:
         final_artifacts: List,
         original_input: str,
     ) -> List:
-        from agent.services.artifact_service import ArtifactService
-
         summaries = []
         for art in final_artifacts:
             summaries.append(f"- [{art.type}] {art.summary}")

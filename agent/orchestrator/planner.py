@@ -63,7 +63,13 @@ def _normalize_continuation_target(target: str) -> str:
     return str(target or "").strip().replace("\\", "/").casefold().rstrip("/")
 
 
-def _record_contract_diagnostic(state: AgentState, operation: str, error: Exception) -> None:
+def _record_contract_diagnostic(
+    state: AgentState,
+    operation: str,
+    error: Exception,
+    *,
+    run_context=None,
+) -> None:
     from agent.diagnostics import handle_contract_violation
 
     event = handle_contract_violation(
@@ -71,6 +77,8 @@ def _record_contract_diagnostic(state: AgentState, operation: str, error: Except
         operation=operation,
         expected="ConversationRetrieverProtocol.get/snapshot/runtime_pending/events",
         error=error,
+        event_bus_instance=(run_context.event_bus if run_context is not None else None),
+        diagnostics=(run_context.diagnostics if run_context is not None else None),
     )
     state.setdefault("diagnostics", []).append({
         "type": "contract_violation",
@@ -86,6 +94,7 @@ def _apply_conversation_contract(
     *,
     pending_target: str = "",
     reference_target: str = "",
+    conversation_retriever=None,
 ):
     """Apply ADR-0013 continuation semantics before routing.
 
@@ -96,13 +105,15 @@ def _apply_conversation_contract(
     from agent.conversation import (
         ConversationIntent,
         classify_conversation_intent,
-        conversation_retriever,
     )
+    from agent.compat.conversation import get_legacy_conversation_retriever
+
+    retriever = conversation_retriever or get_legacy_conversation_retriever()
 
     kind = classify_conversation_intent(
         intent,
         user_input,
-        runtime_pending=conversation_retriever.runtime_pending(user_id),
+        runtime_pending=retriever.runtime_pending(user_id),
     )
     if kind is ConversationIntent.CONTINUE_PLAN:
         intent.domain = DOMAIN_DEVELOPMENT
@@ -158,6 +169,36 @@ class PlannerStage:
 
     def __init__(self, orchestrator):
         self._orch = orchestrator
+
+    def _memory_view(self):
+        session_context = getattr(self._orch, "session_context", None)
+        return getattr(session_context, "memory_view", None)
+
+    def _record_exchange(self, user_id: str, user_input: str, answer: str) -> None:
+        memory_view = self._memory_view()
+        if memory_view is not None:
+            memory_view.record_full_exchange(user_input, answer)
+        else:
+            MemoryService.record_full_exchange(user_id, user_input, answer)
+
+    def _record_resolution(
+        self,
+        user_id: str,
+        utterance: str,
+        resolved_target: str,
+        kind: str,
+    ) -> None:
+        memory_view = self._memory_view()
+        if memory_view is not None:
+            memory_view.record_resolution(utterance, resolved_target, kind)
+        else:
+            MemoryService.record_resolution(user_id, utterance, resolved_target, kind)
+
+    def _get_user_facts(self, user_id: str) -> str:
+        memory_view = self._memory_view()
+        if memory_view is not None:
+            return memory_view.get_user_facts()
+        return MemoryService.get_user_facts(user_id)
 
     async def run(
         self,
@@ -231,21 +272,37 @@ class PlannerStage:
         # v2.1B-1/2：记录本轮 intent + 会话快照 + 引用类型 + Runtime 续接
         self._orch.last_intent = intent
         try:
-            from agent.conversation import conversation_retriever, resolve_reference_type
+            from agent.conversation import resolve_reference_type
+            session_context = getattr(self._orch, "session_context", None)
+            session_retriever = (
+                session_context.conversation_retriever
+                if session_context is not None
+                else None
+            )
             conversation_kind = _apply_conversation_contract(
                 intent,
                 user_id,
                 user_input,
                 pending_target=getattr(planner_context, "runtime_pending_target", ""),
                 reference_target=resolved.target,
+                conversation_retriever=session_retriever,
             )
             state["conversation_intent"] = conversation_kind.value
-            state["conversation_snapshot"] = conversation_retriever.snapshot(user_id)
+            retriever = session_retriever
+            if retriever is None:
+                from agent.compat.conversation import get_legacy_conversation_retriever
+                retriever = get_legacy_conversation_retriever()
+            state["conversation_snapshot"] = retriever.snapshot(user_id)
             state["conversation_reference_type"] = resolve_reference_type(intent).value
             state["conversation_runtime_continuation"] = _render_runtime_continuation(state)
             state["conversation_clarification_required"] = intent.action == "clarify"
         except (AttributeError, ImportError, KeyError, TypeError) as exc:
-            _record_contract_diagnostic(state, "conversation_contract", exc)
+            _record_contract_diagnostic(
+                state,
+                "conversation_contract",
+                exc,
+                run_context=getattr(self._orch, "run_context", None),
+            )
 
         # 更新跨轮对话状态（State = Cache：timeline 写入；last_* 为 Deprecated 双写）
         self._orch._context_builder.update_conversation_state(intent, resolution=resolved)
@@ -253,7 +310,7 @@ class PlannerStage:
         # 记录跨会话解析事实（Memory Facts，v1.2C；不依赖 ResolutionResult 内部）
         try:
             if resolved and resolved.target:
-                MemoryService.record_resolution(
+                self._record_resolution(
                     user_id, user_input, resolved.target, resolved.kind,
                 )
         except Exception:
@@ -266,12 +323,12 @@ class PlannerStage:
                     "你提到的引用目标与当前未完成任务可能不是同一个对象。"
                     "请明确要继续当前未完成任务，还是继续你刚才提到的引用目标。"
                 )
-                MemoryService.record_full_exchange(user_id, user_input, answer)
+                self._record_exchange(user_id, user_input, answer)
                 return state, "FINISH", answer
             if intent.domain == DOMAIN_MEMORY:
                 _facts = ""
                 try:
-                    _facts = MemoryService.get_user_facts(user_id)
+                    _facts = self._get_user_facts(user_id)
                 except Exception:
                     pass
                 if _facts:
@@ -283,8 +340,15 @@ class PlannerStage:
             # v2.1B-2（ADR-0013）：Conversation Reference Resolver —— 只注入对应字段
             try:
                 from agent.conversation import (
-                    conversation_retriever, resolve_reference_type,
+                    resolve_reference_type,
                     ReferenceType, render_reference,
+                )
+                from agent.compat.conversation import get_legacy_conversation_retriever
+                session_context = getattr(self._orch, "session_context", None)
+                conversation_retriever = (
+                    session_context.conversation_retriever
+                    if session_context is not None
+                    else get_legacy_conversation_retriever()
                 )
                 _ref_type = resolve_reference_type(intent)
                 if _ref_type is ReferenceType.LAST_RUNTIME:
@@ -297,7 +361,12 @@ class PlannerStage:
                     if _inj:
                         system_content += f"\n\n{_inj}"
             except (AttributeError, ImportError, KeyError, TypeError) as exc:
-                _record_contract_diagnostic(state, "conversation_reference_injection", exc)
+                _record_contract_diagnostic(
+                    state,
+                    "conversation_reference_injection",
+                    exc,
+                    run_context=getattr(self._orch, "run_context", None),
+                )
             try:
                 response = await llm.ainvoke([
                     SystemMessage(content=system_content),
@@ -306,7 +375,7 @@ class PlannerStage:
                 answer = response.content if hasattr(response, 'content') else str(response)
             except Exception:
                 answer = "抱歉，我暂时无法回答。"
-            MemoryService.record_full_exchange(user_id, user_input, answer)
+            self._record_exchange(user_id, user_input, answer)
             return state, "FINISH", answer
 
         # ── Stage 2: WorkflowRouter 执行路由（接收完整 IntentResult）──
@@ -352,7 +421,7 @@ class PlannerStage:
 
                 if result and result.success and result.outputs.get("_summary"):
                     best_answer = result.outputs["_summary"]
-                    MemoryService.record_full_exchange(user_id, user_input, best_answer)
+                    self._record_exchange(user_id, user_input, best_answer)
                     return state, "FINISH", best_answer
                 else:
                     reason = result.error[:160] if result else "Workflow 异常"
@@ -385,6 +454,9 @@ class PlannerStage:
                     intent=intent,
                     current_file=getattr(ws_ctx, "current_file", "") or "",
                     opened_files=list(getattr(ws_ctx, "opened_files", []) or []),
+                    workspace=(
+                        getattr(getattr(self._orch, "run_context", None), "workspace", None)
+                    ),
                 )).context
             except Exception as e:
                 print(f"  ⚠️ Grounding 失败（忽略）: {e}")
@@ -481,6 +553,9 @@ class PlannerStage:
                 intent=intent,
                 current_file=getattr(ws_ctx, "current_file", "") or "",
                 opened_files=list(getattr(ws_ctx, "opened_files", []) or []),
+                workspace=(
+                    getattr(getattr(self._orch, "run_context", None), "workspace", None)
+                ),
             )).context
         except Exception as exc:
             print(f"  ⚠️ 通用 Planner Grounding 失败（忽略）: {str(exc)[:120]}")

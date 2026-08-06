@@ -40,6 +40,8 @@ from .contracts import (
     PreparedOperation,
     RevisionRecord,
     RunHead,
+    ServiceStartReservation,
+    RunReadSnapshot,
 )
 from .errors import DurableStoreError, StoreErrorCode
 
@@ -686,6 +688,216 @@ class SqliteRuntimeStore:
                 return self._head_contract(row)
             return self._head_contract(
                 self._fetch_head_tx(connection, tenant_id, run_id, session_id=session_id)
+            )
+
+    def reserve_service_start(
+        self,
+        tenant_id: str,
+        session_id: str,
+        *,
+        requested_run_id: str | None,
+        request_id: str,
+        request_digest: str,
+        writer_id: str,
+        external_reference: str,
+        expected_store_generation: str | None = None,
+    ) -> ServiceStartReservation:
+        """Atomically reserve a public ``start_run`` request.
+
+        The reservation reuses the durable idempotency ledger but performs
+        request lookup, Run creation, first fence acquisition, and PREPARED
+        intent publication in one ``BEGIN IMMEDIATE`` transaction.  This is
+        what makes an omitted client run_id safe under concurrent callers.
+        """
+
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        session_id = _require_text(session_id, "session_id")
+        request_id = _require_text(request_id, "request_id")
+        request_digest = _require_text(request_digest, "request_digest")
+        writer_id = _require_text(writer_id, "writer_id")
+        self._check_generation(expected_store_generation)
+        with self._write_transaction() as connection:
+            existing = connection.execute(
+                """
+                SELECT tenant_id, session_id, run_id, operation_id,
+                       idempotency_key, operation_type, request_digest,
+                       expected_effect_digest, effect_state, fence_token,
+                       external_reference, result_json, result_digest,
+                       prepared_revision, committed_revision, request_id,
+                       created_at, updated_at
+                FROM idempotency_ledger
+                WHERE tenant_id = ? AND idempotency_key = ?
+                ORDER BY prepared_revision ASC
+                LIMIT 1
+                """,
+                (tenant_id, request_id),
+            ).fetchone()
+            if existing is not None:
+                if (
+                    str(existing["operation_type"]) != "service.start_run"
+                    or str(existing["request_digest"]) != request_digest
+                ):
+                    raise DurableStoreError(
+                        StoreErrorCode.IDEMPOTENCY_CONFLICT,
+                        "request_id is bound to a different Service operation",
+                    )
+                if str(existing["session_id"]) != session_id:
+                    raise DurableStoreError(
+                        StoreErrorCode.IDENTITY_MISMATCH,
+                        "request_id belongs to another session scope",
+                    )
+                head = self._head_contract(
+                    self._fetch_head_tx(
+                        connection,
+                        tenant_id,
+                        str(existing["run_id"]),
+                        session_id=session_id,
+                    )
+                )
+                return ServiceStartReservation(
+                    head=head,
+                    intent=self._prepared_contract(
+                        existing,
+                        store_generation=self.store_generation,
+                    ),
+                    created=False,
+                )
+
+            run_id = _require_text(
+                requested_run_id or f"run-{uuid.uuid4().hex}",
+                "run_id",
+            )
+            occupied = connection.execute(
+                "SELECT 1 FROM run_heads WHERE tenant_id = ? AND run_id = ?",
+                (tenant_id, run_id),
+            ).fetchone()
+            if occupied is not None:
+                raise DurableStoreError(
+                    StoreErrorCode.RUN_INDEX_CONFLICT,
+                    "requested run_id is already occupied",
+                )
+
+            now = _now()
+            connection.execute(
+                """
+                INSERT INTO run_heads
+                    (tenant_id, session_id, run_id, request_id,
+                     current_revision, current_digest, current_writer_id,
+                     current_fence_token, store_generation, run_status, updated_at)
+                VALUES (?, ?, ?, ?, 0, '', ?, 1, ?, 'CREATED', ?)
+                """,
+                (
+                    tenant_id,
+                    session_id,
+                    run_id,
+                    request_id,
+                    writer_id,
+                    self.store_generation,
+                    now,
+                ),
+            )
+            connection.execute(
+                """
+                INSERT INTO run_fences
+                    (tenant_id, session_id, run_id, writer_id, fence_token,
+                     fence_epoch, acquired_at, released_at)
+                VALUES (?, ?, ?, ?, 1, 1, ?, NULL)
+                """,
+                (tenant_id, session_id, run_id, writer_id, now),
+            )
+
+            operation_id = uuid.uuid4().hex
+            intent_payload = {
+                "effect_state": "PREPARED",
+                "expected_effect_digest": "",
+                "external_reference": external_reference,
+                "idempotency_key": request_id,
+                "operation_id": operation_id,
+                "operation_type": "service.start_run",
+                "request_digest": request_digest,
+            }
+            payload_json = _canonical_json(intent_payload)
+            payload_digest = _digest_text(payload_json)
+            connection.execute(
+                """
+                INSERT INTO idempotency_ledger
+                    (tenant_id, session_id, run_id, operation_id,
+                     idempotency_key, operation_type, request_digest,
+                     expected_effect_digest, effect_state, fence_token,
+                     external_reference, result_json, result_digest,
+                     prepared_revision, committed_revision, request_id,
+                     created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, 'service.start_run', ?, '', 'PREPARED',
+                        1, ?, 'null', ?, 1, NULL, ?, ?, ?)
+                """,
+                (
+                    tenant_id,
+                    session_id,
+                    run_id,
+                    operation_id,
+                    request_id,
+                    request_digest,
+                    external_reference,
+                    _digest_text("null"),
+                    request_id,
+                    now,
+                    now,
+                ),
+            )
+            connection.execute(
+                """
+                INSERT INTO run_resume_revisions
+                    (tenant_id, session_id, run_id, revision, parent_digest,
+                     payload_json, payload_digest, request_id, writer_id,
+                     fence_token, created_at)
+                VALUES (?, ?, ?, 1, '', ?, ?, ?, ?, 1, ?)
+                """,
+                (
+                    tenant_id,
+                    session_id,
+                    run_id,
+                    payload_json,
+                    payload_digest,
+                    request_id,
+                    writer_id,
+                    now,
+                ),
+            )
+            connection.execute(
+                """
+                UPDATE run_heads
+                SET current_revision = 1, current_digest = ?, updated_at = ?
+                WHERE tenant_id = ? AND run_id = ? AND current_revision = 0
+                """,
+                (payload_digest, now, tenant_id, run_id),
+            )
+            row = self._fetch_head_tx(
+                connection,
+                tenant_id,
+                run_id,
+                session_id=session_id,
+            )
+            intent_row = connection.execute(
+                """
+                SELECT tenant_id, session_id, run_id, operation_id,
+                       idempotency_key, operation_type, request_digest,
+                       expected_effect_digest, effect_state, fence_token,
+                       external_reference, result_json, result_digest,
+                       prepared_revision, committed_revision, request_id,
+                       created_at, updated_at
+                FROM idempotency_ledger
+                WHERE tenant_id = ? AND run_id = ? AND idempotency_key = ?
+                """,
+                (tenant_id, run_id, request_id),
+            ).fetchone()
+            assert intent_row is not None
+            return ServiceStartReservation(
+                head=self._head_contract(row),
+                intent=self._prepared_contract(
+                    intent_row,
+                    store_generation=self.store_generation,
+                ),
+                created=True,
             )
 
     def get_run_head(
@@ -2370,6 +2582,71 @@ class SqliteRuntimeStore:
                 row,
                 store_generation=self.store_generation,
             )
+
+    def read_run_snapshot(
+        self,
+        tenant_id: str,
+        run_id: str,
+        *,
+        session_id: str | None = None,
+    ) -> RunReadSnapshot:
+        """Read Service projection inputs from one SQLite read transaction."""
+
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        run_id = _require_text(run_id, "run_id")
+        if session_id is not None:
+            session_id = _require_text(session_id, "session_id")
+        with self._lock:
+            self._ensure_open()
+            try:
+                self._connection.execute("BEGIN")
+                head = self._head_contract(
+                    self._fetch_head_tx(
+                        self._connection,
+                        tenant_id,
+                        run_id,
+                        session_id=session_id,
+                    )
+                )
+                index = self.get_run_index(
+                    tenant_id,
+                    run_id,
+                    session_id=session_id,
+                )
+                intent_row = self._connection.execute(
+                    """
+                    SELECT tenant_id, session_id, run_id, operation_id,
+                           idempotency_key, operation_type, request_digest,
+                           expected_effect_digest, effect_state, fence_token,
+                           external_reference, result_json, result_digest,
+                           prepared_revision, committed_revision, request_id,
+                           created_at, updated_at
+                    FROM idempotency_ledger
+                    WHERE tenant_id = ? AND run_id = ?
+                      AND operation_type = 'service.start_run'
+                    ORDER BY prepared_revision ASC
+                    LIMIT 1
+                    """,
+                    (tenant_id, run_id),
+                ).fetchone()
+                start_intent = (
+                    self._prepared_contract(
+                        intent_row,
+                        store_generation=self.store_generation,
+                    )
+                    if intent_row is not None
+                    else None
+                )
+                self._connection.execute("COMMIT")
+                return RunReadSnapshot(
+                    head=head,
+                    index=index,
+                    start_intent=start_intent,
+                )
+            except Exception:
+                if self._connection.in_transaction:
+                    self._connection.execute("ROLLBACK")
+                raise
 
     @staticmethod
     def _prepared_contract(

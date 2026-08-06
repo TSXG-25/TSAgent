@@ -88,6 +88,24 @@ class PreparedOperation:
 
 
 @dataclass(frozen=True)
+class ServiceStartReservation:
+    """Durable reservation for one public ``start_run`` request."""
+
+    head: RunHead
+    intent: PreparedOperation
+    created: bool
+
+
+@dataclass(frozen=True)
+class RunReadSnapshot:
+    """One consistent read view used by the public Service projector."""
+
+    head: RunHead
+    index: Any | None
+    start_intent: PreparedOperation | None
+
+
+@dataclass(frozen=True)
 class ArtifactCommitFact:
     """Verified, JSON-only artifact fact committed beside a checkpoint."""
 
@@ -255,5 +273,7 @@ __all__ = [
     "FinalizationResult",
     "PreparedOperation",
     "RevisionRecord",
+    "RunReadSnapshot",
+    "ServiceStartReservation",
     "RunHead",
 ]

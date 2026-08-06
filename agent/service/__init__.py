@@ -6,7 +6,7 @@ v2.3C-2.
 """
 
 from .contracts import (
-    AgentService,
+    AgentService as AgentServiceProtocol,
     ArtifactSummary,
     ArtifactView,
     EventStreamRequest,
@@ -24,17 +24,38 @@ from .contracts import (
     StartRunRequest,
 )
 from .errors import AgentServiceError, ServiceErrorCode
+from .context_factory import ServiceContextFactory
+from .event_repository import (
+    EmptyEventRepository,
+    EventRepository,
+    InMemoryEventRepository,
+)
+from .execution_launcher import ExecutionLauncher
 from .events import EventOrderingOracle
+from .service import AgentService as AgentServiceCore
+
+# Keep the Protocol available under an explicit name while exposing the
+# concrete v2.3C-2 implementation as the package-level AgentService.
+AgentServiceContract = AgentServiceProtocol
+AgentService = AgentServiceCore
+GetRunRequest = RunLookupRequest
+ListArtifactsRequest = RunLookupRequest
 
 __all__ = [
     "AgentService",
+    "AgentServiceContract",
     "AgentServiceError",
     "ArtifactSummary",
     "ArtifactView",
     "EventOrderingOracle",
+    "EventRepository",
+    "EmptyEventRepository",
     "EventStreamRequest",
     "EventType",
     "FailureSummary",
+    "ExecutionLauncher",
+    "GetRunRequest",
+    "ListArtifactsRequest",
     "ResumeAction",
     "ResumeDisposition",
     "ResumeRunRequest",
@@ -45,5 +66,7 @@ __all__ = [
     "RunSnapshot",
     "RunStatus",
     "ServiceErrorCode",
+    "ServiceContextFactory",
+    "InMemoryEventRepository",
     "StartRunRequest",
 ]

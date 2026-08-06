@@ -14,7 +14,9 @@ from .contracts import (
     FinalizationResult,
     PreparedOperation,
     RevisionRecord,
+    RunReadSnapshot,
     RunHead,
+    ServiceStartReservation,
 )
 from .buffer import CheckpointStagingBuffer
 from .errors import DurableStoreError, StoreErrorCode
@@ -42,7 +44,9 @@ __all__ = [
     "FinalizationResult",
     "PreparedOperation",
     "RevisionRecord",
+    "RunReadSnapshot",
     "RunHead",
+    "ServiceStartReservation",
     "SCHEMA_VERSION",
     "SqliteRuntimeStore",
     "DurableRuntimeStoreView",

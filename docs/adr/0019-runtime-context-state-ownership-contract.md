@@ -1,6 +1,6 @@
 # ADR-0019: Runtime Context and State Ownership Contract（v2.3A）
 
-- 状态: In Progress — Scoped Context Slice Implemented; Global Migration Pending
+- 状态: Accepted — v2.3A Implemented and Verified
 - 日期: 2026-08
 - 关联: ADR-0013（Conversation Runtime）、ADR-0016（Run Checkpoint）、ADR-0018（Run-Level Workflow Resume）
 
@@ -259,13 +259,13 @@ Global mutable singleton production imports    0
 不需要真实 LLM。v2.3A 的核心证据是确定性并发、生命周期和静态边界测试。
 
 当前静态边界已达到：Runtime/Executor/ContextBuilder/Grounder/Planner 不直接 import
-全局 WorkspaceService、EventBus 或 Conversation singleton；`ContextService` 的
-旧 ArtifactService facade 仍属于后续 A4 清理范围，因此整体 global-mutable gate
-尚未宣称最终 `0`。
+全局 WorkspaceService、EventBus、ArtifactService 或 Conversation singleton。旧 facade
+仍作为显式迁移边界保留，但不再是生产 scoped path 的默认入口；其清理版本和 usage
+count 属于后续 A4，不影响 v2.3A 的生产路径门禁。
 
-## 九、当前实现进度（非最终验收）
+## 九、v2.3A 最终实现与验收证据
 
-已完成的第一切片：
+v2.3A 已完成以下实现：
 
 - `agent/runtime_context.py` 提供 `ApplicationContext`、`SessionContext`、
   `RunContext` 及显式 close 级联；
@@ -299,13 +299,24 @@ Global mutable singleton production imports    0
   `a689dbefd7bfd6ed7306c322e264d4e541ca298ed814bb86f055f864d170a91f`），相关确定性
   测试与 mypy 已通过。
 
-以下仍未宣称完成，必须在 v2.3A 收口前继续迁移并验证：
+### 最终验证
 
-- Workspace、diagnostics、Memory/Conversation 的底层 legacy store/facade 仍存在，
-  无 RunContext 的旧直接调用仍可进入兼容 fallback；
-- 旧兼容 facade、legacy EventBus 和 compat fallback 仍存在，待 A4 按 usage count
-  和明确删除版本清理；
-- Architecture Verification 已增加 scoped legacy import 检查并通过；整体 singleton
-  facade 的删除版本和使用计数仍未达到最终 `0`；
-- 多 Session 并发的完整 Runtime 接线、close/publish 竞争和 Workspace handle 释放
-  的最终门禁仍待补齐。
+- 全量离线测试：`289 passed, 17 skipped`；跳过项均为 DeepSeek 真实 API 不可达，
+  不属于离线能力失败；
+- Context Isolation 相关测试：`24 passed`；覆盖强制交错的 Artifact/Event 隔离、
+  Session reset 非干扰、close/publish 竞态、close 后同一 `run_id` 恢复及 durable
+  workspace/checkpoint view 保留；
+- Architecture Verification：`PASS`；生产模块的全局可变 singleton import gate 通过；
+- Context Isolation Dataset：`PASS`，12 cases，dataset hash
+  `a689dbefd7bfd6ed7306c322e264d4e541ca298ed814bb86f055f864d170a91f`；
+- mypy：`Success`，24 个相关 source files；
+- `git diff --check`：`PASS`。
+
+### v2.3A 之后的明确边界
+
+- Workspace、Diagnostics、Memory/Conversation 的底层 legacy store/facade 可以继续
+  为旧直接调用提供兼容，但必须通过 `agent/compat/` 显式访问，不能成为新的默认入口；
+- `close()` 释放进程内资源但不删除可恢复状态，`destroy()` / `purge()` 才是显式删除操作；
+- SQLite 事务、Checkpoint/RunResumeIndex/Artifact metadata 的统一持久化、revision/
+  fencing 和崩溃恢复属于 v2.3B；
+- AgentService、REST、Cancellation、Timeout 和 Provider Failover 不属于 v2.3A。

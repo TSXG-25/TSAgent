@@ -5,4 +5,4 @@ package are the only place allowed to bridge old process-global services while
 the v2.3A migration is in progress.
 """
 
-__all__ = []
+__all__: list[str] = []

@@ -87,6 +87,24 @@ RULES = (
 )
 
 
+SCOPED_RUNTIME_EXCLUSIONS = {
+    "agent/compat",
+    "agent/event_bus.py",
+    "agent/services/artifact_service.py",
+    "agent/services/workspace_service.py",
+    "agent/conversation/state.py",
+    "agent/conversation/__init__.py",
+}
+
+FORBIDDEN_LEGACY_IMPORTS = {
+    ("agent.event_bus", "event_bus"),
+    ("agent.services.workspace_service", "get_workspace_service"),
+    ("agent.services.artifact_service", "ArtifactService"),
+    ("agent.conversation", "conversation_tracker"),
+    ("agent.conversation", "conversation_retriever"),
+}
+
+
 def _imported_modules(tree: ast.AST):
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
@@ -114,6 +132,28 @@ def verify(root: Path = PROJECT_ROOT) -> list[str]:
                     relative = path.relative_to(root)
                     violations.append(
                         f"{rule.name}: {relative} imports forbidden {module}"
+                    )
+    for path in sorted((root / "agent").rglob("*.py")):
+        relative = path.relative_to(root)
+        relative_text = str(relative)
+        if any(
+            relative_text == excluded or relative_text.startswith(excluded + "/")
+            for excluded in SCOPED_RUNTIME_EXCLUSIONS
+        ):
+            continue
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        except SyntaxError:
+            # The package-specific rules above already report syntax errors.
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ImportFrom) or node.level != 0 or not node.module:
+                continue
+            for alias in node.names:
+                if (node.module, alias.name) in FORBIDDEN_LEGACY_IMPORTS:
+                    violations.append(
+                        f"scoped-runtime: {relative} imports legacy singleton "
+                        f"{node.module}.{alias.name}; use agent.compat explicitly"
                     )
     return violations
 

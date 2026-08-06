@@ -1,0 +1,31 @@
+{
+  "milestone": "v2.2B",
+  "contract": "Workflow Resume Runtime",
+  "implementation_commit": "d345e7d38858343b72aae1d3f9a07d7ffb174156",
+  "report_date": "2026-08-06",
+  "validation_mode": "offline_integration",
+  "test_manifest": "tests/test_workflow_checkpoint_runtime.py",
+  "cases_total": 7,
+  "passed": 7,
+  "failed": 0,
+  "capabilities": [
+    "RESUME_EXACT skips completed stages",
+    "REPLAY_FROM_STAGE requires idempotent Stage",
+    "committed side effect blocks duplicate active task",
+    "unknown side effect requires clarification",
+    "external guard mismatch rejects before execution",
+    "failed Stage creates recoverable checkpoint",
+    "recoverable checkpoint resumes successfully"
+  ],
+  "provider_backed_validation": {
+    "status": "covered_by_v2.2C_p0",
+    "note": "v2.2B deliberately froze the single-Workflow runtime boundary; Run-level Provider smoke is archived in run_resume_p0.json."
+  },
+  "deferred_validation": [
+    "multi-Workflow selection and cross-Workflow process restart",
+    "provider timeout and failover policy"
+  ],
+  "limitations": [
+    "This report does not claim Run-level multi-Workflow orchestration."
+  ]
+}

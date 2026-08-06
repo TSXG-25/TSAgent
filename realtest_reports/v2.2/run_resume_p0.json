@@ -1,0 +1,82 @@
+{
+  "suite": "v2.2C-P0",
+  "round": 1,
+  "date": "2026-08-06",
+  "provider": "deepseek-v4-flash",
+  "implementation_baseline": "14af2ad44ba2e67aef3789ccee50b20e2114d5f1",
+  "topology": "A(spec)->B(impl)->C(verify)",
+  "gate_met": true,
+  "metrics": {
+    "raw_e2e_rate": 1.0,
+    "runtime_capability_rate": 1.0,
+    "provider_error_rate": 0.0,
+    "correct_workflow_resume_rate": 1.0,
+    "completed_workflow_skip_rate": 1.0,
+    "duplicate_side_effect_rate": 0.0,
+    "unsafe_resume_acceptance_rate": 0.0,
+    "artifact_integrity_rate": 1.0,
+    "process_restart_recovery": 1.0
+  },
+  "cases": [
+    {
+      "case": "c01",
+      "scenario": "无中断基线 A->B->C",
+      "result": "PASS",
+      "evidence": "三文件存在，solution.py 真实运行通过"
+    },
+    {
+      "case": "c02",
+      "scenario": "A 完成后进程重启，恢复 B->C",
+      "result": "PASS",
+      "evidence": "A 不重跑，B/C 恢复，spec.md hash 不变，Duplicate=0"
+    },
+    {
+      "case": "c03",
+      "scenario": "B 在 read_spec 后 EXACT resume",
+      "result": "PASS",
+      "evidence": "RESUME_EXACT，Artifact hydration，read_spec 不重跑"
+    },
+    {
+      "case": "c04",
+      "scenario": "B 幂等 Stage Replay",
+      "result": "PASS",
+      "evidence": "REPLAY_FROM_STAGE，只重放允许的 gen_code"
+    },
+    {
+      "case": "c05",
+      "scenario": "A/B 已完成，只恢复 C",
+      "result": "PASS",
+      "evidence": "A/B execution=0，文件 hash 不变，二次调用 RUN_COMPLETED"
+    },
+    {
+      "case": "c06",
+      "scenario": "上游 Artifact 篡改",
+      "result": "PASS",
+      "evidence": "REJECT UPSTREAM_ARTIFACT_CHANGED，Provider/Tool=0"
+    },
+    {
+      "case": "c07",
+      "scenario": "写盘后 checkpoint 前崩溃",
+      "result": "PASS",
+      "evidence": "lineage fallback + committed-file reconcile，B LLM 不重调"
+    },
+    {
+      "case": "c08",
+      "scenario": "错误 Run/Workflow 身份",
+      "result": "PASS",
+      "evidence": "RUN_MISMATCH / REQUIRE_CLARIFICATION，无执行且 revision 不变"
+    }
+  ],
+  "source_report": "benchmarks/v22c/results/p0_round1.json",
+  "source_report_sha256": "c87c8deadf43df5e67d2beffcb383c3520b58b9c5597dceeefc1aa7a6492dd70",
+  "key_findings": [
+    "C03: Artifact 未水合导致零执行假成功",
+    "C07: Checkpoint lineage 缺失导致重复 Provider 调用与重复副作用",
+    "P0 统一运行的 C03 初次误报来自 Harness stale field，而非 Runtime 回归"
+  ],
+  "post_close_backlog": [
+    "C09 version incompatibility enhancement evidence",
+    "C10 provider timeout resilience",
+    "C11 upstream failure isolation"
+  ]
+}

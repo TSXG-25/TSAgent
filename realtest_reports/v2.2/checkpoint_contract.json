@@ -1,0 +1,70 @@
+{
+  "milestone": "v2.2A",
+  "contract": "Run Checkpoint Contract",
+  "implementation_commit": "6c01d46108b7999a661485bbec4fdfd408fe8ea8",
+  "report_date": "2026-08-06",
+  "provider": "DeepSeek",
+  "validation_mode": "real_api_boundary",
+  "cases_total": 20,
+  "passed": 20,
+  "failed": 0,
+  "skipped": 0,
+  "groups": [
+    {
+      "name": "real_read_only_serialization",
+      "cases": 5,
+      "passed": 5,
+      "checks": [
+        "GET /models response round-trip",
+        "canonical digest stable under field reordering",
+        "timestamp/null/missing/Unicode/float/nested data preserved",
+        "large response stored as digest/reference",
+        "API key and Authorization excluded"
+      ]
+    },
+    {
+      "name": "real_api_error_mapping",
+      "cases": 6,
+      "passed": 6,
+      "checks": [
+        "401 -> http_4xx",
+        "404 -> http_4xx",
+        "timeout -> timeout",
+        "network failure -> network",
+        "empty/malformed response -> malformed_response",
+        "SDK exception reduced to serializable failure fact"
+      ]
+    },
+    {
+      "name": "real_external_state_guard",
+      "cases": 6,
+      "passed": 6,
+      "checks": [
+        "file content hash guard",
+        "read-only /models guard",
+        "VERIFIED allows continuation",
+        "MISMATCH rejects",
+        "MISSING requires clarification",
+        "ResumeValidator decision is deterministic"
+      ]
+    },
+    {
+      "name": "checkpoint_no_live_objects",
+      "cases": 3,
+      "passed": 3,
+      "checks": [
+        "payload recursively contains JSON-compatible values only",
+        "HTTP response/file handle/callable/generator rejected",
+        "exception stored as string fact"
+      ]
+    }
+  ],
+  "offline_contract_gate": "PASS",
+  "deferred_validation": [
+    "multi-provider real API matrix",
+    "real-api CI job that forbids skip when credentials/provider are unavailable"
+  ],
+  "limitations": [
+    "This report validates the Checkpoint boundary, not end-to-end Workflow Resume."
+  ]
+}

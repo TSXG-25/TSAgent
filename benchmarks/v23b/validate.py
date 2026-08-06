@@ -124,7 +124,10 @@ def main() -> int:
         "Durable Store Benchmark Validation: PASS "
         f"({metadata['case_count']} cases, dataset_hash={metadata['dataset_hash']})"
     )
-    print("Scope: transaction/crash contract and oracle only; SQLite production implementation is pending")
+    print(
+        "Scope: transaction/crash contract and oracle only; "
+        "full SQLite finalization bundle is deferred to v2.3B-3/B-4"
+    )
     return 0
 
 

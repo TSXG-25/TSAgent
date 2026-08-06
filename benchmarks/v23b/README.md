@@ -20,9 +20,18 @@ Run the contract validator from the repository root:
 python -B -m benchmarks.v23b.validate
 ```
 
-`PASS` means only that the Dataset and pure oracle are deterministic and
-complete. It does not claim that `SqliteRuntimeStore` exists or that any
-production transaction has already been verified.
+`PASS` means that the Dataset and pure oracle are deterministic and complete.
+It does not by itself claim that the full production transaction bundle has
+been verified.  v2.3B-2 now has an independent SQLite primitive gate:
+
+```bash
+pytest -q tests/test_sqlite_runtime_store.py
+mypy agent/runtime_store tests/test_sqlite_runtime_store.py
+```
+
+That gate covers bootstrap, fence, revision CAS, idempotency and Preparation
+intent.  Checkpoint/Artifact finalization and crash injection remain deferred
+to v2.3B-3/B-4.
 
 The future implementation gate must execute the same cases against a real
 SQLite database with WAL, `synchronous=FULL`, process restart, injected crash

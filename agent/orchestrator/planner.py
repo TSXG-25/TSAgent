@@ -41,6 +41,7 @@ from agent.compiler.context import CompilerContext
 from agent.registry.tool_registry import registry as _tool_registry
 from agent.cognition.intent_schema import DOMAIN_CHAT, DOMAIN_DEVELOPMENT, DOMAIN_MEMORY
 from agent.execution_errors import classify_execution_error, is_non_retriable
+from agent.cognition.research_policy import research_query, research_timeliness
 
 
 def _render_runtime_continuation(state: AgentState) -> str:
@@ -470,14 +471,14 @@ class PlannerStage:
                 "verb": "search",
                 "target": user_input,
                 "target_type": "text",
-                "goal": "检索近期外部来源并返回带来源的研究结果",
-                "description": "必须使用 web_search；不得依赖模型记忆生成最新事实。",
+                "goal": "检索外部来源并返回带来源的研究结果",
+                "description": "必须使用 web_search；不得依赖模型记忆替代外部检索。",
                 "success_condition": "至少返回一个可核验来源，或明确报告检索不可用",
                 "dependencies": [],
                 "children": [],
                 "inputs": {
-                    "query": user_input,
-                    "timeliness": "month" if "月" in user_input else "week",
+                    "query": research_query(user_input),
+                    "timeliness": research_timeliness(user_input),
                 },
                 "policy": {
                     "executor": "tool",

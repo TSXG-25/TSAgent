@@ -28,7 +28,10 @@ from langchain_core.messages import SystemMessage, HumanMessage
 
 from .cognitive_context import CognitiveContext, ResolvedQuery
 from .execution_need import analyze_execution_need
-from .research_policy import is_fresh_research_request
+from .research_policy import (
+    is_fresh_research_request,
+    is_source_grounded_request,
+)
 from .intent_schema import (
     IntentResult,
     DOMAIN_CHAT, DOMAIN_KNOWLEDGE, DOMAIN_CREATION,
@@ -378,9 +381,10 @@ class IntentEngine:
         # LLM 不参与"是否执行"决策（ADR-0009），regex 规则也不堆在 Intent 里。
         need = analyze_execution_need(user_input)
 
-        # Fresh financial/news-like research is never delegated to an LLM
-        # task. The Planner lowers this intent to a source-backed tool.
-        if is_fresh_research_request(user_input):
+        # External research is never delegated to an LLM-only task. The
+        # Planner lowers this intent to a source-backed web tool, including
+        # non-financial dynamic topics and explicit tutorial/method searches.
+        if is_source_grounded_request(user_input):
             return IntentResult(
                 domain=DOMAIN_WEB,
                 action="fresh_research",
@@ -389,10 +393,10 @@ class IntentEngine:
                 current_file=context.current_file or "",
                 confidence=0.98,
                 requires_execution=True,
-                summary="fresh external research required",
+                summary="external source grounding required",
                 raw_input=user_input,
                 reference_kind=_detect_reference_kind(user_input),
-                freshness_required=True,
+                freshness_required=is_fresh_research_request(user_input),
                 source_grounding_required=True,
             )
 

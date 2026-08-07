@@ -8,6 +8,11 @@ from typing import cast
 
 from agent.cognition.cognitive_context import CognitiveContext
 from agent.cognition.intent_engine import IntentEngine
+from agent.cognition.research_policy import (
+    is_source_grounded_request,
+    research_query,
+    research_timeliness,
+)
 from agent.compiler.rules import DEFAULT_RULES
 from agent.compiler.tool_selector import Compiler
 from agent.execution_errors import classify_execution_error
@@ -90,6 +95,35 @@ def test_fresh_financial_research_requires_sources() -> None:
     assert intent.freshness_required is True
     assert intent.source_grounding_required is True
     assert intent.requires_execution is True
+
+
+def test_dynamic_and_explicit_research_requests_require_web_grounding() -> None:
+    cases = [
+        "推荐些今天的股票",
+        "今天有哪些财经新闻",
+        "搜索量子计算最新进展",
+        "搜索大语言模型最新动态",
+        "搜索今天北京的天气，然后写一个穿衣建议脚本",
+        "搜索 asyncio 并发教程",
+        "搜索 pandas 数据处理常用方法",
+        "搜索 matplotlib 画股票 K 线图的方法",
+    ]
+    for value in cases:
+        assert is_source_grounded_request(value), value
+        intent = IntentEngine().analyze(CognitiveContext(query=value))
+        assert intent.action == "fresh_research", value
+        assert intent.source_grounding_required is True
+        assert intent.requires_execution is True
+
+    assert not is_source_grounded_request("在仓库中搜索 agent/runtime.py")
+
+
+def test_research_query_and_timeliness_are_deterministic() -> None:
+    value = "搜索 Python 怎么抓取股票行情数据，然后写一个示例程序保存到 output/fetch_stock.py"
+    assert research_query(value) == "Python 怎么抓取股票行情数据"
+    assert research_timeliness("今天北京天气") == "today"
+    assert research_timeliness("搜索量子计算最新进展") == "week"
+    assert research_timeliness("搜索 asyncio 并发教程") == "any"
 
 
 def test_fresh_research_compiles_to_web_search_not_llm() -> None:

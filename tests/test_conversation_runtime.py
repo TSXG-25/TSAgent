@@ -191,7 +191,10 @@ class TestDomainUpgrade:
     def test_non_code_requests_unchanged(self):
         assert self._intent("写一首诗").domain == "creation"
         assert self._intent("1+1等于几").domain == "math"
-        assert self._intent("今天天气怎么样").domain == "knowledge"
+        weather = self._intent("今天天气怎么样")
+        assert weather.domain == "web"
+        assert weather.action == "fresh_research"
+        assert weather.source_grounding_required is True
         assert self._intent("把 hello 保存到 output/x.py").domain == "file"
 
     def test_explicit_continuation_is_deterministic(self):

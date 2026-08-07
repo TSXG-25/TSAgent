@@ -94,6 +94,7 @@ def test_service_runtime_success_has_consistent_terminal_snapshot_and_events(
                 )
             )
             assert [event.event_type for event in events] == [
+                EventType.RUN_CREATED,
                 EventType.RUN_STARTED,
                 EventType.RUN_COMPLETED,
             ]
@@ -132,6 +133,7 @@ def test_service_runtime_failure_has_run_failed_terminal_event(tmp_path: Path) -
                 )
             )
             assert [event.event_type for event in events] == [
+                EventType.RUN_CREATED,
                 EventType.RUN_STARTED,
                 EventType.RUN_FAILED,
             ]
@@ -152,3 +154,58 @@ def test_cli_is_only_a_service_adapter() -> None:
     assert "from agent.orchestrator" not in source
     assert "from agent.event_bus import" not in source
     assert "UniversalAgent" not in source
+
+
+def test_client_disconnect_does_not_stop_runtime_and_reconnect_replays_events(
+    tmp_path: Path,
+) -> None:
+    async def scenario() -> None:
+        database = tmp_path / "disconnect-reconnect.sqlite"
+        store_a = SqliteRuntimeStore.open(database)
+        service_a = AgentService(
+            runtime_store=store_a,
+            launcher=RuntimeExecutionLauncher(runtime_factory=SuccessfulRuntime),
+        )
+        try:
+            handle = await service_a.start_run(_start("disconnect-reconnect"))
+            stream = service_a.stream_events(_events_request(handle.run_id))
+            first = await stream.__anext__()
+            assert first.event_type is EventType.RUN_CREATED
+            # The client stops reading here.  Runtime execution must not be
+            # cancelled or restarted by the abandoned read iterator.
+            del stream
+            remaining = await asyncio.wait_for(
+                _collect_events(service_a, handle.run_id),
+                timeout=2,
+            )
+            assert remaining[-1].event_type is EventType.RUN_COMPLETED
+        finally:
+            await service_a.close()
+
+        store_b = SqliteRuntimeStore.open(database)
+        service_b = AgentService(
+            runtime_store=store_b,
+            launcher=RuntimeExecutionLauncher(runtime_factory=SuccessfulRuntime),
+        )
+        try:
+            replay = [
+                event
+                async for event in service_b.stream_events(
+                    EventStreamRequest(
+                        tenant_id="tenant-a",
+                        user_id="user-a",
+                        session_id="session-a",
+                        run_id=handle.run_id,
+                        request_id="reconnect-events",
+                        after_sequence=1,
+                    )
+                )
+            ]
+            assert [event.event_type for event in replay] == [
+                EventType.RUN_STARTED,
+                EventType.RUN_COMPLETED,
+            ]
+        finally:
+            await service_b.close()
+
+    asyncio.run(scenario())

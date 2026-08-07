@@ -135,8 +135,10 @@ class ResumeAction(str, Enum):
 
 
 class EventType(str, Enum):
+    RUN_CREATED = "run_created"
     RUN_STARTED = "run_started"
     RUN_RESUMED = "run_resumed"
+    WORKFLOW_ACTIVATED = "workflow_activated"
     WORKFLOW_STARTED = "workflow_started"
     WORKFLOW_COMPLETED = "workflow_completed"
     STAGE_STARTED = "stage_started"
@@ -144,6 +146,7 @@ class EventType(str, Enum):
     TASK_STARTED = "task_started"
     TASK_COMPLETED = "task_completed"
     ARTIFACT_PUBLISHED = "artifact_published"
+    CHECKPOINT_COMMITTED = "checkpoint_committed"
     RESUME_DECIDED = "resume_decided"
     RUN_COMPLETED = "run_completed"
     RUN_FAILED = "run_failed"

@@ -928,6 +928,28 @@ class SqliteRuntimeStore:
                 """,
                 (payload_digest, now, tenant_id, run_id),
             )
+            created_payload = {
+                "request_id": request_id,
+                "request_digest": request_digest,
+            }
+            created_payload_json = _canonical_json(created_payload)
+            self._append_event_tx(
+                connection,
+                tenant_id=tenant_id,
+                session_id=session_id,
+                run_id=run_id,
+                event_id=f"run-created:{run_id}:{request_id}",
+                event_type_value="run_created",
+                timestamp=now,
+                optional_ids={
+                    "workflow_id": None,
+                    "stage_id": None,
+                    "task_id": None,
+                },
+                payload_json=created_payload_json,
+                payload_digest=_digest_text(created_payload_json),
+                run_revision=1,
+            )
             row = self._fetch_head_tx(
                 connection,
                 tenant_id,
@@ -1569,6 +1591,32 @@ class SqliteRuntimeStore:
                     StoreErrorCode.REVISION_CONFLICT,
                     "activation Run Head CAS did not update exactly one row",
                 )
+            activated_payload = {
+                "workflow_id": workflow_id,
+                "activation_attempt_id": initial_checkpoint.activation_attempt_id,
+                "checkpoint_id": initial_checkpoint.checkpoint_id,
+            }
+            activated_payload_json = _canonical_json(activated_payload)
+            self._append_event_tx(
+                connection,
+                tenant_id=tenant_id,
+                session_id=session_id,
+                run_id=run_id,
+                event_id=(
+                    f"workflow-activated:{run_id}:{workflow_id}:"
+                    f"{initial_checkpoint.activation_attempt_id}"
+                ),
+                event_type_value="workflow_activated",
+                timestamp=now,
+                optional_ids={
+                    "workflow_id": workflow_id,
+                    "stage_id": initial_checkpoint.active_stage_id or None,
+                    "task_id": initial_checkpoint.active_task_id or None,
+                },
+                payload_json=activated_payload_json,
+                payload_digest=_digest_text(activated_payload_json),
+                run_revision=revision,
+            )
             return next_run_index
 
     def get_latest_revision(
@@ -2321,6 +2369,82 @@ class SqliteRuntimeStore:
                     StoreErrorCode.REVISION_CONFLICT,
                     "finalization Run Head CAS did not update exactly one row",
                 )
+            checkpoint_payload = {
+                "workflow_id": workflow_id,
+                "checkpoint_id": checkpoint.checkpoint_id,
+                "checkpoint_digest": checkpoint_hash,
+                "artifact_ids": [artifact.artifact_id for artifact in bundle.artifacts],
+                "verifier_status": bundle.verifier_status,
+            }
+            checkpoint_payload_json = _canonical_json(checkpoint_payload)
+            self._append_event_tx(
+                connection,
+                tenant_id=tenant_id,
+                session_id=session_id,
+                run_id=run_id,
+                event_id=(
+                    f"checkpoint-committed:{run_id}:{workflow_id}:"
+                    f"{checkpoint.checkpoint_id}"
+                ),
+                event_type_value="checkpoint_committed",
+                timestamp=now,
+                optional_ids={
+                    "workflow_id": workflow_id,
+                    "stage_id": checkpoint.active_stage_id or None,
+                    "task_id": checkpoint.active_task_id or None,
+                },
+                payload_json=checkpoint_payload_json,
+                payload_digest=_digest_text(checkpoint_payload_json),
+                run_revision=revision,
+            )
+            workflow_summary = index.workflow(workflow_id)
+            if workflow_summary is not None and workflow_summary.status.value == "COMPLETED":
+                workflow_payload = {
+                    "workflow_id": workflow_id,
+                    "checkpoint_id": checkpoint.checkpoint_id,
+                    "verifier_status": workflow_summary.verifier_status,
+                }
+                workflow_payload_json = _canonical_json(workflow_payload)
+                self._append_event_tx(
+                    connection,
+                    tenant_id=tenant_id,
+                    session_id=session_id,
+                    run_id=run_id,
+                    event_id=f"workflow-completed:{run_id}:{workflow_id}:{checkpoint.checkpoint_id}",
+                    event_type_value="workflow_completed",
+                    timestamp=now,
+                    optional_ids={
+                        "workflow_id": workflow_id,
+                        "stage_id": checkpoint.active_stage_id or None,
+                        "task_id": checkpoint.active_task_id or None,
+                    },
+                    payload_json=workflow_payload_json,
+                    payload_digest=_digest_text(workflow_payload_json),
+                    run_revision=revision,
+                )
+            if run_status == "COMPLETED":
+                completed_payload = {
+                    "completed_workflow_ids": list(index.completed_workflow_ids),
+                    "artifact_ids": [artifact.artifact_id for artifact in bundle.artifacts],
+                }
+                completed_payload_json = _canonical_json(completed_payload)
+                self._append_event_tx(
+                    connection,
+                    tenant_id=tenant_id,
+                    session_id=session_id,
+                    run_id=run_id,
+                    event_id=f"run-completed:{run_id}:{request_id}",
+                    event_type_value="run_completed",
+                    timestamp=now,
+                    optional_ids={
+                        "workflow_id": None,
+                        "stage_id": None,
+                        "task_id": None,
+                    },
+                    payload_json=completed_payload_json,
+                    payload_digest=_digest_text(completed_payload_json),
+                    run_revision=revision,
+                )
             self._maybe_inject_finalization_failure(point, FinalizationFailurePoint.BEFORE_COMMIT)
             return result
 
@@ -2993,6 +3117,29 @@ class SqliteRuntimeStore:
                 raise DurableStoreError(
                     StoreErrorCode.STALE_WRITER,
                     "only the current fence owner may transition the Run",
+                )
+            current_status = str(row["run_status"])
+            terminal_statuses = {
+                "COMPLETED",
+                "FAILED_TERMINAL",
+                "BLOCKED",
+                "CANCELLED",
+            }
+            if current_status in terminal_statuses and run_status != current_status:
+                raise DurableStoreError(
+                    StoreErrorCode.REVISION_CONFLICT,
+                    "a terminal Run cannot transition back to an active state",
+                )
+            expected_event_for_status = {
+                "RUNNING": {"run_started", "run_resumed"},
+                "COMPLETED": {"run_completed"},
+                "FAILED_TERMINAL": {"run_failed"},
+                "BLOCKED": {"run_blocked"},
+            }
+            if event_type_value not in expected_event_for_status.get(run_status, set()):
+                raise DurableStoreError(
+                    StoreErrorCode.INVALID_ARGUMENT,
+                    "Run status and state event type do not match",
                 )
             if expected_status is not None and str(row["run_status"]) != expected_status:
                 raise DurableStoreError(

@@ -231,6 +231,14 @@ def test_finalization_commits_all_facts_once_and_retries_idempotently(
         assert head.current_digest == result.run_index_digest
         assert head.run_status == "COMPLETED"
 
+        events = store.read_events("tenant-a", "run-1", session_id="session-a")
+        assert [event.event_type for event in events] == [
+            "checkpoint_committed",
+            "workflow_completed",
+            "run_completed",
+        ]
+        assert all(event.run_revision == result.run_revision for event in events)
+
         retry = store.finalize_bundle(bundle)
         assert retry.idempotent is True
         assert replace(retry, idempotent=False) == result

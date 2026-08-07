@@ -28,6 +28,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 
 from .cognitive_context import CognitiveContext, ResolvedQuery
 from .execution_need import analyze_execution_need
+from .research_policy import is_fresh_research_request
 from .intent_schema import (
     IntentResult,
     DOMAIN_CHAT, DOMAIN_KNOWLEDGE, DOMAIN_CREATION,
@@ -262,8 +263,8 @@ def _extract_target(text: str) -> str:
         r'(?:修改|优化|重构|读取|打开|查看|分析|检查|审查|review|read|write|edit|fix|update|improve|optimize)\s+([\w./\\-]+(?:\.\w+)?)',
         r'(?:文件|代码|脚本|模块|类|函数|方法)\s+[`"\'“”]?([\w./\\-]+(?:\.\w+)?)[`"\'“”]?',
     ]
-    for pattern in keyword_patterns:
-        match = re.search(pattern, text, re.IGNORECASE | re.ASCII)
+    for pattern_text in keyword_patterns:
+        match = re.search(pattern_text, text, re.IGNORECASE | re.ASCII)
         if match:
             return match.group(1).strip()
 
@@ -376,6 +377,24 @@ class IntentEngine:
         # 执行需求分析（World State Change → 确定性 requires_execution；v2.1A）。
         # LLM 不参与"是否执行"决策（ADR-0009），regex 规则也不堆在 Intent 里。
         need = analyze_execution_need(user_input)
+
+        # Fresh financial/news-like research is never delegated to an LLM
+        # task. The Planner lowers this intent to a source-backed tool.
+        if is_fresh_research_request(user_input):
+            return IntentResult(
+                domain=DOMAIN_WEB,
+                action="fresh_research",
+                target="",
+                entities=_merge_entities([], context),
+                current_file=context.current_file or "",
+                confidence=0.98,
+                requires_execution=True,
+                summary="fresh external research required",
+                raw_input=user_input,
+                reference_kind=_detect_reference_kind(user_input),
+                freshness_required=True,
+                source_grounding_required=True,
+            )
 
         # Stage 1: 关键词快速匹配
         for pattern, domain, action, requires_exec in _KEYWORD_MAP:

@@ -2,6 +2,8 @@ import json
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from agent.security import is_internal_storage_path
+
 IGNORE_DIRS = {
     ".git",
     "venv",
@@ -89,6 +91,11 @@ class RepositoryIndexer:
 
     def _should_ignore(self, path: Path) -> bool:
         if any(part in IGNORE_DIRS for part in path.parts):
+            return True
+
+        # Repository grounding must never expose Agent-owned persistence
+        # (memory databases, runtime stores, or vector indexes) to Planner.
+        if is_internal_storage_path(path):
             return True
 
         if path.is_file():
@@ -262,6 +269,7 @@ class RepositoryIndexer:
                 "content": d.page_content[:200],
             }
             for d in docs
+            if not is_internal_storage_path(d.metadata.get("path", ""))
         ]
 
     def find_symbol(

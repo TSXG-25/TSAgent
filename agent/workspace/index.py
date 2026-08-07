@@ -11,6 +11,7 @@ import time
 from pathlib import Path
 from typing import Optional
 
+from agent.security import is_internal_storage_path
 from agent.workspace import FileNode, SymbolInfo
 
 IGNORE_DIRS = {
@@ -208,6 +209,8 @@ class ProjectIndex:
 
     def _should_ignore(self, path: Path) -> bool:
         if any(part in IGNORE_DIRS for part in path.parts):
+            return True
+        if is_internal_storage_path(path):
             return True
         if path.suffix.lower() in IGNORE_EXTENSIONS:
             return True

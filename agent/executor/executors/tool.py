@@ -16,6 +16,7 @@ from agent.task import Task
 from agent.workflow import ExecutionContext, ExecutionResult
 from agent.executor.plan_executor import plan_executor
 from agent.executor.verifier import ExecutionArtifacts, execution_verifier
+from agent.execution_errors import classify_execution_error
 
 
 class ToolExecutor:
@@ -39,11 +40,17 @@ class ToolExecutor:
         result = await plan_executor.execute(plan, workspace=workspace)
 
         if result.get("_error"):
+            error = str(result["_error"])
+            error_code = classify_execution_error(error)
             return ExecutionResult(
                 success=False,
-                error=result["_error"],
+                error=error,
                 outputs={},
-                metadata={"executor": "tool", "task_id": target.id},
+                metadata={
+                    "executor": "tool",
+                    "task_id": target.id,
+                    **({"error_code": error_code} if error_code else {}),
+                },
             )
 
         # ── Verifier 阶段（ADR-0012）：success 只能由 ExecutionVerifier 产生 ──

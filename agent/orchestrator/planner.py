@@ -40,6 +40,7 @@ from agent.task import ExecutionPlan, Task, Verb
 from agent.compiler.context import CompilerContext
 from agent.registry.tool_registry import registry as _tool_registry
 from agent.cognition.intent_schema import DOMAIN_CHAT, DOMAIN_DEVELOPMENT, DOMAIN_MEMORY
+from agent.execution_errors import classify_execution_error, is_non_retriable
 
 
 def _render_runtime_continuation(state: AgentState) -> str:
@@ -377,6 +378,40 @@ class PlannerStage:
                 answer = "抱歉，我暂时无法回答。"
             self._record_exchange(user_id, user_input, answer)
             return state, "FINISH", answer
+
+        # Fresh research is a deterministic capability boundary. Build one
+        # source-backed task directly instead of asking the general Planner to
+        # invent an ``llm_executor`` search substitute.
+        if getattr(intent, "freshness_required", False) or intent.action == "fresh_research":
+            task_data = {
+                "id": "task-1",
+                "verb": "search",
+                "target": user_input,
+                "target_type": "text",
+                "goal": "检索近期外部来源并返回带来源的研究结果",
+                "description": "必须使用 web_search；不得依赖模型记忆生成最新事实。",
+                "success_condition": "至少返回一个可核验来源，或明确报告检索不可用",
+                "dependencies": [],
+                "children": [],
+                "inputs": {
+                    "query": user_input,
+                    "timeliness": "month" if "月" in user_input else "week",
+                },
+                "policy": {
+                    "executor": "tool",
+                    "tool_policy": {"allow": ["web_search"]},
+                },
+            }
+            task_obj = Task.from_dict(task_data)
+            execution_plan = self._orch._selector.compile(
+                task_obj,
+                context=CompilerContext(registry=_tool_registry),
+            )
+            state["plan"] = [task_obj.to_dict()]
+            state["execution_plans"] = [execution_plan]
+            state["current_task_index"] = 0
+            self._print_plan(list(state.get("plan") or []))
+            return state, "EXECUTE", None
 
         # ── Stage 2: WorkflowRouter 执行路由（接收完整 IntentResult）──
         wf_obj, wf_reason = workflow_router.route(intent)

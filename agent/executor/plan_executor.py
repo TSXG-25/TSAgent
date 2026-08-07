@@ -252,6 +252,12 @@ class PlanExecutor:
             content = str(result)
         content = redact_sensitive_text(content)
 
+        if tool_name in {"web_search", "web_news_search", "web_deep_search"} and (
+            content.startswith("网络搜索功能不可用")
+            or content.startswith("未找到关于")
+        ):
+            raise RuntimeError(f"RESEARCH_TOOL_UNAVAILABLE: {content}")
+
         # Tools historically returned human-readable error strings.  Convert
         # those into an execution failure here so ExecutionResult.success
         # cannot be true for an operation that actually failed.

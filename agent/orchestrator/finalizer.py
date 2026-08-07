@@ -78,6 +78,15 @@ class Finalizer:
                 "因此无法直接生成 Office 二进制文件。"
                 "可以改为生成一个可审阅、可在本地运行的 Python 生成脚本。"
             )
+        if (
+            "RESEARCH_TOOL_UNAVAILABLE" in joined
+            or "网络搜索功能不可用" in joined
+            or "未找到关于" in joined
+        ):
+            return (
+                "当前无法访问可用的外部检索来源，因此不能可靠回答这项近期市场研究；"
+                "本次未生成无来源的股票或热点推荐。"
+            )
         return f"任务未完成，未确认目标文件已成功写入：{failures[-1][:240]}"
 
     @staticmethod

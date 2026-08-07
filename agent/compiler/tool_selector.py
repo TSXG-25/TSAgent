@@ -212,6 +212,21 @@ class Compiler:
                     outputs=["result"],
                 )],
             )
+        if "web_search" in allowed and (
+            value("query") is not None or value("path") is not None
+        ):
+            query = value("query") if value("query") is not None else value("path")
+            args = {"query": str(query)}
+            if value("timeliness") is not None:
+                args["timeliness"] = str(value("timeliness"))
+            return ExecutionPlan(
+                task=task,
+                steps=[ExecutionStep(
+                    tool="web_search",
+                    args=args,
+                    outputs=["results"],
+                )],
+            )
         if "write_file" in allowed and value("path") is not None and value("content") is not None:
             return ExecutionPlan(
                 task=task,

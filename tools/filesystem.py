@@ -12,7 +12,11 @@ from pathlib import Path
 from typing import Optional
 
 from agent.registry.tool_registry import registry
-from agent.security import is_sensitive_path, redact_sensitive_text
+from agent.security import (
+    is_internal_storage_path,
+    is_sensitive_path,
+    redact_sensitive_text,
+)
 
 # ── Constants ──
 
@@ -212,6 +216,8 @@ def read_file(path: str) -> str:
     Returns:
         File content as string
     """
+    if is_internal_storage_path(path):
+        return "错误：PROTECTED_INTERNAL_PATH：Agent 内部存储只能通过专用接口访问。"
     if is_sensitive_path(path):
         return "错误：出于安全原因，禁止读取敏感文件。"
 
@@ -220,6 +226,8 @@ def read_file(path: str) -> str:
     except PermissionError as e:
         return f"错误：{e}"
 
+    if is_internal_storage_path(full):
+        return "错误：PROTECTED_INTERNAL_PATH：Agent 内部存储只能通过专用接口访问。"
     if is_sensitive_path(full):
         return "错误：出于安全原因，禁止读取敏感文件。"
 
@@ -304,6 +312,8 @@ def write_file(path: str, content: str, mode: str = "overwrite") -> str:
     Returns:
         Operation result description
     """
+    if is_internal_storage_path(path):
+        return "错误：PROTECTED_INTERNAL_PATH：Agent 内部存储只能通过专用接口访问。"
     if is_sensitive_path(path):
         return "错误：出于安全原因，禁止写入敏感文件。"
 
@@ -317,6 +327,8 @@ def write_file(path: str, content: str, mode: str = "overwrite") -> str:
         full = _ensure_workspace_path(_resolve_path(path), str(path))
     except PermissionError as e:
         return f"错误：{e}"
+    if is_internal_storage_path(full):
+        return "错误：PROTECTED_INTERNAL_PATH：Agent 内部存储只能通过专用接口访问。"
     if is_sensitive_path(full):
         return "错误：出于安全原因，禁止写入敏感文件。"
     full.parent.mkdir(parents=True, exist_ok=True)

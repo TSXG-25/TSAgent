@@ -13,6 +13,7 @@ from agent.task import Task, ExecutionPlan, Verb
 from agent.compiler.context import CompilerContext
 from agent.registry.tool_registry import registry as _tool_registry
 from agent.compat.workspace import get_legacy_workspace_service
+from agent.execution_errors import classify_execution_error, is_non_retriable
 
 
 class ExecutionStage:
@@ -31,7 +32,7 @@ class ExecutionStage:
         再按 ``plan.executor`` 通过 ExecutorFactory 分发。
         """
         t_exec = time.perf_counter()
-        tasks = state.get("plan", [])
+        tasks = list(state.get("plan") or [])
         execution_plans = list(state.get("execution_plans", []) or [])
 
         # AgentState is a runtime cache; compile when a plan has not been cached.
@@ -95,13 +96,24 @@ class ExecutionStage:
                     )
 
             self._apply_result(task_dict, plan, exec_result)
+            error_code = str((exec_result.metadata or {}).get("error_code", ""))
+            if not exec_result.success and error_code and is_non_retriable(error_code):
+                state["runtime_failure_code"] = error_code
+                state["runtime_terminal_status"] = (
+                    "BLOCKED"
+                    if error_code == "RESEARCH_TOOL_UNAVAILABLE"
+                    else "FAILED_TERMINAL"
+                )
+                # Do not execute unrelated downstream tasks after a
+                # deterministic boundary failure.
+                break
 
         state["execution_plans"] = execution_plans
 
         self._orch._timings["executor"] = round(time.perf_counter() - t_exec, 3)
 
         # 检查结果
-        failed = [t for t in state.get("plan", []) if t.get("status") == "failed"]
+        failed = [t for t in (state.get("plan") or []) if t.get("status") == "failed"]
         if not failed:
             return state, "NEXT_TASK"
         return state, "RECOVER"
@@ -111,10 +123,14 @@ class ExecutionStage:
         """将路由/执行异常收敛为统一 ExecutionResult。"""
         from agent.workflow import ExecutionResult
 
+        error_code = classify_execution_error(exc)
         return ExecutionResult(
             success=False,
             error=f"{plan.executor} executor failed: {exc}",
-            metadata={"executor": plan.executor},
+            metadata={
+                "executor": plan.executor,
+                **({"error_code": error_code} if error_code else {}),
+            },
         )
 
     @staticmethod
@@ -147,6 +163,9 @@ class ExecutionStage:
         summary = (result.text or result.error or "")[:300]
         task_dict["status"] = "succeeded" if result.success else "failed"
         task_dict["error"] = "" if result.success else result.error
+        task_dict["error_code"] = "" if result.success else str(
+            metadata.get("error_code", "")
+        )
         task_dict["observations"].append({
             "action": f"{plan.executor}_executor",
             "tool": metadata.get("executor", plan.executor),

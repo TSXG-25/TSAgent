@@ -139,7 +139,13 @@ class RuntimeState(str, Enum):
 
 def _build_repo_context(user_input: str) -> str:
     """根据用户输入搜索相关代码片段。"""
+    from agent.security import is_internal_storage_path
+
     hits = RepositoryService.search_similar(user_input, k=5)
+    hits = [
+        hit for hit in hits
+        if not is_internal_storage_path(hit.get("path", ""))
+    ]
     if not hits:
         return ""
     return "\n\n".join(f"[{h['path']}]\n{h['content']}" for h in hits)

@@ -22,6 +22,17 @@ _SENSITIVE_BASENAMES = {
     "secret.json",
 }
 _SENSITIVE_SUFFIXES = {".pem", ".key", ".p12", ".pfx", ".jks"}
+_INTERNAL_STORAGE_DIRS = {
+    ".repo_index",
+    ".tsagent",
+    "semantic_memory",
+    "long_term_memory",
+    "short_term",
+    "runtime_store",
+    "checkpoint_store",
+    "checkpoints",
+}
+_INTERNAL_STORAGE_SUFFIXES = {".db", ".sqlite", ".sqlite3", ".db-wal", ".db-shm"}
 
 
 def is_sensitive_path(path: str | Path) -> bool:
@@ -42,6 +53,21 @@ def is_sensitive_path(path: str | Path) -> bool:
             basename,
         )
     )
+
+
+def is_internal_storage_path(path: str | Path) -> bool:
+    """Return whether a path belongs to Agent-owned persistence.
+
+    These files are implementation state, not user Workspace artifacts.  A
+    normal file-read task must not expose or decode them; dedicated memory and
+    runtime-store APIs are the only supported access paths.
+    """
+    raw = str(path).replace("\\", "/")
+    parts = {part.lower() for part in Path(raw).parts}
+    basename = Path(raw).name.lower()
+    if parts & _INTERNAL_STORAGE_DIRS:
+        return True
+    return basename.endswith(tuple(_INTERNAL_STORAGE_SUFFIXES))
 
 
 _SENSITIVE_VALUE_PATTERNS = (

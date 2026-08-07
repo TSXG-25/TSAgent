@@ -5,6 +5,7 @@ venv/
 .venv/
 
 .repo_index/
+.tsagent/
 .symbol_index.json
 
 data/

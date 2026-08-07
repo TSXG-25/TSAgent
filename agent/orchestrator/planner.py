@@ -399,7 +399,12 @@ def _build_text_merge_execution(
         ),
         ExecutionStep(
             tool="filesystem.write",
-            args={"path": "$output_path", "content": "$content", "mode": "overwrite"},
+            args={
+                "path": "$output_path",
+                "content": "$content",
+                "mode": "overwrite",
+                "exact": True,
+            },
             outputs=["result"],
         ),
     ))

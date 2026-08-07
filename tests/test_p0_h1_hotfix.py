@@ -243,3 +243,19 @@ def test_research_materializer_is_allowed_by_compiler_static_check() -> None:
     plan = compiler.compile(write_task)
 
     assert any(step.tool == "text.materialize_research" for step in plan.steps)
+
+
+def test_exact_write_does_not_fuzzy_redirect_new_target(monkeypatch, tmp_path) -> None:
+    import tools.filesystem as filesystem
+
+    monkeypatch.setattr(filesystem, "ROOT", tmp_path)
+    monkeypatch.setattr(filesystem, "_get_workspace_service", lambda: None)
+    filesystem._path_cache.clear()
+    result = filesystem.write_file(
+        "output/calc.py",
+        "print(49)\n",
+        exact=True,
+    )
+
+    assert "已写入" in result
+    assert (tmp_path / "output" / "calc.py").read_text() == "print(49)\n"

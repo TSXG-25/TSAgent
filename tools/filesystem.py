@@ -301,7 +301,12 @@ def read_file(path: str) -> str:
             return f"错误：无法解码文件 {path}，请确保文件是文本格式"
 
 
-def write_file(path: str, content: str, mode: str = "overwrite") -> str:
+def write_file(
+    path: str,
+    content: str,
+    mode: str = "overwrite",
+    exact: bool = False,
+) -> str:
     """Write content to a file.
 
     Args:
@@ -324,7 +329,15 @@ def write_file(path: str, content: str, mode: str = "overwrite") -> str:
         )
 
     try:
-        full = _ensure_workspace_path(_resolve_path(path), str(path))
+        # A write target is an explicit destination.  Fuzzy discovery is safe
+        # for reads, but can redirect a new file to an unrelated existing
+        # file (for example output/calc.py -> output/solution.py).
+        requested = Path(str(path))
+        candidate = requested if requested.is_absolute() else ROOT / requested
+        full = _ensure_workspace_path(
+            candidate if exact else _resolve_path(path),
+            str(path),
+        )
     except PermissionError as e:
         return f"错误：{e}"
     if is_internal_storage_path(full):

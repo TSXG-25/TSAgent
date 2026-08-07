@@ -82,7 +82,12 @@ class WriteRule(Rule):
         steps.append(
             ExecutionStep(
                 tool="filesystem.write",
-                args={"path": "$path", "content": content_arg, "mode": mode},
+                args={
+                    "path": "$path",
+                    "content": content_arg,
+                    "mode": mode,
+                    "exact": True,
+                },
                 outputs=["result"],
             )
         )

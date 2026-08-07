@@ -182,6 +182,10 @@ class ExecutionStage:
         task_dict["error_code"] = "" if result.success else str(
             metadata.get("error_code", "")
         )
+        task_dict["failed_component"] = "" if result.success else str(
+            metadata.get("failed_component", "")
+        )
+        task_dict["retryable"] = bool(metadata.get("retryable", False))
         task_dict["observations"].append({
             "action": f"{plan.executor}_executor",
             "tool": metadata.get("executor", plan.executor),

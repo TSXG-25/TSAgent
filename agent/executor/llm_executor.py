@@ -20,6 +20,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from agent.llm import llm
 from agent.task import Task
 from agent.workflow import ExecutionContext, ExecutionResult
+from agent.execution_errors import classify_execution_error
 
 LLM_EXECUTION_TIMEOUT = float(os.getenv("TSAGENT_LLM_TIMEOUT", "45"))
 
@@ -114,6 +115,7 @@ class LLMExecutor:
             )
         except Exception as e:
             elapsed = time.time() - t0
+            error_code = classify_execution_error(e)
 
             if context is not None:
                 context.record_failure({
@@ -125,7 +127,12 @@ class LLMExecutor:
             return ExecutionResult(
                 success=False,
                 error=str(e),
-                metadata={"time_s": round(elapsed, 2), "task_id": task.id},
+                metadata={
+                    "time_s": round(elapsed, 2),
+                    "task_id": task.id,
+                    **({"error_code": error_code} if error_code else {}),
+                    "failed_component": "llm_executor",
+                },
             )
 
 

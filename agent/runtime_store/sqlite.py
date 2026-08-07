@@ -2818,11 +2818,28 @@ class SqliteRuntimeStore:
                     if intent_row is not None
                     else None
                 )
+                terminal_row = self._connection.execute(
+                    f"""
+                    SELECT {self._event_columns()}
+                    FROM run_events
+                    WHERE tenant_id = ? AND run_id = ?
+                      AND event_type IN ('run_completed', 'run_failed', 'run_blocked')
+                    ORDER BY sequence_number DESC
+                    LIMIT 1
+                    """,
+                    (tenant_id, run_id),
+                ).fetchone()
+                terminal_event = (
+                    self._event_contract(terminal_row)
+                    if terminal_row is not None
+                    else None
+                )
                 self._connection.execute("COMMIT")
                 return RunReadSnapshot(
                     head=head,
                     index=index,
                     start_intent=start_intent,
+                    terminal_event=terminal_event,
                 )
             except Exception:
                 if self._connection.in_transaction:

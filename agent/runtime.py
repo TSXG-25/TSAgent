@@ -92,7 +92,30 @@ def _build_run_evidence(state: AgentState, final_answer: str, transitions: int) 
     if not terminal_status:
         terminal_status = "COMPLETED" if outputs_verified else "FAILED_TERMINAL"
     if not failure_code and failed_tasks:
-        failure_code = "TASK_EXECUTION_FAILED"
+        failure_code = next(
+            (
+                str(task.get("error_code", ""))
+                for task in failed_tasks
+                if str(task.get("error_code", "")).strip()
+            ),
+            "TASK_EXECUTION_FAILED",
+        )
+    failed_component = next(
+        (
+            str(task.get("failed_component", ""))
+            for task in failed_tasks
+            if str(task.get("failed_component", "")).strip()
+        ),
+        "runtime",
+    )
+    failure_class = str(state.get("runtime_failure_class", "") or "")
+    if not failure_class:
+        failure_class = "provider" if failure_code.startswith("PROVIDER_") else "execution"
+    retryable = bool(state.get("runtime_failure_retryable", False)) or failure_code in {
+        "PROVIDER_TIMEOUT",
+        "PROVIDER_NETWORK",
+        "PROVIDER_UNAVAILABLE",
+    }
     return {
         "conversation_intent": state.get("conversation_intent", ""),
         "requires_execution": any(
@@ -122,6 +145,9 @@ def _build_run_evidence(state: AgentState, final_answer: str, transitions: int) 
             for task in failed_tasks
         ],
         "failure_code": failure_code,
+        "failure_class": failure_class,
+        "failed_component": failed_component,
+        "retryable": retryable,
         "budget_exhausted": budget_exhausted,
     }
 

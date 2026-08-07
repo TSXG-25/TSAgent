@@ -10,6 +10,7 @@ from agent.runtime_store.contracts import RunReadSnapshot
 
 from .contracts import (
     ArtifactSummary,
+    FailureSummary,
     RunHandle,
     RunLookupRequest,
     RunSnapshot,
@@ -106,6 +107,48 @@ def _artifact_summary(
     return ArtifactSummary(**_dataclass_kwargs(ArtifactSummary, values))  # type: ignore[arg-type]
 
 
+_FAILURE_MESSAGES = {
+    "RUNTIME_BUDGET_EXHAUSTED": "Run stopped after reaching its execution budget",
+    "PROVIDER_TIMEOUT": "Required provider operation timed out",
+    "PROVIDER_NETWORK": "Required provider operation was unavailable on the network",
+    "PROVIDER_REQUEST_INVALID": "The provider rejected the request",
+    "PROVIDER_UNAVAILABLE": "A required provider was unavailable",
+    "RESEARCH_TOOL_UNAVAILABLE": "A required research tool was unavailable",
+    "UNKNOWN_TOOL": "The execution plan referenced an unavailable tool",
+    "UNSUPPORTED_BINARY": "The requested file operation does not support this binary format",
+    "PROTECTED_INTERNAL_PATH": "The requested path is protected runtime state",
+    "RUNTIME_EXCEPTION": "The Runtime stopped because of an internal execution error",
+    "RUNTIME_EXECUTION_INCOMPLETE": "The Run did not produce all required outputs",
+    "TASK_EXECUTION_FAILED": "At least one required task failed",
+}
+
+
+def _failure_summary(read: RunReadSnapshot) -> FailureSummary | None:
+    event = read.terminal_event
+    if event is None or event.event_type not in {"run_failed", "run_blocked"}:
+        return None
+    try:
+        payload = json.loads(event.payload_json)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    code = str(payload.get("failure_code", "") or "")
+    if not code:
+        code = "RUN_BLOCKED" if event.event_type == "run_blocked" else "RUNTIME_EXECUTION_FAILED"
+    details: dict[str, Any] = {}
+    for key in ("failure_class", "failed_component", "diagnostic_event_id"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            details[key] = value.strip()[:120]
+    return FailureSummary(
+        code=code,
+        message=_FAILURE_MESSAGES.get(code, "The Run did not complete successfully"),
+        retryable=bool(payload.get("retryable", False)),
+        details=details,
+    )
+
+
 class RunProjector:
     """Project one ``RunReadSnapshot`` without performing additional reads."""
 
@@ -136,7 +179,20 @@ class RunProjector:
         pending = tuple(getattr(index, "pending_workflow_ids", ())) if index else ()
         active_id = getattr(index, "active_workflow_id", "") if index else ""
         active = index.workflow(active_id) if index and active_id else None
-        if active is not None:
+        head_status = _public_status(read.head.run_status)
+        terminal_statuses = {
+            RunStatus.COMPLETED,
+            RunStatus.FAILED_TERMINAL,
+            RunStatus.BLOCKED,
+            RunStatus.CANCELLED,
+        }
+        # The durable Run head and terminal event are authoritative.  An old
+        # or partially published RunResumeIndex must not turn a failed Run
+        # into a public COMPLETED snapshot.
+        if read.terminal_event is not None or head_status in terminal_statuses:
+            status = head_status
+            verifier = "VERIFIED" if status is RunStatus.COMPLETED else None
+        elif active is not None:
             status = _public_status(active.status.value)
             verifier = str(active.verifier_status or "UNKNOWN")
         elif index is not None and not pending and completed:
@@ -171,7 +227,7 @@ class RunProjector:
             "verifier_status": verifier,
             "verifier_summary": ({"status": verifier} if verifier else None),
             "failure": None,
-            "failure_summary": None,
+            "failure_summary": _failure_summary(read),
             "resume_summary": None,
             "revision": read.head.current_revision,
         }

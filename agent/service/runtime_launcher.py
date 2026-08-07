@@ -94,7 +94,11 @@ class RuntimeExecutionLauncher:
                     event_id=f"run-failed:{run_context.run_id}:{request.request_id}",
                     event_type="run_failed",
                     timestamp=_timestamp(),
-                    payload={"request_id": request.request_id},
+                    payload=self._failure_payload(
+                        None,
+                        "RUNTIME_EXCEPTION",
+                        request.request_id,
+                    ),
                 )
             finally:
                 self._close_runtime(runtime)
@@ -116,10 +120,15 @@ class RuntimeExecutionLauncher:
                     event_id=event_id,
                     event_type=event_type,
                     timestamp=_timestamp(),
-                    payload={
-                        "request_id": request.request_id,
-                        **({"failure_code": failure_code} if failure_code else {}),
-                    },
+                    payload=(
+                        {"request_id": request.request_id}
+                        if not failure_code
+                        else self._failure_payload(
+                            runtime,
+                            failure_code,
+                            request.request_id,
+                        )
+                    ),
                 )
             finally:
                 self._close_runtime(runtime)
@@ -151,6 +160,44 @@ class RuntimeExecutionLauncher:
         if status == "BLOCKED" or failure_code.endswith("UNAVAILABLE"):
             return "BLOCKED", "run_blocked", failure_code
         return "FAILED_TERMINAL", "run_failed", failure_code
+
+    @staticmethod
+    def _failure_payload(
+        runtime: Any | None,
+        failure_code: str,
+        request_id: str,
+    ) -> dict[str, Any]:
+        """Build a stable, secret-free durable failure fact."""
+        evidence = getattr(runtime, "last_run_evidence", None) or {}
+        failure_class = str(evidence.get("failure_class", "") or "")
+        if not failure_class:
+            failure_class = "provider" if failure_code.startswith("PROVIDER_") else "execution"
+        failed_component = str(evidence.get("failed_component", "") or "runtime")
+        diagnostic_event_id = ""
+        diagnostics = evidence.get("diagnostics", [])
+        if isinstance(diagnostics, list) and diagnostics:
+            first = diagnostics[0]
+            if isinstance(first, dict):
+                diagnostic_event_id = str(first.get("event_id", "") or "")
+        return {
+            "request_id": request_id,
+            "failure_code": str(failure_code),
+            "failure_class": failure_class[:80],
+            "failed_component": failed_component[:120],
+            "retryable": bool(
+                evidence.get("retryable", False)
+                or failure_code in {
+                    "PROVIDER_TIMEOUT",
+                    "PROVIDER_NETWORK",
+                    "PROVIDER_UNAVAILABLE",
+                }
+            ),
+            **(
+                {"diagnostic_event_id": diagnostic_event_id[:120]}
+                if diagnostic_event_id
+                else {}
+            ),
+        }
 
     @staticmethod
     def _close_runtime(runtime: Any) -> None:

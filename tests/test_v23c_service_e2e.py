@@ -153,6 +153,8 @@ def test_service_runtime_failure_has_run_failed_terminal_event(tmp_path: Path) -
                 EventType.RUN_FAILED,
             ]
             assert snapshot.status is RunStatus.FAILED_TERMINAL
+            assert snapshot.failure_summary is not None
+            assert snapshot.failure_summary.code == "RUNTIME_EXCEPTION"
             assert FailedRuntime.calls == 1
         finally:
             await service.close()
@@ -188,6 +190,9 @@ def test_budget_exhaustion_cannot_commit_run_completed(tmp_path: Path) -> None:
             assert EventType.RUN_COMPLETED not in event_types
             assert event_types[-1] is EventType.RUN_FAILED
             assert snapshot.status is RunStatus.FAILED_TERMINAL
+            assert snapshot.failure_summary is not None
+            assert snapshot.failure_summary.code == "RUNTIME_BUDGET_EXHAUSTED"
+            assert snapshot.failure_summary.retryable is False
         finally:
             await service.close()
             if not store.closed:

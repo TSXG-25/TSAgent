@@ -103,6 +103,7 @@ class RunReadSnapshot:
     head: RunHead
     index: Any | None
     start_intent: PreparedOperation | None
+    terminal_event: DurableEventRecord | None = None
 
 
 @dataclass(frozen=True)

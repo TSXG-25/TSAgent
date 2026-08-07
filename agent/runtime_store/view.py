@@ -183,6 +183,35 @@ class DurableRuntimeStoreView:
             )
         return self._store.finalize_bundle(bundle)
 
+    def transition_run_with_event(
+        self,
+        *,
+        run_status: str,
+        event_id: str,
+        event_type: str,
+        timestamp: str,
+        payload: dict[str, Any],
+        expected_status: str | None = None,
+    ):
+        """Atomically publish a Service-visible Run state and event."""
+
+        self._ensure_open()
+        return self._store.transition_run_with_event(
+            self.tenant_id,
+            self.session_id,
+            self.run_id,
+            run_status=run_status,
+            event_id=event_id,
+            event_type=event_type,
+            timestamp=timestamp,
+            payload=payload,
+            writer_id=self.writer_id,
+            fence_token=self._fence_token,
+            request_id=self.request_id,
+            expected_status=expected_status,
+            expected_store_generation=self.store_generation,
+        )
+
     def get_checkpoint(self, checkpoint_id: str):
         self._ensure_open()
         return self._store.get_checkpoint(

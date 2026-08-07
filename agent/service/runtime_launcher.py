@@ -1,0 +1,121 @@
+"""Runtime adapter used by the C-4 CLI and Service smoke path.
+
+The public AgentService remains unaware of UniversalAgent.  This module is
+the explicit adapter at the boundary where the existing Runtime is launched;
+Run state and its durable event are committed before/after the execution in
+the SQLite transaction owned by ``DurableRuntimeStoreView``.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from typing import Any, Callable
+
+from agent.runtime import UniversalAgent
+
+from .contracts import ResumeRunRequest, StartRunRequest
+
+
+def _timestamp() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+class RuntimeExecutionLauncher:
+    """Launch the established UniversalAgent behind the Service Protocol."""
+
+    def __init__(
+        self,
+        *,
+        runtime_factory: Callable[..., Any] = UniversalAgent,
+    ) -> None:
+        self._runtime_factory = runtime_factory
+
+    async def start(
+        self,
+        *,
+        session_context: Any,
+        run_context: Any,
+        request: StartRunRequest,
+    ) -> None:
+        await self._execute(
+            session_context=session_context,
+            run_context=run_context,
+            request=request,
+            resumed=False,
+        )
+
+    async def resume(
+        self,
+        *,
+        run_context: Any,
+        request: ResumeRunRequest,
+    ) -> None:
+        await self._execute(
+            session_context=run_context.session,
+            run_context=run_context,
+            request=request,
+            resumed=True,
+        )
+
+    async def _execute(
+        self,
+        *,
+        session_context: Any,
+        run_context: Any,
+        request: StartRunRequest | ResumeRunRequest,
+        resumed: bool,
+    ) -> None:
+        durable_view = run_context.durable_store_view
+        if durable_view is None:
+            raise RuntimeError("RuntimeExecutionLauncher requires a durable Run view")
+
+        event_prefix = "resume" if resumed else "start"
+        durable_view.transition_run_with_event(
+            run_status="RUNNING",
+            event_id=f"run-{event_prefix}ed:{run_context.run_id}:{request.request_id}",
+            event_type="run_resumed" if resumed else "run_started",
+            timestamp=_timestamp(),
+            payload={"request_id": request.request_id},
+            expected_status="CREATED" if not resumed else None,
+        )
+
+        runtime = self._runtime_factory(
+            request.user_id,
+            tenant_id=request.tenant_id,
+            session_context=session_context,
+            run_context=run_context,
+        )
+        try:
+            await runtime.run(request.request_text)
+        except BaseException:
+            try:
+                durable_view.transition_run_with_event(
+                    run_status="FAILED_TERMINAL",
+                    event_id=f"run-failed:{run_context.run_id}:{request.request_id}",
+                    event_type="run_failed",
+                    timestamp=_timestamp(),
+                    payload={"request_id": request.request_id},
+                )
+            finally:
+                self._close_runtime(runtime)
+            raise
+        else:
+            try:
+                durable_view.transition_run_with_event(
+                    run_status="COMPLETED",
+                    event_id=f"run-completed:{run_context.run_id}:{request.request_id}",
+                    event_type="run_completed",
+                    timestamp=_timestamp(),
+                    payload={"request_id": request.request_id},
+                )
+            finally:
+                self._close_runtime(runtime)
+
+    @staticmethod
+    def _close_runtime(runtime: Any) -> None:
+        close = getattr(runtime, "close", None)
+        if callable(close):
+            close()
+
+
+__all__ = ["RuntimeExecutionLauncher"]

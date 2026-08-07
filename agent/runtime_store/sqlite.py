@@ -2733,6 +2733,143 @@ class SqliteRuntimeStore:
             "payload_json, payload_digest, run_revision, created_at"
         )
 
+    def _append_event_tx(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        tenant_id: str,
+        session_id: str,
+        run_id: str,
+        event_id: str,
+        event_type_value: str,
+        timestamp: str,
+        optional_ids: Mapping[str, str | None],
+        payload_json: str,
+        payload_digest: str,
+        run_revision: int,
+    ) -> DurableEventRecord:
+        """Append an event inside an already-open writer transaction."""
+
+        self._fetch_head_tx(
+            connection,
+            tenant_id,
+            run_id,
+            session_id=session_id,
+        )
+        existing = connection.execute(
+            f"SELECT {self._event_columns()} FROM run_events "
+            "WHERE tenant_id = ? AND run_id = ? AND event_id = ?",
+            (tenant_id, run_id, event_id),
+        ).fetchone()
+        if existing is not None:
+            same_identity = (
+                str(existing["session_id"]) == session_id
+                and str(existing["event_type"]) == event_type_value
+                and existing["workflow_id"] == optional_ids["workflow_id"]
+                and existing["stage_id"] == optional_ids["stage_id"]
+                and existing["task_id"] == optional_ids["task_id"]
+                and str(existing["timestamp"]) == timestamp
+                and str(existing["payload_digest"]) == payload_digest
+                and int(existing["run_revision"]) == run_revision
+            )
+            if not same_identity:
+                raise DurableStoreError(
+                    StoreErrorCode.IDEMPOTENCY_CONFLICT,
+                    "event_id is bound to a different event payload",
+                )
+            return self._event_contract(existing)
+
+        latest = connection.execute(
+            "SELECT event_type FROM run_events "
+            "WHERE tenant_id = ? AND run_id = ? "
+            "ORDER BY sequence_number DESC LIMIT 1",
+            (tenant_id, run_id),
+        ).fetchone()
+        if latest is not None and str(latest["event_type"]) in {
+            "run_completed",
+            "run_failed",
+            "run_blocked",
+        }:
+            raise DurableStoreError(
+                StoreErrorCode.INVALID_ARGUMENT,
+                "a terminal Run event cannot be followed by another event",
+            )
+
+        now = _now()
+        connection.execute(
+            """
+            INSERT OR IGNORE INTO run_event_heads
+                (tenant_id, session_id, run_id, latest_sequence,
+                 retained_from_sequence, updated_at)
+            VALUES (?, ?, ?, 0, 0, ?)
+            """,
+            (tenant_id, session_id, run_id, now),
+        )
+        event_head = connection.execute(
+            """
+            SELECT latest_sequence
+            FROM run_event_heads
+            WHERE tenant_id = ? AND run_id = ?
+            """,
+            (tenant_id, run_id),
+        ).fetchone()
+        if event_head is None:
+            raise DurableStoreError(
+                StoreErrorCode.INVALID_ARGUMENT,
+                "event head could not be initialized",
+            )
+        sequence = int(event_head["latest_sequence"]) + 1
+        connection.execute(
+            """
+            INSERT INTO run_events
+                (tenant_id, session_id, run_id, sequence_number, event_id,
+                 event_type, workflow_id, stage_id, task_id, timestamp,
+                 payload_json, payload_digest, run_revision, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                tenant_id,
+                session_id,
+                run_id,
+                sequence,
+                event_id,
+                event_type_value,
+                optional_ids["workflow_id"],
+                optional_ids["stage_id"],
+                optional_ids["task_id"],
+                timestamp,
+                payload_json,
+                payload_digest,
+                run_revision,
+                now,
+            ),
+        )
+        cursor = connection.execute(
+            """
+            UPDATE run_event_heads
+            SET latest_sequence = ?, updated_at = ?
+            WHERE tenant_id = ? AND run_id = ?
+              AND latest_sequence = ?
+            """,
+            (sequence, now, tenant_id, run_id, sequence - 1),
+        )
+        if cursor.rowcount != 1:
+            raise DurableStoreError(
+                StoreErrorCode.REVISION_CONFLICT,
+                "event head CAS did not update exactly one row",
+            )
+        row = connection.execute(
+            f"SELECT {self._event_columns()} FROM run_events "
+            "WHERE tenant_id = ? AND run_id = ? AND sequence_number = ?",
+            (tenant_id, run_id, sequence),
+        ).fetchone()
+        if row is None:
+            raise DurableStoreError(
+                StoreErrorCode.INVALID_ARGUMENT,
+                "newly appended event could not be reloaded",
+            )
+        return self._event_contract(row)
+
     def append_event(
         self,
         tenant_id: str,
@@ -2783,125 +2920,135 @@ class SqliteRuntimeStore:
         self._check_generation(expected_store_generation)
 
         with self._write_transaction() as connection:
-            self._fetch_head_tx(
+            return self._append_event_tx(
+                connection,
+                tenant_id=tenant_id,
+                session_id=session_id,
+                run_id=run_id,
+                event_id=event_id,
+                event_type_value=event_type_value,
+                timestamp=timestamp,
+                optional_ids=optional_ids,
+                payload_json=payload_json,
+                payload_digest=payload_digest,
+                run_revision=run_revision,
+            )
+
+    def transition_run_with_event(
+        self,
+        tenant_id: str,
+        session_id: str,
+        run_id: str,
+        *,
+        run_status: str,
+        event_id: str,
+        event_type: str,
+        timestamp: str,
+        payload: Mapping[str, Any],
+        writer_id: str,
+        fence_token: int,
+        request_id: str,
+        expected_status: str | None = None,
+        expected_store_generation: str | None = None,
+    ) -> RunHead:
+        """Commit a Run status change and its state event atomically."""
+
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        session_id = _require_text(session_id, "session_id")
+        run_id = _require_text(run_id, "run_id")
+        run_status = _require_text(run_status, "run_status")
+        event_id = _require_text(event_id, "event_id")
+        event_type_value = _require_text(
+            str(getattr(event_type, "value", event_type)),
+            "event_type",
+        )
+        timestamp = _require_text(timestamp, "timestamp")
+        writer_id = _require_text(writer_id, "writer_id")
+        request_id = _require_text(request_id, "request_id")
+        if fence_token <= 0:
+            raise DurableStoreError(
+                StoreErrorCode.INVALID_ARGUMENT,
+                "fence_token must be positive",
+            )
+        if not isinstance(payload, Mapping):
+            raise DurableStoreError(
+                StoreErrorCode.INVALID_ARGUMENT,
+                "event payload must be a JSON object",
+            )
+        payload_json = _canonical_json(payload)
+        payload_digest = _digest_text(payload_json)
+        self._check_generation(expected_store_generation)
+
+        with self._write_transaction() as connection:
+            row = self._fetch_head_tx(
                 connection,
                 tenant_id,
                 run_id,
                 session_id=session_id,
             )
-            existing = connection.execute(
-                f"SELECT {self._event_columns()} FROM run_events "
-                "WHERE tenant_id = ? AND run_id = ? AND event_id = ?",
-                (tenant_id, run_id, event_id),
-            ).fetchone()
-            if existing is not None:
-                same_identity = (
-                    str(existing["session_id"]) == session_id
-                    and str(existing["event_type"]) == event_type_value
-                    and existing["workflow_id"] == optional_ids["workflow_id"]
-                    and existing["stage_id"] == optional_ids["stage_id"]
-                    and existing["task_id"] == optional_ids["task_id"]
-                    and str(existing["timestamp"]) == timestamp
-                    and str(existing["payload_digest"]) == payload_digest
-                    and int(existing["run_revision"]) == run_revision
-                )
-                if not same_identity:
-                    raise DurableStoreError(
-                        StoreErrorCode.IDEMPOTENCY_CONFLICT,
-                        "event_id is bound to a different event payload",
-                    )
-                return self._event_contract(existing)
-
-            latest = connection.execute(
-                "SELECT event_type FROM run_events "
-                "WHERE tenant_id = ? AND run_id = ? "
-                "ORDER BY sequence_number DESC LIMIT 1",
-                (tenant_id, run_id),
-            ).fetchone()
-            if latest is not None and str(latest["event_type"]) in {
-                "run_completed",
-                "run_failed",
-                "run_blocked",
-            }:
+            if (
+                str(row["current_writer_id"]) != writer_id
+                or int(row["current_fence_token"]) != fence_token
+            ):
                 raise DurableStoreError(
-                    StoreErrorCode.INVALID_ARGUMENT,
-                    "a terminal Run event cannot be followed by another event",
+                    StoreErrorCode.STALE_WRITER,
+                    "only the current fence owner may transition the Run",
                 )
-
+            if expected_status is not None and str(row["run_status"]) != expected_status:
+                raise DurableStoreError(
+                    StoreErrorCode.REVISION_CONFLICT,
+                    "Run status changed before the requested transition",
+                )
+            self._append_event_tx(
+                connection,
+                tenant_id=tenant_id,
+                session_id=session_id,
+                run_id=run_id,
+                event_id=event_id,
+                event_type_value=event_type_value,
+                timestamp=timestamp,
+                optional_ids={
+                    "workflow_id": None,
+                    "stage_id": None,
+                    "task_id": None,
+                },
+                payload_json=payload_json,
+                payload_digest=payload_digest,
+                run_revision=int(row["current_revision"]),
+            )
             now = _now()
-            connection.execute(
-                """
-                INSERT OR IGNORE INTO run_event_heads
-                    (tenant_id, session_id, run_id, latest_sequence,
-                     retained_from_sequence, updated_at)
-                VALUES (?, ?, ?, 0, 0, ?)
-                """,
-                (tenant_id, session_id, run_id, now),
-            )
-            event_head = connection.execute(
-                """
-                SELECT latest_sequence
-                FROM run_event_heads
-                WHERE tenant_id = ? AND run_id = ?
-                """,
-                (tenant_id, run_id),
-            ).fetchone()
-            if event_head is None:
-                raise DurableStoreError(
-                    StoreErrorCode.INVALID_ARGUMENT,
-                    "event head could not be initialized",
-                )
-            sequence = int(event_head["latest_sequence"]) + 1
-            connection.execute(
-                """
-                INSERT INTO run_events
-                    (tenant_id, session_id, run_id, sequence_number, event_id,
-                     event_type, workflow_id, stage_id, task_id, timestamp,
-                     payload_json, payload_digest, run_revision, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    tenant_id,
-                    session_id,
-                    run_id,
-                    sequence,
-                    event_id,
-                    event_type_value,
-                    optional_ids["workflow_id"],
-                    optional_ids["stage_id"],
-                    optional_ids["task_id"],
-                    timestamp,
-                    payload_json,
-                    payload_digest,
-                    run_revision,
-                    now,
-                ),
-            )
             cursor = connection.execute(
                 """
-                UPDATE run_event_heads
-                SET latest_sequence = ?, updated_at = ?
+                UPDATE run_heads
+                SET run_status = ?, request_id = ?, updated_at = ?
                 WHERE tenant_id = ? AND run_id = ?
-                  AND latest_sequence = ?
+                  AND current_revision = ?
+                  AND current_writer_id = ? AND current_fence_token = ?
                 """,
-                (sequence, now, tenant_id, run_id, sequence - 1),
+                (
+                    run_status,
+                    request_id,
+                    now,
+                    tenant_id,
+                    run_id,
+                    int(row["current_revision"]),
+                    writer_id,
+                    fence_token,
+                ),
             )
             if cursor.rowcount != 1:
                 raise DurableStoreError(
                     StoreErrorCode.REVISION_CONFLICT,
-                    "event head CAS did not update exactly one row",
+                    "Run status CAS did not update exactly one row",
                 )
-            row = connection.execute(
-                f"SELECT {self._event_columns()} FROM run_events "
-                "WHERE tenant_id = ? AND run_id = ? AND sequence_number = ?",
-                (tenant_id, run_id, sequence),
-            ).fetchone()
-            if row is None:
-                raise DurableStoreError(
-                    StoreErrorCode.INVALID_ARGUMENT,
-                    "newly appended event could not be reloaded",
+            return self._head_contract(
+                self._fetch_head_tx(
+                    connection,
+                    tenant_id,
+                    run_id,
+                    session_id=session_id,
                 )
-            return self._event_contract(row)
+            )
 
     def get_event_head(
         self,

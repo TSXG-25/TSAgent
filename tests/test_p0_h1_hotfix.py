@@ -215,3 +215,31 @@ def test_research_materialization_is_source_backed_and_valid_json() -> None:
     assert "https://example.com/a" in summary["content"]
     decoded = json.loads(sources["content"])
     assert decoded["source_count"] == 2
+
+
+def test_research_materializer_is_allowed_by_compiler_static_check() -> None:
+    request = (
+        "搜索近期 Python AI Agent 的主要变化，"
+        "生成 output/summary.md 和 output/sources.json 两个文件"
+    )
+    intent = IntentEngine().analyze(CognitiveContext(query=request))
+    tasks = _ensure_explicit_output_write_task(
+        [{
+            "id": "task-1",
+            "verb": "search",
+            "target": request,
+            "target_type": "text",
+            "policy": {"executor": "tool", "tool_policy": {"allow": ["web_search"]}},
+        }],
+        request,
+        intent,
+    )
+    write_task = Task.from_dict(tasks[1])
+    write_task.inputs["research_context"] = "https://example.com/source"
+
+    compiler = Compiler()
+    for rule in DEFAULT_RULES:
+        compiler.add_rule(rule)
+    plan = compiler.compile(write_task)
+
+    assert any(step.tool == "text.materialize_research" for step in plan.steps)

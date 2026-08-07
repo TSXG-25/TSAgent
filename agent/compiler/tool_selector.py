@@ -274,7 +274,14 @@ class Compiler:
 
     # 内置特殊工具（plan_executor 处理，不在 ToolRegistry）
     _BUILTIN_TOOLS = {
-        "workspace", "repository", "knowledge", "llm",
+        "workspace",
+        "repository",
+        "knowledge",
+        "llm",
+        # Deterministic transformations performed inside PlanExecutor. They
+        # are execution primitives, not ToolRegistry providers.
+        "text.merge_unique",
+        "text.materialize_research",
     }
     # filesystem.* 前缀映射到实际工具名
     _FS_PREFIX_MAP = {

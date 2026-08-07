@@ -78,6 +78,21 @@ def _build_run_evidence(state: AgentState, final_answer: str, transitions: int) 
         if isinstance(observation, dict)
     ]
     snapshot = state.get("conversation_snapshot")
+    failed_tasks = [
+        task for task in tasks if str(task.get("status", "")) == "failed"
+    ]
+    pending_tasks = [
+        task for task in tasks
+        if str(task.get("status", "pending")) not in {"succeeded", "skipped"}
+    ]
+    failure_code = str(state.get("runtime_failure_code", "") or "")
+    budget_exhausted = bool(state.get("budget_exhausted", False))
+    terminal_status = str(state.get("runtime_terminal_status", "") or "")
+    outputs_verified = not failed_tasks and not pending_tasks and not budget_exhausted
+    if not terminal_status:
+        terminal_status = "COMPLETED" if outputs_verified else "FAILED_TERMINAL"
+    if not failure_code and failed_tasks:
+        failure_code = "TASK_EXECUTION_FAILED"
     return {
         "conversation_intent": state.get("conversation_intent", ""),
         "requires_execution": any(
@@ -90,11 +105,24 @@ def _build_run_evidence(state: AgentState, final_answer: str, transitions: int) 
             for observation in observations
         ),
         "resolved_target": state.get("resolved_target", ""),
+        "resolved_symbol": state.get("resolved_symbol", ""),
         "pending_target": _runtime_pending_target(state),
         "previous_answer": getattr(snapshot, "last_answer", "") if snapshot else "",
         "answer": final_answer or "",
         "transitions": transitions,
         "runtime_pending": _runtime_has_unfinished_work(state),
+        "terminal_status": terminal_status,
+        "terminal_outputs_verified": outputs_verified,
+        "task_failures": [
+            {
+                "id": str(task.get("id", "")),
+                "error": str(task.get("error", ""))[:300],
+                "error_code": str(task.get("error_code", "")),
+            }
+            for task in failed_tasks
+        ],
+        "failure_code": failure_code,
+        "budget_exhausted": budget_exhausted,
     }
 
 
@@ -166,6 +194,8 @@ class UniversalAgent:
         )
         self._timings: dict = {}
         self.last_run_evidence: dict = {}
+        self._wall_total_seconds = 0.0
+        self._last_timing_profile: dict = {}
         self._pending_execution_target = ""
         self._run_context: Optional[RunContext] = None
         self._task_subscription: Optional[Subscription] = None
@@ -241,23 +271,43 @@ class UniversalAgent:
     async def _on_task_end(self, data):
         print(f"[EVENT] Task {data['task']} ended with {data['status']}")
 
-    def _print_timing_summary(self):
+    def _print_timing_summary(self) -> dict:
         print_bootstrap_timings()
-        total = sum(self._timings.values())
         # Merge orchestrator timings
         orch_timings = self.orchestrator.get_timings()
         all_timings = dict(self._timings)
         all_timings.update(orch_timings)
-        total = sum(all_timings.values())
+        # ``plan`` used to duplicate the nested ``plan_llm`` span.  Keep the
+        # canonical child span and report wall time separately from summed
+        # exclusive spans so nested instrumentation cannot inflate TOTAL.
+        if (
+            "plan" in all_timings
+            and "plan_llm" in all_timings
+            and abs(all_timings["plan"] - all_timings["plan_llm"]) < 0.01
+        ):
+            all_timings.pop("plan", None)
+        exclusive_total = sum(max(float(value), 0.0) for value in all_timings.values())
+        wall_total = self._wall_total_seconds or exclusive_total
         print("=" * 50)
         print("⚡ 执行耗时 Profile")
         print("=" * 50)
         for name, elapsed in sorted(all_timings.items(), key=lambda x: -x[1]):
-            pct = (elapsed / total * 100) if total > 0 else 0
+            pct = (elapsed / wall_total * 100) if wall_total > 0 else 0
             bar = "█" * int(pct / 5) + "░" * (20 - int(pct / 5))
             print(f"  {name:20s} {elapsed:>6.2f}s  {bar} {pct:.0f}%")
-        print(f"  {'TOTAL':20s} {total:>6.2f}s")
+        print(f"  {'EXCLUSIVE TOTAL':20s} {exclusive_total:>6.2f}s")
+        print(f"  {'WALL TOTAL':20s} {wall_total:>6.2f}s")
         print("=" * 50 + "\n")
+        self._last_timing_profile = {
+            "wall_total": round(wall_total, 3),
+            "exclusive_total": round(exclusive_total, 3),
+            "spans": {name: round(float(value), 3) for name, value in all_timings.items()},
+            "llm_calls": sum(
+                1 for name in all_timings if name.endswith("llm") or name == "answer_gen"
+            ),
+            "replan_count": int(getattr(self.orchestrator, "replan_count", 0)),
+        }
+        return dict(self._last_timing_profile)
 
     def _recover(self, e: Exception, user_input: str, user_id: str) -> str:
         """Runtime Recovery：异常 → 结构化分类 → 友好回答 → Session 继续。
@@ -346,6 +396,9 @@ class UniversalAgent:
         best_answer = None
         loop_started = time.perf_counter()
         transitions = 0
+        runtime_terminal_status = ""
+        runtime_failure_code = ""
+        budget_exhausted = False
 
         # ── 状态机循环（P0.1: Runtime Recovery 最后防线）──
         try:
@@ -361,6 +414,12 @@ class UniversalAgent:
                         time.perf_counter() - loop_started,
                     )
                     best_answer = best_answer or "任务执行达到时间或步骤上限，已停止继续重试。"
+                    runtime_terminal_status = "FAILED_TERMINAL"
+                    runtime_failure_code = "RUNTIME_BUDGET_EXHAUSTED"
+                    budget_exhausted = True
+                    state["runtime_terminal_status"] = runtime_terminal_status
+                    state["runtime_failure_code"] = runtime_failure_code
+                    state["budget_exhausted"] = True
                     rt_state = RuntimeState.FINISH
                     break
 
@@ -379,7 +438,6 @@ class UniversalAgent:
                     if answer:
                         best_answer = answer
                     rt_state = RuntimeState[next_state] if isinstance(next_state, str) else next_state
-                    self._timings["plan"] = self.orchestrator._timings.get("plan_llm", 0)
 
                 elif rt_state == RuntimeState.EXECUTE:
                     state, next_state = await self.orchestrator.execute(state)
@@ -406,7 +464,17 @@ class UniversalAgent:
             # P0.1: Runtime Recovery —— 不暴露 Traceback，Session 继续
             print(f"  ⚠️ Runtime 捕获异常并恢复: {type(e).__name__}")
             best_answer = self._recover(e, user_input, self._memory_namespace)
+            runtime_terminal_status = "FAILED_TERMINAL"
+            runtime_failure_code = "RUNTIME_EXCEPTION"
+            state["runtime_terminal_status"] = runtime_terminal_status
+            state["runtime_failure_code"] = runtime_failure_code
             rt_state = RuntimeState.FINISH
+
+        if rt_state == RuntimeState.FAIL and not runtime_failure_code:
+            runtime_terminal_status = "FAILED_TERMINAL"
+            runtime_failure_code = "REPLAN_EXHAUSTED"
+            state["runtime_terminal_status"] = runtime_terminal_status
+            state["runtime_failure_code"] = runtime_failure_code
 
         # ── 最终输出 ──
         final_answer = await self.orchestrator.finalize(
@@ -447,10 +515,17 @@ class UniversalAgent:
                 "failure": event.failure,
             }
         self._pending_execution_target = _runtime_pending_target(state)
+        if runtime_terminal_status:
+            state["runtime_terminal_status"] = runtime_terminal_status
+        if runtime_failure_code:
+            state["runtime_failure_code"] = runtime_failure_code
+        if budget_exhausted:
+            state["budget_exhausted"] = True
         self.last_run_evidence = _build_run_evidence(
             state, final_answer, transitions,
         )
         if conversation_diagnostic:
             self.last_run_evidence["diagnostics"] = [conversation_diagnostic]
-        self._print_timing_summary()
+        self._wall_total_seconds = time.perf_counter() - t0
+        self.last_run_evidence["timing"] = self._print_timing_summary()
         return final_answer

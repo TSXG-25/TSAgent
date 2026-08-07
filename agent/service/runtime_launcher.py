@@ -101,15 +101,56 @@ class RuntimeExecutionLauncher:
             raise
         else:
             try:
+                run_status, event_type, failure_code = self._terminal_outcome(runtime)
+                event_id = (
+                    f"run-completed:{run_context.run_id}:{request.request_id}"
+                    if event_type == "run_completed"
+                    else (
+                        f"run-blocked:{run_context.run_id}:{request.request_id}"
+                        if event_type == "run_blocked"
+                        else f"run-failed:{run_context.run_id}:{request.request_id}"
+                    )
+                )
                 durable_view.transition_run_with_event(
-                    run_status="COMPLETED",
-                    event_id=f"run-completed:{run_context.run_id}:{request.request_id}",
-                    event_type="run_completed",
+                    run_status=run_status,
+                    event_id=event_id,
+                    event_type=event_type,
                     timestamp=_timestamp(),
-                    payload={"request_id": request.request_id},
+                    payload={
+                        "request_id": request.request_id,
+                        **({"failure_code": failure_code} if failure_code else {}),
+                    },
                 )
             finally:
                 self._close_runtime(runtime)
+
+    @staticmethod
+    def _terminal_outcome(runtime: Any) -> tuple[str, str, str]:
+        """Use Runtime evidence, not coroutine return, to commit terminal state."""
+        evidence = getattr(runtime, "last_run_evidence", None)
+        # Small legacy/fake runtimes used by adapter tests have no evidence;
+        # UniversalAgent always publishes it, so this compatibility path is
+        # not used by the production Runtime.
+        if evidence is None:
+            return "COMPLETED", "run_completed", ""
+
+        status = str(evidence.get("terminal_status", "") or "")
+        successful = (
+            status == "COMPLETED"
+            and bool(evidence.get("terminal_outputs_verified", False))
+            and not bool(evidence.get("budget_exhausted", False))
+            and not bool(evidence.get("runtime_pending", False))
+            and not evidence.get("task_failures")
+        )
+        if successful:
+            return "COMPLETED", "run_completed", ""
+
+        failure_code = str(
+            evidence.get("failure_code", "RUNTIME_EXECUTION_INCOMPLETE")
+        )
+        if status == "BLOCKED" or failure_code.endswith("UNAVAILABLE"):
+            return "BLOCKED", "run_blocked", failure_code
+        return "FAILED_TERMINAL", "run_failed", failure_code
 
     @staticmethod
     def _close_runtime(runtime: Any) -> None:

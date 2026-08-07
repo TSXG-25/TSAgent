@@ -35,4 +35,13 @@ class AgentState(TypedDict, total=False):
     decision: Optional[Dict]
     diagnostics: List[Dict[str, Any]]
     resolved_target: str
+    resolved_symbol: str
+    conversation_snapshot: Any
+    conversation_reference_type: str
+    conversation_runtime_continuation: str
     conversation_clarification_required: bool
+    # Terminal outcome projected by UniversalAgent for the Service boundary.
+    # These are facts, not a second Run state machine.
+    runtime_terminal_status: str
+    runtime_failure_code: str
+    budget_exhausted: bool

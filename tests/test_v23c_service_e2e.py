@@ -64,6 +64,21 @@ class FailedRuntime(SuccessfulRuntime):
         raise RuntimeError("provider failure must be sanitized")
 
 
+class BudgetExhaustedRuntime(SuccessfulRuntime):
+    """The coroutine returns normally, but Runtime evidence says it failed."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.last_run_evidence = {
+            "terminal_status": "FAILED_TERMINAL",
+            "terminal_outputs_verified": False,
+            "budget_exhausted": True,
+            "runtime_pending": True,
+            "task_failures": [],
+            "failure_code": "RUNTIME_BUDGET_EXHAUSTED",
+        }
+
+
 async def _collect_events(service: AgentService, run_id: str):
     return [event async for event in service.stream_events(_events_request(run_id))]
 
@@ -139,6 +154,40 @@ def test_service_runtime_failure_has_run_failed_terminal_event(tmp_path: Path) -
             ]
             assert snapshot.status is RunStatus.FAILED_TERMINAL
             assert FailedRuntime.calls == 1
+        finally:
+            await service.close()
+            if not store.closed:
+                store.close()
+
+    asyncio.run(scenario())
+
+
+def test_budget_exhaustion_cannot_commit_run_completed(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        store = SqliteRuntimeStore.open(tmp_path / "budget.sqlite")
+        service = AgentService(
+            runtime_store=store,
+            launcher=RuntimeExecutionLauncher(runtime_factory=BudgetExhaustedRuntime),
+        )
+        try:
+            handle = await service.start_run(_start("service-budget"))
+            events = await asyncio.wait_for(
+                _collect_events(service, handle.run_id),
+                timeout=2,
+            )
+            snapshot = await service.get_run(
+                RunLookupRequest(
+                    tenant_id="tenant-a",
+                    user_id="user-a",
+                    session_id="session-a",
+                    run_id=handle.run_id,
+                    request_id="snapshot-budget",
+                )
+            )
+            event_types = [event.event_type for event in events]
+            assert EventType.RUN_COMPLETED not in event_types
+            assert event_types[-1] is EventType.RUN_FAILED
+            assert snapshot.status is RunStatus.FAILED_TERMINAL
         finally:
             await service.close()
             if not store.closed:

@@ -25,6 +25,8 @@ def classify_execution_error(error: object) -> str:
             return code
     if "网络搜索功能不可用" in text or "未找到关于" in text:
         return "RESEARCH_TOOL_UNAVAILABLE"
+    if "无法解码文件" in text or "请确保文件是文本格式" in text:
+        return "UNSUPPORTED_BINARY"
     if "OFFICE 二进制" in text or "OFFICE BINARY" in upper:
         return "UNSUPPORTED_BINARY"
     return ""

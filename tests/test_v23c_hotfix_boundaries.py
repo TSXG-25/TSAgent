@@ -16,6 +16,7 @@ from agent.security import is_internal_storage_path
 from agent.task import Task
 from agent.state import AgentState
 from agent.runtime import UniversalAgent
+from agent.runtime import _build_repo_context
 from agent.workspace.index import ProjectIndex
 from agent.orchestrator.planner import PlannerStage
 
@@ -45,6 +46,20 @@ def test_internal_file_error_is_non_retriable() -> None:
     assert classify_execution_error(
         "PlanExecutor: step 1 failed: 错误：PROTECTED_INTERNAL_PATH"
     ) == "PROTECTED_INTERNAL_PATH"
+    assert classify_execution_error("错误：无法解码文件 data/blob.bin") == "UNSUPPORTED_BINARY"
+
+
+def test_internal_repository_hits_never_reach_planner_context(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "agent.runtime.RepositoryService.search_similar",
+        lambda *args, **kwargs: [
+            {"path": "data/semantic_memory/chroma.sqlite3", "content": "binary"},
+            {"path": "agent/runtime.py", "content": "safe"},
+        ],
+    )
+    context = _build_repo_context("结合用户偏好")
+    assert "chroma.sqlite3" not in context
+    assert "agent/runtime.py" in context
 
 
 def test_deterministic_file_failure_does_not_call_replanner() -> None:

@@ -9,6 +9,7 @@
 Workflow ToolExecutor 消费的是 Stage，不是 ExecutionPlan。
 """
 import asyncio
+import json
 import logging
 import os
 import re
@@ -72,6 +73,13 @@ class PlanExecutor:
                 if tool_name == "workspace":
                     result = await self._exec_workspace(step, args, workspace, variables)
                 else:
+                    if (
+                        tool_name == "filesystem.write"
+                        and not str(args.get("content", "")).strip()
+                    ):
+                        raise ValueError(
+                            "EMPTY_WRITE_CONTENT: refusing to create an empty artifact"
+                        )
                     result = await self._exec_tool(tool_name, args)
 
                 # ── 收集世界状态痕迹（Verifier 的唯一输入，ADR-0012）──
@@ -86,6 +94,10 @@ class PlanExecutor:
                     if value is None and isinstance(result, dict) and "content" in result:
                         # 缺失的输出键回退到 content（如 llm 步骤声明 new_content 但返回 content）
                         value = result["content"]
+                    if value is None and isinstance(result, dict) and len(result) == 1:
+                        # Workspace uses the stable ``path`` result key while
+                        # multi-source plans need distinct SSA output names.
+                        value = list(result.values())[0]
                     variables[out_key] = str(value)
 
                 # 记录文本摘要
@@ -128,7 +140,14 @@ class PlanExecutor:
     @staticmethod
     def _validate_tools(plan: ExecutionPlan) -> None:
         """Reject unknown tool steps before any earlier step can create effects."""
-        builtin = {"workspace", "repository", "knowledge", "llm"}
+        builtin = {
+            "workspace",
+            "repository",
+            "knowledge",
+            "llm",
+            "text.merge_unique",
+            "text.materialize_research",
+        }
         filesystem = {
             "filesystem.read": "read_file",
             "filesystem.write": "write_file",
@@ -155,6 +174,12 @@ class PlanExecutor:
         """执行 workspace 步骤（特殊处理：解析路径）。"""
         spec = str(args.get("spec", ""))
         if not workspace:
+            return {"path": spec}
+
+        # A write target is an exact destination, not a fuzzy discovery
+        # query. Resolving a non-existent path through Workspace can select a
+        # similarly named existing file and redirect the side effect.
+        if str(args.get("operation", "")) == "write":
             return {"path": spec}
 
         # A trailing slash and the project root are explicit directory
@@ -220,6 +245,44 @@ class PlanExecutor:
             if args.get("verb") in {"write", "generate", "create"}:
                 content = re.sub(r"^```[^\n]*\n", "", content.strip())
                 content = re.sub(r"\n?```\s*$", "", content)
+            return {"content": content, "text": content}
+
+        if tool_name == "text.merge_unique":
+            source_values = [
+                str(value)
+                for key, value in sorted(args.items())
+                if key.startswith("content_")
+            ]
+            lines = [
+                line.strip()
+                for value in source_values
+                for line in value.splitlines()
+                if line.strip()
+            ]
+            unique_lines = sorted(set(lines))
+            return {
+                "content": "\n".join(unique_lines) + ("\n" if unique_lines else ""),
+                "duplicate_count": len(lines) - len(unique_lines),
+                "input_line_count": len(lines),
+                "unique_line_count": len(unique_lines),
+            }
+
+        if tool_name == "text.materialize_research":
+            source = str(args.get("content", "")).strip()
+            output_format = str(args.get("format", "markdown_summary"))
+            if output_format == "sources_json":
+                urls = list(dict.fromkeys(re.findall(r"https?://[^\s\]\[<>()\"']+", source)))
+                content = json.dumps(
+                    {
+                        "sources": [{"url": url.rstrip(".,;，。；")} for url in urls],
+                        "source_count": len(urls),
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            else:
+                title = str(args.get("title", "研究摘要")).strip() or "研究摘要"
+                content = f"# {title}\n\n{source}\n"
             return {"content": content, "text": content}
 
         # ── 特殊处理：repository 语义搜索（RepositoryService）──

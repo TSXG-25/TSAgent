@@ -30,6 +30,27 @@ _LOCAL_SEARCH_TERMS = re.compile(
 )
 
 
+def _research_subject(text: str) -> str:
+    """Return only the subject that precedes an output-materialization tail."""
+    value = str(text or "").strip()
+    value = re.sub(
+        r"^\s*(?:请|帮我|麻烦)?\s*(?:搜索|搜一下|检索|查找|查一下|查询)\s*",
+        "",
+        value,
+    )
+    value = re.split(
+        r"(?:"
+        r"(?:，|,|；|;)?\s*(?:然后|并且|之后|再)\s*(?:写|生成|保存|输出|制作|创建)"
+        r"|"
+        r"(?:，|,|；|;)?\s*(?:写|生成|保存|输出|制作|创建)\s+"
+        r"(?:[\w.-]+/)*[\w.-]+\.[A-Za-z0-9]+"
+        r")",
+        value,
+        maxsplit=1,
+    )[0]
+    return value.strip(" ，,。；;")
+
+
 def is_source_grounded_request(text: str) -> bool:
     """Return true when the request must execute an external web search.
 
@@ -39,13 +60,13 @@ def is_source_grounded_request(text: str) -> bool:
     searches remain outside this policy.
     """
     value = str(text or "")
+    subject = _research_subject(value)
     temporal_dynamic = bool(
-        _FRESHNESS_TERMS.search(value) and _DYNAMIC_TOPIC_TERMS.search(value)
+        _FRESHNESS_TERMS.search(subject) and _DYNAMIC_TOPIC_TERMS.search(subject)
     )
     explicit_external = bool(
         _EXPLICIT_SEARCH_TERMS.search(value)
-        and not _LOCAL_SEARCH_TERMS.search(value)
-        and _DYNAMIC_TOPIC_TERMS.search(value)
+        and not _LOCAL_SEARCH_TERMS.search(subject)
     )
     return temporal_dynamic or explicit_external
 
@@ -68,14 +89,7 @@ def research_timeliness(text: str) -> str:
 
 def research_query(text: str) -> str:
     """Remove the output-writing tail before sending a query to the web tool."""
-    value = str(text or "").strip()
-    value = re.sub(r"^\s*(?:请|帮我|麻烦)?\s*(?:搜索|搜一下|检索|查找|查一下|查询)\s*", "", value)
-    value = re.split(
-        r"(?:，|,)?\s*(?:然后|并且|之后|再)\s*(?:写|生成|保存|输出|制作)",
-        value,
-        maxsplit=1,
-    )[0]
-    return value.strip(" ，,。") or str(text or "").strip()
+    return _research_subject(text) or str(text or "").strip()
 
 
 def is_fresh_research_request(text: str) -> bool:

@@ -52,15 +52,16 @@ class ExecutionStage:
                 str(task_dict.get("verb", "")).lower() == Verb.WRITE.value
                 and bool((task_dict.get("inputs") or {}).get("use_prior_facts"))
             ):
-                prior_facts: dict[str, object] = {}
+                prior_fact_lines: list[str] = []
                 for previous_task in tasks[:idx]:
-                    prior_facts.update(previous_task.get("facts", {}) or {})
-                if prior_facts:
+                    previous_id = str(previous_task.get("id", "prior-task"))
+                    for key, value in (previous_task.get("facts", {}) or {}).items():
+                        prior_fact_lines.append(
+                            f"[{previous_id}.{key}] {str(value)[:2400]}"
+                        )
+                if prior_fact_lines:
                     inputs = dict(task_dict.get("inputs") or {})
-                    inputs["research_context"] = "\n".join(
-                        f"{key}: {str(value)[:1200]}"
-                        for key, value in prior_facts.items()
-                    )
+                    inputs["research_context"] = "\n\n".join(prior_fact_lines)
                     task_dict["inputs"] = inputs
                     if idx < len(execution_plans):
                         execution_plans[idx] = None

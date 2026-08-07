@@ -90,7 +90,7 @@ _KEYWORD_MAP: list[tuple[re.Pattern, str, str, bool]] = [
     (re.compile(r'^\d+[+\-*/]\d+|^\d+\.\d+'), DOMAIN_MATH, "calculate", False),
 
     # 创作（精确短语，避免"大小写/拼写"的"写"作为语素时误判为创作）
-    (re.compile(r'写[一首篇个段]{0,2}[诗故事小说剧本文案]|作诗|赋诗|创作|生成.*[诗故事文案]'), DOMAIN_CREATION, "generate", False),
+    (re.compile(r'写[一首篇个段]{0,2}(?:诗|故事|小说|剧本|文案)|作诗|赋诗|创作|生成.*(?:诗|故事|文案)'), DOMAIN_CREATION, "generate", False),
 
     # 记忆查询必须早于“编程/开发”关键词，否则“我最喜欢什么编程语言”
     # 会被误判为代码开发并进入执行链。

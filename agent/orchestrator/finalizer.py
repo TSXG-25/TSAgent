@@ -49,6 +49,11 @@ class Finalizer:
             self._memory().record_full_exchange(user_input, best_answer)
             return best_answer
 
+        deterministic_answer = self._deterministic_completion_answer(state)
+        if deterministic_answer:
+            self._memory().record_full_exchange(user_input, deterministic_answer)
+            return deterministic_answer
+
         t_answer = time.perf_counter()
         final_answer = await generate_final_answer(state, user_input)
         checked = self._verify_written_files(state, final_answer)
@@ -57,6 +62,41 @@ class Finalizer:
         self._memory().record_full_exchange(user_input, final_answer)
         self._orch._timings["answer_gen"] = round(time.perf_counter() - t_answer, 3)
         return final_answer
+
+    @staticmethod
+    def _deterministic_completion_answer(state: AgentState) -> Optional[str]:
+        """Describe verified deterministic effects without another LLM call."""
+        tasks = list(state.get("plan", []) or [])
+        if not tasks or any(task.get("status") == "failed" for task in tasks):
+            return None
+        for task in tasks:
+            inputs = task.get("inputs") or {}
+            if inputs.get("operation") == "merge_unique_lines":
+                count = (task.get("facts") or {}).get("duplicate_count", "0")
+                return (
+                    f"已合并并去重文本内容，结果已写入 {task.get('target', '')}；"
+                    f"删除了 {count} 行重复内容。"
+                )
+        executed = [
+            task for task in tasks
+            if str(task.get("verb", "")) == Verb.EXECUTE.value
+            and task.get("status") == "succeeded"
+        ]
+        if executed:
+            task = executed[-1]
+            output = str((task.get("facts") or {}).get("output", "")).strip()
+            suffix = f"，运行输出：{output[:240]}" if output else ""
+            return f"已创建并运行 {task.get('target', '')}{suffix}。"
+        written = [
+            str(task.get("target", ""))
+            for task in tasks
+            if str(task.get("verb", "")) == Verb.WRITE.value
+            and task.get("status") == "succeeded"
+            and task.get("target")
+        ]
+        if written:
+            return "已成功写入：" + "、".join(written)
+        return None
 
     @staticmethod
     def _failure_answer(state: AgentState) -> Optional[str]:

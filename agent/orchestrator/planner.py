@@ -36,7 +36,7 @@ from agent.registry.skill_registry import skill_registry
 from agent.router.workflow_router import router as workflow_router
 from agent.cognition.intent_engine import engine as intent_engine
 from agent.workflow import ExecutionContext, Artifact, Workflow
-from agent.task import ExecutionPlan, Task, Verb
+from agent.task import ExecutionPlan, ExecutionStep, Task, Verb
 from agent.compiler.context import CompilerContext
 from agent.registry.tool_registry import registry as _tool_registry
 from agent.cognition.intent_schema import DOMAIN_CHAT, DOMAIN_DEVELOPMENT, DOMAIN_MEMORY
@@ -214,6 +214,26 @@ def _ensure_explicit_output_write_task(
         task for task in plan
         if str(task.get("verb", "")).lower() == Verb.WRITE.value
     ]
+    source_grounded = bool(
+        intent is not None
+        and (
+            getattr(intent, "source_grounding_required", False)
+            or getattr(intent, "action", "") == "fresh_research"
+        )
+    )
+
+    def configure_write(task: dict, target: str) -> None:
+        inputs = dict(task.get("inputs") or {})
+        inputs["use_prior_facts"] = True
+        if source_grounded:
+            name = target.replace("\\", "/").rsplit("/", 1)[-1].casefold()
+            inputs["research_output_format"] = (
+                "sources_json"
+                if target.casefold().endswith(".json") and "source" in name
+                else "markdown_summary"
+            )
+        task["inputs"] = inputs
+
     normalized_targets = {
         target.casefold().rstrip("/") for target in targets
     }
@@ -239,7 +259,13 @@ def _ensure_explicit_output_write_task(
         if reusable is not None:
             reusable["target"] = target
             reusable["target_type"] = "file"
+            configure_write(reusable, target)
             assigned_targets.add(normalized_target)
+
+    for task in write_tasks:
+        target = str(task.get("target", "")).replace("\\", "/")
+        if target.casefold().rstrip("/") in normalized_targets:
+            configure_write(task, target)
 
     missing_targets = [
         target for target in targets
@@ -270,11 +296,12 @@ def _ensure_explicit_output_write_task(
             "success_condition": f"文件 {target} 存在且非空",
             "dependencies": base_dependencies,
             "children": [],
-            "inputs": {"use_prior_facts": True},
+            "inputs": {},
             "status": "pending",
             "observations": [],
             "error": "",
         })
+        configure_write(plan[-1], target)
         existing_ids.append(next_id)
         next_number += 1
     return plan
@@ -305,6 +332,117 @@ def _extract_literal_file_write(user_input: str) -> Optional[tuple[str, str]]:
     if not content:
         return None
     return target, content
+
+
+def _build_text_merge_execution(
+    user_input: str,
+) -> Optional[tuple[Task, ExecutionPlan]]:
+    """Compile an explicit text merge/deduplicate request deterministically."""
+    value = str(user_input or "")
+    if not re.search(r"合并.*去重|去重.*合并", value):
+        return None
+    if not re.search(r"保存到|保存为|写入到|写到|输出到", value):
+        return None
+    paths = [
+        path for path in _extract_explicit_output_paths(value)
+        if path.casefold().endswith((".txt", ".csv", ".md"))
+    ]
+    if len(paths) < 3:
+        return None
+    target = paths[-1]
+    sources = paths[:-1]
+    if target in sources:
+        return None
+    task = Task.from_dict({
+        "id": "task-1",
+        "verb": Verb.WRITE.value,
+        "target": target,
+        "target_type": "file",
+        "goal": f"合并并去重 {len(sources)} 个文本文件，保存到 {target}",
+        "description": value,
+        "success_condition": f"文件 {target} 存在、非空且内容已去重",
+        "dependencies": [],
+        "children": [],
+        "inputs": {
+            "operation": "merge_unique_lines",
+            "sources": sources,
+        },
+    })
+    steps: list[ExecutionStep] = []
+    merge_args: dict[str, str] = {}
+    for index, source in enumerate(sources, 1):
+        path_key = f"source_path_{index}"
+        content_key = f"content_{index}"
+        steps.extend((
+            ExecutionStep(
+                tool="workspace",
+                args={"spec": source},
+                outputs=[path_key],
+            ),
+            ExecutionStep(
+                tool="filesystem.read",
+                args={"path": f"${path_key}"},
+                outputs=[content_key],
+            ),
+        ))
+        merge_args[content_key] = f"${content_key}"
+    steps.extend((
+        ExecutionStep(
+            tool="text.merge_unique",
+            args=merge_args,
+            outputs=["content", "duplicate_count", "unique_line_count"],
+        ),
+        ExecutionStep(
+            tool="workspace",
+            args={"spec": target, "operation": "write"},
+            outputs=["output_path"],
+        ),
+        ExecutionStep(
+            tool="filesystem.write",
+            args={"path": "$output_path", "content": "$content", "mode": "overwrite"},
+            outputs=["result"],
+        ),
+    ))
+    return task, ExecutionPlan(task=task, steps=steps)
+
+
+def _build_code_run_tasks(user_input: str) -> Optional[list[Task]]:
+    """Build the minimal write→run chain for one explicit Python target."""
+    value = str(user_input or "")
+    paths = [
+        path for path in _extract_explicit_output_paths(value)
+        if path.casefold().endswith(".py")
+    ]
+    if len(paths) != 1:
+        return None
+    if not re.search(r"创建|新建|生成|写入|写到", value):
+        return None
+    if not re.search(r"运行|执行", value):
+        return None
+    target = paths[0]
+    write_task = Task.from_dict({
+        "id": "task-1",
+        "verb": Verb.WRITE.value,
+        "target": target,
+        "target_type": "file",
+        "goal": f"根据完整需求生成可运行的 Python 程序并写入 {target}",
+        "description": value,
+        "success_condition": f"文件 {target} 存在且非空",
+        "dependencies": [],
+        "children": [],
+    })
+    execute_task = Task.from_dict({
+        "id": "task-2",
+        "verb": Verb.EXECUTE.value,
+        "target": target,
+        "target_type": "file",
+        "goal": f"运行 {target} 并验证输出满足原始需求",
+        "description": value,
+        "success_condition": "程序成功运行并产生预期输出",
+        "dependencies": ["task-1"],
+        "children": [],
+    })
+    return [write_task, execute_task]
 
 
 class PlannerStage:
@@ -564,6 +702,29 @@ class PlannerStage:
                 )
             state["plan"] = canonical_plan
             state["execution_plans"] = fresh_execution_plans
+            state["current_task_index"] = 0
+            self._print_plan(list(state.get("plan") or []))
+            return state, "EXECUTE", None
+
+        merge_execution = _build_text_merge_execution(user_input)
+        if merge_execution and getattr(intent, "requires_execution", False):
+            task_obj, execution_plan = merge_execution
+            state["plan"] = [task_obj.to_dict()]
+            state["execution_plans"] = [execution_plan]
+            state["current_task_index"] = 0
+            self._print_plan(list(state.get("plan") or []))
+            return state, "EXECUTE", None
+
+        code_run_tasks = _build_code_run_tasks(user_input)
+        if code_run_tasks and getattr(intent, "requires_execution", False):
+            state["plan"] = [task.to_dict() for task in code_run_tasks]
+            state["execution_plans"] = [
+                self._orch._selector.compile(
+                    task,
+                    context=CompilerContext(registry=_tool_registry),
+                )
+                for task in code_run_tasks
+            ]
             state["current_task_index"] = 0
             self._print_plan(list(state.get("plan") or []))
             return state, "EXECUTE", None

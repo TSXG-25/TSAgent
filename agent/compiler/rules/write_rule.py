@@ -15,7 +15,11 @@ class WriteRule(Rule):
 
     def build(self, task: Task, **services) -> ExecutionPlan:
         steps = [
-            ExecutionStep(tool="workspace", args={"spec": task.target}, outputs=["path"]),
+            ExecutionStep(
+                tool="workspace",
+                args={"spec": task.target, "operation": "write"},
+                outputs=["path"],
+            ),
         ]
 
         # A workflow can provide the final content as a resolved Task input.
@@ -31,32 +35,46 @@ class WriteRule(Rule):
         )
         if content is None:
             research_context = task.inputs.get("research_context")
+            research_output_format = task.inputs.get("research_output_format")
             context_suffix = ""
             if research_context:
                 context_suffix = (
                     "\n\n已完成的前置检索/分析结果（仅作为事实依据，勿编造来源）：\n"
                     f"{str(research_context)[:6000]}"
                 )
-            steps.append(
-                ExecutionStep(
-                    tool="llm",
-                    args={
-                        "verb": "write",
-                        "target": task.target,
-                        "prompt": (
-                            "你是文件生成器。只输出目标文件的完整内容，"
-                            "不要解释，不要 markdown 代码围栏。"
-                        ),
-                        "user": (
-                            f"目标文件: {task.target}\n"
-                            f"任务: {task.goal}\n"
-                            f"说明: {task.description}"
-                            f"{context_suffix}"
-                        ),
-                    },
-                    outputs=["content"],
+            if research_context and research_output_format:
+                steps.append(
+                    ExecutionStep(
+                        tool="text.materialize_research",
+                        args={
+                            "content": str(research_context),
+                            "format": str(research_output_format),
+                            "title": task.goal,
+                        },
+                        outputs=["content"],
+                    )
                 )
-            )
+            else:
+                steps.append(
+                    ExecutionStep(
+                        tool="llm",
+                        args={
+                            "verb": "write",
+                            "target": task.target,
+                            "prompt": (
+                                "你是文件生成器。只输出目标文件的完整内容，"
+                                "不要解释，不要 markdown 代码围栏。"
+                            ),
+                            "user": (
+                                f"目标文件: {task.target}\n"
+                                f"任务: {task.goal}\n"
+                                f"说明: {task.description}"
+                                f"{context_suffix}"
+                            ),
+                        },
+                        outputs=["content"],
+                    )
+                )
             content_arg = "$content"
         else:
             content_arg = str(content)

@@ -6,6 +6,7 @@
 
 Phase C.1：从 orchestrator.py 的 finalize() 迁移。
 """
+import re
 import time
 from typing import Optional
 
@@ -99,9 +100,30 @@ class Finalizer:
         for task in state.get("plan", []) or []:
             if str(task.get("verb", "")) in ("write", Verb.WRITE.value) and task.get("target"):
                 write_targets.append(str(task["target"]))
-        if not write_targets:
+
+        # A malformed/LLM-generated plan can omit its write Task.  Successful
+        # prose still cannot be trusted: extract only affirmative write claims
+        # and verify those paths independently of the plan projection.
+        claim_pattern = re.compile(
+            r"(?:已|已经|成功|并)\s*(?:写入|保存|创建|生成|写出|追加)"
+            r"(?:到|为|成)?\s*[`\"']?"
+            r"((?:/?[A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+\.[A-Za-z0-9]+)"
+        )
+        claimed_targets = claim_pattern.findall(answer or "")
+        has_write_claim = bool(claimed_targets) or any(
+            claim in (answer or "")
+            for claim in (
+                "已写入", "已保存", "已创建", "已生成", "已写出", "已追加",
+                "成功写入", "成功保存", "成功创建", "成功生成",
+            )
+        )
+        if not has_write_claim:
             return None
-        if not any(claim in answer for claim in ("已写入", "已保存", "已创建", "已生成", "已写出", "已追加")):
+        for target in claimed_targets:
+            if target not in write_targets:
+                write_targets.append(target)
+
+        if not write_targets:
             return None
         from agent.executor.verifier import verify_write
         missing = [t for t in write_targets if not verify_write(t)]

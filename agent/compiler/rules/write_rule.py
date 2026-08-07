@@ -30,6 +30,13 @@ class WriteRule(Rule):
             else "overwrite"
         )
         if content is None:
+            research_context = task.inputs.get("research_context")
+            context_suffix = ""
+            if research_context:
+                context_suffix = (
+                    "\n\n已完成的前置检索/分析结果（仅作为事实依据，勿编造来源）：\n"
+                    f"{str(research_context)[:6000]}"
+                )
             steps.append(
                 ExecutionStep(
                     tool="llm",
@@ -44,6 +51,7 @@ class WriteRule(Rule):
                             f"目标文件: {task.target}\n"
                             f"任务: {task.goal}\n"
                             f"说明: {task.description}"
+                            f"{context_suffix}"
                         ),
                     },
                     outputs=["content"],

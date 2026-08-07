@@ -17,6 +17,7 @@ from agent.cognition.cognitive_context import CognitiveContext, ResolvedQuery
 from agent.cognition.intent_schema import DOMAIN_FILE, DOMAIN_MATH
 from agent.memory.preference import _deterministic_extract
 from agent.orchestrator.finalizer import Finalizer
+from agent.orchestrator.planner import _ensure_explicit_output_write_task
 from agent.compiler.rules.write_rule import WriteRule
 from agent.executor.verifier import ExecutionVerifier, ExecutionArtifacts
 from agent.task import Task, Verb
@@ -57,6 +58,24 @@ class TestIntentFileWriteOverride:
         assert _intent("读取 output/solution.py").requires_execution is True
         assert _intent("读取 output/solution.py").domain == DOMAIN_FILE
 
+    def test_search_and_write_request_stays_execution_intent(self):
+        result = _intent(
+            "搜索 Python 怎么抓取股票行情数据，然后写一个示例程序保存到 output/fetch_stock.py"
+        )
+        assert result.requires_execution is True
+        assert result.target.endswith("output/fetch_stock.py")
+
+    def test_search_and_write_plan_contains_materialization_task(self):
+        request = "搜索 Python 怎么抓取股票行情数据，然后写一个示例程序保存到 output/fetch_stock.py"
+        plan = _ensure_explicit_output_write_task(
+            [{"id": "task-1", "verb": "search", "target": "股票行情", "target_type": "text"}],
+            request,
+        )
+        assert [task["verb"] for task in plan] == ["search", "write"]
+        assert plan[-1]["target"] == "output/fetch_stock.py"
+        assert plan[-1]["dependencies"] == ["task-1"]
+        assert plan[-1]["inputs"]["use_prior_facts"] is True
+
 
 class TestDeterministicFactExtract:
     """H01/H04 类：LLM 不可用时确定性兜底仍保存关键事实。"""
@@ -95,6 +114,19 @@ class TestFinalizerTruthfulness:
     def test_no_write_task_or_no_claim(self):
         assert Finalizer._verify_written_files({"plan": []}, "已写入 x") is None
         assert Finalizer._verify_written_files(self._write_state("/tmp/nope.py"), "好的") is None
+
+    def test_missing_file_claim_is_checked_without_write_task(self, tmp_path):
+        target = str(tmp_path / "missing_without_task.py")
+        state = {"plan": [{"verb": "explain", "target": "", "status": "succeeded"}]}
+        answer = f"我已整理示例，并保存到 {target} 文件里。"
+        assert Finalizer._verify_written_files(state, answer) is not None
+
+    def test_existing_file_claim_is_allowed_without_write_task(self, tmp_path):
+        target = tmp_path / "existing_without_task.py"
+        target.write_text("print('ok')", encoding="utf-8")
+        state = {"plan": [{"verb": "explain", "target": "", "status": "succeeded"}]}
+        answer = f"我已整理示例，并保存到 {target} 文件里。"
+        assert Finalizer._verify_written_files(state, answer) is None
 
 
 class TestModifyRuleInstruction:
@@ -203,3 +235,15 @@ class TestWriteRuleAppendMode:
         plan = WriteRule().build(t)
         ws = [s for s in plan.steps if s.tool == "filesystem.write"][0]
         assert ws.args["mode"] == "overwrite"
+
+    def test_research_context_reaches_generated_file_prompt(self):
+        t = Task(
+            id="t",
+            verb=Verb.WRITE,
+            target="output/fetch_stock.py",
+            goal="生成股票行情抓取示例",
+            inputs={"research_context": "results: requests 与 yfinance 的用法"},
+        )
+        plan = WriteRule().build(t)
+        llm_step = [step for step in plan.steps if step.tool == "llm"][0]
+        assert "yfinance" in llm_step.args["user"]

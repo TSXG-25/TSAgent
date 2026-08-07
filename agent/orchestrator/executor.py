@@ -48,6 +48,22 @@ class ExecutionStage:
             pass
 
         for idx, task_dict in enumerate(tasks):
+            if (
+                str(task_dict.get("verb", "")).lower() == Verb.WRITE.value
+                and bool((task_dict.get("inputs") or {}).get("use_prior_facts"))
+            ):
+                prior_facts: dict[str, object] = {}
+                for previous_task in tasks[:idx]:
+                    prior_facts.update(previous_task.get("facts", {}) or {})
+                if prior_facts:
+                    inputs = dict(task_dict.get("inputs") or {})
+                    inputs["research_context"] = "\n".join(
+                        f"{key}: {str(value)[:1200]}"
+                        for key, value in prior_facts.items()
+                    )
+                    task_dict["inputs"] = inputs
+                    if idx < len(execution_plans):
+                        execution_plans[idx] = None
             task_obj = Task.from_dict(task_dict)
             plan = execution_plans[idx] if idx < len(execution_plans) else None
             if not isinstance(plan, ExecutionPlan):

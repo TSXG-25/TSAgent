@@ -148,8 +148,13 @@ def _apply_conversation_contract(
 
 def _extract_workflow_output_path(user_input: str) -> str:
     """Extract an explicit output file for the question-code workflow."""
+    return _extract_explicit_output_path(user_input) or "output/solution.py"
+
+
+def _extract_explicit_output_path(user_input: str) -> Optional[str]:
+    """Extract the user-requested output path, without inventing a default."""
     candidates = re.findall(
-        r"(?<![\w/])(?:[\w.-]+/)*[\w.-]+\.(?:py|txt|csv|json|xlsx|xls|docx|pptx)",
+        r"(?<![\w/])(?:[\w.-]+/)*[\w.-]+\.(?:py|txt|md|csv|json|yaml|yml|xlsx|xls|docx|pptx)",
         user_input or "",
         flags=re.IGNORECASE,
     )
@@ -158,7 +163,84 @@ def _extract_workflow_output_path(user_input: str) -> str:
         if normalized.lower().startswith("input/") or normalized.lower().endswith("question.docx"):
             continue
         return normalized
-    return "output/solution.py"
+    return None
+
+
+_OUTPUT_MATERIALIZATION_RE = re.compile(
+    r"保存到|保存为|写入到|写到|输出到|落盘|另存为|写成"
+)
+_TEXT_OUTPUT_SUFFIXES = (
+    ".py", ".txt", ".md", ".json", ".csv", ".yaml", ".yml",
+    ".js", ".ts", ".rs", ".go", ".java", ".sh", ".html", ".css",
+)
+
+
+def _ensure_explicit_output_write_task(
+    plan: list[dict],
+    user_input: str,
+    intent=None,
+) -> list[dict]:
+    """Guarantee an explicit text-file output request reaches the write chain.
+
+    The LLM Planner may correctly create search/explain tasks while omitting the
+    world-state mutation implied by ``保存到 output/example.py``.  That omission
+    is a contract violation, not a reason to trust the final prose.  Add one
+    canonical ``write`` Task after the preceding tasks so the existing WriteRule
+    and ExecutionVerifier own materialization and truthfulness.
+    """
+    if intent is not None and not getattr(intent, "requires_execution", False):
+        return plan
+    if not _OUTPUT_MATERIALIZATION_RE.search(user_input or ""):
+        return plan
+
+    target = _extract_explicit_output_path(user_input)
+    if not target or not target.lower().endswith(_TEXT_OUTPUT_SUFFIXES):
+        # Office/binary targets retain their dedicated degradation path.
+        return plan
+
+    normalized_target = target.casefold().rstrip("/")
+    write_tasks = [
+        task for task in plan
+        if str(task.get("verb", "")).lower() == Verb.WRITE.value
+    ]
+    if write_tasks:
+        matching = next(
+            (
+                task for task in write_tasks
+                if str(task.get("target", "")).replace("\\", "/")
+                .casefold().rstrip("/") == normalized_target
+            ),
+            None,
+        )
+        target_task = matching or write_tasks[-1]
+        target_task["target"] = target
+        target_task["target_type"] = "file"
+        return plan
+
+    existing_ids = [str(task.get("id", "")) for task in plan if task.get("id")]
+    next_id = f"task-{len(plan) + 1}"
+    while next_id in existing_ids:
+        next_id = f"task-{int(next_id.rsplit('-', 1)[-1]) + 1}"
+    plan.append({
+        "id": next_id,
+        "verb": Verb.WRITE.value,
+        "target": target,
+        "target_type": "file",
+        "goal": f"根据用户需求生成内容并保存到 {target}",
+        "description": (
+            "这是用户明确要求的文件落盘步骤。保留前置检索/分析结果，"
+            "只输出目标文件的完整内容并实际写入。\n"
+            f"原始需求：{user_input}"
+        ),
+        "success_condition": f"文件 {target} 存在且非空",
+        "dependencies": existing_ids,
+        "children": [],
+        "inputs": {"use_prior_facts": True},
+        "status": "pending",
+        "observations": [],
+        "error": "",
+    })
+    return plan
 
 
 class PlannerStage:
@@ -402,13 +484,22 @@ class PlannerStage:
                     "tool_policy": {"allow": ["web_search"]},
                 },
             }
-            task_obj = Task.from_dict(task_data)
-            execution_plan = self._orch._selector.compile(
-                task_obj,
-                context=CompilerContext(registry=_tool_registry),
+            fresh_plan = _ensure_explicit_output_write_task(
+                [task_data], user_input, intent,
             )
-            state["plan"] = [task_obj.to_dict()]
-            state["execution_plans"] = [execution_plan]
+            canonical_plan = []
+            fresh_execution_plans = []
+            for task in fresh_plan:
+                task_obj = Task.from_dict(task)
+                canonical_plan.append(task_obj.to_dict())
+                fresh_execution_plans.append(
+                    self._orch._selector.compile(
+                        task_obj,
+                        context=CompilerContext(registry=_tool_registry),
+                    )
+                )
+            state["plan"] = canonical_plan
+            state["execution_plans"] = fresh_execution_plans
             state["current_task_index"] = 0
             self._print_plan(list(state.get("plan") or []))
             return state, "EXECUTE", None
@@ -508,6 +599,9 @@ class PlannerStage:
                         grounding=grounding_ctx,
                     )
                     plan = plan_output.tasks
+                    plan = _ensure_explicit_output_write_task(
+                        plan, user_input, intent,
+                    )
                     for i, t in enumerate(plan):
                         t.setdefault("id", f"task-{i+1}")
                         t.setdefault("status", "pending")
@@ -613,6 +707,9 @@ class PlannerStage:
                     grounding=grounding_ctx,
                 )
                 plan = plan_output.tasks
+                plan = _ensure_explicit_output_write_task(
+                    plan, user_input, intent,
+                )
                 for i, task_data in enumerate(plan):
                     task_data.setdefault("id", f"task-{i + 1}")
                     task_data.setdefault("status", "pending")
@@ -671,6 +768,7 @@ class PlannerStage:
             + "\n".join(failed_info)
         )
         new_plan = (await plan_with_metadata(replan_input, "", "", "", None)).tasks
+        new_plan = _ensure_explicit_output_write_task(new_plan, user_input)
         for t in new_plan:
             t.setdefault("status", "pending")
             t.setdefault("observations", [])

@@ -384,7 +384,7 @@ class IntentEngine:
             return IntentResult(
                 domain=DOMAIN_WEB,
                 action="fresh_research",
-                target="",
+                target=_merge_target(raw_target, context),
                 entities=_merge_entities([], context),
                 current_file=context.current_file or "",
                 confidence=0.98,

@@ -9,15 +9,14 @@ import uuid
 from pathlib import Path
 
 from agent.bootstrap import load_all, load_all_async
-from agent.runtime_store import SqliteRuntimeStore
 from agent.service import (
     AgentService,
     EventStreamRequest,
     EventType,
     RunLookupRequest,
     StartRunRequest,
+    create_default_agent_service,
 )
-from agent.service.runtime_launcher import RuntimeExecutionLauncher
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -108,11 +107,7 @@ async def main() -> None:
     load_all()
     await load_all_async()
 
-    store = SqliteRuntimeStore.open(args.db)
-    service = AgentService(
-        runtime_store=store,
-        launcher=RuntimeExecutionLauncher(),
-    )
+    service = create_default_agent_service(args.db)
     cli = ServiceCLI(
         service,
         tenant_id=args.tenant_id,
@@ -130,8 +125,6 @@ async def main() -> None:
             await cli.run_request(user_input)
     finally:
         await service.close()
-        if not store.closed:
-            store.close()
 
 
 if __name__ == "__main__":

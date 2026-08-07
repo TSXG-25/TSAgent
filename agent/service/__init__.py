@@ -34,6 +34,7 @@ from .event_repository import (
 )
 from .execution_launcher import ExecutionLauncher
 from .events import EventOrderingOracle
+from .factory import create_default_agent_service
 from .service import AgentService as AgentServiceCore
 
 # Keep the Protocol available under an explicit name while exposing the
@@ -58,6 +59,7 @@ __all__ = [
     "EventType",
     "FailureSummary",
     "ExecutionLauncher",
+    "create_default_agent_service",
     "GetRunRequest",
     "ListArtifactsRequest",
     "ResumeAction",

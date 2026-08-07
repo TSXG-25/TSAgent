@@ -104,6 +104,14 @@ FORBIDDEN_LEGACY_IMPORTS = {
     ("agent.conversation", "conversation_retriever"),
 }
 
+CLI_FORBIDDEN_IMPORT_PREFIXES = (
+    "agent.runtime",
+    "agent.orchestrator",
+    "agent.event_bus",
+    "agent.runtime_store",
+    "agent.service.runtime_launcher",
+)
+
 
 def _imported_modules(tree: ast.AST):
     for node in ast.walk(tree):
@@ -155,6 +163,19 @@ def verify(root: Path = PROJECT_ROOT) -> list[str]:
                         f"scoped-runtime: {relative} imports legacy singleton "
                         f"{node.module}.{alias.name}; use agent.compat explicitly"
                     )
+    cli_path = root / "main.py"
+    if cli_path.exists():
+        try:
+            cli_tree = ast.parse(cli_path.read_text(encoding="utf-8"), filename=str(cli_path))
+        except SyntaxError as exc:
+            violations.append(f"cli: syntax error: {exc}")
+        else:
+            for module in _imported_modules(cli_tree):
+                if any(
+                    module == prefix or module.startswith(prefix + ".")
+                    for prefix in CLI_FORBIDDEN_IMPORT_PREFIXES
+                ):
+                    violations.append(f"cli: main.py imports forbidden {module}")
     return violations
 
 

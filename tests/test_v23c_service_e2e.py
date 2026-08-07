@@ -153,6 +153,8 @@ def test_cli_is_only_a_service_adapter() -> None:
     assert "from agent.runtime import" not in source
     assert "from agent.orchestrator" not in source
     assert "from agent.event_bus import" not in source
+    assert "from agent.runtime_store" not in source
+    assert "runtime_launcher" not in source
     assert "UniversalAgent" not in source
 
 

@@ -154,21 +154,29 @@ def _extract_workflow_output_path(user_input: str) -> str:
 
 def _extract_explicit_output_path(user_input: str) -> Optional[str]:
     """Extract the user-requested output path, without inventing a default."""
+    paths = _extract_explicit_output_paths(user_input)
+    return paths[-1] if paths else None
+
+
+def _extract_explicit_output_paths(user_input: str) -> list[str]:
+    """Extract all explicit output paths in their input order."""
     candidates = re.findall(
         r"(?<![\w/])(?:[\w.-]+/)*[\w.-]+\.(?:py|txt|md|csv|json|yaml|yml|xlsx|xls|docx|pptx)",
         user_input or "",
         flags=re.IGNORECASE,
     )
+    paths: list[str] = []
     for candidate in reversed(candidates):
         normalized = candidate.replace("\\", "/")
         if normalized.lower().startswith("input/") or normalized.lower().endswith("question.docx"):
             continue
-        return normalized
-    return None
+        if normalized.casefold() not in {item.casefold() for item in paths}:
+            paths.insert(0, normalized)
+    return paths
 
 
 _OUTPUT_MATERIALIZATION_RE = re.compile(
-    r"保存到|保存为|写入到|写到|输出到|落盘|另存为|写成"
+    r"保存到|保存为|写入到|写到|输出到|落盘|另存为|写成|生成|创建|新建"
 )
 _TEXT_OUTPUT_SUFFIXES = (
     ".py", ".txt", ".md", ".json", ".csv", ".yaml", ".yml",
@@ -194,54 +202,109 @@ def _ensure_explicit_output_write_task(
     if not _OUTPUT_MATERIALIZATION_RE.search(user_input or ""):
         return plan
 
-    target = _extract_explicit_output_path(user_input)
-    if not target or not target.lower().endswith(_TEXT_OUTPUT_SUFFIXES):
+    targets = [
+        target for target in _extract_explicit_output_paths(user_input)
+        if target.lower().endswith(_TEXT_OUTPUT_SUFFIXES)
+    ]
+    if not targets:
         # Office/binary targets retain their dedicated degradation path.
         return plan
 
-    normalized_target = target.casefold().rstrip("/")
     write_tasks = [
         task for task in plan
         if str(task.get("verb", "")).lower() == Verb.WRITE.value
     ]
-    if write_tasks:
-        matching = next(
+    normalized_targets = {
+        target.casefold().rstrip("/") for target in targets
+    }
+    assigned_targets = {
+        str(task.get("target", "")).replace("\\", "/").casefold().rstrip("/")
+        for task in write_tasks
+        if task.get("target")
+    }
+    for index, target in enumerate(targets):
+        normalized_target = target.casefold().rstrip("/")
+        if normalized_target in assigned_targets:
+            continue
+        # Reuse an unbound Planner write task before appending a new one.
+        reusable = next(
             (
                 task for task in write_tasks
-                if str(task.get("target", "")).replace("\\", "/")
-                .casefold().rstrip("/") == normalized_target
+                if not task.get("target")
+                or str(task.get("target", "")).replace("\\", "/").casefold().rstrip("/")
+                not in normalized_targets
             ),
             None,
         )
-        target_task = matching or write_tasks[-1]
-        target_task["target"] = target
-        target_task["target_type"] = "file"
+        if reusable is not None:
+            reusable["target"] = target
+            reusable["target_type"] = "file"
+            assigned_targets.add(normalized_target)
+
+    missing_targets = [
+        target for target in targets
+        if target.casefold().rstrip("/") not in assigned_targets
+    ]
+    if not missing_targets:
         return plan
 
     existing_ids = [str(task.get("id", "")) for task in plan if task.get("id")]
-    next_id = f"task-{len(plan) + 1}"
-    while next_id in existing_ids:
-        next_id = f"task-{int(next_id.rsplit('-', 1)[-1]) + 1}"
-    plan.append({
-        "id": next_id,
-        "verb": Verb.WRITE.value,
-        "target": target,
-        "target_type": "file",
-        "goal": f"根据用户需求生成内容并保存到 {target}",
-        "description": (
-            "这是用户明确要求的文件落盘步骤。保留前置检索/分析结果，"
-            "只输出目标文件的完整内容并实际写入。\n"
-            f"原始需求：{user_input}"
-        ),
-        "success_condition": f"文件 {target} 存在且非空",
-        "dependencies": existing_ids,
-        "children": [],
-        "inputs": {"use_prior_facts": True},
-        "status": "pending",
-        "observations": [],
-        "error": "",
-    })
+    base_dependencies = list(existing_ids)
+    next_number = len(plan) + 1
+    for target in missing_targets:
+        next_id = f"task-{next_number}"
+        while next_id in existing_ids:
+            next_number += 1
+            next_id = f"task-{next_number}"
+        plan.append({
+            "id": next_id,
+            "verb": Verb.WRITE.value,
+            "target": target,
+            "target_type": "file",
+            "goal": f"根据用户需求生成内容并保存到 {target}",
+            "description": (
+                "这是用户明确要求的文件落盘步骤。保留前置检索/分析结果，"
+                "只输出目标文件的完整内容并实际写入。\n"
+                f"原始需求：{user_input}"
+            ),
+            "success_condition": f"文件 {target} 存在且非空",
+            "dependencies": base_dependencies,
+            "children": [],
+            "inputs": {"use_prior_facts": True},
+            "status": "pending",
+            "observations": [],
+            "error": "",
+        })
+        existing_ids.append(next_id)
+        next_number += 1
     return plan
+
+
+def _extract_literal_file_write(user_input: str) -> Optional[tuple[str, str]]:
+    """Extract a complete one-file write request without invoking an LLM.
+
+    This fast path is deliberately narrow: it only accepts one explicit text
+    path and a literal ``内容为/内容是`` clause, with no research, read, or
+    execution verb.  The resulting Task still goes through Compiler,
+    PlanExecutor, and ExecutionVerifier.
+    """
+    value = str(user_input or "").strip()
+    if not value or len(_extract_explicit_output_paths(value)) != 1:
+        return None
+    if re.search(r"搜索|检索|查找|读取|分析|合并|运行|执行|根据|然后", value):
+        return None
+    if not re.search(r"创建|新建|写入|写到|保存到|输出到|生成", value):
+        return None
+    match = re.search(r"内容(?:为|是|：|:)?\s*(.+?)\s*$", value, re.DOTALL)
+    if match is None:
+        return None
+    target = _extract_explicit_output_paths(value)[0]
+    if not target.lower().endswith(_TEXT_OUTPUT_SUFFIXES):
+        return None
+    content = match.group(1).strip().strip("`\"'")
+    if not content:
+        return None
+    return target, content
 
 
 class PlannerStage:
@@ -505,6 +568,35 @@ class PlannerStage:
             self._print_plan(list(state.get("plan") or []))
             return state, "EXECUTE", None
 
+        # A complete literal write is a deterministic world-state change.  Do
+        # not spend Planner/LLM calls rediscovering the content already given
+        # by the user; it still enters the canonical Compiler → Executor →
+        # Verifier chain below.
+        literal_write = _extract_literal_file_write(user_input)
+        if literal_write and getattr(intent, "requires_execution", False):
+            target, content = literal_write
+            task_obj = Task.from_dict({
+                "id": "task-1",
+                "verb": Verb.WRITE.value,
+                "target": target,
+                "target_type": "file",
+                "goal": f"将用户提供的内容写入 {target}",
+                "description": "内容已由用户明确提供，无需再次生成。",
+                "success_condition": f"文件 {target} 存在且非空",
+                "dependencies": [],
+                "children": [],
+                "inputs": {"content": content},
+            })
+            compiled = self._orch._selector.compile(
+                task_obj,
+                context=CompilerContext(registry=_tool_registry),
+            )
+            state["plan"] = [task_obj.to_dict()]
+            state["execution_plans"] = [compiled]
+            state["current_task_index"] = 0
+            self._print_plan(list(state.get("plan") or []))
+            return state, "EXECUTE", None
+
         # ── Stage 2: WorkflowRouter 执行路由（接收完整 IntentResult）──
         wf_obj, wf_reason = workflow_router.route(intent)
 
@@ -750,6 +842,32 @@ class PlannerStage:
         user_id: str,
     ) -> Tuple[AgentState, str]:
         """REPLAN 阶段：重规划失败任务。"""
+        current_plan = state.get("plan") or []
+        deterministic_failure = next(
+            (
+                str(task.get("error_code", ""))
+                or classify_execution_error(task.get("error", ""))
+                for task in current_plan
+                if task.get("status") == "failed"
+                and (
+                    str(task.get("error_code", ""))
+                    or classify_execution_error(task.get("error", ""))
+                )
+            ),
+            "",
+        )
+        if deterministic_failure and is_non_retriable(deterministic_failure):
+            state["runtime_failure_code"] = deterministic_failure
+            state["runtime_terminal_status"] = (
+                "BLOCKED"
+                if deterministic_failure == "RESEARCH_TOOL_UNAVAILABLE"
+                else "FAILED_TERMINAL"
+            )
+            print(
+                f"❌ 确定性错误 {deterministic_failure}，停止重规划"
+            )
+            return state, "FAIL"
+
         if self._orch.replan_count >= 2:
             print("❌ 达到最大重试次数")
             return state, "FAIL"

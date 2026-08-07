@@ -112,6 +112,10 @@ _KEYWORD_MAP: list[tuple[re.Pattern, str, str, bool]] = [
     (re.compile(r'关于我|我的.*[事实信息]'), DOMAIN_MEMORY, "query", False),
 
     # 文件操作
+    # 仅匹配带明确文件扩展名的写入表达，避免为普通“生成代码/内容”
+    # 抢占开发或创作意图。命中后由 Planner 的 literal-write fast path
+    # 继续确认目标和内容是否完整。
+    (re.compile(r'(?:创建|新建|生成|写入|写到|保存到|输出到)\s+\S+\.[A-Za-z0-9]+'), DOMAIN_FILE, "write", True),
     (re.compile(r'读取.*文件|打开.*文件|写入.*文件|创建.*文件|删除.*文件|列出.*目录|浏览.*目录'), DOMAIN_FILE, "operate", True),
     (re.compile(r'保存到|保存为|写入到|写到|追加到|另存为'), DOMAIN_FILE, "write", True),
     (re.compile(r'^读取\s+\S+|^读\s+\S+|^打开\s+\S+|^查看\s+\S+|^阅读\s+\S+'), DOMAIN_FILE, "operate", True),

@@ -49,6 +49,17 @@ class PlanExecutor:
         if not plan or not plan.steps:
             return {"_last_output": "", "_error": "空 plan，无步骤可执行"}
 
+        try:
+            self._validate_tools(plan)
+        except ValueError as exc:
+            return {
+                "_last_output": "",
+                "_error": f"PlanExecutor: plan validation failed: {exc}",
+                "_error_code": "UNKNOWN_TOOL",
+                "_failed_tool": "plan_validation",
+                "_files_written": [],
+            }
+
         variables: Dict[str, Any] = {}
         last_output = ""
         files_written: list = []
@@ -113,6 +124,26 @@ class PlanExecutor:
             else:
                 result[k] = v
         return result
+
+    @staticmethod
+    def _validate_tools(plan: ExecutionPlan) -> None:
+        """Reject unknown tool steps before any earlier step can create effects."""
+        builtin = {"workspace", "repository", "knowledge", "llm"}
+        filesystem = {
+            "filesystem.read": "read_file",
+            "filesystem.write": "write_file",
+            "filesystem.list": "list_directory",
+            "filesystem.delete": "delete_file",
+            "filesystem.move": "move_file",
+        }
+        for step in plan.steps:
+            if step.tool in builtin:
+                continue
+            actual = filesystem.get(step.tool, step.tool)
+            if step.tool.startswith("knowledge."):
+                actual = step.tool.split(".", 1)[1]
+            if tool_registry.get(actual) is None and tool_registry.get(step.tool) is None:
+                raise ValueError(f"UNKNOWN_TOOL: 未注册工具 {step.tool}")
 
     async def _exec_workspace(
         self,

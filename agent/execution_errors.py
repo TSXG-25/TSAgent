@@ -13,6 +13,7 @@ NON_RETRIABLE_CODES = frozenset({
     "UNSUPPORTED_BINARY",
     "IDENTITY_MISMATCH",
     "RESEARCH_TOOL_UNAVAILABLE",
+    "UNKNOWN_TOOL",
 })
 
 
@@ -29,6 +30,29 @@ def classify_execution_error(error: object) -> str:
         return "UNSUPPORTED_BINARY"
     if "OFFICE 二进制" in text or "OFFICE BINARY" in upper:
         return "UNSUPPORTED_BINARY"
+    if "UNKNOWN_TOOL" in upper or "未找到工具" in text or "工具不存在" in text:
+        return "UNKNOWN_TOOL"
+    error_type = type(error).__name__.upper()
+    if isinstance(error, TimeoutError) or "TIMEOUT" in error_type or "TIMED OUT" in upper or "超时" in text:
+        return "PROVIDER_TIMEOUT"
+    if "所有 LLM 提供商均不可用" in text or "PROVIDER_UNAVAILABLE" in upper:
+        return "PROVIDER_UNAVAILABLE"
+    if (
+        "CONNECTION" in upper
+        or "NETWORK" in upper
+        or "DNS" in upper
+        or "连接" in text
+        or "网络" in text
+    ):
+        return "PROVIDER_NETWORK"
+    if (
+        "RESPONSE_FORMAT" in upper
+        or "BAD REQUEST" in upper
+        or "INVALID REQUEST" in upper
+        or "STATUS CODE 400" in upper
+        or "HTTP 400" in upper
+    ):
+        return "PROVIDER_REQUEST_INVALID"
     return ""
 
 

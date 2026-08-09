@@ -14,6 +14,7 @@ from agent.compiler.context import CompilerContext
 from agent.registry.tool_registry import registry as _tool_registry
 from agent.compat.workspace import get_legacy_workspace_service
 from agent.execution_errors import classify_execution_error, is_non_retriable
+from agent.effect_truth import record_effect_result
 
 
 class ExecutionStage:
@@ -113,12 +114,16 @@ class ExecutionStage:
                     )
 
             self._apply_result(task_dict, plan, exec_result)
+            record_effect_result(state, task_dict, plan, exec_result)
             error_code = str((exec_result.metadata or {}).get("error_code", ""))
             if not exec_result.success and error_code and is_non_retriable(error_code):
                 state["runtime_failure_code"] = error_code
                 state["runtime_terminal_status"] = (
                     "BLOCKED"
-                    if error_code == "RESEARCH_TOOL_UNAVAILABLE"
+                    if error_code in {
+                        "RESEARCH_TOOL_UNAVAILABLE",
+                        "UNSUPPORTED_CAPABILITY",
+                    }
                     else "FAILED_TERMINAL"
                 )
                 # Do not execute unrelated downstream tasks after a

@@ -14,6 +14,12 @@ from agent.state import AgentState
 from agent.answer_generator import generate_final_answer
 from agent.services import MemoryService
 from agent.task import Verb
+from agent.effect_truth import (
+    effect_label,
+    enforce_completion_gate,
+    initialize_effect_contract,
+)
+from agent.registry.capability_registry import registry as _capability_registry
 
 
 class Finalizer:
@@ -37,6 +43,20 @@ class Finalizer:
         best_answer: Optional[str] = None,
     ) -> str:
         """生成最终答案并提交记忆。"""
+        # v2.3H2: final prose is never the source of truth for an external
+        # effect.  Re-project the request here as a last boundary in case a
+        # caller bypassed Planner or supplied a best_answer from an LLM.
+        initialize_effect_contract(
+            state,
+            user_input,
+            capability_resolver=_capability_registry.resolve,
+        )
+        effect_truth = enforce_completion_gate(state)
+        effect_failure = self._effect_truth_failure_answer(state, effect_truth)
+        if effect_failure:
+            self._memory().record_full_exchange(user_input, effect_failure)
+            return effect_failure
+
         failure_answer = self._failure_answer(state)
         if failure_answer and not best_answer:
             self._memory().record_full_exchange(user_input, failure_answer)
@@ -62,6 +82,24 @@ class Finalizer:
         self._memory().record_full_exchange(user_input, final_answer)
         self._orch._timings["answer_gen"] = round(time.perf_counter() - t_answer, 3)
         return final_answer
+
+    @staticmethod
+    def _effect_truth_failure_answer(state: AgentState, truth) -> Optional[str]:
+        """Explain an unresolved effect without making a success claim."""
+
+        if not truth.unresolved_required_effects:
+            return None
+        if truth.unsupported_effects:
+            requirement = truth.unsupported_effects[0]
+            label = effect_label(requirement)
+            return (
+                f"当前没有可用的{label}能力，因此本次未执行该外部操作。"
+                "没有可验证的执行证据，不能报告为已完成。"
+            )
+        return (
+            "外部操作尚未获得可验证的执行证据，因此不能确认已经完成；"
+            "本次不会将任务报告为成功。"
+        )
 
     @staticmethod
     def _deterministic_completion_answer(state: AgentState) -> Optional[str]:

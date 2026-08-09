@@ -20,6 +20,7 @@ from agent.services import RepositoryService
 from agent.event_bus import Subscription
 from agent.registry.skill_registry import skill_registry
 from agent.state import AgentState
+from agent.effect_truth import enforce_completion_gate, execution_truth
 from agent.orchestrator import ExecutionOrchestrator
 from agent.bootstrap import print_timings as print_bootstrap_timings
 from agent.runtime_context import (
@@ -88,9 +89,26 @@ def _build_run_evidence(state: AgentState, final_answer: str, transitions: int) 
     failure_code = str(state.get("runtime_failure_code", "") or "")
     budget_exhausted = bool(state.get("budget_exhausted", False))
     terminal_status = str(state.get("runtime_terminal_status", "") or "")
-    outputs_verified = not failed_tasks and not pending_tasks and not budget_exhausted
+    truth = execution_truth(state)
+    outputs_verified = (
+        not failed_tasks
+        and not pending_tasks
+        and not budget_exhausted
+        and truth.can_complete
+    )
     if not terminal_status:
         terminal_status = "COMPLETED" if outputs_verified else "FAILED_TERMINAL"
+    elif truth.unresolved_required_effects and terminal_status == "COMPLETED":
+        # A stale caller-provided status cannot override missing effect
+        # evidence.  The Service launcher consumes this projection to choose
+        # run_blocked/run_failed instead of publishing run_completed.
+        terminal_status = (
+            "BLOCKED" if truth.unsupported_effects else "FAILED_TERMINAL"
+        )
+    if not failure_code and truth.unsupported_effects:
+        failure_code = "UNSUPPORTED_CAPABILITY"
+    if not failure_code and truth.unresolved_required_effects:
+        failure_code = "UNVERIFIED_EFFECT"
     if not failure_code and failed_tasks:
         failure_code = next(
             (
@@ -136,6 +154,14 @@ def _build_run_evidence(state: AgentState, final_answer: str, transitions: int) 
         "runtime_pending": _runtime_has_unfinished_work(state),
         "terminal_status": terminal_status,
         "terminal_outputs_verified": outputs_verified,
+        "effect_truth_ok": truth.can_complete,
+        "required_effects": [dict(item) for item in truth.required_effects],
+        "verified_effects": [dict(item) for item in truth.verified_effects],
+        "unsupported_effects": [dict(item) for item in truth.unsupported_effects],
+        "failed_effects": [dict(item) for item in truth.failed_effects],
+        "unresolved_required_effects": [
+            dict(item) for item in truth.unresolved_required_effects
+        ],
         "task_failures": [
             {
                 "id": str(task.get("id", "")),
@@ -517,6 +543,18 @@ class UniversalAgent:
             runtime_failure_code = "REPLAN_EXHAUSTED"
             state["runtime_terminal_status"] = runtime_terminal_status
             state["runtime_failure_code"] = runtime_failure_code
+
+        # Finalizer also enforces this boundary for direct callers.  Keeping a
+        # Runtime-level projection here guarantees Service terminal evidence
+        # cannot be based on a successful-looking answer.
+        effect_truth = enforce_completion_gate(state)
+        if not effect_truth.can_complete:
+            runtime_terminal_status = str(
+                state.get("runtime_terminal_status", "FAILED_TERMINAL")
+            )
+            runtime_failure_code = str(
+                state.get("runtime_failure_code", "UNVERIFIED_EFFECT")
+            )
 
         # ── 最终输出 ──
         final_answer = await self.orchestrator.finalize(

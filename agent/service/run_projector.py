@@ -115,6 +115,8 @@ _FAILURE_MESSAGES = {
     "PROVIDER_UNAVAILABLE": "A required provider was unavailable",
     "RESEARCH_TOOL_UNAVAILABLE": "A required research tool was unavailable",
     "UNKNOWN_TOOL": "The execution plan referenced an unavailable tool",
+    "UNSUPPORTED_CAPABILITY": "The requested external capability is not available",
+    "UNVERIFIED_EFFECT": "The requested effect has no verified execution evidence",
     "UNSUPPORTED_BINARY": "The requested file operation does not support this binary format",
     "PROTECTED_INTERNAL_PATH": "The requested path is protected runtime state",
     "RUNTIME_EXCEPTION": "The Runtime stopped because of an internal execution error",

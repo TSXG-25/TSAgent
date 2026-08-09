@@ -45,3 +45,11 @@ class AgentState(TypedDict, total=False):
     runtime_terminal_status: str
     runtime_failure_code: str
     budget_exhausted: bool
+    # v2.3H2: deterministic world-effect truth projected by Runtime.
+    effect_class: str
+    required_effects: List[Dict[str, Any]]
+    verified_effects: List[Dict[str, Any]]
+    unsupported_effects: List[Dict[str, Any]]
+    failed_effects: List[Dict[str, Any]]
+    unresolved_required_effects: List[Dict[str, Any]]
+    effect_truth_ok: bool

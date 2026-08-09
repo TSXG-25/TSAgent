@@ -39,6 +39,7 @@ from agent.workflow import ExecutionContext, Artifact, Workflow
 from agent.task import ExecutionPlan, ExecutionStep, Task, Verb
 from agent.compiler.context import CompilerContext
 from agent.registry.tool_registry import registry as _tool_registry
+from agent.registry.capability_registry import registry as _capability_registry
 from agent.cognition.intent_schema import DOMAIN_CHAT, DOMAIN_DEVELOPMENT, DOMAIN_MEMORY
 from agent.execution_errors import classify_execution_error, is_non_retriable
 from agent.cognition.research_policy import research_query, research_timeliness
@@ -734,6 +735,39 @@ class PlannerStage:
             "execution_plans": [],
         }
 
+        # v2.3H2: external effects are a deterministic capability boundary.
+        # Register them before any open-ended Planner call so a missing
+        # reservation/message/deployment capability cannot drift into an LLM
+        # success narrative or consume a replan budget.
+        from agent.effect_truth import initialize_effect_contract
+
+        effect_truth = initialize_effect_contract(
+            state,
+            user_input,
+            capability_resolver=_capability_registry.resolve,
+        )
+        if effect_truth.unsupported_effects:
+            requirement = effect_truth.unsupported_effects[0]
+            capability = str(requirement.get("capability", "external_effect"))
+            description = str(requirement.get("description", "外部操作"))
+            message = (
+                f"当前没有可用的 {description} 能力，因此本次未执行该外部操作。"
+                "不会伪造已完成的结果。"
+            )
+            state["plan"] = [{
+                "id": "task-1",
+                "verb": Verb.EXECUTE.value,
+                "target": capability,
+                "target_type": "symbol",
+                "goal": description,
+                "description": user_input,
+                "status": "failed",
+                "error": f"UNSUPPORTED_CAPABILITY: 未注册能力 {capability}",
+                "error_code": "UNSUPPORTED_CAPABILITY",
+                "observations": [],
+            }]
+            return state, "FINISH", message
+
         # ── Stage 0: 构建 CognitiveContext ──
         planner_context = self._orch._context_builder.build(
             user_input=user_input,
@@ -1303,7 +1337,10 @@ class PlannerStage:
             state["runtime_failure_code"] = deterministic_failure
             state["runtime_terminal_status"] = (
                 "BLOCKED"
-                if deterministic_failure == "RESEARCH_TOOL_UNAVAILABLE"
+                if deterministic_failure in {
+                    "RESEARCH_TOOL_UNAVAILABLE",
+                    "UNSUPPORTED_CAPABILITY",
+                }
                 else "FAILED_TERMINAL"
             )
             print(

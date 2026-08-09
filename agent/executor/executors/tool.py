@@ -58,7 +58,12 @@ class ToolExecutor:
             files_written=list(result.get("_files_written", []) or []),
             file_operations=list(result.get("_file_operations", []) or []),
         )
-        verification = execution_verifier.verify(plan, artifacts, task=target)
+        verification = execution_verifier.verify(
+            plan,
+            artifacts,
+            task=target,
+            workspace=workspace,
+        )
         if not verification.success:
             return ExecutionResult(
                 success=False,

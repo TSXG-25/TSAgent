@@ -44,18 +44,20 @@ class VerificationResult:
 # ── 基础核验原语（纯函数，以文件系统为准） ──
 
 def verify_write(path: str, *, min_size: int = 1,
-                 expect_content: Optional[str] = None) -> bool:
+                 expect_content: Optional[str] = None,
+                 workspace: Optional[Any] = None) -> bool:
     """文件确实存在且非空（可选内容匹配）。"""
-    if not path or not os.path.exists(path) or os.path.isdir(path):
+    resolved = _resolve_evidence_path(path, workspace)
+    if resolved is None or not resolved.exists() or resolved.is_dir():
         return False
     try:
-        if os.path.getsize(path) < min_size:
+        if resolved.stat().st_size < min_size:
             return False
     except OSError:
         return False
     if expect_content is not None:
         try:
-            with open(path, encoding="utf-8", errors="replace") as f:
+            with resolved.open(encoding="utf-8", errors="replace") as f:
                 if expect_content not in f.read():
                     return False
         except OSError:
@@ -90,7 +92,8 @@ class BaseVerification:
     name: str = "base"
 
     def verify(self, artifacts: ExecutionArtifacts,
-               task: Optional[Any] = None) -> VerificationResult:
+               task: Optional[Any] = None,
+               workspace: Optional[Any] = None) -> VerificationResult:
         raise NotImplementedError
 
 
@@ -99,7 +102,8 @@ class WriteVerification(BaseVerification):
     name = "write"
 
     def verify(self, artifacts: ExecutionArtifacts,
-               task: Optional[Any] = None) -> VerificationResult:
+               task: Optional[Any] = None,
+               workspace: Optional[Any] = None) -> VerificationResult:
         if not artifacts.files_written:
             return VerificationResult(
                 False, self.name, "计划含 write 步骤但未声明写入目标")
@@ -115,17 +119,23 @@ class WriteVerification(BaseVerification):
             checks=[f"exists+nonempty: {p}" for p in artifacts.files_written])
 
 
-def _workspace_path(value: str):
-    """Resolve a verifier path exactly under the active project workspace."""
-    from pathlib import Path
-    from tools.filesystem import ROOT
+def _resolve_evidence_path(value: str, workspace: Optional[Any]) -> Optional[Any]:
+    """Resolve evidence through the current Run or a compat-only fallback."""
+    if not value:
+        return None
+    if workspace is not None:
+        return workspace.resolve_path(value)
+    # Direct unscoped callers are legacy/test-only.  Production Runtime paths
+    # always pass RunContext.workspace and never consult process cwd/ROOT.
+    from agent.compat.workspace import resolve_legacy_path
 
-    candidate = Path(str(value))
-    resolved = (candidate if candidate.is_absolute() else ROOT / candidate).resolve()
-    try:
-        resolved.relative_to(ROOT.resolve())
-    except ValueError as exc:
-        raise ValueError(f"目标超出 workspace 范围: {value}") from exc
+    return resolve_legacy_path(value)
+
+
+def _workspace_path(value: str, workspace: Optional[Any] = None):
+    resolved = _resolve_evidence_path(value, workspace)
+    if resolved is None:
+        raise ValueError(f"目标路径为空: {value}")
     return resolved
 
 
@@ -133,7 +143,8 @@ class FileOperationVerification(BaseVerification):
     """Verify copy/move/delete from observed filesystem state."""
 
     def verify(self, artifacts: ExecutionArtifacts,
-               task: Optional[Any] = None) -> VerificationResult:
+               task: Optional[Any] = None,
+               workspace: Optional[Any] = None) -> VerificationResult:
         operations = [
             operation for operation in artifacts.file_operations
             if operation.get("operation") == self.name
@@ -148,7 +159,7 @@ class FileOperationVerification(BaseVerification):
         try:
             for operation in operations:
                 if self.name == "delete":
-                    target = _workspace_path(operation.get("path", ""))
+                    target = _workspace_path(operation.get("path", ""), workspace)
                     if target.exists():
                         return VerificationResult(
                             False,
@@ -157,8 +168,8 @@ class FileOperationVerification(BaseVerification):
                         )
                     continue
 
-                source = _workspace_path(operation.get("source", ""))
-                destination = _workspace_path(operation.get("destination", ""))
+                source = _workspace_path(operation.get("source", ""), workspace)
+                destination = _workspace_path(operation.get("destination", ""), workspace)
                 if not destination.exists() or not destination.is_file():
                     return VerificationResult(
                         False,
@@ -230,7 +241,8 @@ class ExecutionVerifier:
         return self._registry.get(name)
 
     def verify(self, plan: Any, artifacts: ExecutionArtifacts,
-               task: Optional[Any] = None) -> VerificationResult:
+               task: Optional[Any] = None,
+               workspace: Optional[Any] = None) -> VerificationResult:
         """对一次执行做最终验证。
 
         Args:
@@ -245,7 +257,33 @@ class ExecutionVerifier:
         if verification is None:
             # 非受管 verb（read/explain/search…）不强制验证，默认 success
             return VerificationResult(True, "none", f"verb={vname} 无专用验证器")
-        return verification.verify(artifacts, task=t)
+        if isinstance(verification, WriteVerification):
+            if not artifacts.files_written:
+                return verification.verify(artifacts, task=t)
+            missing = [
+                path for path in artifacts.files_written
+                if not verify_write(path, workspace=workspace)
+            ]
+            if missing:
+                return VerificationResult(
+                    False,
+                    verification.name,
+                    f"写入校验失败（文件未创建或为空）: {missing[0]}",
+                    checks=[
+                        f"exists+nonempty: {path}"
+                        for path in artifacts.files_written
+                    ],
+                )
+            return VerificationResult(
+                True,
+                verification.name,
+                f"已确认 {len(artifacts.files_written)} 个写入目标",
+                checks=[
+                    f"exists+nonempty: {path}"
+                    for path in artifacts.files_written
+                ],
+            )
+        return verification.verify(artifacts, task=t, workspace=workspace)
 
 
 # 全局单例（与 plan_executor 同级，Execution Runtime 共享）

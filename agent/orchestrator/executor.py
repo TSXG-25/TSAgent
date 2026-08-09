@@ -105,7 +105,7 @@ class ExecutionStage:
                 exec_result = self._failed_result(plan, exc)
 
             if exec_result.success:
-                verification_error = self._verify_completion(task_obj)
+                verification_error = self._verify_completion(task_obj, ws_service)
                 if verification_error:
                     exec_result = replace(
                         exec_result,
@@ -158,18 +158,21 @@ class ExecutionStage:
         )
 
     @staticmethod
-    def _verify_completion(task: Task) -> str:
+    def _verify_completion(task: Task, workspace=None) -> str:
         """Verify file mutations before allowing a task to be reported done."""
         try:
             from pathlib import Path
-            from tools.filesystem import ROOT
+            if workspace is None:
+                workspace = get_legacy_workspace_service()
+
+            def resolve(value: str):
+                return workspace.resolve_path(value)
 
             if task.verb in (Verb.WRITE, Verb.MODIFY):
                 if task.target_type != "file" or not task.target.strip():
                     return ""
-                requested = Path(task.target)
-                full = (requested if requested.is_absolute() else ROOT / requested).resolve()
-                if not full.is_relative_to(ROOT.resolve()):
+                full = resolve(task.target)
+                if not full.is_relative_to(workspace.root.resolve()):
                     return f"FILE_WRITE_UNVERIFIED: 文件写入未验证：目标超出 workspace 范围: {task.target}"
                 if not full.exists() or not full.is_file():
                     return f"FILE_WRITE_UNVERIFIED: 文件写入未验证：文件不存在: {task.target}"
@@ -179,9 +182,8 @@ class ExecutionStage:
 
             inputs = task.inputs or {}
             if task.verb is Verb.DELETE:
-                requested = Path(task.target)
-                full = (requested if requested.is_absolute() else ROOT / requested).resolve()
-                if not full.is_relative_to(ROOT.resolve()):
+                full = resolve(task.target)
+                if not full.is_relative_to(workspace.root.resolve()):
                     return f"FILE_OPERATION_UNVERIFIED: 目标超出 workspace 范围: {task.target}"
                 if full.exists():
                     return f"FILE_OPERATION_UNVERIFIED: 删除目标仍存在: {task.target}"
@@ -190,19 +192,11 @@ class ExecutionStage:
             if task.verb in (Verb.COPY, Verb.MOVE):
                 source_value = str(inputs.get("source", ""))
                 destination_value = str(inputs.get("destination", task.target))
-                source_requested = Path(source_value)
-                destination_requested = Path(destination_value)
-                source = (
-                    source_requested if source_requested.is_absolute() else ROOT / source_requested
-                ).resolve()
-                destination = (
-                    destination_requested
-                    if destination_requested.is_absolute()
-                    else ROOT / destination_requested
-                ).resolve()
+                source = resolve(source_value)
+                destination = resolve(destination_value)
                 if (
-                    not source.is_relative_to(ROOT.resolve())
-                    or not destination.is_relative_to(ROOT.resolve())
+                    not source.is_relative_to(workspace.root.resolve())
+                    or not destination.is_relative_to(workspace.root.resolve())
                 ):
                     return "FILE_OPERATION_UNVERIFIED: 文件操作目标超出 workspace 范围"
                 if not destination.exists() or not destination.is_file():

@@ -1,6 +1,6 @@
 # agent/validators/min_length.py
 """MinLengthValidator — 验证文件内容长度满足最小要求。"""
-from pathlib import Path
+from .path_utils import resolve_deliverable_path
 
 
 class MinLengthValidator:
@@ -13,8 +13,10 @@ class MinLengthValidator:
         if not path:
             return True, "无路径需要验证"
         
-        from tools.filesystem import _resolve_path, ROOT
-        full = _resolve_path(path) if not Path(path).is_absolute() else Path(path)
+        try:
+            full = resolve_deliverable_path(task, deliverable, path)
+        except (OSError, ValueError, PermissionError) as exc:
+            return False, f"路径不属于当前 workspace: {exc}"
         
         if not full.exists():
             return False, f"文件不存在: {path}"

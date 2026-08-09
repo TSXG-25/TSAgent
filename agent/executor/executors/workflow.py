@@ -309,12 +309,30 @@ class WorkflowExecutor:
                     artifact_content = str(resolved_inputs["content"])
 
                 artifact_reference = str(resolved_inputs.get("path", ""))
+                storage_reference = artifact_reference
+                scoped_workspace = context.get_var("workspace")
+                if storage_reference and scoped_workspace is not None:
+                    try:
+                        storage_reference = scoped_workspace.artifact_reference(
+                            storage_reference
+                        )
+                    except (OSError, ValueError, PermissionError):
+                        # Non-file/external references remain opaque values.
+                        storage_reference = artifact_reference
                 if artifact_reference:
                     try:
-                        artifact_content = Path(artifact_reference).read_text(
-                            encoding="utf-8"
-                        )
-                    except (OSError, UnicodeError):
+                        if scoped_workspace is not None:
+                            artifact_content = scoped_workspace.read_text(
+                                artifact_reference
+                            )
+                        else:
+                            # Unscoped workflow callers retain the old
+                            # compatibility behavior; RunContext paths never
+                            # enter this branch.
+                            artifact_content = Path(artifact_reference).read_text(
+                                encoding="utf-8"
+                            )
+                    except (OSError, UnicodeError, ValueError, PermissionError):
                         # A non-file reference (for example an external URI)
                         # keeps the executor output as the logical artifact.
                         pass
@@ -326,11 +344,11 @@ class WorkflowExecutor:
                             id=f"{stage.id}-{idx}", type=out.type,
                             content=artifact_content,
                             summary=str(artifact_content)[:200],
-                            storage_uri=artifact_reference,
+                            storage_uri=storage_reference,
                             metadata={
                                 "output_name": out.type,
                                 "artifact_type": out.type,
-                                "reference": artifact_reference,
+                                "reference": storage_reference,
                                 "encoding": "utf-8",
                                 "producer_stage_id": stage.id,
                                 "producer_task_id": task.id,
@@ -349,7 +367,13 @@ class WorkflowExecutor:
                         if hasattr(validator_obj, 'validate'):
                             sol_art = context.get_artifact("solution_file")
                             sol_path = sol_art.content if sol_art else ""
-                            v, r = validator_obj.validate({}, {"path": sol_path})
+                            v, r = validator_obj.validate(
+                                {},
+                                {
+                                    "path": sol_path,
+                                    "_workspace": context.get_var("workspace"),
+                                },
+                            )
                             if not v:
                                 stage_checkpoint_success = False
                                 stage_error = f"[{stage.id}] {r}"

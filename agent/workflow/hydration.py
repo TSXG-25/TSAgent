@@ -54,12 +54,16 @@ def _hydrate_snapshot(
     if not bool(getattr(snapshot, "exists", True)):
         return "missing"
 
-    path = Path(reference)
-    if not path.is_file():
-        return "missing"
     encoding = metadata.get("encoding", "utf-8")
     try:
-        content = path.read_text(encoding=encoding)
+        scoped_workspace = context.get_var("workspace")
+        if scoped_workspace is not None:
+            content = scoped_workspace.read_text(reference)
+        else:
+            path = Path(reference)
+            if not path.is_file():
+                return "missing"
+            content = path.read_text(encoding=encoding)
     except (OSError, UnicodeError):
         return "missing"
 

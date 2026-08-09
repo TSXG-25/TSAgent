@@ -4,12 +4,16 @@ This is the ONLY way Planner/Executor/Tools should access Workspace.
 Service does NOT expose internal Workspace components.
 """
 from pathlib import Path
+import shutil
 from typing import Optional
 
 from agent.workspace import FileNode, PathMatch, WorkspaceContext
 from agent.workspace.manager import WorkspaceManager
 from agent.workspace.workspace import Workspace
 from agent.event_bus import EventBus
+from agent.security import is_internal_storage_path, is_sensitive_path, redact_sensitive_text
+
+from .workspace_resolver import WorkspaceBoundaryError, WorkspaceResolver
 
 
 class WorkspaceService:
@@ -91,6 +95,135 @@ class WorkspaceService:
     def current_workspace(self):
         """Get the current Workspace instance."""
         return self._ensure_workspace()
+
+    @property
+    def root(self) -> Path:
+        """The immutable root owned by this scoped service."""
+        return self._ensure_workspace().root
+
+    @property
+    def resolver(self) -> WorkspaceResolver:
+        """Return the exact path resolver for this workspace."""
+        return WorkspaceResolver(self.root)
+
+    def resolve_path(self, path: str | Path, *, must_exist: bool = False) -> Path:
+        """Resolve an exact path without fuzzy discovery or global fallback."""
+        return self.resolver.resolve(path, must_exist=must_exist)
+
+    def relative_path(self, path: str | Path) -> str:
+        return self.resolver.relative(path)
+
+    def artifact_reference(self, path: str | Path) -> str:
+        """Return the canonical, workspace-relative artifact reference."""
+        return self.relative_path(path)
+
+    @staticmethod
+    def _guard(path: str | Path, *, operation: str) -> None:
+        if is_internal_storage_path(path):
+            raise PermissionError(
+                f"PROTECTED_INTERNAL_PATH: forbidden to {operation} internal storage"
+            )
+        if is_sensitive_path(path):
+            raise PermissionError(
+                f"SENSITIVE_PATH_BLOCKED: forbidden to {operation} sensitive file"
+            )
+
+    def read_text(self, path: str | Path) -> str:
+        """Read a user text artifact from this Run's workspace only."""
+        self._guard(path, operation="read")
+        full = self.resolve_path(path, must_exist=True)
+        self._guard(full, operation="read")
+        if full.is_dir():
+            raise IsADirectoryError(str(path))
+        try:
+            text = full.read_text(encoding="utf-8")
+        except UnicodeDecodeError as exc:
+            raise ValueError(
+                f"cannot decode workspace file as text: {path}"
+            ) from exc
+        self.record_open(self.relative_path(full))
+        return redact_sensitive_text(text)
+
+    def write_text(
+        self,
+        path: str | Path,
+        content: str,
+        *,
+        mode: str = "overwrite",
+    ) -> str:
+        """Write a text artifact under this Run's workspace."""
+        self._guard(path, operation="write")
+        if Path(str(path)).suffix.lower() in {".docx", ".xlsx", ".xls", ".pptx"}:
+            raise ValueError(
+                "UNSUPPORTED_BINARY: Office binary files require a dedicated generator"
+            )
+        full = self.resolve_path(path)
+        self._guard(full, operation="write")
+        full.parent.mkdir(parents=True, exist_ok=True)
+        if mode == "append":
+            with full.open("a", encoding="utf-8") as handle:
+                handle.write(str(content))
+            message = f"已追加内容到 {path}"
+        else:
+            full.write_text(str(content), encoding="utf-8")
+            message = f"已写入 {path}"
+        self.record_edit(self.relative_path(full))
+        return message
+
+    def copy_file(self, source: str | Path, destination: str | Path) -> str:
+        self._guard(source, operation="copy")
+        self._guard(destination, operation="copy")
+        source_path = self.resolve_path(source, must_exist=True)
+        destination_path = self.resolve_path(destination)
+        self._guard(source_path, operation="copy")
+        self._guard(destination_path, operation="copy")
+        if source_path == destination_path:
+            raise ValueError("FILE_OPERATION_FAILED: copy source and destination match")
+        if not source_path.is_file():
+            raise FileNotFoundError(f"copy source is not a file: {source}")
+        destination_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source_path, destination_path)
+        self.record_edit(self.relative_path(destination_path))
+        return f"已复制 {source} 到 {destination}"
+
+    def move_file(self, source: str | Path, destination: str | Path) -> str:
+        self._guard(source, operation="move")
+        self._guard(destination, operation="move")
+        source_path = self.resolve_path(source, must_exist=True)
+        destination_path = self.resolve_path(destination)
+        self._guard(source_path, operation="move")
+        self._guard(destination_path, operation="move")
+        if source_path == destination_path:
+            raise ValueError("FILE_OPERATION_FAILED: move source and destination match")
+        if not source_path.is_file():
+            raise FileNotFoundError(f"move source is not a file: {source}")
+        destination_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(source_path), str(destination_path))
+        self.record_edit(self.relative_path(destination_path))
+        return f"已移动 {source} 到 {destination}"
+
+    def delete_file(self, path: str | Path) -> str:
+        self._guard(path, operation="delete")
+        full = self.resolve_path(path, must_exist=True)
+        self._guard(full, operation="delete")
+        if not full.is_file():
+            raise IsADirectoryError(str(path))
+        full.unlink()
+        self.record_edit(self.relative_path(full))
+        return f"已删除 {path}"
+
+    def list_directory(self, path: str | Path = ".") -> str:
+        self._guard(path, operation="list")
+        full = self.resolve_path(path, must_exist=True)
+        if not full.is_dir():
+            raise NotADirectoryError(str(path))
+        items = [
+            f"{entry.name}{'/' if entry.is_dir() else ''}"
+            for entry in full.iterdir()
+            if not is_sensitive_path(entry)
+        ]
+        display = self.relative_path(full)
+        return f"📁 {display}/ ({len(items)} 项)\n" + "\n".join(sorted(items))
 
     def current_context(self) -> WorkspaceContext:
         """Get full workspace context (opened files, edited files, etc.)."""

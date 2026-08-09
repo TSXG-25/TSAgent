@@ -21,8 +21,9 @@ class ServiceContextFactory:
         workspace_root: Path | None = None,
         writer_id: str | None = None,
     ) -> None:
+        self.workspace_root = workspace_root.resolve() if workspace_root else None
         self.application = ApplicationContext(
-            workspace_root=workspace_root,
+            workspace_root=self.workspace_root,
             runtime_store=store,
             runtime_writer_id=writer_id,
         )
@@ -68,6 +69,10 @@ class ServiceContextFactory:
             return existing
         return session.create_run(
             run_id,
+            # The Service boundary owns an explicit workspace root.  Passing
+            # it here is mandatory: omitting it silently routes the Runtime
+            # to the legacy process-global filesystem facade.
+            workspace=self.workspace_root,
             request_id=request.request_id,
             writer_id=self.writer_id,
         )

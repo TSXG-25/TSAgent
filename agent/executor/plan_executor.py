@@ -85,7 +85,16 @@ class PlanExecutor:
                         raise ValueError(
                             "EMPTY_WRITE_CONTENT: refusing to create an empty artifact"
                         )
-                    result = await self._exec_tool(tool_name, args)
+                    if workspace is None:
+                        # Preserve the unscoped legacy/test hook signature;
+                        # scoped Runtime calls always take the explicit path.
+                        result = await self._exec_tool(tool_name, args)
+                    else:
+                        result = await self._exec_tool(
+                            tool_name,
+                            args,
+                            workspace=workspace,
+                        )
 
                 # ── 收集世界状态痕迹（Verifier 的唯一输入，ADR-0012）──
                 # 写入是否真正生效由 ExecutionVerifier 在 Pipeline 末端判定，
@@ -297,7 +306,13 @@ class PlanExecutor:
         else:
             return {"path": spec}
 
-    async def _exec_tool(self, tool_name: str, args: Dict[str, Any]) -> Dict[str, Any]:
+    async def _exec_tool(
+        self,
+        tool_name: str,
+        args: Dict[str, Any],
+        *,
+        workspace: Optional[WorkspaceService] = None,
+    ) -> Dict[str, Any]:
         """通过 ToolRegistry 调用工具。
 
         特殊处理：
@@ -305,6 +320,13 @@ class PlanExecutor:
         - filesystem.*: 映射为 read_file/write_file 等注册名
         - 其他: 走 ToolRegistry
         """
+        # A scoped Runtime must never dispatch filesystem effects to the
+        # legacy registry functions, whose compatibility implementation uses
+        # a process-global project root.  Keep the registry path only for
+        # unscoped legacy callers.
+        if workspace is not None and tool_name.startswith("filesystem."):
+            return await self._exec_scoped_filesystem(tool_name, args, workspace)
+
         # ── 特殊处理：llm 未注册为工具 ──
         if tool_name == "llm":
             from agent.llm import llm as llm_engine
@@ -464,6 +486,43 @@ class PlanExecutor:
         if content.lstrip().startswith(("错误:", "错误：", "Error:", "ERROR:")):
             raise RuntimeError(content)
         return {"content": content}
+
+    @staticmethod
+    async def _exec_scoped_filesystem(
+        tool_name: str,
+        args: Dict[str, Any],
+        workspace: WorkspaceService,
+    ) -> Dict[str, Any]:
+        """Execute a filesystem primitive against the explicit Run root."""
+        operation = tool_name.split(".", 1)[1]
+
+        def invoke() -> str:
+            if operation == "read":
+                return workspace.read_text(str(args.get("path", "")))
+            if operation == "write":
+                return workspace.write_text(
+                    str(args.get("path", "")),
+                    str(args.get("content", "")),
+                    mode=str(args.get("mode", "overwrite")),
+                )
+            if operation == "copy":
+                return workspace.copy_file(
+                    str(args.get("source", "")),
+                    str(args.get("destination", "")),
+                )
+            if operation == "move":
+                return workspace.move_file(
+                    str(args.get("source", "")),
+                    str(args.get("destination", "")),
+                )
+            if operation == "delete":
+                return workspace.delete_file(str(args.get("path", "")))
+            if operation == "list":
+                return workspace.list_directory(str(args.get("path", ".")))
+            raise ValueError(f"UNKNOWN_TOOL: 未知 filesystem operation: {operation}")
+
+        content = await asyncio.to_thread(invoke)
+        return {"content": content, "text": content}
 
 
 # 全局单例

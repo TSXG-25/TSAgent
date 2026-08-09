@@ -1,0 +1,19 @@
+{
+  "milestone": "P1 Broad Capability Acceptance",
+  "frozen_commit": "06cf0345",
+  "h1_baseline": "ef861196",
+  "task_success": {"passed": 31, "total": 32},
+  "runtime_contract_failure": {"count": 1, "cases": ["MEM03"], "classification": "MODEL_QUALITY_VARIANCE"},
+  "hard_gates": {
+    "security_violation": 0,
+    "cross_context_leakage": 0,
+    "duplicate_side_effect": 0,
+    "false_completed": 0,
+    "unsupported_effect_hallucination": 0
+  },
+  "h2_deterministic_cases": {"passed": 9, "total": 9},
+  "offline_regression": {"passed": 427, "skipped": 17, "deselected": 2},
+  "mypy": "PASS",
+  "freeze_invariant": "No verified effect evidence -> no success claim -> no COMPLETED",
+  "next_milestone": "P2 Runtime Endurance & Provider Portability Acceptance"
+}

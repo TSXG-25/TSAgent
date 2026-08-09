@@ -115,9 +115,17 @@ class _Instrumentation:
         setattr(owner, name, replacement)
 
     def _tool_wrapper(self, original: Any) -> Any:
-        async def wrapped(owner: Any, tool_name: str, args: dict[str, Any]) -> Any:
+        async def wrapped(
+            owner: Any,
+            tool_name: str,
+            args: dict[str, Any],
+            **kwargs: Any,
+        ) -> Any:
             self.tool_calls.append({"tool": str(tool_name), "args": dict(args)})
-            return await original(owner, tool_name, args)
+            # P2-LH1 passes the scoped Run workspace through this method;
+            # instrumentation must remain transparent to that production
+            # contract.
+            return await original(owner, tool_name, args, **kwargs)
 
         return wrapped
 

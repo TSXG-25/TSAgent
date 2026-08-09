@@ -1,7 +1,5 @@
 # agent/validators/file_exists.py
 """FileExistsValidator — 验证文件存在且大小 > 0。"""
-from typing import Any
-
 from .path_utils import resolve_deliverable_path
 
 

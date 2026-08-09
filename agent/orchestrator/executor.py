@@ -161,7 +161,6 @@ class ExecutionStage:
     def _verify_completion(task: Task, workspace=None) -> str:
         """Verify file mutations before allowing a task to be reported done."""
         try:
-            from pathlib import Path
             if workspace is None:
                 workspace = get_legacy_workspace_service()
 

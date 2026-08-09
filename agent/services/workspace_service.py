@@ -13,7 +13,7 @@ from agent.workspace.workspace import Workspace
 from agent.event_bus import EventBus
 from agent.security import is_internal_storage_path, is_sensitive_path, redact_sensitive_text
 
-from .workspace_resolver import WorkspaceBoundaryError, WorkspaceResolver
+from .workspace_resolver import WorkspaceResolver
 
 
 class WorkspaceService:

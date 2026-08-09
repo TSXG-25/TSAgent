@@ -68,7 +68,11 @@ def build_report(
         "commit": commit,
         "attempts_per_case": attempts,
         "automatic_rerun": False,
-        "scope": "harness evidence/oracle/report pipeline; not real Runtime capability evidence",
+        "scope": (
+            "fixture evidence/oracle/report pipeline only"
+            if source == "fixture"
+            else "one real AgentService attempt; no automatic rerun"
+        ),
         "dataset": benchmark_metadata(cases),
         "dataset_hash": dataset_hash(cases),
         "summary": {

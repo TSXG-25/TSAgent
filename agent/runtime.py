@@ -502,6 +502,16 @@ class UniversalAgent:
             state["runtime_failure_code"] = runtime_failure_code
             rt_state = RuntimeState.FINISH
 
+        # ExecutionStage/Planner store deterministic terminal facts in the
+        # AgentState.  Carry them back to the launcher before applying the
+        # generic FAIL fallback; otherwise a deliberate BLOCKED/FAILED result
+        # is overwritten as REPLAN_EXHAUSTED.
+        runtime_terminal_status = runtime_terminal_status or str(
+            state.get("runtime_terminal_status", "") or ""
+        )
+        runtime_failure_code = runtime_failure_code or str(
+            state.get("runtime_failure_code", "") or ""
+        )
         if rt_state == RuntimeState.FAIL and not runtime_failure_code:
             runtime_terminal_status = "FAILED_TERMINAL"
             runtime_failure_code = "REPLAN_EXHAUSTED"

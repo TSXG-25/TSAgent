@@ -9,6 +9,7 @@ Changes:
 - Fully backward compatible (fallback to existing logic)
 """
 from pathlib import Path
+import shutil
 from typing import Optional
 
 from agent.registry.tool_registry import registry
@@ -30,9 +31,10 @@ _workspace_service = None
 
 def _ensure_workspace_path(path: Path, requested: str = "") -> Path:
     """所有文件工具统一限制在当前 workspace 根目录内。"""
+    workspace_root = ROOT.resolve()
     resolved = path.resolve()
     try:
-        resolved.relative_to(ROOT)
+        resolved.relative_to(workspace_root)
     except ValueError as exc:
         label = requested or str(path)
         raise PermissionError(f"路径超出 workspace 范围: {label}") from exc
@@ -204,6 +206,39 @@ def _resolve_path(path: str) -> Path:
     return full  # Return original path as fallback
 
 
+def _resolve_operation_path(path: str, *, exact: bool = False) -> Path:
+    """Resolve a mutation target without fuzzy redirection when requested.
+
+    Reads may use Workspace discovery.  Mutations must be able to prove which
+    path they touched, so File Ops callers pass ``exact=True`` and resolve
+    relative to the workspace root directly.
+    """
+    requested = Path(str(path).strip())
+    candidate = requested if requested.is_absolute() else ROOT / requested
+    return _ensure_workspace_path(
+        candidate if exact else _resolve_path(str(path)),
+        str(path),
+    )
+
+
+def _protect_operation_path(path: str, *, label: str) -> Optional[str]:
+    """Return a stable error for paths that are not user workspace files."""
+    if is_internal_storage_path(path):
+        return f"错误：PROTECTED_INTERNAL_PATH：禁止对内部存储执行 {label} 操作。"
+    if is_sensitive_path(path):
+        return f"错误：出于安全原因，禁止对敏感文件执行 {label} 操作。"
+    return None
+
+
+def _record_edit(path: Path) -> None:
+    ws = _get_workspace_service()
+    if ws is not None:
+        try:
+            ws.record_edit(str(path.relative_to(ROOT)))
+        except ValueError:
+            pass
+
+
 # ── Tool Implementations ──
 
 
@@ -365,6 +400,97 @@ def write_file(
     return result
 
 
+def copy_file(
+    source: str,
+    destination: str,
+    exact: bool = True,
+) -> str:
+    """Copy one workspace file to another workspace path.
+
+    This is the canonical ``filesystem.copy`` primitive.  It never falls back
+    to shell execution and never accepts paths outside the active workspace.
+    """
+    for value in (source, destination):
+        error = _protect_operation_path(value, label="复制")
+        if error:
+            return error
+    try:
+        source_path = _resolve_operation_path(source, exact=exact)
+        destination_path = _resolve_operation_path(destination, exact=True)
+    except PermissionError as exc:
+        return f"错误：{exc}"
+    if source_path == destination_path:
+        return "错误：FILE_OPERATION_FAILED：复制源和目标不能相同。"
+    if not source_path.exists() or not source_path.is_file():
+        return f"错误：FILE_OPERATION_FAILED：复制源文件不存在: {source}"
+    if is_internal_storage_path(source_path) or is_sensitive_path(source_path):
+        return "错误：PROTECTED_INTERNAL_PATH：禁止复制内部或敏感文件。"
+    if is_internal_storage_path(destination_path) or is_sensitive_path(destination_path):
+        return "错误：PROTECTED_INTERNAL_PATH：禁止写入内部或敏感文件。"
+    try:
+        destination_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source_path, destination_path)
+        _record_edit(destination_path)
+    except OSError as exc:
+        return f"错误：FILE_OPERATION_FAILED：复制失败: {exc}"
+    return f"已复制 {source} 到 {destination}"
+
+
+def move_file(
+    source: str,
+    destination: str,
+    exact: bool = True,
+) -> str:
+    """Move one workspace file to another workspace path."""
+    for value in (source, destination):
+        error = _protect_operation_path(value, label="移动")
+        if error:
+            return error
+    try:
+        source_path = _resolve_operation_path(source, exact=exact)
+        destination_path = _resolve_operation_path(destination, exact=True)
+    except PermissionError as exc:
+        return f"错误：{exc}"
+    if source_path == destination_path:
+        return "错误：FILE_OPERATION_FAILED：移动源和目标不能相同。"
+    if not source_path.exists() or not source_path.is_file():
+        return f"错误：FILE_OPERATION_FAILED：移动源文件不存在: {source}"
+    if is_internal_storage_path(source_path) or is_sensitive_path(source_path):
+        return "错误：PROTECTED_INTERNAL_PATH：禁止移动内部或敏感文件。"
+    if is_internal_storage_path(destination_path) or is_sensitive_path(destination_path):
+        return "错误：PROTECTED_INTERNAL_PATH：禁止写入内部或敏感文件。"
+    try:
+        destination_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(source_path), str(destination_path))
+        _record_edit(destination_path)
+    except OSError as exc:
+        return f"错误：FILE_OPERATION_FAILED：移动失败: {exc}"
+    return f"已移动 {source} 到 {destination}"
+
+
+def delete_file(path: str, exact: bool = True) -> str:
+    """Delete one regular workspace file and verify the target is absent."""
+    error = _protect_operation_path(path, label="删除")
+    if error:
+        return error
+    try:
+        full = _resolve_operation_path(path, exact=exact)
+    except PermissionError as exc:
+        return f"错误：{exc}"
+    if is_internal_storage_path(full) or is_sensitive_path(full):
+        return "错误：PROTECTED_INTERNAL_PATH：禁止删除内部或敏感文件。"
+    if not full.exists():
+        return f"错误：FILE_OPERATION_FAILED：文件不存在: {path}"
+    if not full.is_file():
+        return f"错误：FILE_OPERATION_FAILED：只允许删除文件，不能删除目录: {path}"
+    try:
+        full.unlink()
+        _record_edit(full)
+    except OSError as exc:
+        return f"错误：FILE_OPERATION_FAILED：删除失败: {exc}"
+    return f"已删除 {path}"
+
+
 def list_directory(path: str = ".") -> str:
     """List directory contents.
 
@@ -459,6 +585,9 @@ def clear_path_cache() -> str:
 
 registry.register(read_file, category="filesystem", tags=["filesystem", "read"])
 registry.register(write_file, category="filesystem", tags=["filesystem", "write"])
+registry.register(copy_file, category="filesystem", tags=["filesystem", "copy"])
+registry.register(move_file, category="filesystem", tags=["filesystem", "move"])
+registry.register(delete_file, category="filesystem", tags=["filesystem", "delete"])
 registry.register(list_directory, category="filesystem", tags=["filesystem", "list"])
 registry.register(set_working_directory, category="filesystem", tags=["filesystem", "navigate"])
 registry.register(find_file, category="filesystem", tags=["filesystem", "search"])

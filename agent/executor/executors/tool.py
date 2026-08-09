@@ -56,6 +56,7 @@ class ToolExecutor:
         # ── Verifier 阶段（ADR-0012）：success 只能由 ExecutionVerifier 产生 ──
         artifacts = ExecutionArtifacts(
             files_written=list(result.get("_files_written", []) or []),
+            file_operations=list(result.get("_file_operations", []) or []),
         )
         verification = execution_verifier.verify(plan, artifacts, task=target)
         if not verification.success:

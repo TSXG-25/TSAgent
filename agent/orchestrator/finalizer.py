@@ -128,6 +128,11 @@ class Finalizer:
                 "当前无法访问可用的外部检索来源，因此不能可靠回答这项近期市场研究；"
                 "本次未生成无来源的股票或热点推荐。"
             )
+        if "UNSUPPORTED_CAPABILITY" in joined:
+            return (
+                "当前未注册所需的能力，任务已阻止；没有执行未授权的外部操作，"
+                "也没有伪造成功结果。"
+            )
         return f"任务未完成，未确认目标文件已成功写入：{failures[-1][:240]}"
 
     @staticmethod

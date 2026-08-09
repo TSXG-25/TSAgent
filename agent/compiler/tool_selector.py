@@ -247,6 +247,47 @@ class Compiler:
                     ),
                 ],
             )
+        if "copy_file" in allowed and value("source") is not None and value("destination") is not None:
+            return ExecutionPlan(
+                task=task,
+                steps=[
+                    ExecutionStep(
+                        tool="filesystem.copy",
+                        args={
+                            "source": str(value("source")),
+                            "destination": str(value("destination")),
+                            "exact": True,
+                        },
+                        outputs=["result"],
+                    ),
+                ],
+            )
+        if "move_file" in allowed and value("source") is not None and value("destination") is not None:
+            return ExecutionPlan(
+                task=task,
+                steps=[
+                    ExecutionStep(
+                        tool="filesystem.move",
+                        args={
+                            "source": str(value("source")),
+                            "destination": str(value("destination")),
+                            "exact": True,
+                        },
+                        outputs=["result"],
+                    ),
+                ],
+            )
+        if "delete_file" in allowed and value("path") is not None:
+            return ExecutionPlan(
+                task=task,
+                steps=[
+                    ExecutionStep(
+                        tool="filesystem.delete",
+                        args={"path": str(value("path")), "exact": True},
+                        outputs=["result"],
+                    ),
+                ],
+            )
         return None
 
     def _fallback(self, task: Task, **services) -> ExecutionPlan:
@@ -290,6 +331,7 @@ class Compiler:
         "filesystem.list": "list_directory",
         "filesystem.delete": "delete_file",
         "filesystem.move": "move_file",
+        "filesystem.copy": "copy_file",
     }
 
     def _static_check(self, plan: ExecutionPlan, context: Optional[CompilerContext] = None) -> None:

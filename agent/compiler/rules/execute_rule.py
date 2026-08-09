@@ -15,6 +15,16 @@ class ExecuteRule(Rule):
 
     def build(self, task: Task, **services) -> ExecutionPlan:
         target = task.target
+        verification_code = str((task.inputs or {}).get("verification_code", "")).strip()
+        if verification_code:
+            return ExecutionPlan(
+                task=task,
+                steps=[ExecutionStep(
+                    tool="run_python",
+                    args={"code": verification_code},
+                    outputs=["output"],
+                )],
+            )
         # Python files use the registered, argument-safe runner rather than a
         # shell command assembled from a model-produced path.
         if target.endswith(".py"):

@@ -9,6 +9,7 @@ from agent.compiler.rules.modify_rule import ModifyRule
 from agent.compiler.rules.explain_rule import ExplainRule
 from agent.compiler.rules.search_rule import SearchRule
 from agent.compiler.rules.list_rule import ListRule
+from agent.compiler.rules.file_operation_rule import FileOperationRule
 from agent.compiler.rules.execute_rule import ExecuteRule
 
 DEFAULT_RULES = [
@@ -19,5 +20,6 @@ DEFAULT_RULES = [
     ExplainRule(),
     SearchRule(),
     ListRule(),
+    FileOperationRule(),
     ExecuteRule(),
 ]

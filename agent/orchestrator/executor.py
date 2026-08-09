@@ -131,6 +131,8 @@ class ExecutionStage:
 
         # 检查结果
         failed = [t for t in (state.get("plan") or []) if t.get("status") == "failed"]
+        if state.get("runtime_terminal_status") in {"BLOCKED", "FAILED_TERMINAL"}:
+            return state, "FAIL"
         if not failed:
             return state, "NEXT_TASK"
         return state, "RECOVER"
@@ -153,24 +155,63 @@ class ExecutionStage:
     @staticmethod
     def _verify_completion(task: Task) -> str:
         """Verify file mutations before allowing a task to be reported done."""
-        if task.verb not in (Verb.WRITE, Verb.MODIFY):
-            return ""
-        if task.target_type != "file" or not task.target.strip():
-            return ""
-
         try:
-            from tools.filesystem import ROOT, _resolve_path
+            from pathlib import Path
+            from tools.filesystem import ROOT
 
-            full = _resolve_path(task.target)
-            if not full.is_relative_to(ROOT):
-                return f"文件写入未验证：目标超出 workspace 范围: {task.target}"
-            if not full.exists() or not full.is_file():
-                return f"文件写入未验证：文件不存在: {task.target}"
-            if full.stat().st_size == 0:
-                return f"文件写入未验证：文件为空: {task.target}"
+            if task.verb in (Verb.WRITE, Verb.MODIFY):
+                if task.target_type != "file" or not task.target.strip():
+                    return ""
+                requested = Path(task.target)
+                full = (requested if requested.is_absolute() else ROOT / requested).resolve()
+                if not full.is_relative_to(ROOT.resolve()):
+                    return f"FILE_WRITE_UNVERIFIED: 文件写入未验证：目标超出 workspace 范围: {task.target}"
+                if not full.exists() or not full.is_file():
+                    return f"FILE_WRITE_UNVERIFIED: 文件写入未验证：文件不存在: {task.target}"
+                if full.stat().st_size == 0:
+                    return f"FILE_WRITE_UNVERIFIED: 文件写入未验证：文件为空: {task.target}"
+                return ""
+
+            inputs = task.inputs or {}
+            if task.verb is Verb.DELETE:
+                requested = Path(task.target)
+                full = (requested if requested.is_absolute() else ROOT / requested).resolve()
+                if not full.is_relative_to(ROOT.resolve()):
+                    return f"FILE_OPERATION_UNVERIFIED: 目标超出 workspace 范围: {task.target}"
+                if full.exists():
+                    return f"FILE_OPERATION_UNVERIFIED: 删除目标仍存在: {task.target}"
+                return ""
+
+            if task.verb in (Verb.COPY, Verb.MOVE):
+                source_value = str(inputs.get("source", ""))
+                destination_value = str(inputs.get("destination", task.target))
+                source_requested = Path(source_value)
+                destination_requested = Path(destination_value)
+                source = (
+                    source_requested if source_requested.is_absolute() else ROOT / source_requested
+                ).resolve()
+                destination = (
+                    destination_requested
+                    if destination_requested.is_absolute()
+                    else ROOT / destination_requested
+                ).resolve()
+                if (
+                    not source.is_relative_to(ROOT.resolve())
+                    or not destination.is_relative_to(ROOT.resolve())
+                ):
+                    return "FILE_OPERATION_UNVERIFIED: 文件操作目标超出 workspace 范围"
+                if not destination.exists() or not destination.is_file():
+                    return f"FILE_OPERATION_UNVERIFIED: 目标文件不存在: {destination_value}"
+                if task.verb is Verb.COPY:
+                    if not source.exists() or source.read_bytes() != destination.read_bytes():
+                        return "FILE_OPERATION_UNVERIFIED: 复制后源/目标内容不一致"
+                elif source.exists():
+                    return f"FILE_OPERATION_UNVERIFIED: 移动源文件仍存在: {source_value}"
+                return ""
+
+            return ""
         except Exception as exc:
-            return f"文件写入未验证: {task.target} ({exc})"
-        return ""
+            return f"FILE_OPERATION_UNVERIFIED: {task.target} ({exc})"
 
     @staticmethod
     def _apply_result(task_dict: dict, plan: ExecutionPlan, result) -> None:

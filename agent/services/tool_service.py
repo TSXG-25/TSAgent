@@ -62,6 +62,16 @@ class ToolService:
                     score += 8
                 if name == "run_python_file":
                     score += 5
+
+            if any(w in goal_lower for w in ["复制", "拷贝", "copy"]):
+                if name == "copy_file":
+                    score += 12
+            if any(w in goal_lower for w in ["移动", "move"]):
+                if name == "move_file":
+                    score += 12
+            if any(w in goal_lower for w in ["删除", "移除", "delete"]):
+                if name == "delete_file":
+                    score += 12
             
             # 代码类任务 → 优先 python 工具
             if any(w in goal_lower for w in ["代码", "执行", "运行", "编程", "code", "run", "execute", "python"]):

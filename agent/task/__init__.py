@@ -37,6 +37,7 @@ class Verb(Enum):
     LIST = "list"             # knowledge or filesystem.list()
     DELETE = "delete"         # filesystem.delete()
     MOVE = "move"             # filesystem.move()
+    COPY = "copy"             # filesystem.copy()
     EXECUTE = "execute"       # shell.execute()
 
 

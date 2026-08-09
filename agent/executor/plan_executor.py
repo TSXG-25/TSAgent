@@ -9,6 +9,7 @@
 Workflow ToolExecutor 消费的是 Stage，不是 ExecutionPlan。
 """
 import asyncio
+import ast
 import json
 import logging
 import os
@@ -59,11 +60,13 @@ class PlanExecutor:
                 "_error_code": "UNKNOWN_TOOL",
                 "_failed_tool": "plan_validation",
                 "_files_written": [],
+                "_file_operations": [],
             }
 
         variables: Dict[str, Any] = {}
         last_output = ""
         files_written: list = []
+        file_operations: list[dict[str, str]] = []
 
         for step_idx, step in enumerate(plan.steps):
             tool_name = step.tool
@@ -73,6 +76,8 @@ class PlanExecutor:
                 if tool_name == "workspace":
                     result = await self._exec_workspace(step, args, workspace, variables)
                 else:
+                    if tool_name == "filesystem.write":
+                        args = self._prepare_write_args(args)
                     if (
                         tool_name == "filesystem.write"
                         and not str(args.get("content", "")).strip()
@@ -87,6 +92,17 @@ class PlanExecutor:
                 # Tool 的返回字符串不代表成功。
                 if tool_name == "filesystem.write":
                     files_written.append(str(args.get("path", "")))
+                elif tool_name in {
+                    "filesystem.copy",
+                    "filesystem.move",
+                    "filesystem.delete",
+                }:
+                    file_operations.append({
+                        "operation": tool_name.split(".", 1)[1],
+                        "path": str(args.get("path", "")),
+                        "source": str(args.get("source", "")),
+                        "destination": str(args.get("destination", "")),
+                    })
 
                 # 处理结果
                 for out_key in step.outputs:
@@ -115,6 +131,7 @@ class PlanExecutor:
                     "_failed_step": step_idx,
                     "_failed_tool": tool_name,
                     "_files_written": files_written,
+                    "_file_operations": file_operations,
                     **variables,
                 }
 
@@ -122,6 +139,7 @@ class PlanExecutor:
             "_last_output": last_output,
             "_error": "",
             "_files_written": files_written,
+            "_file_operations": file_operations,
             **variables,
         }
 
@@ -138,6 +156,82 @@ class PlanExecutor:
         return result
 
     @staticmethod
+    def _prepare_write_args(args: Dict[str, Any]) -> Dict[str, Any]:
+        """Apply internal write guards and strip non-tool metadata."""
+        prepared = dict(args)
+        original = prepared.pop("preserve_original", None)
+        instruction = str(prepared.pop("preserve_instruction", ""))
+        if original is not None:
+            PlanExecutor._validate_code_preservation(
+                str(original),
+                str(prepared.get("content", "")),
+                instruction,
+            )
+        return prepared
+
+    @staticmethod
+    def _validate_code_preservation(
+        original: str,
+        updated: str,
+        instruction: str,
+    ) -> None:
+        """Reject an edit that changes an unrequested top-level function.
+
+        ModifyRule still uses a single full-file LLM edit, but this deterministic
+        guard prevents that implementation detail from becoming an
+        unrequested rewrite.  It is intentionally AST-based so formatting
+        changes do not look like semantic collateral damage.
+        """
+        if not original.lstrip().startswith(("def ", "async def ", "import ", "from ")):
+            # Non-Python text files retain the legacy append/edit behavior.
+            return
+        try:
+            original_tree = ast.parse(original)
+            updated_tree = ast.parse(updated)
+        except SyntaxError as exc:
+            raise ValueError(
+                f"PRESERVATION_VIOLATION: 修改结果不是有效 Python: {exc.msg}"
+            ) from exc
+
+        def functions(tree: ast.Module) -> Dict[str, ast.AST]:
+            return {
+                node.name: node
+                for node in tree.body
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            }
+
+        before = functions(original_tree)
+        requested = set(
+            re.findall(r"([A-Za-z_]\w*)\s*(?:函数|方法)", instruction)
+        )
+        requested.update(
+            re.findall(
+                r"(?:给|修改|修复|新增|增加|添加|改成|改为)\s+([A-Za-z_]\w*)",
+                instruction,
+            )
+        )
+        # Some Chinese constructions put the symbol after punctuation (for
+        # example ``：给 f 增加``), so use the original AST as a bounded
+        # vocabulary rather than relying only on word-boundary regexes.
+        requested.update(
+            name for name in before if name and name in instruction
+        )
+        if not requested:
+            return
+
+        after = functions(updated_tree)
+        for name, node in before.items():
+            if name in requested:
+                continue
+            replacement = after.get(name)
+            if replacement is None or ast.dump(node, include_attributes=False) != ast.dump(
+                replacement, include_attributes=False
+            ):
+                raise ValueError(
+                    f"PRESERVATION_VIOLATION: 未请求的函数被修改: {name}"
+                )
+
+    @staticmethod
     def _validate_tools(plan: ExecutionPlan) -> None:
         """Reject unknown tool steps before any earlier step can create effects."""
         builtin = {
@@ -147,6 +241,7 @@ class PlanExecutor:
             "llm",
             "text.merge_unique",
             "text.materialize_research",
+            "text.transform_upper",
         }
         filesystem = {
             "filesystem.read": "read_file",
@@ -154,6 +249,7 @@ class PlanExecutor:
             "filesystem.list": "list_directory",
             "filesystem.delete": "delete_file",
             "filesystem.move": "move_file",
+            "filesystem.copy": "copy_file",
         }
         for step in plan.steps:
             if step.tool in builtin:
@@ -179,7 +275,7 @@ class PlanExecutor:
         # A write target is an exact destination, not a fuzzy discovery
         # query. Resolving a non-existent path through Workspace can select a
         # similarly named existing file and redirect the side effect.
-        if str(args.get("operation", "")) == "write":
+        if str(args.get("operation", "")) in {"write", "source"}:
             return {"path": spec}
 
         # A trailing slash and the project root are explicit directory
@@ -222,6 +318,8 @@ class PlanExecutor:
                 prompt = prompt or (
                     "你是一个代码编辑助手。根据目标、修改要求与文件原文，"
                     "输出修改后的完整文件内容（不要任何解释、不要 markdown 代码块）。"
+                    "除非用户明确要求重写，否则必须保留所有未请求的函数、导入和代码区域，"
+                    "只修改目标符号或目标行为。"
                 )
                 user = f"目标: {args.get('target', '')}\n"
                 if args.get("instruction"):
@@ -242,7 +340,7 @@ class PlanExecutor:
                 timeout=float(args.get("timeout", LLM_STEP_TIMEOUT)),
             )
             content = response.content if hasattr(response, 'content') else str(response)
-            if args.get("verb") in {"write", "generate", "create"}:
+            if args.get("verb") in {"write", "generate", "create", "edit"}:
                 content = re.sub(r"^```[^\n]*\n", "", content.strip())
                 content = re.sub(r"\n?```\s*$", "", content)
             return {"content": content, "text": content}
@@ -265,6 +363,13 @@ class PlanExecutor:
                 "duplicate_count": len(lines) - len(unique_lines),
                 "input_line_count": len(lines),
                 "unique_line_count": len(unique_lines),
+            }
+
+        if tool_name == "text.transform_upper":
+            source = str(args.get("content", ""))
+            return {
+                "content": source.upper(),
+                "text": source.upper(),
             }
 
         if tool_name == "text.materialize_research":
@@ -320,6 +425,7 @@ class PlanExecutor:
                 "list": "list_directory",
                 "delete": "delete_file",
                 "move": "move_file",
+                "copy": "copy_file",
             }
             actual_name = name_map.get(actual_name, actual_name)
 

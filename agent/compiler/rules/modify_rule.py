@@ -30,6 +30,20 @@ class ModifyRule(Rule):
                     },
                     outputs=["new_content"],
                 ),
-                ExecutionStep(tool="filesystem.write", args={"path": "$path", "content": "$new_content"}, outputs=["result"]),
+                ExecutionStep(
+                    tool="filesystem.write",
+                    args={
+                        "path": "$path",
+                        "content": "$new_content",
+                        "exact": True,
+                        # Internal verifier metadata.  PlanExecutor removes
+                        # these keys before invoking write_file.
+                        "preserve_original": "$content",
+                        "preserve_instruction": (
+                            f"{task.goal}\n{task.description}"
+                        ),
+                    },
+                    outputs=["result"],
+                ),
             ],
         )

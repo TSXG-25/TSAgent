@@ -128,6 +128,9 @@ def register_default_capabilities():
     # 文件操作
     registry.register_capability("file_read", "read_file", priority=10)
     registry.register_capability("file_write", "write_file", priority=10)
+    registry.register_capability("file_copy", "copy_file", priority=10)
+    registry.register_capability("file_move", "move_file", priority=10)
+    registry.register_capability("file_delete", "delete_file", priority=10)
     registry.register_capability("file_list", "list_directory", priority=10)
     registry.register_capability("file_patch", "patch", priority=10)
     

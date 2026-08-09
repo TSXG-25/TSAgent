@@ -212,7 +212,10 @@ class ContextService:
             lines.append("  · 文件系统（read_file, write_file, list_directory）")
         
         lines.append("  ✓ Python 运行环境（run_python, run_python_file）")
-        lines.append("  ✓ 文件系统（read_file, write_file, list_directory）")
+        lines.append(
+            "  ✓ 文件系统（read_file, write_file, copy_file, move_file, "
+            "delete_file, list_directory）"
+        )
         
         # Check if web tools are available and should be restricted
         try:
@@ -387,6 +390,9 @@ class ContextService:
         schemas = {
             "read_file": "path (string, 必填) — 文件路径，如 'output/solution.py'",
             "write_file": "path (string, 必填), content (string, 必填), mode (string, 可选, 默认overwrite)",
+            "copy_file": "source (string, 必填), destination (string, 必填), exact (bool, 可选)",
+            "move_file": "source (string, 必填), destination (string, 必填), exact (bool, 可选)",
+            "delete_file": "path (string, 必填), exact (bool, 可选)",
             "list_directory": "path (string, 可选, 默认'.') — 目录路径，如 'output'",
             "set_working_directory": "path (string, 必填) — 切换工作目录，如 'output'、'src'、'.'",
             "find_file": "name (string, 必填) — 按文件名搜索，如 'solution.py'、'question.docx'",

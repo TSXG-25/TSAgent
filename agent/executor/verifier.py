@@ -27,6 +27,9 @@ class ExecutionArtifacts:
     commands: List[str] = field(default_factory=list)
     stdout: str = ""
     stderr: str = ""
+    # Deterministic filesystem mutations other than write.  Each entry is a
+    # JSON-shaped record so the verifier never trusts a tool's prose result.
+    file_operations: List[Dict[str, str]] = field(default_factory=list)
 
 
 @dataclass
@@ -112,14 +115,96 @@ class WriteVerification(BaseVerification):
             checks=[f"exists+nonempty: {p}" for p in artifacts.files_written])
 
 
-class DeleteVerification(BaseVerification):
-    """Delete 成功 = 声明的目标已不存在（预留，v2.1A 后启用）。"""
-    name = "delete"
+def _workspace_path(value: str):
+    """Resolve a verifier path exactly under the active project workspace."""
+    from pathlib import Path
+    from tools.filesystem import ROOT
+
+    candidate = Path(str(value))
+    resolved = (candidate if candidate.is_absolute() else ROOT / candidate).resolve()
+    try:
+        resolved.relative_to(ROOT.resolve())
+    except ValueError as exc:
+        raise ValueError(f"目标超出 workspace 范围: {value}") from exc
+    return resolved
+
+
+class FileOperationVerification(BaseVerification):
+    """Verify copy/move/delete from observed filesystem state."""
 
     def verify(self, artifacts: ExecutionArtifacts,
                task: Optional[Any] = None) -> VerificationResult:
-        # 待 ExecutionArtifacts 增加 files_deleted 后接入 verify_absent
-        return VerificationResult(True, self.name, "delete 验证未启用（预留）")
+        operations = [
+            operation for operation in artifacts.file_operations
+            if operation.get("operation") == self.name
+        ]
+        if not operations:
+            return VerificationResult(
+                False,
+                self.name,
+                f"{self.name} 步骤没有可验证的副作用记录",
+            )
+
+        try:
+            for operation in operations:
+                if self.name == "delete":
+                    target = _workspace_path(operation.get("path", ""))
+                    if target.exists():
+                        return VerificationResult(
+                            False,
+                            self.name,
+                            f"删除校验失败：目标仍然存在: {target}",
+                        )
+                    continue
+
+                source = _workspace_path(operation.get("source", ""))
+                destination = _workspace_path(operation.get("destination", ""))
+                if not destination.exists() or not destination.is_file():
+                    return VerificationResult(
+                        False,
+                        self.name,
+                        f"{self.name} 校验失败：目标不存在或不是文件: {destination}",
+                    )
+                if self.name == "copy":
+                    if not source.exists() or not source.is_file():
+                        return VerificationResult(
+                            False,
+                            self.name,
+                            f"复制校验失败：源文件不存在: {source}",
+                        )
+                    if source.read_bytes() != destination.read_bytes():
+                        return VerificationResult(
+                            False,
+                            self.name,
+                            "复制校验失败：源文件与目标内容不一致",
+                        )
+                elif source.exists():
+                    return VerificationResult(
+                        False,
+                        self.name,
+                        f"移动校验失败：源文件仍然存在: {source}",
+                    )
+        except (OSError, ValueError) as exc:
+            return VerificationResult(False, self.name, f"{self.name} 校验异常: {exc}")
+
+        return VerificationResult(
+            True,
+            self.name,
+            f"已确认 {len(operations)} 个 {self.name} 操作",
+        )
+
+
+class DeleteVerification(FileOperationVerification):
+    """Delete 成功 = 目标已从 workspace 中消失。"""
+    name = "delete"
+
+
+class CopyVerification(FileOperationVerification):
+    name = "copy"
+
+
+class MoveVerification(FileOperationVerification):
+    name = "move"
 
 
 class ExecutionVerifier:
@@ -135,6 +220,8 @@ class ExecutionVerifier:
         self._registry: Dict[str, BaseVerification] = {}
         self.register(WriteVerification())
         self.register(DeleteVerification())
+        self.register(CopyVerification())
+        self.register(MoveVerification())
 
     def register(self, verification: BaseVerification) -> None:
         self._registry[verification.name] = verification
@@ -153,7 +240,7 @@ class ExecutionVerifier:
         """
         t = task or getattr(plan, "task", None)
         verb = getattr(t, "verb", None)
-        vname = getattr(verb, "value", verb)  # Verb enum → str
+        vname = str(getattr(verb, "value", verb) or "")  # Verb enum → str
         verification = self._registry.get(vname)
         if verification is None:
             # 非受管 verb（read/explain/search…）不强制验证，默认 success

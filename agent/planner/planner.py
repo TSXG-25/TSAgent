@@ -61,7 +61,7 @@ class PlannerPromptBuilder:
 PLANNER_PROMPT = """你是一个目标分解专家。将用户请求分解为子任务列表。
 
 每个子任务必须包含：
-- verb: 动词（枚举值）: read, write, modify, execute, search, list, explain, delete, move, resolve
+- verb: 动词（枚举值）: read, write, modify, execute, search, list, explain, delete, move, copy, resolve
 - target: 操作对象
 - target_type: 目标类型（枚举值）: file(文件路径) / symbol(符号名) / text(自由文本) / none
 - goal: 简短的描述

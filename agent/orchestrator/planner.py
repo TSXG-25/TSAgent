@@ -334,6 +334,26 @@ def _extract_literal_file_write(user_input: str) -> Optional[tuple[str, str]]:
     return target, content
 
 
+def _extract_literal_file_append(user_input: str) -> Optional[tuple[str, str]]:
+    """Extract a complete one-line append request without an LLM round-trip."""
+    value = str(user_input or "").strip()
+    paths = _extract_explicit_output_paths(value)
+    if len(paths) != 1 or not re.search(r"追加|附加|append", value, re.IGNORECASE):
+        return None
+    match = re.search(
+        r"(?:追加|附加)(?:一行|一条)?\s*(?:内容为|内容是|[:：])?\s*([A-Za-z0-9][\w ._-]*)",
+        value,
+    )
+    if match is None:
+        match = re.search(r"append\s+([A-Za-z0-9][\w ._-]*)", value, re.IGNORECASE)
+    if match is None:
+        return None
+    content = match.group(1).strip().rstrip("。；;，,")
+    if not content:
+        return None
+    return paths[0], content
+
+
 def _build_text_merge_execution(
     user_input: str,
 ) -> Optional[tuple[Task, ExecutionPlan]]:
@@ -448,6 +468,182 @@ def _build_code_run_tasks(user_input: str) -> Optional[list[Task]]:
         "children": [],
     })
     return [write_task, execute_task]
+
+
+def _build_file_operation_task(user_input: str) -> Optional[Task]:
+    """Extract an explicit copy/move/delete request into one canonical Task."""
+    value = str(user_input or "")
+    paths = _extract_explicit_output_paths(value)
+    if re.search(r"(?:复制|拷贝|copy)", value, re.IGNORECASE) and len(paths) >= 2:
+        return Task.from_dict({
+            "id": "task-1",
+            "verb": Verb.COPY.value,
+            "target": paths[1],
+            "target_type": "file",
+            "goal": f"复制 {paths[0]} 到 {paths[1]}",
+            "description": value,
+            "success_condition": f"{paths[1]} 存在且与源文件内容一致",
+            "inputs": {"source": paths[0], "destination": paths[1]},
+        })
+    if re.search(r"(?:移动|move)", value, re.IGNORECASE) and len(paths) >= 2:
+        return Task.from_dict({
+            "id": "task-1",
+            "verb": Verb.MOVE.value,
+            "target": paths[1],
+            "target_type": "file",
+            "goal": f"移动 {paths[0]} 到 {paths[1]}",
+            "description": value,
+            "success_condition": f"{paths[0]} 不存在且 {paths[1]} 存在",
+            "inputs": {"source": paths[0], "destination": paths[1]},
+        })
+    if re.search(r"(?:删除|移除|delete)", value, re.IGNORECASE) and paths:
+        return Task.from_dict({
+            "id": "task-1",
+            "verb": Verb.DELETE.value,
+            "target": paths[0],
+            "target_type": "file",
+            "goal": f"删除 {paths[0]}",
+            "description": value,
+            "success_condition": f"{paths[0]} 不存在",
+        })
+    return None
+
+
+def _build_text_transform_execution(
+    user_input: str,
+) -> Optional[tuple[Task, ExecutionPlan]]:
+    """Build a deterministic read → transform → write chain for text files."""
+    value = str(user_input or "")
+    if not re.search(r"每行.*(?:大写|转成大写|转换为大写)|(?:转成|转换为)大写", value):
+        return None
+    paths = [
+        path for path in _extract_explicit_output_paths(value)
+        if path.casefold().endswith((".txt", ".csv", ".md"))
+    ]
+    if len(paths) < 2:
+        return None
+    source, target = paths[0], paths[-1]
+    if source.casefold() == target.casefold():
+        return None
+    task = Task.from_dict({
+        "id": "task-1",
+        "verb": Verb.WRITE.value,
+        "target": target,
+        "target_type": "file",
+        "goal": f"读取 {source}，逐行转成大写并写入 {target}",
+        "description": value,
+        "success_condition": f"{target} 存在、非空且内容为大写",
+        "inputs": {"operation": "uppercase_lines", "source": source},
+    })
+    steps = [
+        ExecutionStep(
+            tool="workspace",
+            args={"spec": source, "operation": "source"},
+            outputs=["source_path"],
+        ),
+        ExecutionStep(
+            tool="filesystem.read",
+            args={"path": "$source_path"},
+            outputs=["source_content"],
+        ),
+        ExecutionStep(
+            tool="text.transform_upper",
+            args={"content": "$source_content"},
+            outputs=["content"],
+        ),
+        ExecutionStep(
+            tool="workspace",
+            args={"spec": target, "operation": "write"},
+            outputs=["output_path"],
+        ),
+        ExecutionStep(
+            tool="filesystem.write",
+            args={
+                "path": "$output_path",
+                "content": "$content",
+                "mode": "overwrite",
+                "exact": True,
+            },
+            outputs=["result"],
+        ),
+    ]
+    return task, ExecutionPlan(task=task, steps=steps)
+
+
+def _build_modify_execution_tasks(user_input: str) -> Optional[list[Task]]:
+    """Build a stable modify→optional-verify chain for explicit Python edits."""
+    value = str(user_input or "")
+    if not re.search(r"修复|修改|新增|增加|改成|改为|添加", value):
+        return None
+    paths = [
+        path for path in _extract_explicit_output_paths(value)
+        if path.casefold().endswith(".py")
+    ]
+    if not paths:
+        return None
+    target = paths[0]
+    modify = Task.from_dict({
+        "id": "task-1",
+        "verb": Verb.MODIFY.value,
+        "target": target,
+        "target_type": "file",
+        "goal": value,
+        "description": (
+            "只修改用户明确要求的符号或行为；保留未请求的函数、导入和代码区域。"
+            f"\n原始请求：{value}"
+        ),
+        "success_condition": f"{target} 已按请求修改且未破坏未请求代码",
+        "inputs": {"requested_scope": value},
+    })
+    if not re.search(r"运行|测试|验证", value):
+        return [modify]
+    verification_target = paths[1] if len(paths) >= 2 else target
+    verification_inputs: dict[str, str] = {}
+    if (
+        len(paths) == 1
+        and re.search(r"一行\s*(?:Python|代码)|大写.*感叹号", value, re.IGNORECASE)
+    ):
+        symbol_match = re.search(
+            r"([A-Za-z_]\w*)\s*(?:函数|方法)",
+            value,
+        )
+        if symbol_match:
+            module = target[:-3].replace("/", ".").replace("\\", ".")
+            symbol = symbol_match.group(1)
+            verification_inputs["verification_code"] = (
+                f"from {module} import {symbol}; "
+                f"assert {symbol}('hi') == 'HI!'; print('PASS')"
+            )
+    execute = Task.from_dict({
+        "id": "task-2",
+        "verb": Verb.EXECUTE.value,
+        "target": verification_target,
+        "target_type": "file",
+        "goal": f"运行 {verification_target} 验证刚才的修改",
+        "description": value,
+        "success_condition": "验证命令成功完成",
+        "dependencies": ["task-1"],
+        "inputs": verification_inputs,
+    })
+    return [modify, execute]
+
+
+def _explicit_unsupported_capability(user_input: str) -> Optional[str]:
+    """Return an explicitly requested but unregistered capability/tool."""
+    value = str(user_input or "")
+    match = re.search(
+        r"(?:使用|调用|用)\s+([A-Za-z][A-Za-z0-9_-]*)\s*工具",
+        value,
+        re.IGNORECASE,
+    )
+    if match:
+        name = match.group(1)
+        if _tool_registry.get(name) is None:
+            return name
+    if re.search(r"(?:发送|发)\s*邮件|send[_ -]?email", value, re.IGNORECASE):
+        if not any("email" in name.lower() for name in _tool_registry.get_all()):
+            return "email"
+    return None
 
 
 class PlannerStage:
@@ -597,6 +793,28 @@ class PlannerStage:
         # 更新跨轮对话状态（State = Cache：timeline 写入；last_* 为 Deprecated 双写）
         self._orch._context_builder.update_conversation_state(intent, resolution=resolved)
 
+        unsupported_capability = _explicit_unsupported_capability(user_input)
+        if unsupported_capability:
+            message = (
+                f"当前未注册或不支持 `{unsupported_capability}` 能力，"
+                "因此不会伪造执行，也不会继续重规划。"
+            )
+            state["plan"] = [{
+                "id": "task-1",
+                "verb": Verb.EXECUTE.value,
+                "target": unsupported_capability,
+                "target_type": "symbol",
+                "goal": f"调用 {unsupported_capability}",
+                "description": user_input,
+                "status": "failed",
+                "error": f"UNSUPPORTED_CAPABILITY: 未注册能力 {unsupported_capability}",
+                "error_code": "UNSUPPORTED_CAPABILITY",
+                "observations": [],
+            }]
+            state["runtime_failure_code"] = "UNSUPPORTED_CAPABILITY"
+            state["runtime_terminal_status"] = "BLOCKED"
+            return state, "FINISH", message
+
         # 记录跨会话解析事实（Memory Facts，v1.2C；不依赖 ResolutionResult 内部）
         try:
             if resolved and resolved.target:
@@ -711,6 +929,51 @@ class PlannerStage:
             self._print_plan(list(state.get("plan") or []))
             return state, "EXECUTE", None
 
+        file_operation_task = _build_file_operation_task(user_input)
+        if file_operation_task and getattr(intent, "requires_execution", False):
+            state["plan"] = [file_operation_task.to_dict()]
+            state["execution_plans"] = [
+                self._orch._selector.compile(
+                    file_operation_task,
+                    context=CompilerContext(registry=_tool_registry),
+                )
+            ]
+            state["current_task_index"] = 0
+            self._print_plan(list(state.get("plan") or []))
+            return state, "EXECUTE", None
+
+        transform_execution = _build_text_transform_execution(user_input)
+        if transform_execution and getattr(intent, "requires_execution", False):
+            task_obj, execution_plan = transform_execution
+            state["plan"] = [task_obj.to_dict()]
+            state["execution_plans"] = [execution_plan]
+            state["current_task_index"] = 0
+            self._print_plan(list(state.get("plan") or []))
+            return state, "EXECUTE", None
+
+        literal_append = _extract_literal_file_append(user_input)
+        if literal_append and getattr(intent, "requires_execution", False):
+            target, content = literal_append
+            task_obj = Task.from_dict({
+                "id": "task-1",
+                "verb": Verb.WRITE.value,
+                "target": target,
+                "target_type": "file",
+                "goal": f"向 {target} 追加一行",
+                "description": "内容由用户明确提供，不需要再次生成。",
+                "success_condition": f"{target} 保留已有内容且只追加本次内容一次",
+                "inputs": {"content": f"{content}\n", "mode": "append"},
+            })
+            compiled = self._orch._selector.compile(
+                task_obj,
+                context=CompilerContext(registry=_tool_registry),
+            )
+            state["plan"] = [task_obj.to_dict()]
+            state["execution_plans"] = [compiled]
+            state["current_task_index"] = 0
+            self._print_plan(list(state.get("plan") or []))
+            return state, "EXECUTE", None
+
         merge_execution = _build_text_merge_execution(user_input)
         if merge_execution and getattr(intent, "requires_execution", False):
             task_obj, execution_plan = merge_execution
@@ -729,6 +992,20 @@ class PlannerStage:
                     context=CompilerContext(registry=_tool_registry),
                 )
                 for task in code_run_tasks
+            ]
+            state["current_task_index"] = 0
+            self._print_plan(list(state.get("plan") or []))
+            return state, "EXECUTE", None
+
+        modify_tasks = _build_modify_execution_tasks(user_input)
+        if modify_tasks and getattr(intent, "requires_execution", False):
+            state["plan"] = [task.to_dict() for task in modify_tasks]
+            state["execution_plans"] = [
+                self._orch._selector.compile(
+                    task,
+                    context=CompilerContext(registry=_tool_registry),
+                )
+                for task in modify_tasks
             ]
             state["current_task_index"] = 0
             self._print_plan(list(state.get("plan") or []))
@@ -894,7 +1171,7 @@ class PlannerStage:
                     planner_input = (
                         f"你上一次输出的计划不合法，需要修正后重新输出。\n"
                         f"错误：{last_error}\n"
-                        f"规则：verb 必须是 read/write/modify/execute/search/list/explain/delete/move/resolve；\n"
+                        f"规则：verb 必须是 read/write/modify/execute/search/list/explain/delete/move/copy/resolve；\n"
                         f"target_type=file 时 target 必须是具体文件路径（禁止中文描述）；\n"
                         f"示例：{{\"verb\": \"read\", \"target\": \"output/solution.py\", \"target_type\": \"file\"}}\n\n"
                         f"原始需求：{user_input}"
@@ -1045,7 +1322,7 @@ class PlannerStage:
         t_replan = time.perf_counter()
         failed_info = [
             f"- {t['id']}: {t.get('goal', '?')} (错误: {t.get('error', '?')})"
-            for t in state.get("plan", [])
+            for t in current_plan
             if t.get("status") == "failed"
         ]
         replan_input = (
@@ -1065,12 +1342,12 @@ class PlannerStage:
 
 
         preserved_facts = {}
-        for t in state.get("plan", []):
+        for t in current_plan:
             if t.get("status") == "succeeded":
                 preserved_facts.update(t.get("facts", {}))
 
         old_unfinished = [
-            t for t in state.get("plan", [])
+            t for t in current_plan
             if t.get("status") in ("pending", "running")
         ]
         for t in new_plan:
@@ -1089,10 +1366,14 @@ class PlannerStage:
             )
             execution_plans.append(ep)
 
-        state["execution_plans"] = execution_plans + state.get("execution_plans", [])[len(old_unfinished):]
+        previous_execution_plans = state.get("execution_plans") or []
+        state["execution_plans"] = execution_plans + previous_execution_plans[len(old_unfinished):]
         state["plan"] = old_unfinished + new_plan
         state["current_task_index"] = 0
-        print(f"  🔄 重新规划，共 {len(state['plan'])} 个任务（保留 {len(preserved_facts)} 个 Facts）")
+        print(
+            f"  🔄 重新规划，共 {len(old_unfinished + new_plan)} 个任务"
+            f"（保留 {len(preserved_facts)} 个 Facts）"
+        )
         self._orch._timings["replan_llm"] = round(time.perf_counter() - t_replan, 3)
         return state, "EXECUTE"
 

@@ -111,6 +111,7 @@ class RunTraceEvidence:
     orphan_active_run: bool = False
     subscriber_leak: bool = False
     sqlite_deadlock_or_busy_failure: bool = False
+    provider_errors: tuple[str, ...] = ()
     performance: PerformanceEvidence = PerformanceEvidence()
 
     def __post_init__(self) -> None:
@@ -119,6 +120,7 @@ class RunTraceEvidence:
         object.__setattr__(self, "completed_task_ids", _string_tuple(self.completed_task_ids))
         object.__setattr__(self, "required_artifact_ids", _string_tuple(self.required_artifact_ids))
         object.__setattr__(self, "task_failures", _string_tuple(self.task_failures))
+        object.__setattr__(self, "provider_errors", _string_tuple(self.provider_errors))
         object.__setattr__(self, "task_execution_counts", _string_int_map(self.task_execution_counts))
         object.__setattr__(self, "artifacts", tuple(self.artifacts))
         if not isinstance(self.performance, PerformanceEvidence):
@@ -152,6 +154,7 @@ class RunTraceEvidence:
             "orphan_active_run": self.orphan_active_run,
             "subscriber_leak": self.subscriber_leak,
             "sqlite_deadlock_or_busy_failure": self.sqlite_deadlock_or_busy_failure,
+            "provider_errors": list(self.provider_errors),
             "performance": self.performance.to_dict(),
         }
 
@@ -194,6 +197,7 @@ class RunTraceEvidence:
             orphan_active_run=bool(value.get("orphan_active_run", False)),
             subscriber_leak=bool(value.get("subscriber_leak", False)),
             sqlite_deadlock_or_busy_failure=bool(value.get("sqlite_deadlock_or_busy_failure", False)),
+            provider_errors=_string_tuple(value.get("provider_errors")),
             performance=performance,
         )
 

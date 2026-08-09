@@ -1,0 +1,32 @@
+{
+  "suite": "P2-L Long-horizon discovery",
+  "commit": "5f36b1f7",
+  "dataset_hash": "9f33d2ee400651a2980cf876d054aef93fc86a50dd4791ffbceff2558df934f6",
+  "provider": "primary",
+  "attempts_per_case": 1,
+  "automatic_rerun": false,
+  "raw_attempts": {
+    "L01": "/private/tmp/p2_l_real_round1_l01_fixed.json",
+    "L02-L05": "/private/tmp/p2_l_real_round1.json"
+  },
+  "summary": {
+    "total": 5,
+    "capability_pass": 0,
+    "runtime_correctness_pass": 0,
+    "false_completed_cases": 3,
+    "cross_context_leakage_cases": 5,
+    "missing_required_artifact_cases": 5,
+    "duplicate_side_effects": 0,
+    "provider_error_telemetry": "added after these attempts; raw logs observed structured-output/connection/timeout errors but no per-case count is asserted here"
+  },
+  "cases": [
+    {"case_id": "L01", "terminal_status": "FAILED_TERMINAL", "capability": "FAIL", "runtime_correctness": "FAIL", "false_completed": false, "missing_required_artifacts": 1, "cross_context_leakage": true},
+    {"case_id": "L02", "terminal_status": "COMPLETED", "capability": "FAIL", "runtime_correctness": "FAIL", "false_completed": true, "missing_required_artifacts": 2, "cross_context_leakage": true},
+    {"case_id": "L03", "terminal_status": "FAILED_TERMINAL", "capability": "FAIL", "runtime_correctness": "FAIL", "false_completed": false, "missing_required_artifacts": 1, "cross_context_leakage": true},
+    {"case_id": "L04", "terminal_status": "COMPLETED", "capability": "FAIL", "runtime_correctness": "FAIL", "false_completed": true, "missing_required_artifacts": 3, "cross_context_leakage": true},
+    {"case_id": "L05", "terminal_status": "COMPLETED", "capability": "FAIL", "runtime_correctness": "FAIL", "false_completed": true, "missing_required_artifacts": 2, "cross_context_leakage": true}
+  ],
+  "classification": "RUNTIME_CONTEXT_BOUNDARY_FAILURE",
+  "p2_l_accepted": false,
+  "p2_r_blocked": true
+}

@@ -80,6 +80,7 @@ def build_report(
             "capability_pass": capability_pass,
             "runtime_correctness_pass": runtime_pass,
             "runtime_correctness_rate": (runtime_pass / len(results) if results else 0.0),
+            "provider_error_count": sum(len(result.trace.provider_errors) for result in results),
         },
         "results": [result.to_dict() for result in results],
     }

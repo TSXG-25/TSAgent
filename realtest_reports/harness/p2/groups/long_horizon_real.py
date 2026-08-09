@@ -88,6 +88,7 @@ class _Instrumentation:
         self.tool_calls: list[dict[str, Any]] = []
         self.llm_calls = 0
         self.provider_ms = 0.0
+        self.provider_errors: list[str] = []
         self.plan_calls = 0
         self.execution_stage_calls = 0
         self.task_counts: dict[str, int] = {}
@@ -126,6 +127,9 @@ class _Instrumentation:
             started = time.perf_counter()
             try:
                 return await original(messages, *args, **kwargs)
+            except Exception as error:
+                self.provider_errors.append(type(error).__name__)
+                raise
             finally:
                 self.provider_ms += (time.perf_counter() - started) * 1000
 
@@ -308,6 +312,7 @@ async def run_real_case(case_id: str, *, snapshot: Path | None = None, timeout: 
                 if isinstance(item, dict)
             ),
             cross_context_leakage=leaked_to_process_root,
+            provider_errors=tuple(instrumentation.provider_errors),
             performance=PerformanceEvidence(
                 wall_ms=(time.perf_counter() - started) * 1000,
                 provider_ms=instrumentation.provider_ms,

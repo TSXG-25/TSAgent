@@ -77,3 +77,17 @@ def test_verified_artifact_is_not_missing() -> None:
 
     assert invariants.missing_required_artifacts == 0
     assert not invariants.false_completed
+
+
+def test_provider_errors_are_preserved_as_stable_case_evidence() -> None:
+    trace = RunTraceEvidence.from_dict(
+        {
+            "case_id": "L-provider",
+            "run_id": "run-provider",
+            "provider": "primary",
+            "provider_errors": ["TimeoutError", "ConnectionError"],
+        }
+    )
+
+    assert trace.provider_errors == ("TimeoutError", "ConnectionError")
+    assert "provider_errors" in trace.to_dict()

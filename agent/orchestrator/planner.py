@@ -25,7 +25,7 @@ Phase C.1：从 orchestrator.py 的 plan() / replan() / _print_plan() 迁移。
 import re
 import time
 from datetime import datetime
-from typing import Dict, Optional, Tuple
+from typing import Any, Dict, Mapping, Optional, Tuple
 from langchain_core.messages import SystemMessage, HumanMessage
 
 from agent.state import AgentState
@@ -43,6 +43,142 @@ from agent.registry.capability_registry import registry as _capability_registry
 from agent.cognition.intent_schema import DOMAIN_CHAT, DOMAIN_DEVELOPMENT, DOMAIN_MEMORY
 from agent.execution_errors import classify_execution_error, is_non_retriable
 from agent.cognition.research_policy import research_query, research_timeliness
+
+
+_REPLAN_EFFECT_VERBS = frozenset(
+    {
+        Verb.WRITE.value,
+        Verb.MODIFY.value,
+        Verb.DELETE.value,
+        Verb.MOVE.value,
+        Verb.COPY.value,
+        Verb.EXECUTE.value,
+    }
+)
+
+
+def _normalized_effect_value(value: Any) -> str:
+    return str(value or "").strip().replace("\\", "/").casefold()
+
+
+def _task_effect_signature(task: Mapping[str, Any]) -> tuple[str, ...] | None:
+    """Return a content-free identity for a potentially effectful Task."""
+
+    raw_verb = task.get("verb", "")
+    verb = (
+        raw_verb.value
+        if isinstance(raw_verb, Verb)
+        else str(raw_verb or "").strip().lower()
+    )
+    if verb not in _REPLAN_EFFECT_VERBS:
+        return None
+    raw_inputs = task.get("inputs") or {}
+    inputs = raw_inputs if isinstance(raw_inputs, Mapping) else {}
+    if verb in {Verb.COPY.value, Verb.MOVE.value}:
+        source = _normalized_effect_value(
+            inputs.get("source", inputs.get("src", ""))
+        )
+        destination = _normalized_effect_value(
+            inputs.get(
+                "destination",
+                inputs.get("dst", task.get("target", "")),
+            )
+        )
+        return (verb, source, destination) if source or destination else None
+    if verb == Verb.EXECUTE.value:
+        command = _normalized_effect_value(
+            task.get("target")
+            or inputs.get("command")
+            or inputs.get("script")
+            or inputs.get("spec")
+        )
+        return (verb, command) if command else None
+    target = _normalized_effect_value(
+        task.get("target") or inputs.get("path")
+    )
+    return (verb, target) if target else None
+
+
+def _reconcile_replan_tasks(
+    current_plan: list[dict[str, Any]],
+    proposed_plan: list[dict[str, Any]],
+    *,
+    replan_attempt: int,
+) -> tuple[list[dict[str, Any]], tuple[str, ...]]:
+    """Remove already verified effects and mint collision-free replacement IDs."""
+
+    succeeded = [
+        task for task in current_plan if task.get("status") == "succeeded"
+    ]
+    succeeded_ids = {
+        str(task.get("id", "")).strip() for task in succeeded
+    }
+    current_ids = {
+        str(task.get("id", "")).strip()
+        for task in current_plan
+        if str(task.get("id", "")).strip()
+    }
+    unfinished_ids = {
+        str(task.get("id", "")).strip()
+        for task in current_plan
+        if task.get("status") in {"pending", "running"}
+        and str(task.get("id", "")).strip()
+    }
+    seen_effects = {
+        signature
+        for task in succeeded
+        if (signature := _task_effect_signature(task)) is not None
+    }
+    used_ids = set(current_ids)
+    kept: list[tuple[str, dict[str, Any]]] = []
+    id_map: dict[str, str] = {}
+    skipped_ids: set[str] = set()
+
+    for index, original in enumerate(proposed_plan, 1):
+        task = dict(original)
+        original_id = str(task.get("id", "") or f"task-{index}").strip()
+        signature = _task_effect_signature(task)
+        if signature is not None and signature in seen_effects:
+            skipped_ids.add(original_id)
+            continue
+        if signature is not None:
+            seen_effects.add(signature)
+
+        candidate = f"replan-{replan_attempt}-{index}"
+        suffix = 1
+        while candidate in used_ids:
+            suffix += 1
+            candidate = f"replan-{replan_attempt}-{index}-{suffix}"
+        used_ids.add(candidate)
+        id_map.setdefault(original_id, candidate)
+        task["id"] = candidate
+        kept.append((original_id, task))
+
+    for _original_id, task in kept:
+        dependencies = task.get("dependencies") or []
+        remapped: list[str] = []
+        for dependency in dependencies:
+            dependency_id = str(dependency).strip()
+            if not dependency_id:
+                continue
+            if dependency_id in id_map:
+                resolved = id_map[dependency_id]
+            elif dependency_id in skipped_ids or dependency_id in succeeded_ids:
+                # The dependency is already satisfied by a verified effect.
+                continue
+            elif dependency_id in unfinished_ids:
+                resolved = dependency_id
+            elif dependency_id in current_ids:
+                # Failed/retired Tasks are replaced by this new plan and must
+                # not remain as dangling dependency IDs.
+                continue
+            else:
+                resolved = dependency_id
+            if resolved != task["id"] and resolved not in remapped:
+                remapped.append(resolved)
+        task["dependencies"] = remapped
+
+    return [task for _original_id, task in kept], tuple(sorted(skipped_ids))
 
 
 def _render_runtime_continuation(state: AgentState) -> str:
@@ -1362,9 +1498,24 @@ class PlannerStage:
             for t in current_plan
             if t.get("status") == "failed"
         ]
+        completed_info = [
+            (
+                f"- {t.get('id', '?')}: verb={t.get('verb', '?')} "
+                f"target={t.get('target', '')} goal={t.get('goal', '?')}"
+            )
+            for t in current_plan
+            if t.get("status") == "succeeded"
+        ]
         replan_input = (
             f"原始需求: {user_input}\n\n以下任务执行失败，需要重新规划：\n"
             + "\n".join(failed_info)
+            + (
+                "\n\n以下任务已经成功并通过执行验证，不得重复其写入、修改、"
+                "删除、移动、复制或命令副作用：\n"
+                + "\n".join(completed_info)
+                if completed_info
+                else ""
+            )
         )
         new_plan = (await plan_with_metadata(replan_input, "", "", "", None)).tasks
         new_plan = _ensure_explicit_output_write_task(new_plan, user_input)
@@ -1377,6 +1528,15 @@ class PlannerStage:
                 if _t.get("verb") == "write":
                     _t.setdefault("inputs", {})["mode"] = "append"
 
+        new_plan, skipped_verified_effects = _reconcile_replan_tasks(
+            current_plan,
+            new_plan,
+            replan_attempt=self._orch.replan_count,
+        )
+        if skipped_verified_effects:
+            state["replan_skipped_verified_effects"] = int(
+                state.get("replan_skipped_verified_effects", 0) or 0
+            ) + len(skipped_verified_effects)
 
         preserved_facts = {}
         for t in current_plan:
@@ -1387,6 +1547,15 @@ class PlannerStage:
             t for t in current_plan
             if t.get("status") in ("pending", "running")
         ]
+        if not old_unfinished and not new_plan:
+            state["runtime_failure_code"] = "REPLAN_NO_EXECUTABLE_TASKS"
+            state["runtime_terminal_status"] = "FAILED_TERMINAL"
+            self._orch._timings["replan_llm"] = round(
+                time.perf_counter() - t_replan,
+                3,
+            )
+            print("❌ 重规划未产生新的安全可执行任务")
+            return state, "FAIL"
         for t in new_plan:
             t.setdefault("facts", {})
             t["facts"].update(preserved_facts)
@@ -1403,13 +1572,21 @@ class PlannerStage:
             )
             execution_plans.append(ep)
 
-        previous_execution_plans = state.get("execution_plans") or []
-        state["execution_plans"] = execution_plans + previous_execution_plans[len(old_unfinished):]
+        previous_execution_plans = list(state.get("execution_plans") or [])
+        preserved_execution_plans = [
+            previous_execution_plans[index]
+            if index < len(previous_execution_plans)
+            else None
+            for index, task in enumerate(current_plan)
+            if task.get("status") in ("pending", "running")
+        ]
+        state["execution_plans"] = preserved_execution_plans + execution_plans
         state["plan"] = old_unfinished + new_plan
         state["current_task_index"] = 0
         print(
             f"  🔄 重新规划，共 {len(old_unfinished + new_plan)} 个任务"
-            f"（保留 {len(preserved_facts)} 个 Facts）"
+            f"（保留 {len(preserved_facts)} 个 Facts，"
+            f"跳过 {len(skipped_verified_effects)} 个已验证副作用）"
         )
         self._orch._timings["replan_llm"] = round(time.perf_counter() - t_replan, 3)
         return state, "EXECUTE"

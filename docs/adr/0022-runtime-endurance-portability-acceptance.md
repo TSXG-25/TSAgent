@@ -1,7 +1,8 @@
 # ADR-0022: Runtime Endurance & Provider Portability Acceptance（P2）
 
-- 状态: Accepted — Contract Frozen; P2-LH1 / P2-S1 / P2-R1 Runtime Verified
+- 状态: Accepted — Contract Frozen; P2-L/R/S + Primary Provider Verified; Secondary Provider Deferred
 - 日期: 2026-08-09
+- 最后更新: 2026-08-10
 - 关联: ADR-0016（Run Checkpoint）、ADR-0018（Run-Level Resume）、ADR-0019（Context Ownership）、ADR-0020（Durable Store）、ADR-0021（AgentService/Event Stream）
 - Dataset: `benchmarks/p2/`
 - Contract version: `adr-0022-v1`
@@ -316,4 +317,86 @@ DEFERRED`；不得将 fixture 的 6/6 表述为 Provider Capability 通过。
 
 ```text
 realtest_reports/results/p2_p_fixture.json
+```
+
+## 十三、真实 L/P 证据与当前统一状态
+
+固定 L01–L05 在 commit `697ce06d` 的首次真实 discovery 暴露了两个评测缺陷和一个
+Runtime 缺陷：
+
+```text
+P2-P report aggregation:
+python -m 产生两份 AttemptStatus Enum，identity 比较导致 summary/pair 误报
+
+P2-L oracle:
+安全 FAILED/BLOCKED 时缺少 required artifact 被错误计为 Runtime FAIL
+
+P2-L L05 Runtime:
+重规划复用了 task-1/task-2/task-3，并重复已验证工作
+```
+
+原始 discovery 均永久保留，没有通过重复调用筛选幸运结果。修复分别收敛为：
+
+```text
+428fc2f3  P2-PH1: fix portability report aggregation
+ceea8d7b  P2-LH2: correct long-horizon scoring and evidence isolation
+68480d91  P2-LH3: preserve verified effects across replan
+0cc498d5  P2-LH3b: archive post-fix long-horizon evidence
+```
+
+P2-L post-fix 只运行一次固定 L01–L05：
+
+```text
+Capability Outcome:       3/5 PASS
+Runtime Correctness:      5/5 PASS
+Provider Error cases:     2
+False COMPLETED:          0
+Duplicate Side Effect:    0
+Completed Task re-run:    0
+Workspace leakage:        0
+Terminal mismatch:        0
+```
+
+L01/L03 因 Provider 错误安全进入 `FAILED_TERMINAL`，因此 Capability FAIL、Runtime
+PASS。L05 在 post-fix 中完成，重规划任务使用新的 `replan-*` ID，已完成 Task 与副作用
+均未重复。
+
+真实 P01–P03 使用固定 primary Provider 各执行一次；secondary 缺少独立配置，在调用前
+判为 `DEFERRED`，没有启动子进程：
+
+```text
+Primary Capability:       3/3 PASS
+Primary Runtime:          3/3 PASS
+Secondary attempts:       3 DEFERRED
+Fallback count:           0
+Pair Runtime verdict:     DEFERRED
+```
+
+P2-P 原报告的 attempt 数据正确，仅聚合结果错误；`P2-PH1` 从原 attempt 重建报告，
+没有再次调用 Provider。
+
+永久证据：
+
+```text
+realtest_reports/results/p2_l_real_discovery_697ce06d.json
+realtest_reports/results/p2_l_real_rescored_697ce06d.json
+realtest_reports/results/p2_l_real_postfix_68480d91.json
+realtest_reports/results/p2_p_primary_discovery_697ce06d.json
+realtest_reports/results/p2_p_primary_corrected_697ce06d.json
+```
+
+当前统一结论：P2-L、P2-R、P2-S 和 primary P2-P 的所有适用 Runtime 硬门禁均为零；
+P2 尚不标记最终双 Provider closeout，唯一剩余外部证据是使用同一 manifest/hash 的
+secondary P01–P03。它保持 `DEFERRED`，不得写成 FAIL、PASS 或由 primary fallback
+替代。
+
+本轮门禁：
+
+```text
+Offline pytest (excluding external tool module): 466 passed, 17 skipped
+Offline tool tests (web excluded):                17 passed, 3 deselected
+P2 Dataset / Oracle:                              16/16 PASS
+Architecture Verification:                        PASS
+Contract Verification:                            PASS
+mypy (changed modules):                            PASS
 ```

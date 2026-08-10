@@ -43,6 +43,10 @@ from agent.compiler.context import CompilerContext
 from agent.compiler.rules import DEFAULT_RULES
 from agent.executor.contract import executor_factory
 from agent.registry.tool_registry import registry as _tool_registry
+from agent.interruption import (
+    CancellationSafetyClass,
+    SafeCancellationBoundary,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -175,6 +179,12 @@ class WorkflowExecutor:
         print(f"{'='*50}\n")
 
         for idx, stage in enumerate(sorted_stages):
+            cancellation_view = context.get_var("cancellation_view")
+            if cancellation_view is not None:
+                cancellation_view.raise_if_requested(
+                    SafeCancellationBoundary.BEFORE_WORKFLOW_ACTIVATION,
+                    CancellationSafetyClass.BOUNDARY_ONLY,
+                )
             stage_num = idx + 1
             print(f"  [{stage_num}/{total}] {stage.id} — {stage.description or stage.execution.executor.value}")
 

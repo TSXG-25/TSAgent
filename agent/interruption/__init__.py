@@ -32,6 +32,11 @@ from .store import (
     DurableInterruptionRecord,
     InterruptionFailurePoint,
 )
+from .view import (
+    CancellationView,
+    InterruptionObservation,
+    RunInterruptionRequested,
+)
 
 __all__ = [
     "ALLOWED_PHASE_TRANSITIONS",
@@ -40,10 +45,12 @@ __all__ = [
     "CancellationCoordinator",
     "CancellationSafetyClass",
     "CancellationStore",
+    "CancellationView",
     "CancelRunRequest",
     "InterruptionAction",
     "InterruptionFailurePoint",
     "InterruptionIntent",
+    "InterruptionObservation",
     "InterruptionPhase",
     "InterruptionPolicy",
     "InterruptionProjection",
@@ -53,6 +60,7 @@ __all__ = [
     "DurableInterruptionRecord",
     "InvalidInterruptionTransition",
     "SafeCancellationBoundary",
+    "RunInterruptionRequested",
     "allowed_phase_transition",
     "can_observe_interruption",
     "interruption_policy",

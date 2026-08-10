@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable
 
 from agent.runtime import UniversalAgent
+from agent.interruption import CancellationCoordinator
 
 from .contracts import ResumeRunRequest, StartRunRequest
 
@@ -105,6 +106,8 @@ class RuntimeExecutionLauncher:
             raise
         else:
             try:
+                if self._converge_interruption(run_context, runtime):
+                    return
                 run_status, event_type, failure_code = self._terminal_outcome(runtime)
                 event_id = (
                     f"run-completed:{run_context.run_id}:{request.request_id}"
@@ -132,6 +135,33 @@ class RuntimeExecutionLauncher:
                 )
             finally:
                 self._close_runtime(runtime)
+
+    @staticmethod
+    def _converge_interruption(run_context: Any, runtime: Any) -> bool:
+        """Finalize a durable intent only after Runtime reached a safe boundary."""
+
+        durable_view = run_context.durable_store_view
+        cancellation_view = getattr(run_context, "cancellation_view", None)
+        if durable_view is None or cancellation_view is None:
+            return False
+        record = cancellation_view.current()
+        if record is None:
+            return False
+        evidence = getattr(runtime, "last_run_evidence", None) or {}
+        if not bool(evidence.get("interruption_requested", False)):
+            # Close the race between Runtime's last safe-point check and the
+            # Service terminal transition.  A durable intent always wins over
+            # a stale successful coroutine return.
+            evidence["interruption_requested"] = True
+        CancellationCoordinator(durable_view.store).mark_safe_to_interrupt(
+            tenant_id=run_context.tenant_id,
+            session_id=run_context.session_id,
+            run_id=run_context.run_id,
+            request_id=record.intent.request_id,
+            writer_id=durable_view.writer_id,
+            fence_token=durable_view.fence_epoch,
+        )
+        return True
 
     @staticmethod
     def _terminal_outcome(runtime: Any) -> tuple[str, str, str]:

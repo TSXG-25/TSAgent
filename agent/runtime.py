@@ -28,6 +28,12 @@ from agent.runtime_context import (
     RunContext,
     SessionContext,
 )
+from agent.interruption import (
+    CancellationSafetyClass,
+    InterruptionReason,
+    RunInterruptionRequested,
+    SafeCancellationBoundary,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -403,7 +409,46 @@ class UniversalAgent:
     async def run(self, user_input: str) -> str:
         """Run one message inside the attached logical RunContext."""
         self._ensure_run_subscription()
-        return await self._run_in_context(user_input)
+        try:
+            self._interruption_boundary(SafeCancellationBoundary.BEFORE_PLANNER)
+            return await self._run_in_context(user_input)
+        except RunInterruptionRequested as interruption:
+            return self._interrupted_result(interruption)
+
+    def _interruption_boundary(
+        self,
+        boundary: SafeCancellationBoundary,
+        safety_class: CancellationSafetyClass = CancellationSafetyClass.BOUNDARY_ONLY,
+    ) -> None:
+        run_context = self._run_context
+        if run_context is None or run_context.cancellation_view is None:
+            return
+        run_context.cancellation_view.raise_if_requested(boundary, safety_class)
+
+    def _interrupted_result(self, signal: RunInterruptionRequested) -> str:
+        """Publish process-local evidence; Launcher owns durable convergence."""
+
+        intent = signal.observation.record.intent
+        timed_out = intent.reason is InterruptionReason.RUN_TIMEOUT
+        answer = (
+            "本次运行已达到时间上限，并在安全边界停止。"
+            if timed_out
+            else "已收到取消请求，本次运行已在安全边界停止。"
+        )
+        self.last_run_evidence = {
+            "terminal_status": "CANCELLING",
+            "terminal_outputs_verified": False,
+            "runtime_pending": True,
+            "task_failures": [],
+            "failure_code": intent.reason.value,
+            "interruption_requested": True,
+            "interruption_request_id": intent.request_id,
+            "interruption_reason": intent.reason.value,
+            "interruption_phase": intent.phase.value,
+            "interruption_boundary": signal.observation.boundary.value,
+            "interruption_intent_revision": intent.revision,
+        }
+        return answer
 
     async def _run_in_context(self, user_input: str) -> str:
         """State machine body; caller owns the RunContext lifecycle."""
@@ -486,6 +531,9 @@ class UniversalAgent:
 
                 elif rt_state == RuntimeState.PLAN:
                     # 委托 Orchestrator
+                    self._interruption_boundary(
+                        SafeCancellationBoundary.BEFORE_PLANNER
+                    )
                     state, next_state, answer = await self.orchestrator.plan(
                         user_input=normalized_input,
                         user_id=self._memory_namespace,
@@ -495,19 +543,37 @@ class UniversalAgent:
                     )
                     if answer:
                         best_answer = answer
+                    self._interruption_boundary(
+                        SafeCancellationBoundary.AFTER_PLANNER
+                    )
                     rt_state = RuntimeState[next_state] if isinstance(next_state, str) else next_state
 
                 elif rt_state == RuntimeState.EXECUTE:
+                    self._interruption_boundary(
+                        SafeCancellationBoundary.BEFORE_TOOL
+                    )
                     state, next_state = await self.orchestrator.execute(state)
+                    self._interruption_boundary(
+                        SafeCancellationBoundary.AFTER_TOOL
+                    )
                     rt_state = RuntimeState[next_state] if isinstance(next_state, str) else next_state
 
                 elif rt_state == RuntimeState.RECOVER:
+                    self._interruption_boundary(
+                        SafeCancellationBoundary.BEFORE_PLANNER
+                    )
                     state, next_state = await self.orchestrator.replan(
                         state, normalized_input, self._memory_namespace,
+                    )
+                    self._interruption_boundary(
+                        SafeCancellationBoundary.AFTER_PLANNER
                     )
                     rt_state = RuntimeState[next_state] if isinstance(next_state, str) else next_state
 
                 elif rt_state == RuntimeState.NEXT_TASK:
+                    self._interruption_boundary(
+                        SafeCancellationBoundary.AFTER_TOOL
+                    )
                     best_answer = await self.orchestrator.finalize(
                         state=state,
                         user_input=user_input,
@@ -518,6 +584,11 @@ class UniversalAgent:
                 elif rt_state == RuntimeState.REPLAN:
                     # 已由 RECOVER 处理
                     pass
+        except RunInterruptionRequested:
+            # Cooperative control flow must reach ``run()`` so the Service
+            # launcher can converge the durable intent instead of recording a
+            # generic Runtime failure.
+            raise
         except Exception as e:
             # P0.1: Runtime Recovery —— 不暴露 Traceback，Session 继续
             print(f"  ⚠️ Runtime 捕获异常并恢复: {type(e).__name__}")

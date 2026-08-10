@@ -15,6 +15,10 @@ from agent.registry.tool_registry import registry as _tool_registry
 from agent.compat.workspace import get_legacy_workspace_service
 from agent.execution_errors import classify_execution_error, is_non_retriable
 from agent.effect_truth import record_effect_result
+from agent.interruption import (
+    CancellationSafetyClass,
+    SafeCancellationBoundary,
+)
 
 
 class ExecutionStage:
@@ -49,6 +53,17 @@ class ExecutionStage:
             pass
 
         for idx, task_dict in enumerate(tasks):
+            run_context = getattr(self._orch, "run_context", None)
+            cancellation_view = (
+                getattr(run_context, "cancellation_view", None)
+                if run_context is not None
+                else None
+            )
+            if cancellation_view is not None:
+                cancellation_view.raise_if_requested(
+                    SafeCancellationBoundary.BEFORE_TOOL,
+                    CancellationSafetyClass.BOUNDARY_ONLY,
+                )
             if (
                 str(task_dict.get("verb", "")).lower() == Verb.WRITE.value
                 and bool((task_dict.get("inputs") or {}).get("use_prior_facts"))
@@ -93,6 +108,7 @@ class ExecutionStage:
             if run_context is not None:
                 context.set_var("artifact_store", run_context.artifacts)
                 context.set_var("event_bus", run_context.event_bus)
+                context.set_var("cancellation_view", run_context.cancellation_view)
             context.set_var("execution_plan", plan)
             context.set_var("conversation_snapshot", state.get("conversation_snapshot"))
             context.set_var("conversation_reference_type", state.get("conversation_reference_type"))

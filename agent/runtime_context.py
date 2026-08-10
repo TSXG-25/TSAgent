@@ -28,6 +28,7 @@ from agent.services.artifact_service import ArtifactStore
 from agent.services.memory_service import ScopedMemoryView
 from agent.runtime_store import SqliteRuntimeStore
 from agent.runtime_store.view import DurableRuntimeStoreView
+from agent.interruption import CancellationView
 
 
 class ContextClosedError(RuntimeError):
@@ -250,6 +251,7 @@ class RunContext:
         )
         self.workspace = workspace
         self.durable_store_view: DurableRuntimeStoreView | None = None
+        self.cancellation_view: CancellationView | None = None
         if self.application.runtime_store is not None:
             if checkpoint_store is not None or run_resume_store is not None:
                 raise ValueError(
@@ -266,6 +268,12 @@ class RunContext:
             )
             self.checkpoint_store = self.durable_store_view.checkpoint_store
             self.run_resume_store = self.durable_store_view.run_resume_store
+            self.cancellation_view = CancellationView(
+                self.application.runtime_store,
+                tenant_id=self.tenant_id,
+                session_id=self.session_id,
+                run_id=self.run_id,
+            )
         else:
             self.checkpoint_store = checkpoint_store
             self.run_resume_store = run_resume_store

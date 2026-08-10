@@ -8,6 +8,7 @@ establishes that either requirement was satisfied.
 from __future__ import annotations
 
 import re
+import unicodedata
 from typing import Any, Mapping
 
 from agent.cognition.research_policy import is_fresh_research_request
@@ -34,6 +35,23 @@ def is_previous_output_request(text: str) -> bool:
 
     value = re.sub(r"\s+", "", str(text or "").strip())
     return any(pattern.fullmatch(value) for pattern in _PREVIOUS_OUTPUT_PATTERNS)
+
+
+def is_empty_or_punctuation_request(text: str) -> bool:
+    """Recognize input that cannot carry a task or question.
+
+    This is intentionally narrower than ``not text``: symbols such as ``+``
+    may be meaningful in a programming or math request. Unicode punctuation
+    alone (for example ``？`` or ``...``) is rejected before Planner/LLM work.
+    """
+
+    value = str(text or "").strip()
+    if not value:
+        return True
+    return all(
+        char.isspace() or unicodedata.category(char).startswith("P")
+        for char in value
+    )
 
 
 def _observation_tools(observation: Mapping[str, Any]) -> set[str]:
@@ -85,6 +103,7 @@ def output_required(state: Mapping[str, Any] | None = None) -> bool:
 __all__ = [
     "freshness_required_for",
     "has_fresh_evidence",
+    "is_empty_or_punctuation_request",
     "is_previous_output_request",
     "output_required",
 ]

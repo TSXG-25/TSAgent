@@ -16,6 +16,7 @@ from agent.planner.constraint_extractor import extract_constraints, detect_abste
 from agent.planner.schemas import TaskList
 from agent.task import Task
 from agent.interruption import RunInterruptionRequested, await_interruptibly
+from agent.execution_errors import classify_execution_error
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,8 @@ class PlanOutput:
     abstain: bool = False
     abstain_reason: str = ""
     raw: Optional[dict] = None
+    failure_code: str = ""
+    failure_message: str = ""
 
 
 
@@ -257,6 +260,12 @@ async def plan_with_metadata(
         raise
     except Exception as e:
         logger.error(f"Planner 失败: {e}")
+        failure_code = classify_execution_error(e)
+        if failure_code.startswith("PROVIDER_"):
+            return PlanOutput(
+                failure_code=failure_code,
+                failure_message="当前 LLM 服务暂时不可用，本次未生成或执行任务。",
+            )
         return PlanOutput(tasks=[{
             "id": "task-1", "verb": "modify", "target": "",
             "target_type": "text",

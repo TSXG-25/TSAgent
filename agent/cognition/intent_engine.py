@@ -24,6 +24,7 @@ import re
 from typing import Optional
 
 from agent.llm import llm as default_llm
+from agent.execution_errors import classify_execution_error
 from langchain_core.messages import SystemMessage, HumanMessage
 
 from .cognitive_context import CognitiveContext, ResolvedQuery
@@ -511,6 +512,19 @@ class IntentEngine:
             )
 
         except Exception as e:
+            failure_code = classify_execution_error(e)
+            if failure_code.startswith("PROVIDER_"):
+                return IntentResult(
+                    domain=DOMAIN_UNKNOWN,
+                    confidence=0.0,
+                    requires_execution=True,
+                    summary="意图理解所需的 LLM 服务不可用",
+                    raw_input=user_input,
+                    failure_code=failure_code,
+                    failure_message=(
+                        "当前 LLM 服务暂时不可用，本次未生成或执行任务。"
+                    ),
+                )
             # LLM 失败时保守处理：走 Planner（World State Change 仍优先于保守默认）
             _need = analyze_execution_need(user_input)
             return IntentResult(

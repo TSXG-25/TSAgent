@@ -73,6 +73,10 @@ class IntentResult:
     reference_kind: str = ""   # 引用类意图的目标字段提示（answer/instruction/runtime/goal）；Intent Engine 判定
     freshness_required: bool = False
     source_grounding_required: bool = False
+    # Stable cognition-boundary failure.  A provider outage must not be
+    # downgraded to DOMAIN_UNKNOWN and sent through a second Planner call.
+    failure_code: str = ""
+    failure_message: str = ""
 
     @property
     def is_chat(self) -> bool:

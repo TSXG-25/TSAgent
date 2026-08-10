@@ -21,6 +21,9 @@ NON_RETRIABLE_CODES = frozenset({
     "FILE_OPERATION_UNVERIFIED",
     "EMPTY_WRITE_CONTENT",
     "PRESERVATION_VIOLATION",
+    # Provider outage is not a planning problem. A separate retry/failover
+    # policy may handle it, but Planner replan must not repeat the same call.
+    "PROVIDER_UNAVAILABLE",
 })
 
 

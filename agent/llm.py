@@ -140,22 +140,32 @@ class LLMRouter:
             return result
         except Exception as e:
             self._on_failure(name, e)
+            attempted = {name}
+            last_error: Exception = e
             fallback_provider, fallback_name = self._get_active_provider()
             if fallback_name != name:
+                attempted.add(fallback_name)
                 try:
                     result = fallback_provider.invoke(messages, **kwargs)
                     self._on_success(fallback_name)
                     return result
                 except Exception as e2:
                     self._on_failure(fallback_name, e2)
-            try:
-                result = self._provider_deepseek.invoke(messages, **kwargs)
-                self._deepseek_available = True
-                return result
-            except Exception as e3:
-                raise RuntimeError(
-                    f"所有 LLM 提供商均不可用。最后一次错误: {e3}"
-                ) from e3
+                    last_error = e2
+            # Do not retry a provider already attempted in this request. A
+            # failed DeepSeek -> failed Ollama sequence must become one stable
+            # provider failure, not a third identical DeepSeek call.
+            if "deepseek" not in attempted:
+                try:
+                    result = self._provider_deepseek.invoke(messages, **kwargs)
+                    self._deepseek_available = True
+                    return result
+                except Exception as e3:
+                    self._on_failure("deepseek", e3)
+                    last_error = e3
+            raise RuntimeError(
+                f"所有 LLM 提供商均不可用。最后一次错误: {last_error}"
+            ) from last_error
 
     async def ainvoke(self, messages: list[BaseMessage], **kwargs):
         messages = _inject_time_to_system(messages)
@@ -171,8 +181,11 @@ class LLMRouter:
             raise
         except Exception as e:
             self._on_failure(name, e)
+            attempted = {name}
+            last_error: Exception = e
             fallback_provider, fallback_name = self._get_active_provider()
             if fallback_name != name:
+                attempted.add(fallback_name)
                 try:
                     result = await await_interruptibly(
                         fallback_provider.ainvoke(messages, **kwargs),
@@ -184,19 +197,23 @@ class LLMRouter:
                     raise
                 except Exception as e2:
                     self._on_failure(fallback_name, e2)
-            try:
-                result = await await_interruptibly(
-                    self._provider_deepseek.ainvoke(messages, **kwargs),
-                    timeout=LLM_REQUEST_TIMEOUT,
-                )
-                self._deepseek_available = True
-                return result
-            except RunInterruptionRequested:
-                raise
-            except Exception as e3:
-                raise RuntimeError(
-                    f"所有 LLM 提供商均不可用。最后一次错误: {e3}"
-                ) from e3
+                    last_error = e2
+            if "deepseek" not in attempted:
+                try:
+                    result = await await_interruptibly(
+                        self._provider_deepseek.ainvoke(messages, **kwargs),
+                        timeout=LLM_REQUEST_TIMEOUT,
+                    )
+                    self._deepseek_available = True
+                    return result
+                except RunInterruptionRequested:
+                    raise
+                except Exception as e3:
+                    self._on_failure("deepseek", e3)
+                    last_error = e3
+            raise RuntimeError(
+                f"所有 LLM 提供商均不可用。最后一次错误: {last_error}"
+            ) from last_error
 
     @property
     def status(self) -> dict:

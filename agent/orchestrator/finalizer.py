@@ -156,6 +156,13 @@ class Finalizer:
     @staticmethod
     def _failure_answer(state: AgentState) -> Optional[str]:
         """Turn failed execution into an honest, actionable user-facing result."""
+
+        runtime_failure_code = str(state.get("runtime_failure_code", "") or "")
+        if runtime_failure_code == "INVALID_REQUEST":
+            return "当前输入为空或仅包含标点，请提供具体问题或任务。"
+        if runtime_failure_code.startswith("PROVIDER_"):
+            return "当前 LLM 服务暂时不可用，本次未生成或执行任务。"
+
         failures = [
             str(task.get("error", ""))
             for task in (state.get("plan", []) or [])

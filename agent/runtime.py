@@ -24,6 +24,7 @@ from agent.effect_truth import enforce_completion_gate, execution_truth
 from agent.runtime_gates import (
     freshness_required_for,
     has_fresh_evidence,
+    is_empty_or_punctuation_request,
     is_previous_output_request,
     output_required,
 )
@@ -459,9 +460,39 @@ class UniversalAgent:
                 self._interruption_boundary(SafeCancellationBoundary.BEFORE_PLANNER)
                 if is_previous_output_request(user_input):
                     return self._run_previous_output_request(user_input)
+                if is_empty_or_punctuation_request(user_input):
+                    return self._run_invalid_request(user_input)
                 return await self._run_in_context(user_input)
             except RunInterruptionRequested as interruption:
                 return self._interrupted_result(interruption)
+
+    def _run_invalid_request(self, user_input: str) -> str:
+        """Reject an empty/punctuation-only request without cognition calls."""
+
+        answer = "当前输入为空或仅包含标点，请提供具体问题或任务。"
+        self.last_run_evidence = {
+            "terminal_status": "BLOCKED",
+            "terminal_outputs_verified": False,
+            "runtime_pending": False,
+            "task_failures": [],
+            "failure_code": "INVALID_REQUEST",
+            "failure_class": "input",
+            "failed_component": "input_validation",
+            "retryable": False,
+            "answer": answer,
+            "answer_required": True,
+            "user_visible_output_verified": True,
+            "freshness_required": False,
+            "source_grounding_required": False,
+            "fresh_evidence": True,
+            "effect_truth_ok": True,
+            "request_output": False,
+        }
+        try:
+            self._memory_view.record_full_exchange(user_input, answer)
+        except Exception:
+            pass
+        return answer
 
     def _run_previous_output_request(self, user_input: str) -> str:
         """Resolve ``输出呢`` from durable RunOutput without starting Planner.

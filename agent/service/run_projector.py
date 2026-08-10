@@ -109,6 +109,7 @@ def _artifact_summary(
 
 
 _FAILURE_MESSAGES = {
+    "INVALID_REQUEST": "The request was empty or contained only punctuation",
     "RUNTIME_BUDGET_EXHAUSTED": "Run stopped after reaching its execution budget",
     "PROVIDER_TIMEOUT": "Required provider operation timed out",
     "PROVIDER_NETWORK": "Required provider operation was unavailable on the network",

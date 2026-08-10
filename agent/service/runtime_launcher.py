@@ -273,7 +273,10 @@ class RuntimeExecutionLauncher:
             or evidence.get("source_grounding_required", False)
         ) and not evidence.get("fresh_evidence", False) and status == "COMPLETED":
             failure_code = "RESEARCH_TOOL_UNAVAILABLE"
-        if status == "BLOCKED" or failure_code.endswith("UNAVAILABLE"):
+        if status == "BLOCKED" or failure_code in {
+            "RESEARCH_TOOL_UNAVAILABLE",
+            "UNSUPPORTED_CAPABILITY",
+        }:
             return "BLOCKED", "run_blocked", failure_code
         return "FAILED_TERMINAL", "run_failed", failure_code
 

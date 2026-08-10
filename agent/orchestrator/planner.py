@@ -61,6 +61,32 @@ def _normalized_effect_value(value: Any) -> str:
     return str(value or "").strip().replace("\\", "/").casefold()
 
 
+def _apply_planner_failure(
+    state: AgentState,
+    plan_output: Any,
+) -> Optional[Tuple[AgentState, str, Optional[str]]]:
+    """Turn a stable Planner failure into a terminal Runtime fact."""
+
+    failure_code = str(getattr(plan_output, "failure_code", "") or "")
+    if not failure_code:
+        return None
+    state["runtime_failure_code"] = failure_code
+    state["runtime_failure_class"] = (
+        "provider" if failure_code.startswith("PROVIDER_") else "planning"
+    )
+    state["runtime_failure_retryable"] = failure_code in {
+        "PROVIDER_TIMEOUT",
+        "PROVIDER_NETWORK",
+        "PROVIDER_UNAVAILABLE",
+    }
+    state["runtime_terminal_status"] = "FAILED_TERMINAL"
+    message = str(
+        getattr(plan_output, "failure_message", "")
+        or "Planner 未能生成可执行计划。"
+    )
+    return state, "FAIL", message
+
+
 def _task_effect_signature(task: Mapping[str, Any]) -> tuple[str, ...] | None:
     """Return a content-free identity for a potentially effectful Task."""
 
@@ -925,6 +951,25 @@ class PlannerStage:
         intent = intent_engine.analyze(planner_context)
         print(f"  🧠 意图: {intent}")
 
+        intent_failure_code = str(getattr(intent, "failure_code", "") or "")
+        if intent_failure_code:
+            state["runtime_failure_code"] = intent_failure_code
+            state["runtime_failure_class"] = "provider"
+            state["runtime_failure_retryable"] = intent_failure_code in {
+                "PROVIDER_TIMEOUT",
+                "PROVIDER_NETWORK",
+                "PROVIDER_UNAVAILABLE",
+            }
+            state["runtime_terminal_status"] = "FAILED_TERMINAL"
+            return (
+                state,
+                "FAIL",
+                str(
+                    getattr(intent, "failure_message", "")
+                    or "当前 LLM 服务暂时不可用，本次未生成或执行任务。"
+                ),
+            )
+
         # v2.3H3: preserve the deterministic research contract in Runtime
         # state. The final answer cannot establish freshness; only successful
         # source-tool observations can satisfy this requirement.
@@ -1346,6 +1391,9 @@ class PlannerStage:
                         repo_context, skill_hint, None,
                         grounding=grounding_ctx,
                     )
+                    planner_failure = _apply_planner_failure(state, plan_output)
+                    if planner_failure is not None:
+                        return planner_failure
                     plan = plan_output.tasks
                     plan = _ensure_explicit_output_write_task(
                         plan, user_input, intent,
@@ -1454,6 +1502,9 @@ class PlannerStage:
                     None,
                     grounding=grounding_ctx,
                 )
+                planner_failure = _apply_planner_failure(state, plan_output)
+                if planner_failure is not None:
+                    return planner_failure
                 plan = plan_output.tasks
                 plan = _ensure_explicit_output_write_task(
                     plan, user_input, intent,
@@ -1559,7 +1610,11 @@ class PlannerStage:
                 else ""
             )
         )
-        new_plan = (await plan_with_metadata(replan_input, "", "", "", None)).tasks
+        plan_output = await plan_with_metadata(replan_input, "", "", "", None)
+        planner_failure = _apply_planner_failure(state, plan_output)
+        if planner_failure is not None:
+            return state, "FAIL"
+        new_plan = plan_output.tasks
         new_plan = _ensure_explicit_output_write_task(new_plan, user_input)
         for t in new_plan:
             t.setdefault("status", "pending")

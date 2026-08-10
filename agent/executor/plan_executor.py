@@ -69,15 +69,18 @@ class PlanExecutor:
                 "_failed_tool": "plan_validation",
                 "_files_written": [],
                 "_file_operations": [],
+                "_tools_called": [],
             }
 
         variables: Dict[str, Any] = {}
         last_output = ""
         files_written: list = []
         file_operations: list[dict[str, str]] = []
+        tools_called: list[str] = []
 
         for step_idx, step in enumerate(plan.steps):
             tool_name = step.tool
+            tools_called.append(tool_name)
             args = self._substitute_args(step.args, variables)
             safety_class = tool_cancellation_safety(tool_name)
 
@@ -188,6 +191,7 @@ class PlanExecutor:
                     "_failed_tool": tool_name,
                     "_files_written": files_written,
                     "_file_operations": file_operations,
+                    "_tools_called": tools_called,
                     **variables,
                 }
 
@@ -196,6 +200,7 @@ class PlanExecutor:
             "_error": "",
             "_files_written": files_written,
             "_file_operations": file_operations,
+            "_tools_called": tools_called,
             **variables,
         }
 

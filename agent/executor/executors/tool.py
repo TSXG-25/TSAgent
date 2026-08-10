@@ -54,6 +54,7 @@ class ToolExecutor:
                 metadata={
                     "executor": "tool",
                     "task_id": target.id,
+                    "tools_called": list(result.get("_tools_called", []) or []),
                     **({"error_code": error_code} if error_code else {}),
                 },
             )
@@ -77,6 +78,7 @@ class ToolExecutor:
                 metadata={
                     "executor": "tool",
                     "task_id": target.id,
+                    "tools_called": list(result.get("_tools_called", []) or []),
                     "verifier": verification.verifier,
                     "verifier_checks": verification.checks,
                 },
@@ -89,6 +91,7 @@ class ToolExecutor:
             metadata={
                 "executor": "tool",
                 "task_id": target.id,
+                "tools_called": list(result.get("_tools_called", []) or []),
                 "time_s": round(time.time() - t0, 2),
                 "verifier": verification.verifier,
                 "verifier_checks": verification.checks,

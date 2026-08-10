@@ -17,6 +17,7 @@ from .contracts import (
     PreparedOperation,
     RevisionRecord,
     RunReadSnapshot,
+    RunOutputRecord,
     RunHead,
     ServiceStartReservation,
 )
@@ -49,6 +50,7 @@ __all__ = [
     "PreparedOperation",
     "RevisionRecord",
     "RunReadSnapshot",
+    "RunOutputRecord",
     "RunHead",
     "ServiceStartReservation",
     "SCHEMA_VERSION",

@@ -19,6 +19,7 @@ from agent.effect_truth import (
     enforce_completion_gate,
     initialize_effect_contract,
 )
+from agent.runtime_gates import has_fresh_evidence
 from agent.registry.capability_registry import registry as _capability_registry
 
 
@@ -56,6 +57,22 @@ class Finalizer:
         if effect_failure:
             self._memory().record_full_exchange(user_input, effect_failure)
             return effect_failure
+
+        # H3: a temporal/source-grounded request may not fall through to an
+        # LLM-only answer when the execution plan produced no source evidence.
+        # This is a Runtime boundary, not a prompt preference.
+        if (
+            bool(state.get("freshness_required", False))
+            or bool(state.get("source_grounding_required", False))
+        ) and not has_fresh_evidence(state):
+            state["runtime_terminal_status"] = "BLOCKED"
+            state["runtime_failure_code"] = "RESEARCH_TOOL_UNAVAILABLE"
+            answer = (
+                "当前没有可核验的外部最新来源，因此不能可靠回答这项时效性问题；"
+                "本次未生成无来源的当前信息。"
+            )
+            self._memory().record_full_exchange(user_input, answer)
+            return answer
 
         failure_answer = self._failure_answer(state)
         if failure_answer and not best_answer:

@@ -1,0 +1,69 @@
+{
+  "suite": "H3 Output / Freshness Closeout",
+  "date": "2026-08-10",
+  "head_at_run": "9cd6e287 + uncommitted H3 changes",
+  "provider": {
+    "primary": "DeepSeek",
+    "secondary": "Ollama",
+    "status": "unavailable",
+    "classification": "PROVIDER_ERROR"
+  },
+  "cases": [
+    {
+      "id": "H3-REAL-01",
+      "request": "分析下今天A股市场",
+      "status": "BLOCKED",
+      "event_types": ["run_created", "run_started", "run_blocked"],
+      "failure_code": "RESEARCH_TOOL_UNAVAILABLE",
+      "capability": "DEFERRED_PROVIDER_UNAVAILABLE"
+    },
+    {
+      "id": "H3-REAL-02",
+      "request": "分析下今天AI新闻",
+      "status": "BLOCKED",
+      "event_types": ["run_created", "run_started", "run_blocked"],
+      "failure_code": "RESEARCH_TOOL_UNAVAILABLE",
+      "capability": "DEFERRED_PROVIDER_UNAVAILABLE"
+    },
+    {
+      "id": "H3-REAL-03",
+      "request": "解释什么是A股",
+      "status": "BLOCKED",
+      "event_types": ["run_created", "run_started", "run_blocked"],
+      "failure_code": "PROVIDER_UNAVAILABLE",
+      "capability": "DEFERRED_PROVIDER_UNAVAILABLE"
+    },
+    {
+      "id": "H3-REAL-05",
+      "request": "分析下今天A股市场（搜索工具移除）",
+      "status": "BLOCKED",
+      "event_types": ["run_created", "run_started", "run_blocked"],
+      "failure_code": "RESEARCH_TOOL_UNAVAILABLE",
+      "capability": "DEFERRED_PROVIDER_UNAVAILABLE"
+    },
+    {
+      "id": "H3-REAL-04",
+      "request": "输出呢",
+      "status": "BLOCKED",
+      "event_types": ["run_created", "run_started", "run_blocked"],
+      "failure_code": "RESEARCH_TOOL_UNAVAILABLE",
+      "capability": "PASS_RUNTIME_SUMMARY_OF_PREVIOUS_BLOCKED_RUN"
+    }
+  ],
+  "runtime_checks": {
+    "fresh_request_without_evidence_completed": 0,
+    "provider_failure_completed": 0,
+    "missing_research_tool_internal_exception": 0,
+    "failed_previous_output_marked_completed": 0,
+    "cross_session_output_leakage": 0,
+    "request_output_planner_calls": 0
+  },
+  "offline": {
+    "h3_tests": "9 passed",
+    "related_regression": "33 passed",
+    "mypy": "Success: no issues found in 25 source files",
+    "full_regression": "533 passed, 17 skipped, 2 deselected",
+    "deselected": "tests/test_tools_execution.py::test_web_fetch",
+    "environment_note": "External DNS/provider unavailable; real capability outcomes deferred"
+  }
+}

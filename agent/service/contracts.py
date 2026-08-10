@@ -481,6 +481,57 @@ class FailureSummary:
 
 
 @dataclass(frozen=True)
+class RunOutput:
+    """Opaque, durable user-visible output projected from one Run."""
+
+    run_id: str
+    revision: int
+    text: str
+    evidence_ids: tuple[str, ...] = ()
+    artifact_ids: tuple[str, ...] = ()
+    created_at: str = ""
+
+    def __post_init__(self) -> None:
+        _required_identifier(self.run_id, "output run_id")
+        _nonnegative_integer(self.revision, "output revision")
+        if not isinstance(self.text, str) or not self.text.strip():
+            raise ValueError("RunOutput text must be non-empty")
+        object.__setattr__(
+            self,
+            "evidence_ids",
+            tuple(_required_identifier(item, "evidence_id") for item in self.evidence_ids),
+        )
+        object.__setattr__(
+            self,
+            "artifact_ids",
+            tuple(_required_identifier(item, "artifact_id") for item in self.artifact_ids),
+        )
+        if not isinstance(self.created_at, str) or not self.created_at.strip():
+            raise ValueError("RunOutput created_at must be a non-empty string")
+
+    def to_dict(self) -> dict[str, JSONValue]:
+        return {
+            "run_id": self.run_id,
+            "revision": self.revision,
+            "text": self.text,
+            "evidence_ids": list(self.evidence_ids),
+            "artifact_ids": list(self.artifact_ids),
+            "created_at": self.created_at,
+        }
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "RunOutput":
+        return cls(
+            run_id=str(value.get("run_id", "")),
+            revision=int(value.get("revision", 0)),
+            text=str(value.get("text", "")),
+            evidence_ids=tuple(str(item) for item in value.get("evidence_ids", []) or []),
+            artifact_ids=tuple(str(item) for item in value.get("artifact_ids", []) or []),
+            created_at=str(value.get("created_at", "")),
+        )
+
+
+@dataclass(frozen=True)
 class RunHandle:
     tenant_id: str
     session_id: str
@@ -535,6 +586,7 @@ class RunSnapshot:
     verifier_status: str | None = None
     resume_summary: ResumeSummary | None = None
     failure: FailureSummary | None = None
+    output: RunOutput | None = None
     revision: int = 0
 
     def __post_init__(self) -> None:
@@ -561,9 +613,17 @@ class RunSnapshot:
             raise TypeError("resume_summary must be a ResumeSummary or None")
         if self.failure is not None and not isinstance(self.failure, FailureSummary):
             raise TypeError("failure must be a FailureSummary or None")
+        if self.output is not None and not isinstance(self.output, RunOutput):
+            raise TypeError("output must be a RunOutput or None")
         if self.verifier_status is not None and not isinstance(self.verifier_status, str):
             raise ValueError("verifier_status must be a string or None")
         _nonnegative_integer(self.revision, "revision")
+
+    @property
+    def failure_summary(self) -> FailureSummary | None:
+        """Compatibility alias for the stable failure projection."""
+
+        return self.failure
 
     def to_dict(self) -> dict[str, JSONValue]:
         return {
@@ -581,6 +641,7 @@ class RunSnapshot:
                 self.resume_summary.to_dict() if self.resume_summary else None
             ),
             "failure": self.failure.to_dict() if self.failure else None,
+            "output": self.output.to_dict() if self.output else None,
             "revision": self.revision,
         }
 
@@ -625,6 +686,11 @@ class RunSnapshot:
                 None
                 if value.get("failure") is None
                 else FailureSummary.from_dict(cast(Mapping[str, Any], value["failure"]))
+            ),
+            output=(
+                None
+                if value.get("output") is None
+                else RunOutput.from_dict(cast(Mapping[str, Any], value["output"]))
             ),
             revision=int(value.get("revision", 0)),
         )
@@ -741,6 +807,7 @@ __all__ = [
     "RunEvent",
     "RunHandle",
     "RunLookupRequest",
+    "RunOutput",
     "RunSnapshot",
     "RunStatus",
     "StartRunRequest",

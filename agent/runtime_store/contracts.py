@@ -97,6 +97,20 @@ class ServiceStartReservation:
 
 
 @dataclass(frozen=True)
+class RunOutputRecord:
+    """Durable, user-visible final output for one logical Run revision."""
+
+    tenant_id: str
+    session_id: str
+    run_id: str
+    revision: int
+    text: str
+    evidence_ids: tuple[str, ...]
+    artifact_ids: tuple[str, ...]
+    created_at: str
+
+
+@dataclass(frozen=True)
 class RunReadSnapshot:
     """One consistent read view used by the public Service projector."""
 
@@ -104,6 +118,7 @@ class RunReadSnapshot:
     index: Any | None
     start_intent: PreparedOperation | None
     terminal_event: DurableEventRecord | None = None
+    output: RunOutputRecord | None = None
 
 
 @dataclass(frozen=True)
@@ -306,6 +321,7 @@ __all__ = [
     "PreparedOperation",
     "RevisionRecord",
     "RunReadSnapshot",
+    "RunOutputRecord",
     "DurableEventRecord",
     "DurableEventHead",
     "ServiceStartReservation",

@@ -54,12 +54,17 @@ from .contracts import (
     RunHead,
     ServiceStartReservation,
     RunReadSnapshot,
+    RunOutputRecord,
 )
 from .errors import DurableStoreError, StoreErrorCode
 
 
-SCHEMA_VERSION = "v2.3D-2"
-_MIGRATABLE_SCHEMA_VERSIONS = frozenset({"v2.3B-3", "v2.3C-3"})
+SCHEMA_VERSION = "v2.3H3"
+_MIGRATABLE_SCHEMA_VERSIONS = frozenset({
+    "v2.3B-3",
+    "v2.3C-3",
+    "v2.3D-2",
+})
 DEFAULT_BUSY_TIMEOUT_MS = 5_000
 DEFAULT_WAL_AUTOCHECKPOINT = 1_000
 _MAX_BUSY_TIMEOUT_MS = 60_000
@@ -507,6 +512,20 @@ class SqliteRuntimeStore:
                         REFERENCES run_heads (tenant_id, run_id)
                 );
 
+                CREATE TABLE IF NOT EXISTS run_outputs (
+                    tenant_id TEXT NOT NULL,
+                    session_id TEXT NOT NULL,
+                    run_id TEXT NOT NULL,
+                    revision INTEGER NOT NULL CHECK (revision >= 0),
+                    text TEXT NOT NULL,
+                    evidence_ids_json TEXT NOT NULL,
+                    artifact_ids_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    PRIMARY KEY (tenant_id, run_id, revision),
+                    FOREIGN KEY (tenant_id, run_id)
+                        REFERENCES run_heads (tenant_id, run_id)
+                );
+
                 CREATE INDEX IF NOT EXISTS idx_run_revisions_latest
                     ON run_resume_revisions (tenant_id, run_id, revision DESC);
                 CREATE INDEX IF NOT EXISTS idx_run_fences_current
@@ -515,6 +534,8 @@ class SqliteRuntimeStore:
                     ON run_events (tenant_id, run_id, sequence_number ASC);
                 CREATE INDEX IF NOT EXISTS idx_run_interruptions_request
                     ON run_interruption_intents (tenant_id, cancel_request_id);
+                CREATE INDEX IF NOT EXISTS idx_run_outputs_session_latest
+                    ON run_outputs (tenant_id, session_id, created_at DESC);
                 """
             )
             connection.execute("BEGIN IMMEDIATE")
@@ -3577,17 +3598,142 @@ class SqliteRuntimeStore:
                     if terminal_row is not None
                     else None
                 )
+                output_row = self._connection.execute(
+                    """
+                    SELECT tenant_id, session_id, run_id, revision, text,
+                           evidence_ids_json, artifact_ids_json, created_at
+                    FROM run_outputs
+                    WHERE tenant_id = ? AND run_id = ?
+                    ORDER BY revision DESC
+                    LIMIT 1
+                    """,
+                    (tenant_id, run_id),
+                ).fetchone()
+                output = (
+                    self._run_output_contract(output_row)
+                    if output_row is not None
+                    else None
+                )
                 self._connection.execute("COMMIT")
                 return RunReadSnapshot(
                     head=head,
                     index=index,
                     start_intent=start_intent,
                     terminal_event=terminal_event,
+                    output=output,
                 )
             except Exception:
                 if self._connection.in_transaction:
                     self._connection.execute("ROLLBACK")
                 raise
+
+    def latest_run_id(
+        self,
+        tenant_id: str,
+        session_id: str,
+        *,
+        exclude_run_id: str | None = None,
+    ) -> str | None:
+        """Return the latest logical Run in one tenant/session scope."""
+
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        session_id = _require_text(session_id, "session_id")
+        with self._lock:
+            self._ensure_open()
+            self._connection.execute("BEGIN")
+            try:
+                query = (
+                    "SELECT run_id FROM run_heads "
+                    "WHERE tenant_id = ? AND session_id = ?"
+                )
+                params: list[Any] = [tenant_id, session_id]
+                if exclude_run_id:
+                    query += " AND run_id <> ?"
+                    params.append(str(exclude_run_id))
+                query += " ORDER BY updated_at DESC, run_id DESC LIMIT 1"
+                row = self._connection.execute(query, tuple(params)).fetchone()
+                self._connection.execute("COMMIT")
+                return None if row is None else str(row["run_id"])
+            except Exception:
+                if self._connection.in_transaction:
+                    self._connection.execute("ROLLBACK")
+                raise
+
+    @staticmethod
+    def _run_output_contract(row: sqlite3.Row) -> RunOutputRecord:
+        try:
+            evidence = json.loads(str(row["evidence_ids_json"]))
+            artifacts = json.loads(str(row["artifact_ids_json"]))
+        except (TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise DurableStoreError(
+                StoreErrorCode.SCHEMA_INCOMPATIBLE,
+                "durable RunOutput identifiers are invalid",
+            ) from exc
+        if not isinstance(evidence, list) or not isinstance(artifacts, list):
+            raise DurableStoreError(
+                StoreErrorCode.SCHEMA_INCOMPATIBLE,
+                "durable RunOutput identifiers must be JSON arrays",
+            )
+        return RunOutputRecord(
+            tenant_id=str(row["tenant_id"]),
+            session_id=str(row["session_id"]),
+            run_id=str(row["run_id"]),
+            revision=int(row["revision"]),
+            text=str(row["text"]),
+            evidence_ids=tuple(str(item) for item in evidence),
+            artifact_ids=tuple(str(item) for item in artifacts),
+            created_at=str(row["created_at"]),
+        )
+
+    @staticmethod
+    def _insert_run_output_tx(
+        connection: sqlite3.Connection,
+        *,
+        tenant_id: str,
+        session_id: str,
+        run_id: str,
+        revision: int,
+        output: Mapping[str, Any],
+    ) -> None:
+        if not isinstance(output, Mapping):
+            raise DurableStoreError(
+                StoreErrorCode.INVALID_ARGUMENT,
+                "RunOutput must be a JSON object",
+            )
+        text = str(output.get("text", ""))
+        if not text.strip():
+            return
+        evidence = output.get("evidence_ids", ())
+        artifacts = output.get("artifact_ids", ())
+        if isinstance(evidence, str) or not isinstance(evidence, (list, tuple, set)):
+            raise DurableStoreError(
+                StoreErrorCode.INVALID_ARGUMENT,
+                "RunOutput evidence_ids must be a string sequence",
+            )
+        if isinstance(artifacts, str) or not isinstance(artifacts, (list, tuple, set)):
+            raise DurableStoreError(
+                StoreErrorCode.INVALID_ARGUMENT,
+                "RunOutput artifact_ids must be a string sequence",
+            )
+        now = str(output.get("created_at", "") or _now())
+        connection.execute(
+            """
+            INSERT OR REPLACE INTO run_outputs
+                (tenant_id, session_id, run_id, revision, text,
+                 evidence_ids_json, artifact_ids_json, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                tenant_id,
+                session_id,
+                run_id,
+                int(revision),
+                text,
+                _canonical_json([str(item) for item in evidence]),
+                _canonical_json([str(item) for item in artifacts]),
+                now,
+            ),
+        )
 
     @staticmethod
     def _event_contract(row: sqlite3.Row) -> DurableEventRecord:
@@ -3836,6 +3982,7 @@ class SqliteRuntimeStore:
         request_id: str,
         expected_status: str | None = None,
         expected_store_generation: str | None = None,
+        run_output: Mapping[str, Any] | None = None,
     ) -> RunHead:
         """Commit a Run status change and its state event atomically."""
 
@@ -3935,6 +4082,15 @@ class SqliteRuntimeStore:
                 raise DurableStoreError(
                     StoreErrorCode.REVISION_CONFLICT,
                     "Run status changed before the requested transition",
+                )
+            if run_output is not None:
+                self._insert_run_output_tx(
+                    connection,
+                    tenant_id=tenant_id,
+                    session_id=session_id,
+                    run_id=run_id,
+                    revision=int(row["current_revision"]),
+                    output=run_output,
                 )
             self._append_event_tx(
                 connection,

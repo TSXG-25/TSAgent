@@ -204,6 +204,7 @@ class DurableRuntimeStoreView:
         timestamp: str,
         payload: dict[str, Any],
         expected_status: str | None = None,
+        run_output: dict[str, Any] | None = None,
     ):
         """Atomically publish a Service-visible Run state and event."""
 
@@ -222,6 +223,17 @@ class DurableRuntimeStoreView:
             request_id=self.request_id,
             expected_status=expected_status,
             expected_store_generation=self.store_generation,
+            run_output=run_output,
+        )
+
+    def latest_run_id(self, *, exclude_run_id: str | None = None) -> str | None:
+        """Find the latest Run strictly inside this tenant/session scope."""
+
+        self._ensure_open()
+        return self._store.latest_run_id(
+            self.tenant_id,
+            self.session_id,
+            exclude_run_id=exclude_run_id,
         )
 
     def get_checkpoint(self, checkpoint_id: str):

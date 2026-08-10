@@ -11,7 +11,11 @@ _FINANCIAL_TERMS = re.compile(
     re.IGNORECASE,
 )
 _FRESHNESS_TERMS = re.compile(
-    r"近期|最近|最新|当前|今天|今日|本周|本月|热点|值得关注|实时|行情",
+    r"近期|最近|最新|当前|今天|今日|本周|本月|热点|值得关注|实时|行情|此刻|截至",
+    re.IGNORECASE,
+)
+_DATE_TERMS = re.compile(
+    r"(?:20\d{2}年\s*\d{1,2}月(?:\s*\d{1,2}[日号])?|20\d{2}[-/]\d{1,2}(?:[-/]\d{1,2})?)",
     re.IGNORECASE,
 )
 _EXPLICIT_SEARCH_TERMS = re.compile(
@@ -62,7 +66,11 @@ def is_source_grounded_request(text: str) -> bool:
     value = str(text or "")
     subject = _research_subject(value)
     temporal_dynamic = bool(
-        _FRESHNESS_TERMS.search(subject) and _DYNAMIC_TOPIC_TERMS.search(subject)
+        (
+            _FRESHNESS_TERMS.search(subject)
+            or _DATE_TERMS.search(subject)
+        )
+        and _DYNAMIC_TOPIC_TERMS.search(subject)
     )
     explicit_external = bool(
         _EXPLICIT_SEARCH_TERMS.search(value)
@@ -93,9 +101,20 @@ def research_query(text: str) -> str:
 
 
 def is_fresh_research_request(text: str) -> bool:
-    """Return true when a request cannot be answered from model memory alone."""
+    """Return true when a request cannot be answered from model memory alone.
+
+    Freshness is a cross-domain property.  Financial requests were the first
+    caller, but the same safety boundary applies to news, weather, prices,
+    sports, policy and other time-varying subjects.  Explicit calendar dates
+    are treated as freshness requirements as well; callers must provide
+    source-backed evidence or end in a non-completed state.
+    """
     value = str(text or "")
-    return bool(_FINANCIAL_TERMS.search(value) and _FRESHNESS_TERMS.search(value))
+    subject = _research_subject(value)
+    return bool(
+        _DYNAMIC_TOPIC_TERMS.search(subject)
+        and (_FRESHNESS_TERMS.search(subject) or _DATE_TERMS.search(subject))
+    )
 
 
 __all__ = [

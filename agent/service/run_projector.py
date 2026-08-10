@@ -13,6 +13,7 @@ from .contracts import (
     FailureSummary,
     RunHandle,
     RunLookupRequest,
+    RunOutput,
     RunSnapshot,
     RunStatus,
 )
@@ -122,6 +123,8 @@ _FAILURE_MESSAGES = {
     "RUNTIME_EXCEPTION": "The Runtime stopped because of an internal execution error",
     "RUNTIME_EXECUTION_INCOMPLETE": "The Run did not produce all required outputs",
     "TASK_EXECUTION_FAILED": "At least one required task failed",
+    "MISSING_USER_OUTPUT": "The Run completed its internal work but produced no user-visible output",
+    "MISSING_PREVIOUS_OUTPUT": "No previous user-visible Run output is available",
 }
 
 
@@ -148,6 +151,20 @@ def _failure_summary(read: RunReadSnapshot) -> FailureSummary | None:
         message=_FAILURE_MESSAGES.get(code, "The Run did not complete successfully"),
         retryable=bool(payload.get("retryable", False)),
         details=details,
+    )
+
+
+def _run_output(read: RunReadSnapshot) -> RunOutput | None:
+    output = getattr(read, "output", None)
+    if output is None:
+        return None
+    return RunOutput(
+        run_id=output.run_id,
+        revision=output.revision,
+        text=output.text,
+        evidence_ids=output.evidence_ids,
+        artifact_ids=output.artifact_ids,
+        created_at=output.created_at,
     )
 
 
@@ -233,8 +250,9 @@ class RunProjector:
             "artifacts": artifacts,
             "verifier_status": verifier,
             "verifier_summary": ({"status": verifier} if verifier else None),
-            "failure": None,
+            "failure": _failure_summary(read),
             "failure_summary": _failure_summary(read),
+            "output": _run_output(read),
             "resume_summary": None,
             "revision": read.head.current_revision,
         }

@@ -925,6 +925,18 @@ class PlannerStage:
         intent = intent_engine.analyze(planner_context)
         print(f"  🧠 意图: {intent}")
 
+        # v2.3H3: preserve the deterministic research contract in Runtime
+        # state. The final answer cannot establish freshness; only successful
+        # source-tool observations can satisfy this requirement.
+        state["freshness_required"] = bool(
+            getattr(intent, "freshness_required", False)
+        )
+        state["source_grounding_required"] = bool(
+            getattr(intent, "source_grounding_required", False)
+        )
+        state["fresh_evidence"] = False
+        state["answer_required"] = True
+
         # v2.1B-1/2：记录本轮 intent + 会话快照 + 引用类型 + Runtime 续接
         self._orch.last_intent = intent
         try:
@@ -1051,8 +1063,19 @@ class PlannerStage:
                     HumanMessage(content=user_input),
                 ])
                 answer = response.content if hasattr(response, 'content') else str(response)
-            except Exception:
+            except Exception as exc:
+                # A provider failure must remain a runtime fact.  Returning a
+                # polite fallback string alone makes the answer gate treat the
+                # direct-chat path as successful and can emit run_completed.
+                # Keep the user-facing wording safe, while preserving a
+                # stable terminal classification for the Runtime/Service.
                 answer = "抱歉，我暂时无法回答。"
+                state["runtime_terminal_status"] = "FAILED_TERMINAL"
+                state["runtime_failure_code"] = (
+                    classify_execution_error(exc) or "PROVIDER_UNAVAILABLE"
+                )
+                state["runtime_failure_class"] = "provider"
+                state["runtime_failure_retryable"] = True
             self._record_exchange(user_id, user_input, answer)
             return state, "FINISH", answer
 
@@ -1060,6 +1083,25 @@ class PlannerStage:
         # source-backed task directly instead of asking the general Planner to
         # invent an ``llm_executor`` search substitute.
         if getattr(intent, "freshness_required", False) or intent.action == "fresh_research":
+            if not any(
+                _tool_registry.get(name) is not None
+                for name in (
+                    "web_search",
+                    "web_news_search",
+                    "web_deep_search",
+                    "web_fetch",
+                )
+            ):
+                state["runtime_terminal_status"] = "BLOCKED"
+                state["runtime_failure_code"] = "RESEARCH_TOOL_UNAVAILABLE"
+                state["runtime_failure_class"] = "execution"
+                state["runtime_failure_retryable"] = False
+                return (
+                    state,
+                    "FINISH",
+                    "当前没有可用的外部检索工具，因此不能可靠回答这项时效性问题；"
+                    "本次未生成无来源的当前信息。",
+                )
             task_data = {
                 "id": "task-1",
                 "verb": "search",

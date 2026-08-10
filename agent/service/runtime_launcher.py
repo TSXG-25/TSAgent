@@ -90,8 +90,9 @@ class RuntimeExecutionLauncher:
         )
         watchdog = self._start_timeout_watchdog(run_context, request)
         try:
+            runtime_answer = ""
             try:
-                await runtime.run(request.request_text)
+                runtime_answer = str(await runtime.run(request.request_text) or "")
             except BaseException:
                 try:
                     durable_view.transition_run_with_event(
@@ -136,6 +137,7 @@ class RuntimeExecutionLauncher:
                                 request.request_id,
                             )
                         ),
+                        run_output=self._run_output_payload(runtime, runtime_answer),
                     )
                 finally:
                     self._close_runtime(runtime)
@@ -242,6 +244,17 @@ class RuntimeExecutionLauncher:
             and not bool(evidence.get("budget_exhausted", False))
             and not bool(evidence.get("runtime_pending", False))
             and not evidence.get("task_failures")
+            and (
+                not bool(evidence.get("answer_required", False))
+                or bool(evidence.get("user_visible_output_verified", False))
+            )
+            and (
+                not bool(
+                    evidence.get("freshness_required", False)
+                    or evidence.get("source_grounding_required", False)
+                )
+                or bool(evidence.get("fresh_evidence", False))
+            )
         )
         if successful:
             return "COMPLETED", "run_completed", ""
@@ -249,9 +262,43 @@ class RuntimeExecutionLauncher:
         failure_code = str(
             evidence.get("failure_code", "RUNTIME_EXECUTION_INCOMPLETE")
         )
+        if (
+            evidence.get("answer_required", False)
+            and not evidence.get("user_visible_output_verified", False)
+            and status == "COMPLETED"
+        ):
+            failure_code = "MISSING_USER_OUTPUT"
+        if (
+            evidence.get("freshness_required", False)
+            or evidence.get("source_grounding_required", False)
+        ) and not evidence.get("fresh_evidence", False) and status == "COMPLETED":
+            failure_code = "RESEARCH_TOOL_UNAVAILABLE"
         if status == "BLOCKED" or failure_code.endswith("UNAVAILABLE"):
             return "BLOCKED", "run_blocked", failure_code
         return "FAILED_TERMINAL", "run_failed", failure_code
+
+    @staticmethod
+    def _run_output_payload(runtime: Any, runtime_answer: str) -> dict[str, Any] | None:
+        """Project only a non-empty user-visible answer into durable storage."""
+
+        raw_evidence = getattr(runtime, "last_run_evidence", None)
+        # Once Runtime evidence exists, its answer field is authoritative. A
+        # coroutine return from a failed/budget-exhausted runtime is not an
+        # independent success fact and must not become durable output.
+        evidence = raw_evidence if isinstance(raw_evidence, dict) else None
+        text = str(
+            (evidence.get("answer", "") if evidence is not None else runtime_answer)
+            or ""
+        )
+        if not text.strip():
+            return None
+        evidence_ids = evidence.get("evidence_ids", ()) if evidence is not None else ()
+        artifact_ids = evidence.get("artifact_ids", ()) if evidence is not None else ()
+        return {
+            "text": text,
+            "evidence_ids": list(evidence_ids) if isinstance(evidence_ids, (list, tuple)) else [],
+            "artifact_ids": list(artifact_ids) if isinstance(artifact_ids, (list, tuple)) else [],
+        }
 
     @staticmethod
     def _failure_payload(

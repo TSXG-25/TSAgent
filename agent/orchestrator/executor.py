@@ -15,6 +15,7 @@ from agent.registry.tool_registry import registry as _tool_registry
 from agent.compat.workspace import get_legacy_workspace_service
 from agent.execution_errors import classify_execution_error, is_non_retriable
 from agent.effect_truth import record_effect_result
+from agent.runtime_gates import has_fresh_evidence
 from agent.interruption import (
     CancellationSafetyClass,
     SafeCancellationBoundary,
@@ -131,6 +132,7 @@ class ExecutionStage:
 
             self._apply_result(task_dict, plan, exec_result)
             record_effect_result(state, task_dict, plan, exec_result)
+            state["fresh_evidence"] = has_fresh_evidence(state)
             error_code = str((exec_result.metadata or {}).get("error_code", ""))
             if not exec_result.success and error_code and is_non_retriable(error_code):
                 state["runtime_failure_code"] = error_code
@@ -245,6 +247,7 @@ class ExecutionStage:
         task_dict["observations"].append({
             "action": f"{plan.executor}_executor",
             "tool": metadata.get("executor", plan.executor),
+            "tools": list(metadata.get("tools_called", []) or []),
             "status": "succeeded" if result.success else "failed",
             "summary": summary,
             "artifact_ids": [a.id for a in result.artifacts],

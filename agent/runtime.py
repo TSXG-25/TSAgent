@@ -21,6 +21,12 @@ from agent.event_bus import Subscription
 from agent.registry.skill_registry import skill_registry
 from agent.state import AgentState
 from agent.effect_truth import enforce_completion_gate, execution_truth
+from agent.runtime_gates import (
+    freshness_required_for,
+    has_fresh_evidence,
+    is_previous_output_request,
+    output_required,
+)
 from agent.orchestrator import ExecutionOrchestrator
 from agent.bootstrap import print_timings as print_bootstrap_timings
 from agent.runtime_context import (
@@ -71,7 +77,12 @@ def _runtime_pending_target(state: AgentState) -> str:
     return ""
 
 
-def _build_run_evidence(state: AgentState, final_answer: str, transitions: int) -> dict:
+def _build_run_evidence(
+    state: AgentState,
+    final_answer: str,
+    transitions: int,
+    user_input: str = "",
+) -> dict:
     """Project the last run into benchmark-safe continuation evidence.
 
     This is deliberately a small read-only projection. It exposes verifier
@@ -97,11 +108,18 @@ def _build_run_evidence(state: AgentState, final_answer: str, transitions: int) 
     budget_exhausted = bool(state.get("budget_exhausted", False))
     terminal_status = str(state.get("runtime_terminal_status", "") or "")
     truth = execution_truth(state)
+    freshness_required = freshness_required_for(user_input, state)
+    source_grounding_required = bool(state.get("source_grounding_required", False))
+    fresh_evidence = has_fresh_evidence(state)
+    answer_required = output_required(state)
+    user_visible_output_verified = bool(str(final_answer or "").strip())
     outputs_verified = (
         not failed_tasks
         and not pending_tasks
         and not budget_exhausted
         and truth.can_complete
+        and (not answer_required or user_visible_output_verified)
+        and (not (freshness_required or source_grounding_required) or fresh_evidence)
     )
     if not terminal_status:
         terminal_status = "COMPLETED" if outputs_verified else "FAILED_TERMINAL"
@@ -112,6 +130,20 @@ def _build_run_evidence(state: AgentState, final_answer: str, transitions: int) 
         terminal_status = (
             "BLOCKED" if truth.unsupported_effects else "FAILED_TERMINAL"
         )
+    if (
+        (freshness_required or source_grounding_required)
+        and not fresh_evidence
+        and terminal_status in {"", "COMPLETED"}
+    ):
+        terminal_status = "BLOCKED"
+        failure_code = "RESEARCH_TOOL_UNAVAILABLE"
+    if (
+        answer_required
+        and not user_visible_output_verified
+        and terminal_status in {"", "COMPLETED"}
+    ):
+        terminal_status = "FAILED_TERMINAL"
+        failure_code = "MISSING_USER_OUTPUT"
     if not failure_code and truth.unsupported_effects:
         failure_code = "UNSUPPORTED_CAPABILITY"
     if not failure_code and truth.unresolved_required_effects:
@@ -125,6 +157,8 @@ def _build_run_evidence(state: AgentState, final_answer: str, transitions: int) 
             ),
             "TASK_EXECUTION_FAILED",
         )
+    if not failure_code and terminal_status not in {"", "COMPLETED"}:
+        failure_code = "RUNTIME_EXECUTION_INCOMPLETE"
     failed_component = next(
         (
             str(task.get("failed_component", ""))
@@ -157,6 +191,11 @@ def _build_run_evidence(state: AgentState, final_answer: str, transitions: int) 
         "pending_target": _runtime_pending_target(state),
         "previous_answer": getattr(snapshot, "last_answer", "") if snapshot else "",
         "answer": final_answer or "",
+        "answer_required": answer_required,
+        "user_visible_output_verified": user_visible_output_verified,
+        "freshness_required": freshness_required,
+        "source_grounding_required": source_grounding_required,
+        "fresh_evidence": fresh_evidence,
         "transitions": transitions,
         "runtime_pending": _runtime_has_unfinished_work(state),
         "terminal_status": terminal_status,
@@ -418,9 +457,96 @@ class UniversalAgent:
         with cancellation_scope(view):
             try:
                 self._interruption_boundary(SafeCancellationBoundary.BEFORE_PLANNER)
+                if is_previous_output_request(user_input):
+                    return self._run_previous_output_request(user_input)
                 return await self._run_in_context(user_input)
             except RunInterruptionRequested as interruption:
                 return self._interrupted_result(interruption)
+
+    def _run_previous_output_request(self, user_input: str) -> str:
+        """Resolve ``输出呢`` from durable RunOutput without starting Planner.
+
+        The current Run is already durably created by AgentService.  It is
+        intentionally excluded from the lookup, so a request can never read
+        its own not-yet-committed output or another Session's output.
+        """
+        run_context = self._run_context
+        source_status = ""
+        answer = ""
+        terminal_status = "COMPLETED"
+        failure_code = ""
+        source = None
+        if run_context is not None and run_context.durable_store_view is not None:
+            view = run_context.durable_store_view
+            previous_run_id = view.latest_run_id(exclude_run_id=run_context.run_id)
+            if previous_run_id:
+                source = view.store.read_run_snapshot(
+                    run_context.tenant_id,
+                    previous_run_id,
+                    session_id=run_context.session_id,
+                )
+        if source is not None:
+            source_status = str(source.head.run_status)
+            output = getattr(source, "output", None)
+            if source_status in {"FAILED_TERMINAL", "BLOCKED", "CANCELLED", "TIMED_OUT"}:
+                payload: dict[str, Any] = {}
+                event = getattr(source, "terminal_event", None)
+                if event is not None:
+                    try:
+                        import json
+                        parsed = json.loads(event.payload_json)
+                        if isinstance(parsed, dict):
+                            payload = parsed
+                    except (TypeError, ValueError, json.JSONDecodeError):
+                        payload = {}
+                failure_code = str(payload.get("failure_code", "") or source_status)
+                answer = (
+                    f"上一轮任务状态为 {source_status}（{failure_code}），"
+                    "未产生可展示的成功输出。"
+                )
+                terminal_status = "BLOCKED"
+            elif output is not None and str(output.text).strip():
+                answer = str(output.text)
+            else:
+                terminal_status = "BLOCKED"
+                failure_code = "MISSING_PREVIOUS_OUTPUT"
+                answer = "上一轮尚无可展示的输出（MISSING_PREVIOUS_OUTPUT）。"
+        else:
+            # Non-Service/legacy callers retain a safe conversation fallback;
+            # they still never invoke Planner, tools, or an LLM to regenerate.
+            snapshot = self._session_context.conversation_retriever.snapshot(
+                self._memory_namespace
+            )
+            answer = str(getattr(snapshot, "last_answer", "") or "")
+            if not answer:
+                terminal_status = "BLOCKED"
+                failure_code = "MISSING_PREVIOUS_OUTPUT"
+                answer = "没有找到上一轮可展示的输出（MISSING_PREVIOUS_OUTPUT）。"
+
+        self.last_run_evidence = {
+            "terminal_status": terminal_status,
+            "terminal_outputs_verified": terminal_status == "COMPLETED" and bool(answer.strip()),
+            "runtime_pending": False,
+            "task_failures": [],
+            "failure_code": failure_code,
+            "answer": answer,
+            "answer_required": True,
+            "user_visible_output_verified": bool(answer.strip()),
+            "freshness_required": False,
+            "source_grounding_required": False,
+            "fresh_evidence": True,
+            "request_output": True,
+            "previous_output_run_id": (
+                None if source is None else source.head.run_id
+            ),
+            "previous_output_status": source_status,
+            "effect_truth_ok": True,
+        }
+        try:
+            self._memory_view.record_full_exchange(user_input, answer)
+        except Exception:
+            pass
+        return answer
 
     def _interruption_boundary(
         self,
@@ -503,6 +629,9 @@ class UniversalAgent:
             "skill_hint": skill_hint,
             "retries": 0,
             "workflow": None,
+            "answer_required": True,
+            "fresh_evidence": False,
+            "request_output": False,
         }
         best_answer = None
         loop_started = time.perf_counter()
@@ -681,7 +810,7 @@ class UniversalAgent:
         if budget_exhausted:
             state["budget_exhausted"] = True
         self.last_run_evidence = _build_run_evidence(
-            state, final_answer, transitions,
+            state, final_answer, transitions, user_input,
         )
         if conversation_diagnostic:
             self.last_run_evidence["diagnostics"] = [conversation_diagnostic]

@@ -44,7 +44,10 @@ class AgentState(TypedDict, total=False):
     # These are facts, not a second Run state machine.
     runtime_terminal_status: str
     runtime_failure_code: str
+    runtime_failure_class: str
+    runtime_failure_retryable: bool
     budget_exhausted: bool
+    replan_skipped_verified_effects: int
     # v2.3H2: deterministic world-effect truth projected by Runtime.
     effect_class: str
     required_effects: List[Dict[str, Any]]
@@ -53,3 +56,11 @@ class AgentState(TypedDict, total=False):
     failed_effects: List[Dict[str, Any]]
     unresolved_required_effects: List[Dict[str, Any]]
     effect_truth_ok: bool
+    # v2.3H3: deterministic freshness/output requirements projected from the
+    # Intent and consumed by the Runtime completion gate.
+    freshness_required: bool
+    source_grounding_required: bool
+    fresh_evidence: bool
+    answer_required: bool
+    user_visible_output_verified: bool
+    request_output: bool

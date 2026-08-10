@@ -1,0 +1,1506 @@
+{
+  "suite": "P2-R1 Process Crash / Restart",
+  "source": "true-subprocess-sigkill",
+  "commit": "d2a0bae8ad2095bdf6756fee8edae3919bf7a34e",
+  "provider": "deterministic-workflow-no-network",
+  "dataset": {
+    "benchmark_name": "runtime-endurance-portability-v2.3-p2",
+    "benchmark_version": "v0.1",
+    "contract_version": "adr-0022-v1",
+    "case_count": 4,
+    "dataset_hash": "83eab4a5e0762cd044ef5fcc7e057e090647bfd89e43f4e7da2a421b4d31cb63",
+    "scoring": {
+      "capability_outcome": [
+        "PASS",
+        "FAIL",
+        "PARTIAL"
+      ],
+      "runtime_correctness": [
+        "PASS",
+        "FAIL"
+      ],
+      "hard_gate_zero_required": true
+    }
+  },
+  "dataset_hash": "83eab4a5e0762cd044ef5fcc7e057e090647bfd89e43f4e7da2a421b4d31cb63",
+  "automatic_rerun": false,
+  "scope": "real AgentService/SQLite/RunContext/Workspace/ResumeCoordinator/WorkflowExecutor with true child-process SIGKILL",
+  "summary": {
+    "total": 4,
+    "runtime_correctness_pass": 0,
+    "true_process_kill_pass": 0,
+    "duplicate_side_effect_count": 0,
+    "completed_workflow_reexecution_count": 0,
+    "stale_writer_acceptance_count": 0
+  },
+  "results": [
+    {
+      "case_id": "R01",
+      "crash_point": "after_run_active",
+      "case_root": "/private/tmp/tsagent-p2-r1-discovery-archive/r01-3meph2ar",
+      "worker_a": {
+        "marker_status": "WORKER_EXITED",
+        "returncode": 2,
+        "killed_by_parent": false,
+        "result": {
+          "error": {
+            "code": "RUN_INDEX_CONFLICT",
+            "message": "RUN_INDEX_CONFLICT: cannot bootstrap an index after the Run has begun writing",
+            "type": "DurableStoreError"
+          },
+          "phase": "start"
+        },
+        "stdout": "",
+        "stderr": ""
+      },
+      "marker": {},
+      "pre_crash_durable_state": {
+        "run_id": "run-r01",
+        "database_exists": true,
+        "head": {
+          "tenant_id": "tenant-p2r",
+          "session_id": "session-p2r",
+          "run_id": "run-r01",
+          "request_id": "start-r01",
+          "current_revision": 1,
+          "current_digest": "66155604b10aef1c3448e50a9e82fe227aa0b534e622b827de266391c899d9de",
+          "current_writer_id": "",
+          "current_fence_token": 1,
+          "store_generation": "aab2ebbccf7e4486bce517bd87e7a841",
+          "run_status": "RUNNING",
+          "updated_at": "2026-08-10T02:18:46.858202Z"
+        },
+        "run_index": null,
+        "checkpoints": [],
+        "events": [
+          {
+            "event_id": "run-created:run-r01:start-r01",
+            "sequence_number": 1,
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r01",
+            "workflow_id": null,
+            "stage_id": null,
+            "task_id": null,
+            "event_type": "run_created",
+            "timestamp": "2026-08-10T02:18:46.856658Z",
+            "payload_json": "{\"request_digest\":\"8cb61999d0ae111c1fb77752f843ce1e3cf209828aac3aee5a21b2cf81ebc7ba\",\"request_id\":\"start-r01\"}",
+            "payload_digest": "0a5b5376bec5980b6b009ec3f67fe62ea63b8b13e40361ee4e79bcf39eb51a27",
+            "run_revision": 1
+          },
+          {
+            "event_id": "p2-r-start:run-r01",
+            "sequence_number": 2,
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r01",
+            "workflow_id": null,
+            "stage_id": null,
+            "task_id": null,
+            "event_type": "run_started",
+            "timestamp": "2026-08-10T02:18:46.857891Z",
+            "payload_json": "{\"case_id\":\"R01\"}",
+            "payload_digest": "1b63fff14f1cb3b03953e4505ef7d0daf670ae85729c398ce7d7591713c9c674",
+            "run_revision": 1
+          }
+        ],
+        "current_fence": null,
+        "artifacts": [],
+        "ledger": [
+          {
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r01",
+            "operation_id": "32fa92260ccd41dfaa82396a1e011674",
+            "idempotency_key": "start-r01",
+            "operation_type": "service.start_run",
+            "request_digest": "8cb61999d0ae111c1fb77752f843ce1e3cf209828aac3aee5a21b2cf81ebc7ba",
+            "expected_effect_digest": "",
+            "effect_state": "PREPARED",
+            "fence_token": 1,
+            "external_reference": "tsagent-service-request-v1:{\"metadata\":{},\"request_id\":\"start-r01\",\"request_text\":\"deterministic process crash case R01\",\"run_id\":\"run-r01\",\"session_id\":\"session-p2r\",\"tenant_id\":\"tenant-p2r\",\"user_id\":\"user-p2r\"}",
+            "result_json": "null",
+            "result_digest": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+            "prepared_revision": 1,
+            "committed_revision": null,
+            "request_id": "start-r01",
+            "created_at": "2026-08-10T02:18:46.856658Z",
+            "updated_at": "2026-08-10T02:18:46.856658Z"
+          }
+        ],
+        "fence_history": [
+          {
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r01",
+            "writer_id": "writer-a",
+            "fence_token": 1,
+            "fence_epoch": 1,
+            "acquired_at": "2026-08-10T02:18:46.856658Z",
+            "released_at": "2026-08-10T02:18:46.858216Z"
+          }
+        ],
+        "revision_history": [
+          {
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r01",
+            "revision": 1,
+            "parent_digest": "",
+            "payload_json": "{\"effect_state\":\"PREPARED\",\"expected_effect_digest\":\"\",\"external_reference\":\"tsagent-service-request-v1:{\\\"metadata\\\":{},\\\"request_id\\\":\\\"start-r01\\\",\\\"request_text\\\":\\\"deterministic process crash case R01\\\",\\\"run_id\\\":\\\"run-r01\\\",\\\"session_id\\\":\\\"session-p2r\\\",\\\"tenant_id\\\":\\\"tenant-p2r\\\",\\\"user_id\\\":\\\"user-p2r\\\"}\",\"idempotency_key\":\"start-r01\",\"operation_id\":\"32fa92260ccd41dfaa82396a1e011674\",\"operation_type\":\"service.start_run\",\"request_digest\":\"8cb61999d0ae111c1fb77752f843ce1e3cf209828aac3aee5a21b2cf81ebc7ba\"}",
+            "payload_digest": "66155604b10aef1c3448e50a9e82fe227aa0b534e622b827de266391c899d9de",
+            "request_id": "start-r01",
+            "writer_id": "writer-a",
+            "fence_token": 1,
+            "created_at": "2026-08-10T02:18:46.856658Z"
+          }
+        ],
+        "workspace_files": {}
+      },
+      "worker_b": {
+        "returncode": 6,
+        "result": {
+          "error": {
+            "code": "",
+            "message": "Run 不存在: run-r01",
+            "type": "ValueError"
+          },
+          "phase": "resume"
+        },
+        "stdout": "",
+        "stderr": ""
+      },
+      "post_resume_durable_state": {
+        "run_id": "run-r01",
+        "database_exists": true,
+        "head": {
+          "tenant_id": "tenant-p2r",
+          "session_id": "session-p2r",
+          "run_id": "run-r01",
+          "request_id": "resume-r01",
+          "current_revision": 2,
+          "current_digest": "72108cb42e93074ec4786e3413416d755b0cb3e367a54eabff8c8eaca0fd63a8",
+          "current_writer_id": "",
+          "current_fence_token": 2,
+          "store_generation": "aab2ebbccf7e4486bce517bd87e7a841",
+          "run_status": "RUNNING",
+          "updated_at": "2026-08-10T02:18:50.372384Z"
+        },
+        "run_index": null,
+        "checkpoints": [],
+        "events": [
+          {
+            "event_id": "run-created:run-r01:start-r01",
+            "sequence_number": 1,
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r01",
+            "workflow_id": null,
+            "stage_id": null,
+            "task_id": null,
+            "event_type": "run_created",
+            "timestamp": "2026-08-10T02:18:46.856658Z",
+            "payload_json": "{\"request_digest\":\"8cb61999d0ae111c1fb77752f843ce1e3cf209828aac3aee5a21b2cf81ebc7ba\",\"request_id\":\"start-r01\"}",
+            "payload_digest": "0a5b5376bec5980b6b009ec3f67fe62ea63b8b13e40361ee4e79bcf39eb51a27",
+            "run_revision": 1
+          },
+          {
+            "event_id": "p2-r-start:run-r01",
+            "sequence_number": 2,
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r01",
+            "workflow_id": null,
+            "stage_id": null,
+            "task_id": null,
+            "event_type": "run_started",
+            "timestamp": "2026-08-10T02:18:46.857891Z",
+            "payload_json": "{\"case_id\":\"R01\"}",
+            "payload_digest": "1b63fff14f1cb3b03953e4505ef7d0daf670ae85729c398ce7d7591713c9c674",
+            "run_revision": 1
+          },
+          {
+            "event_id": "p2-r-resume:run-r01:resume-r01",
+            "sequence_number": 3,
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r01",
+            "workflow_id": null,
+            "stage_id": null,
+            "task_id": null,
+            "event_type": "run_resumed",
+            "timestamp": "2026-08-10T02:18:50.371766Z",
+            "payload_json": "{\"case_id\":\"R01\"}",
+            "payload_digest": "1b63fff14f1cb3b03953e4505ef7d0daf670ae85729c398ce7d7591713c9c674",
+            "run_revision": 2
+          }
+        ],
+        "current_fence": null,
+        "artifacts": [],
+        "ledger": [
+          {
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r01",
+            "operation_id": "32fa92260ccd41dfaa82396a1e011674",
+            "idempotency_key": "start-r01",
+            "operation_type": "service.start_run",
+            "request_digest": "8cb61999d0ae111c1fb77752f843ce1e3cf209828aac3aee5a21b2cf81ebc7ba",
+            "expected_effect_digest": "",
+            "effect_state": "PREPARED",
+            "fence_token": 1,
+            "external_reference": "tsagent-service-request-v1:{\"metadata\":{},\"request_id\":\"start-r01\",\"request_text\":\"deterministic process crash case R01\",\"run_id\":\"run-r01\",\"session_id\":\"session-p2r\",\"tenant_id\":\"tenant-p2r\",\"user_id\":\"user-p2r\"}",
+            "result_json": "null",
+            "result_digest": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+            "prepared_revision": 1,
+            "committed_revision": null,
+            "request_id": "start-r01",
+            "created_at": "2026-08-10T02:18:46.856658Z",
+            "updated_at": "2026-08-10T02:18:46.856658Z"
+          },
+          {
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r01",
+            "operation_id": "bf5eebecfa2d42fc9796598ce93610fe",
+            "idempotency_key": "resume-r01",
+            "operation_type": "service.resume_run",
+            "request_digest": "02896a992f6db91a82a74d93ec166290fe026985ebec64b8be5607964bfd0ed3",
+            "expected_effect_digest": "",
+            "effect_state": "PREPARED",
+            "fence_token": 2,
+            "external_reference": "service-resume:run-r01",
+            "result_json": "null",
+            "result_digest": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+            "prepared_revision": 2,
+            "committed_revision": null,
+            "request_id": "resume-r01",
+            "created_at": "2026-08-10T02:18:50.371076Z",
+            "updated_at": "2026-08-10T02:18:50.371076Z"
+          }
+        ],
+        "fence_history": [
+          {
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r01",
+            "writer_id": "writer-a",
+            "fence_token": 1,
+            "fence_epoch": 1,
+            "acquired_at": "2026-08-10T02:18:46.856658Z",
+            "released_at": "2026-08-10T02:18:46.858216Z"
+          },
+          {
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r01",
+            "writer_id": "writer-b",
+            "fence_token": 2,
+            "fence_epoch": 2,
+            "acquired_at": "2026-08-10T02:18:50.370446Z",
+            "released_at": "2026-08-10T02:18:50.372409Z"
+          }
+        ],
+        "revision_history": [
+          {
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r01",
+            "revision": 1,
+            "parent_digest": "",
+            "payload_json": "{\"effect_state\":\"PREPARED\",\"expected_effect_digest\":\"\",\"external_reference\":\"tsagent-service-request-v1:{\\\"metadata\\\":{},\\\"request_id\\\":\\\"start-r01\\\",\\\"request_text\\\":\\\"deterministic process crash case R01\\\",\\\"run_id\\\":\\\"run-r01\\\",\\\"session_id\\\":\\\"session-p2r\\\",\\\"tenant_id\\\":\\\"tenant-p2r\\\",\\\"user_id\\\":\\\"user-p2r\\\"}\",\"idempotency_key\":\"start-r01\",\"operation_id\":\"32fa92260ccd41dfaa82396a1e011674\",\"operation_type\":\"service.start_run\",\"request_digest\":\"8cb61999d0ae111c1fb77752f843ce1e3cf209828aac3aee5a21b2cf81ebc7ba\"}",
+            "payload_digest": "66155604b10aef1c3448e50a9e82fe227aa0b534e622b827de266391c899d9de",
+            "request_id": "start-r01",
+            "writer_id": "writer-a",
+            "fence_token": 1,
+            "created_at": "2026-08-10T02:18:46.856658Z"
+          },
+          {
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r01",
+            "revision": 2,
+            "parent_digest": "66155604b10aef1c3448e50a9e82fe227aa0b534e622b827de266391c899d9de",
+            "payload_json": "{\"effect_state\":\"PREPARED\",\"expected_effect_digest\":\"\",\"external_reference\":\"service-resume:run-r01\",\"idempotency_key\":\"resume-r01\",\"operation_id\":\"bf5eebecfa2d42fc9796598ce93610fe\",\"operation_type\":\"service.resume_run\",\"request_digest\":\"02896a992f6db91a82a74d93ec166290fe026985ebec64b8be5607964bfd0ed3\"}",
+            "payload_digest": "72108cb42e93074ec4786e3413416d755b0cb3e367a54eabff8c8eaca0fd63a8",
+            "request_id": "resume-r01",
+            "writer_id": "writer-b",
+            "fence_token": 2,
+            "created_at": "2026-08-10T02:18:50.371076Z"
+          }
+        ],
+        "workspace_files": {}
+      },
+      "audit_records": [],
+      "stale_writer_probe": {
+        "attempted": true,
+        "accepted": false,
+        "code": "STALE_WRITER",
+        "old_token": 1,
+        "new_token": 2
+      },
+      "diagnostics": {
+        "marker_valid": false,
+        "required_files_ok": false,
+        "index_complete": true,
+        "effect_counts": {},
+        "duplicate_side_effect_count": 0,
+        "completed_workflow_reexecution_count": 0,
+        "event_sequences": [
+          1,
+          2,
+          3
+        ],
+        "event_ids": [
+          "run-created:run-r01:start-r01",
+          "p2-r-start:run-r01",
+          "p2-r-resume:run-r01:resume-r01"
+        ],
+        "event_types": [
+          "run_created",
+          "run_started",
+          "run_resumed"
+        ],
+        "legacy_workspace_files": {}
+      },
+      "gates": {
+        "true_process_kill": false,
+        "durable_state_loss_zero": false,
+        "duplicate_side_effect_zero": false,
+        "duplicate_provider_operation_zero": true,
+        "completed_workflow_reexecution_zero": true,
+        "stale_writer_acceptance_zero": true,
+        "terminal_snapshot_event_match": false,
+        "cross_run_workspace_leakage_zero": true,
+        "event_replay_gap_zero": true,
+        "false_completed_zero": true,
+        "resume_worker_completed": false
+      },
+      "runtime_correctness": "FAIL",
+      "oracle": {
+        "case_id": "R01",
+        "capability_target": "MEASURE_ONLY",
+        "required_runtime_outcome": "PASS",
+        "hard_gates": [
+          "false_completed",
+          "duplicate_side_effect",
+          "terminal_snapshot_event_mismatch",
+          "durable_state_loss",
+          "stale_writer_acceptance",
+          "completed_workflow_reexecution"
+        ],
+        "performance_profile": "resume",
+        "performance_metrics": [
+          "wall_ms",
+          "provider_ms",
+          "llm_calls",
+          "replans",
+          "tool_calls",
+          "time_to_first_event_ms",
+          "time_to_first_artifact_ms"
+        ],
+        "provider_parity_key": null
+      }
+    },
+    {
+      "case_id": "R02",
+      "crash_point": "after_effect_commit",
+      "case_root": "/private/tmp/tsagent-p2-r1-discovery-archive/r02-khoegtpa",
+      "worker_a": {
+        "marker_status": "WORKER_EXITED",
+        "returncode": 2,
+        "killed_by_parent": false,
+        "result": {
+          "error": {
+            "code": "RUN_INDEX_CONFLICT",
+            "message": "RUN_INDEX_CONFLICT: cannot bootstrap an index after the Run has begun writing",
+            "type": "DurableStoreError"
+          },
+          "phase": "start"
+        },
+        "stdout": "",
+        "stderr": ""
+      },
+      "marker": {},
+      "pre_crash_durable_state": {
+        "run_id": "run-r02",
+        "database_exists": true,
+        "head": {
+          "tenant_id": "tenant-p2r",
+          "session_id": "session-p2r",
+          "run_id": "run-r02",
+          "request_id": "start-r02",
+          "current_revision": 1,
+          "current_digest": "db36303528d2c05d8865bee6eabfbe82e1915b14777516c415fe31863c638582",
+          "current_writer_id": "",
+          "current_fence_token": 1,
+          "store_generation": "617270e32076498db95d839bdc6d6650",
+          "run_status": "RUNNING",
+          "updated_at": "2026-08-10T02:18:53.970468Z"
+        },
+        "run_index": null,
+        "checkpoints": [],
+        "events": [
+          {
+            "event_id": "run-created:run-r02:start-r02",
+            "sequence_number": 1,
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r02",
+            "workflow_id": null,
+            "stage_id": null,
+            "task_id": null,
+            "event_type": "run_created",
+            "timestamp": "2026-08-10T02:18:53.968791Z",
+            "payload_json": "{\"request_digest\":\"3d5f06de9ab5454a79d2f879959b09fd454ce5ffd0838f7f66b709d7810da123\",\"request_id\":\"start-r02\"}",
+            "payload_digest": "30ca41c4168ccaa79d48508df1ee11dcddc4fa181c3b7026f8d9c43416b0f34b",
+            "run_revision": 1
+          },
+          {
+            "event_id": "p2-r-start:run-r02",
+            "sequence_number": 2,
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r02",
+            "workflow_id": null,
+            "stage_id": null,
+            "task_id": null,
+            "event_type": "run_started",
+            "timestamp": "2026-08-10T02:18:53.970120Z",
+            "payload_json": "{\"case_id\":\"R02\"}",
+            "payload_digest": "60571af35c0f638cd7c8a6e622d69fbd9ad3017a621eacf574c2848d676cdf77",
+            "run_revision": 1
+          }
+        ],
+        "current_fence": null,
+        "artifacts": [],
+        "ledger": [
+          {
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r02",
+            "operation_id": "48888e43bd5a49eba1ffc887e3a31dec",
+            "idempotency_key": "start-r02",
+            "operation_type": "service.start_run",
+            "request_digest": "3d5f06de9ab5454a79d2f879959b09fd454ce5ffd0838f7f66b709d7810da123",
+            "expected_effect_digest": "",
+            "effect_state": "PREPARED",
+            "fence_token": 1,
+            "external_reference": "tsagent-service-request-v1:{\"metadata\":{},\"request_id\":\"start-r02\",\"request_text\":\"deterministic process crash case R02\",\"run_id\":\"run-r02\",\"session_id\":\"session-p2r\",\"tenant_id\":\"tenant-p2r\",\"user_id\":\"user-p2r\"}",
+            "result_json": "null",
+            "result_digest": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+            "prepared_revision": 1,
+            "committed_revision": null,
+            "request_id": "start-r02",
+            "created_at": "2026-08-10T02:18:53.968791Z",
+            "updated_at": "2026-08-10T02:18:53.968791Z"
+          }
+        ],
+        "fence_history": [
+          {
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r02",
+            "writer_id": "writer-a",
+            "fence_token": 1,
+            "fence_epoch": 1,
+            "acquired_at": "2026-08-10T02:18:53.968791Z",
+            "released_at": "2026-08-10T02:18:53.970485Z"
+          }
+        ],
+        "revision_history": [
+          {
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r02",
+            "revision": 1,
+            "parent_digest": "",
+            "payload_json": "{\"effect_state\":\"PREPARED\",\"expected_effect_digest\":\"\",\"external_reference\":\"tsagent-service-request-v1:{\\\"metadata\\\":{},\\\"request_id\\\":\\\"start-r02\\\",\\\"request_text\\\":\\\"deterministic process crash case R02\\\",\\\"run_id\\\":\\\"run-r02\\\",\\\"session_id\\\":\\\"session-p2r\\\",\\\"tenant_id\\\":\\\"tenant-p2r\\\",\\\"user_id\\\":\\\"user-p2r\\\"}\",\"idempotency_key\":\"start-r02\",\"operation_id\":\"48888e43bd5a49eba1ffc887e3a31dec\",\"operation_type\":\"service.start_run\",\"request_digest\":\"3d5f06de9ab5454a79d2f879959b09fd454ce5ffd0838f7f66b709d7810da123\"}",
+            "payload_digest": "db36303528d2c05d8865bee6eabfbe82e1915b14777516c415fe31863c638582",
+            "request_id": "start-r02",
+            "writer_id": "writer-a",
+            "fence_token": 1,
+            "created_at": "2026-08-10T02:18:53.968791Z"
+          }
+        ],
+        "workspace_files": {}
+      },
+      "worker_b": {
+        "returncode": 6,
+        "result": {
+          "error": {
+            "code": "",
+            "message": "Run 不存在: run-r02",
+            "type": "ValueError"
+          },
+          "phase": "resume"
+        },
+        "stdout": "",
+        "stderr": ""
+      },
+      "post_resume_durable_state": {
+        "run_id": "run-r02",
+        "database_exists": true,
+        "head": {
+          "tenant_id": "tenant-p2r",
+          "session_id": "session-p2r",
+          "run_id": "run-r02",
+          "request_id": "resume-r02",
+          "current_revision": 2,
+          "current_digest": "6f1c808ef97aeba21fe6191288ab0650b3cef2e36b2b44af88918b0cd9837124",
+          "current_writer_id": "",
+          "current_fence_token": 2,
+          "store_generation": "617270e32076498db95d839bdc6d6650",
+          "run_status": "RUNNING",
+          "updated_at": "2026-08-10T02:18:57.487405Z"
+        },
+        "run_index": null,
+        "checkpoints": [],
+        "events": [
+          {
+            "event_id": "run-created:run-r02:start-r02",
+            "sequence_number": 1,
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r02",
+            "workflow_id": null,
+            "stage_id": null,
+            "task_id": null,
+            "event_type": "run_created",
+            "timestamp": "2026-08-10T02:18:53.968791Z",
+            "payload_json": "{\"request_digest\":\"3d5f06de9ab5454a79d2f879959b09fd454ce5ffd0838f7f66b709d7810da123\",\"request_id\":\"start-r02\"}",
+            "payload_digest": "30ca41c4168ccaa79d48508df1ee11dcddc4fa181c3b7026f8d9c43416b0f34b",
+            "run_revision": 1
+          },
+          {
+            "event_id": "p2-r-start:run-r02",
+            "sequence_number": 2,
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r02",
+            "workflow_id": null,
+            "stage_id": null,
+            "task_id": null,
+            "event_type": "run_started",
+            "timestamp": "2026-08-10T02:18:53.970120Z",
+            "payload_json": "{\"case_id\":\"R02\"}",
+            "payload_digest": "60571af35c0f638cd7c8a6e622d69fbd9ad3017a621eacf574c2848d676cdf77",
+            "run_revision": 1
+          },
+          {
+            "event_id": "p2-r-resume:run-r02:resume-r02",
+            "sequence_number": 3,
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r02",
+            "workflow_id": null,
+            "stage_id": null,
+            "task_id": null,
+            "event_type": "run_resumed",
+            "timestamp": "2026-08-10T02:18:57.487018Z",
+            "payload_json": "{\"case_id\":\"R02\"}",
+            "payload_digest": "60571af35c0f638cd7c8a6e622d69fbd9ad3017a621eacf574c2848d676cdf77",
+            "run_revision": 2
+          }
+        ],
+        "current_fence": null,
+        "artifacts": [],
+        "ledger": [
+          {
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r02",
+            "operation_id": "48888e43bd5a49eba1ffc887e3a31dec",
+            "idempotency_key": "start-r02",
+            "operation_type": "service.start_run",
+            "request_digest": "3d5f06de9ab5454a79d2f879959b09fd454ce5ffd0838f7f66b709d7810da123",
+            "expected_effect_digest": "",
+            "effect_state": "PREPARED",
+            "fence_token": 1,
+            "external_reference": "tsagent-service-request-v1:{\"metadata\":{},\"request_id\":\"start-r02\",\"request_text\":\"deterministic process crash case R02\",\"run_id\":\"run-r02\",\"session_id\":\"session-p2r\",\"tenant_id\":\"tenant-p2r\",\"user_id\":\"user-p2r\"}",
+            "result_json": "null",
+            "result_digest": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+            "prepared_revision": 1,
+            "committed_revision": null,
+            "request_id": "start-r02",
+            "created_at": "2026-08-10T02:18:53.968791Z",
+            "updated_at": "2026-08-10T02:18:53.968791Z"
+          },
+          {
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r02",
+            "operation_id": "0fef0dc1b3bf4e779a53f72159814b36",
+            "idempotency_key": "resume-r02",
+            "operation_type": "service.resume_run",
+            "request_digest": "492a5afa0c578091b8449918c383ca60b61cb15815c48e395f5a39e4f4be3fa9",
+            "expected_effect_digest": "",
+            "effect_state": "PREPARED",
+            "fence_token": 2,
+            "external_reference": "service-resume:run-r02",
+            "result_json": "null",
+            "result_digest": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+            "prepared_revision": 2,
+            "committed_revision": null,
+            "request_id": "resume-r02",
+            "created_at": "2026-08-10T02:18:57.486465Z",
+            "updated_at": "2026-08-10T02:18:57.486465Z"
+          }
+        ],
+        "fence_history": [
+          {
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r02",
+            "writer_id": "writer-a",
+            "fence_token": 1,
+            "fence_epoch": 1,
+            "acquired_at": "2026-08-10T02:18:53.968791Z",
+            "released_at": "2026-08-10T02:18:53.970485Z"
+          },
+          {
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r02",
+            "writer_id": "writer-b",
+            "fence_token": 2,
+            "fence_epoch": 2,
+            "acquired_at": "2026-08-10T02:18:57.485877Z",
+            "released_at": "2026-08-10T02:18:57.487420Z"
+          }
+        ],
+        "revision_history": [
+          {
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r02",
+            "revision": 1,
+            "parent_digest": "",
+            "payload_json": "{\"effect_state\":\"PREPARED\",\"expected_effect_digest\":\"\",\"external_reference\":\"tsagent-service-request-v1:{\\\"metadata\\\":{},\\\"request_id\\\":\\\"start-r02\\\",\\\"request_text\\\":\\\"deterministic process crash case R02\\\",\\\"run_id\\\":\\\"run-r02\\\",\\\"session_id\\\":\\\"session-p2r\\\",\\\"tenant_id\\\":\\\"tenant-p2r\\\",\\\"user_id\\\":\\\"user-p2r\\\"}\",\"idempotency_key\":\"start-r02\",\"operation_id\":\"48888e43bd5a49eba1ffc887e3a31dec\",\"operation_type\":\"service.start_run\",\"request_digest\":\"3d5f06de9ab5454a79d2f879959b09fd454ce5ffd0838f7f66b709d7810da123\"}",
+            "payload_digest": "db36303528d2c05d8865bee6eabfbe82e1915b14777516c415fe31863c638582",
+            "request_id": "start-r02",
+            "writer_id": "writer-a",
+            "fence_token": 1,
+            "created_at": "2026-08-10T02:18:53.968791Z"
+          },
+          {
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r02",
+            "revision": 2,
+            "parent_digest": "db36303528d2c05d8865bee6eabfbe82e1915b14777516c415fe31863c638582",
+            "payload_json": "{\"effect_state\":\"PREPARED\",\"expected_effect_digest\":\"\",\"external_reference\":\"service-resume:run-r02\",\"idempotency_key\":\"resume-r02\",\"operation_id\":\"0fef0dc1b3bf4e779a53f72159814b36\",\"operation_type\":\"service.resume_run\",\"request_digest\":\"492a5afa0c578091b8449918c383ca60b61cb15815c48e395f5a39e4f4be3fa9\"}",
+            "payload_digest": "6f1c808ef97aeba21fe6191288ab0650b3cef2e36b2b44af88918b0cd9837124",
+            "request_id": "resume-r02",
+            "writer_id": "writer-b",
+            "fence_token": 2,
+            "created_at": "2026-08-10T02:18:57.486465Z"
+          }
+        ],
+        "workspace_files": {}
+      },
+      "audit_records": [],
+      "stale_writer_probe": {
+        "attempted": true,
+        "accepted": false,
+        "code": "STALE_WRITER",
+        "old_token": 1,
+        "new_token": 2
+      },
+      "diagnostics": {
+        "marker_valid": false,
+        "required_files_ok": false,
+        "index_complete": true,
+        "effect_counts": {},
+        "duplicate_side_effect_count": 0,
+        "completed_workflow_reexecution_count": 0,
+        "event_sequences": [
+          1,
+          2,
+          3
+        ],
+        "event_ids": [
+          "run-created:run-r02:start-r02",
+          "p2-r-start:run-r02",
+          "p2-r-resume:run-r02:resume-r02"
+        ],
+        "event_types": [
+          "run_created",
+          "run_started",
+          "run_resumed"
+        ],
+        "legacy_workspace_files": {}
+      },
+      "gates": {
+        "true_process_kill": false,
+        "durable_state_loss_zero": false,
+        "duplicate_side_effect_zero": false,
+        "duplicate_provider_operation_zero": true,
+        "completed_workflow_reexecution_zero": true,
+        "stale_writer_acceptance_zero": true,
+        "terminal_snapshot_event_match": false,
+        "cross_run_workspace_leakage_zero": true,
+        "event_replay_gap_zero": true,
+        "false_completed_zero": true,
+        "resume_worker_completed": false
+      },
+      "runtime_correctness": "FAIL",
+      "oracle": {
+        "case_id": "R02",
+        "capability_target": "MEASURE_ONLY",
+        "required_runtime_outcome": "PASS",
+        "hard_gates": [
+          "false_completed",
+          "duplicate_side_effect",
+          "stale_writer_acceptance",
+          "durable_state_loss"
+        ],
+        "performance_profile": "resume",
+        "performance_metrics": [
+          "wall_ms",
+          "provider_ms",
+          "llm_calls",
+          "replans",
+          "tool_calls",
+          "time_to_first_event_ms",
+          "time_to_first_artifact_ms"
+        ],
+        "provider_parity_key": null
+      }
+    },
+    {
+      "case_id": "R03",
+      "crash_point": "after_checkpoint_commit",
+      "case_root": "/private/tmp/tsagent-p2-r1-discovery-archive/r03-n5y4m6od",
+      "worker_a": {
+        "marker_status": "WORKER_EXITED",
+        "returncode": 2,
+        "killed_by_parent": false,
+        "result": {
+          "error": {
+            "code": "RUN_INDEX_CONFLICT",
+            "message": "RUN_INDEX_CONFLICT: cannot bootstrap an index after the Run has begun writing",
+            "type": "DurableStoreError"
+          },
+          "phase": "start"
+        },
+        "stdout": "",
+        "stderr": ""
+      },
+      "marker": {},
+      "pre_crash_durable_state": {
+        "run_id": "run-r03",
+        "database_exists": true,
+        "head": {
+          "tenant_id": "tenant-p2r",
+          "session_id": "session-p2r",
+          "run_id": "run-r03",
+          "request_id": "start-r03",
+          "current_revision": 1,
+          "current_digest": "8f5ebaee5d8ac13dd701b48983d67b1744d3f4228f36600e4d6dd158a5421580",
+          "current_writer_id": "",
+          "current_fence_token": 1,
+          "store_generation": "8765eda7afbe4b8daa1d622d79c566f3",
+          "run_status": "RUNNING",
+          "updated_at": "2026-08-10T02:19:01.067743Z"
+        },
+        "run_index": null,
+        "checkpoints": [],
+        "events": [
+          {
+            "event_id": "run-created:run-r03:start-r03",
+            "sequence_number": 1,
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r03",
+            "workflow_id": null,
+            "stage_id": null,
+            "task_id": null,
+            "event_type": "run_created",
+            "timestamp": "2026-08-10T02:19:01.066069Z",
+            "payload_json": "{\"request_digest\":\"88a45c74a186fc74731a60b0baab7895f7fce1085caa4cf9aa5c39e7af2d67eb\",\"request_id\":\"start-r03\"}",
+            "payload_digest": "9869763f6d5f7bafe4ad8702b01721ddaf66f9bd0e67332913e592a3b9f1454d",
+            "run_revision": 1
+          },
+          {
+            "event_id": "p2-r-start:run-r03",
+            "sequence_number": 2,
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r03",
+            "workflow_id": null,
+            "stage_id": null,
+            "task_id": null,
+            "event_type": "run_started",
+            "timestamp": "2026-08-10T02:19:01.067344Z",
+            "payload_json": "{\"case_id\":\"R03\"}",
+            "payload_digest": "3a4770daed13c3db0e320c9f407bf552ecd2fa5e7d42237ea62ec592ed19a2b0",
+            "run_revision": 1
+          }
+        ],
+        "current_fence": null,
+        "artifacts": [],
+        "ledger": [
+          {
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r03",
+            "operation_id": "8582142850d546d9a3f2f46d7a6692c8",
+            "idempotency_key": "start-r03",
+            "operation_type": "service.start_run",
+            "request_digest": "88a45c74a186fc74731a60b0baab7895f7fce1085caa4cf9aa5c39e7af2d67eb",
+            "expected_effect_digest": "",
+            "effect_state": "PREPARED",
+            "fence_token": 1,
+            "external_reference": "tsagent-service-request-v1:{\"metadata\":{},\"request_id\":\"start-r03\",\"request_text\":\"deterministic process crash case R03\",\"run_id\":\"run-r03\",\"session_id\":\"session-p2r\",\"tenant_id\":\"tenant-p2r\",\"user_id\":\"user-p2r\"}",
+            "result_json": "null",
+            "result_digest": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+            "prepared_revision": 1,
+            "committed_revision": null,
+            "request_id": "start-r03",
+            "created_at": "2026-08-10T02:19:01.066069Z",
+            "updated_at": "2026-08-10T02:19:01.066069Z"
+          }
+        ],
+        "fence_history": [
+          {
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r03",
+            "writer_id": "writer-a",
+            "fence_token": 1,
+            "fence_epoch": 1,
+            "acquired_at": "2026-08-10T02:19:01.066069Z",
+            "released_at": "2026-08-10T02:19:01.067770Z"
+          }
+        ],
+        "revision_history": [
+          {
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r03",
+            "revision": 1,
+            "parent_digest": "",
+            "payload_json": "{\"effect_state\":\"PREPARED\",\"expected_effect_digest\":\"\",\"external_reference\":\"tsagent-service-request-v1:{\\\"metadata\\\":{},\\\"request_id\\\":\\\"start-r03\\\",\\\"request_text\\\":\\\"deterministic process crash case R03\\\",\\\"run_id\\\":\\\"run-r03\\\",\\\"session_id\\\":\\\"session-p2r\\\",\\\"tenant_id\\\":\\\"tenant-p2r\\\",\\\"user_id\\\":\\\"user-p2r\\\"}\",\"idempotency_key\":\"start-r03\",\"operation_id\":\"8582142850d546d9a3f2f46d7a6692c8\",\"operation_type\":\"service.start_run\",\"request_digest\":\"88a45c74a186fc74731a60b0baab7895f7fce1085caa4cf9aa5c39e7af2d67eb\"}",
+            "payload_digest": "8f5ebaee5d8ac13dd701b48983d67b1744d3f4228f36600e4d6dd158a5421580",
+            "request_id": "start-r03",
+            "writer_id": "writer-a",
+            "fence_token": 1,
+            "created_at": "2026-08-10T02:19:01.066069Z"
+          }
+        ],
+        "workspace_files": {}
+      },
+      "worker_b": {
+        "returncode": 6,
+        "result": {
+          "error": {
+            "code": "",
+            "message": "Run 不存在: run-r03",
+            "type": "ValueError"
+          },
+          "phase": "resume"
+        },
+        "stdout": "",
+        "stderr": ""
+      },
+      "post_resume_durable_state": {
+        "run_id": "run-r03",
+        "database_exists": true,
+        "head": {
+          "tenant_id": "tenant-p2r",
+          "session_id": "session-p2r",
+          "run_id": "run-r03",
+          "request_id": "resume-r03",
+          "current_revision": 2,
+          "current_digest": "881391a0439dbd59cd05aa9842316276482f4af47a828c7a553927115a6a5273",
+          "current_writer_id": "",
+          "current_fence_token": 2,
+          "store_generation": "8765eda7afbe4b8daa1d622d79c566f3",
+          "run_status": "RUNNING",
+          "updated_at": "2026-08-10T02:19:04.678110Z"
+        },
+        "run_index": null,
+        "checkpoints": [],
+        "events": [
+          {
+            "event_id": "run-created:run-r03:start-r03",
+            "sequence_number": 1,
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r03",
+            "workflow_id": null,
+            "stage_id": null,
+            "task_id": null,
+            "event_type": "run_created",
+            "timestamp": "2026-08-10T02:19:01.066069Z",
+            "payload_json": "{\"request_digest\":\"88a45c74a186fc74731a60b0baab7895f7fce1085caa4cf9aa5c39e7af2d67eb\",\"request_id\":\"start-r03\"}",
+            "payload_digest": "9869763f6d5f7bafe4ad8702b01721ddaf66f9bd0e67332913e592a3b9f1454d",
+            "run_revision": 1
+          },
+          {
+            "event_id": "p2-r-start:run-r03",
+            "sequence_number": 2,
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r03",
+            "workflow_id": null,
+            "stage_id": null,
+            "task_id": null,
+            "event_type": "run_started",
+            "timestamp": "2026-08-10T02:19:01.067344Z",
+            "payload_json": "{\"case_id\":\"R03\"}",
+            "payload_digest": "3a4770daed13c3db0e320c9f407bf552ecd2fa5e7d42237ea62ec592ed19a2b0",
+            "run_revision": 1
+          },
+          {
+            "event_id": "p2-r-resume:run-r03:resume-r03",
+            "sequence_number": 3,
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r03",
+            "workflow_id": null,
+            "stage_id": null,
+            "task_id": null,
+            "event_type": "run_resumed",
+            "timestamp": "2026-08-10T02:19:04.677740Z",
+            "payload_json": "{\"case_id\":\"R03\"}",
+            "payload_digest": "3a4770daed13c3db0e320c9f407bf552ecd2fa5e7d42237ea62ec592ed19a2b0",
+            "run_revision": 2
+          }
+        ],
+        "current_fence": null,
+        "artifacts": [],
+        "ledger": [
+          {
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r03",
+            "operation_id": "8582142850d546d9a3f2f46d7a6692c8",
+            "idempotency_key": "start-r03",
+            "operation_type": "service.start_run",
+            "request_digest": "88a45c74a186fc74731a60b0baab7895f7fce1085caa4cf9aa5c39e7af2d67eb",
+            "expected_effect_digest": "",
+            "effect_state": "PREPARED",
+            "fence_token": 1,
+            "external_reference": "tsagent-service-request-v1:{\"metadata\":{},\"request_id\":\"start-r03\",\"request_text\":\"deterministic process crash case R03\",\"run_id\":\"run-r03\",\"session_id\":\"session-p2r\",\"tenant_id\":\"tenant-p2r\",\"user_id\":\"user-p2r\"}",
+            "result_json": "null",
+            "result_digest": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+            "prepared_revision": 1,
+            "committed_revision": null,
+            "request_id": "start-r03",
+            "created_at": "2026-08-10T02:19:01.066069Z",
+            "updated_at": "2026-08-10T02:19:01.066069Z"
+          },
+          {
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r03",
+            "operation_id": "0c566a445cb54ad890b4431d682a8237",
+            "idempotency_key": "resume-r03",
+            "operation_type": "service.resume_run",
+            "request_digest": "b63cc67ff692a518ab5a298bdfaf5d0b8096193fb143abff5e1a507081756d3b",
+            "expected_effect_digest": "",
+            "effect_state": "PREPARED",
+            "fence_token": 2,
+            "external_reference": "service-resume:run-r03",
+            "result_json": "null",
+            "result_digest": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+            "prepared_revision": 2,
+            "committed_revision": null,
+            "request_id": "resume-r03",
+            "created_at": "2026-08-10T02:19:04.677218Z",
+            "updated_at": "2026-08-10T02:19:04.677218Z"
+          }
+        ],
+        "fence_history": [
+          {
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r03",
+            "writer_id": "writer-a",
+            "fence_token": 1,
+            "fence_epoch": 1,
+            "acquired_at": "2026-08-10T02:19:01.066069Z",
+            "released_at": "2026-08-10T02:19:01.067770Z"
+          },
+          {
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r03",
+            "writer_id": "writer-b",
+            "fence_token": 2,
+            "fence_epoch": 2,
+            "acquired_at": "2026-08-10T02:19:04.676642Z",
+            "released_at": "2026-08-10T02:19:04.678131Z"
+          }
+        ],
+        "revision_history": [
+          {
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r03",
+            "revision": 1,
+            "parent_digest": "",
+            "payload_json": "{\"effect_state\":\"PREPARED\",\"expected_effect_digest\":\"\",\"external_reference\":\"tsagent-service-request-v1:{\\\"metadata\\\":{},\\\"request_id\\\":\\\"start-r03\\\",\\\"request_text\\\":\\\"deterministic process crash case R03\\\",\\\"run_id\\\":\\\"run-r03\\\",\\\"session_id\\\":\\\"session-p2r\\\",\\\"tenant_id\\\":\\\"tenant-p2r\\\",\\\"user_id\\\":\\\"user-p2r\\\"}\",\"idempotency_key\":\"start-r03\",\"operation_id\":\"8582142850d546d9a3f2f46d7a6692c8\",\"operation_type\":\"service.start_run\",\"request_digest\":\"88a45c74a186fc74731a60b0baab7895f7fce1085caa4cf9aa5c39e7af2d67eb\"}",
+            "payload_digest": "8f5ebaee5d8ac13dd701b48983d67b1744d3f4228f36600e4d6dd158a5421580",
+            "request_id": "start-r03",
+            "writer_id": "writer-a",
+            "fence_token": 1,
+            "created_at": "2026-08-10T02:19:01.066069Z"
+          },
+          {
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r03",
+            "revision": 2,
+            "parent_digest": "8f5ebaee5d8ac13dd701b48983d67b1744d3f4228f36600e4d6dd158a5421580",
+            "payload_json": "{\"effect_state\":\"PREPARED\",\"expected_effect_digest\":\"\",\"external_reference\":\"service-resume:run-r03\",\"idempotency_key\":\"resume-r03\",\"operation_id\":\"0c566a445cb54ad890b4431d682a8237\",\"operation_type\":\"service.resume_run\",\"request_digest\":\"b63cc67ff692a518ab5a298bdfaf5d0b8096193fb143abff5e1a507081756d3b\"}",
+            "payload_digest": "881391a0439dbd59cd05aa9842316276482f4af47a828c7a553927115a6a5273",
+            "request_id": "resume-r03",
+            "writer_id": "writer-b",
+            "fence_token": 2,
+            "created_at": "2026-08-10T02:19:04.677218Z"
+          }
+        ],
+        "workspace_files": {}
+      },
+      "audit_records": [],
+      "stale_writer_probe": {
+        "attempted": true,
+        "accepted": false,
+        "code": "STALE_WRITER",
+        "old_token": 1,
+        "new_token": 2
+      },
+      "diagnostics": {
+        "marker_valid": false,
+        "required_files_ok": false,
+        "index_complete": true,
+        "effect_counts": {},
+        "duplicate_side_effect_count": 0,
+        "completed_workflow_reexecution_count": 0,
+        "event_sequences": [
+          1,
+          2,
+          3
+        ],
+        "event_ids": [
+          "run-created:run-r03:start-r03",
+          "p2-r-start:run-r03",
+          "p2-r-resume:run-r03:resume-r03"
+        ],
+        "event_types": [
+          "run_created",
+          "run_started",
+          "run_resumed"
+        ],
+        "legacy_workspace_files": {}
+      },
+      "gates": {
+        "true_process_kill": false,
+        "durable_state_loss_zero": false,
+        "duplicate_side_effect_zero": false,
+        "duplicate_provider_operation_zero": true,
+        "completed_workflow_reexecution_zero": true,
+        "stale_writer_acceptance_zero": true,
+        "terminal_snapshot_event_match": false,
+        "cross_run_workspace_leakage_zero": true,
+        "event_replay_gap_zero": true,
+        "false_completed_zero": true,
+        "resume_worker_completed": false
+      },
+      "runtime_correctness": "FAIL",
+      "oracle": {
+        "case_id": "R03",
+        "capability_target": "MEASURE_ONLY",
+        "required_runtime_outcome": "PASS",
+        "hard_gates": [
+          "event_gap",
+          "duplicate_side_effect",
+          "terminal_snapshot_event_mismatch",
+          "durable_state_loss"
+        ],
+        "performance_profile": "event_replay",
+        "performance_metrics": [
+          "wall_ms",
+          "provider_ms",
+          "llm_calls",
+          "replans",
+          "tool_calls",
+          "time_to_first_event_ms",
+          "time_to_first_artifact_ms"
+        ],
+        "provider_parity_key": null
+      }
+    },
+    {
+      "case_id": "R04",
+      "crash_point": "workflow_b_active",
+      "case_root": "/private/tmp/tsagent-p2-r1-discovery-archive/r04-9hjy5fou",
+      "worker_a": {
+        "marker_status": "WORKER_EXITED",
+        "returncode": 2,
+        "killed_by_parent": false,
+        "result": {
+          "error": {
+            "code": "RUN_INDEX_CONFLICT",
+            "message": "RUN_INDEX_CONFLICT: cannot bootstrap an index after the Run has begun writing",
+            "type": "DurableStoreError"
+          },
+          "phase": "start"
+        },
+        "stdout": "",
+        "stderr": ""
+      },
+      "marker": {},
+      "pre_crash_durable_state": {
+        "run_id": "run-r04",
+        "database_exists": true,
+        "head": {
+          "tenant_id": "tenant-p2r",
+          "session_id": "session-p2r",
+          "run_id": "run-r04",
+          "request_id": "start-r04",
+          "current_revision": 1,
+          "current_digest": "848bd99f4b6b55766bc4c5533840e1ec2b0f9d5c55f591d7095264e67a6be201",
+          "current_writer_id": "",
+          "current_fence_token": 1,
+          "store_generation": "63888a10fe6d46c6b5b7a711177da4a5",
+          "run_status": "RUNNING",
+          "updated_at": "2026-08-10T02:19:08.412182Z"
+        },
+        "run_index": null,
+        "checkpoints": [],
+        "events": [
+          {
+            "event_id": "run-created:run-r04:start-r04",
+            "sequence_number": 1,
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r04",
+            "workflow_id": null,
+            "stage_id": null,
+            "task_id": null,
+            "event_type": "run_created",
+            "timestamp": "2026-08-10T02:19:08.410771Z",
+            "payload_json": "{\"request_digest\":\"e8387dc386cff69584de4f15fef86d34ec09a89913979f44c7bd82f0a0c6c6df\",\"request_id\":\"start-r04\"}",
+            "payload_digest": "757b38d1caac43dc3760cdb7cdf74015a5964f7f7f4ad8a02593807382e82251",
+            "run_revision": 1
+          },
+          {
+            "event_id": "p2-r-start:run-r04",
+            "sequence_number": 2,
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r04",
+            "workflow_id": null,
+            "stage_id": null,
+            "task_id": null,
+            "event_type": "run_started",
+            "timestamp": "2026-08-10T02:19:08.411848Z",
+            "payload_json": "{\"case_id\":\"R04\"}",
+            "payload_digest": "1360a401fd2a0ed99b74d089edb096639a52c98eee932c2092358242fbf45848",
+            "run_revision": 1
+          }
+        ],
+        "current_fence": null,
+        "artifacts": [],
+        "ledger": [
+          {
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r04",
+            "operation_id": "997c7baa9c154d95807098e8dd9e6b8d",
+            "idempotency_key": "start-r04",
+            "operation_type": "service.start_run",
+            "request_digest": "e8387dc386cff69584de4f15fef86d34ec09a89913979f44c7bd82f0a0c6c6df",
+            "expected_effect_digest": "",
+            "effect_state": "PREPARED",
+            "fence_token": 1,
+            "external_reference": "tsagent-service-request-v1:{\"metadata\":{},\"request_id\":\"start-r04\",\"request_text\":\"deterministic process crash case R04\",\"run_id\":\"run-r04\",\"session_id\":\"session-p2r\",\"tenant_id\":\"tenant-p2r\",\"user_id\":\"user-p2r\"}",
+            "result_json": "null",
+            "result_digest": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+            "prepared_revision": 1,
+            "committed_revision": null,
+            "request_id": "start-r04",
+            "created_at": "2026-08-10T02:19:08.410771Z",
+            "updated_at": "2026-08-10T02:19:08.410771Z"
+          }
+        ],
+        "fence_history": [
+          {
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r04",
+            "writer_id": "writer-a",
+            "fence_token": 1,
+            "fence_epoch": 1,
+            "acquired_at": "2026-08-10T02:19:08.410771Z",
+            "released_at": "2026-08-10T02:19:08.412198Z"
+          }
+        ],
+        "revision_history": [
+          {
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r04",
+            "revision": 1,
+            "parent_digest": "",
+            "payload_json": "{\"effect_state\":\"PREPARED\",\"expected_effect_digest\":\"\",\"external_reference\":\"tsagent-service-request-v1:{\\\"metadata\\\":{},\\\"request_id\\\":\\\"start-r04\\\",\\\"request_text\\\":\\\"deterministic process crash case R04\\\",\\\"run_id\\\":\\\"run-r04\\\",\\\"session_id\\\":\\\"session-p2r\\\",\\\"tenant_id\\\":\\\"tenant-p2r\\\",\\\"user_id\\\":\\\"user-p2r\\\"}\",\"idempotency_key\":\"start-r04\",\"operation_id\":\"997c7baa9c154d95807098e8dd9e6b8d\",\"operation_type\":\"service.start_run\",\"request_digest\":\"e8387dc386cff69584de4f15fef86d34ec09a89913979f44c7bd82f0a0c6c6df\"}",
+            "payload_digest": "848bd99f4b6b55766bc4c5533840e1ec2b0f9d5c55f591d7095264e67a6be201",
+            "request_id": "start-r04",
+            "writer_id": "writer-a",
+            "fence_token": 1,
+            "created_at": "2026-08-10T02:19:08.410771Z"
+          }
+        ],
+        "workspace_files": {}
+      },
+      "worker_b": {
+        "returncode": 6,
+        "result": {
+          "error": {
+            "code": "",
+            "message": "Run 不存在: run-r04",
+            "type": "ValueError"
+          },
+          "phase": "resume"
+        },
+        "stdout": "",
+        "stderr": ""
+      },
+      "post_resume_durable_state": {
+        "run_id": "run-r04",
+        "database_exists": true,
+        "head": {
+          "tenant_id": "tenant-p2r",
+          "session_id": "session-p2r",
+          "run_id": "run-r04",
+          "request_id": "resume-r04",
+          "current_revision": 2,
+          "current_digest": "47bf23f88f983bbd423bfad967489b06dfe4b05e424b495b0cffdd854bc8f9b9",
+          "current_writer_id": "",
+          "current_fence_token": 2,
+          "store_generation": "63888a10fe6d46c6b5b7a711177da4a5",
+          "run_status": "RUNNING",
+          "updated_at": "2026-08-10T02:19:11.851692Z"
+        },
+        "run_index": null,
+        "checkpoints": [],
+        "events": [
+          {
+            "event_id": "run-created:run-r04:start-r04",
+            "sequence_number": 1,
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r04",
+            "workflow_id": null,
+            "stage_id": null,
+            "task_id": null,
+            "event_type": "run_created",
+            "timestamp": "2026-08-10T02:19:08.410771Z",
+            "payload_json": "{\"request_digest\":\"e8387dc386cff69584de4f15fef86d34ec09a89913979f44c7bd82f0a0c6c6df\",\"request_id\":\"start-r04\"}",
+            "payload_digest": "757b38d1caac43dc3760cdb7cdf74015a5964f7f7f4ad8a02593807382e82251",
+            "run_revision": 1
+          },
+          {
+            "event_id": "p2-r-start:run-r04",
+            "sequence_number": 2,
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r04",
+            "workflow_id": null,
+            "stage_id": null,
+            "task_id": null,
+            "event_type": "run_started",
+            "timestamp": "2026-08-10T02:19:08.411848Z",
+            "payload_json": "{\"case_id\":\"R04\"}",
+            "payload_digest": "1360a401fd2a0ed99b74d089edb096639a52c98eee932c2092358242fbf45848",
+            "run_revision": 1
+          },
+          {
+            "event_id": "p2-r-resume:run-r04:resume-r04",
+            "sequence_number": 3,
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r04",
+            "workflow_id": null,
+            "stage_id": null,
+            "task_id": null,
+            "event_type": "run_resumed",
+            "timestamp": "2026-08-10T02:19:11.851327Z",
+            "payload_json": "{\"case_id\":\"R04\"}",
+            "payload_digest": "1360a401fd2a0ed99b74d089edb096639a52c98eee932c2092358242fbf45848",
+            "run_revision": 2
+          }
+        ],
+        "current_fence": null,
+        "artifacts": [],
+        "ledger": [
+          {
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r04",
+            "operation_id": "997c7baa9c154d95807098e8dd9e6b8d",
+            "idempotency_key": "start-r04",
+            "operation_type": "service.start_run",
+            "request_digest": "e8387dc386cff69584de4f15fef86d34ec09a89913979f44c7bd82f0a0c6c6df",
+            "expected_effect_digest": "",
+            "effect_state": "PREPARED",
+            "fence_token": 1,
+            "external_reference": "tsagent-service-request-v1:{\"metadata\":{},\"request_id\":\"start-r04\",\"request_text\":\"deterministic process crash case R04\",\"run_id\":\"run-r04\",\"session_id\":\"session-p2r\",\"tenant_id\":\"tenant-p2r\",\"user_id\":\"user-p2r\"}",
+            "result_json": "null",
+            "result_digest": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+            "prepared_revision": 1,
+            "committed_revision": null,
+            "request_id": "start-r04",
+            "created_at": "2026-08-10T02:19:08.410771Z",
+            "updated_at": "2026-08-10T02:19:08.410771Z"
+          },
+          {
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r04",
+            "operation_id": "990a0ee6ea3249fd9ef04511398ed64a",
+            "idempotency_key": "resume-r04",
+            "operation_type": "service.resume_run",
+            "request_digest": "bc87bfff776f844a7f34419193c1e649bcc4b3856a4d7be39b86d6b080265cf0",
+            "expected_effect_digest": "",
+            "effect_state": "PREPARED",
+            "fence_token": 2,
+            "external_reference": "service-resume:run-r04",
+            "result_json": "null",
+            "result_digest": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+            "prepared_revision": 2,
+            "committed_revision": null,
+            "request_id": "resume-r04",
+            "created_at": "2026-08-10T02:19:11.850854Z",
+            "updated_at": "2026-08-10T02:19:11.850854Z"
+          }
+        ],
+        "fence_history": [
+          {
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r04",
+            "writer_id": "writer-a",
+            "fence_token": 1,
+            "fence_epoch": 1,
+            "acquired_at": "2026-08-10T02:19:08.410771Z",
+            "released_at": "2026-08-10T02:19:08.412198Z"
+          },
+          {
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r04",
+            "writer_id": "writer-b",
+            "fence_token": 2,
+            "fence_epoch": 2,
+            "acquired_at": "2026-08-10T02:19:11.850375Z",
+            "released_at": "2026-08-10T02:19:11.851718Z"
+          }
+        ],
+        "revision_history": [
+          {
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r04",
+            "revision": 1,
+            "parent_digest": "",
+            "payload_json": "{\"effect_state\":\"PREPARED\",\"expected_effect_digest\":\"\",\"external_reference\":\"tsagent-service-request-v1:{\\\"metadata\\\":{},\\\"request_id\\\":\\\"start-r04\\\",\\\"request_text\\\":\\\"deterministic process crash case R04\\\",\\\"run_id\\\":\\\"run-r04\\\",\\\"session_id\\\":\\\"session-p2r\\\",\\\"tenant_id\\\":\\\"tenant-p2r\\\",\\\"user_id\\\":\\\"user-p2r\\\"}\",\"idempotency_key\":\"start-r04\",\"operation_id\":\"997c7baa9c154d95807098e8dd9e6b8d\",\"operation_type\":\"service.start_run\",\"request_digest\":\"e8387dc386cff69584de4f15fef86d34ec09a89913979f44c7bd82f0a0c6c6df\"}",
+            "payload_digest": "848bd99f4b6b55766bc4c5533840e1ec2b0f9d5c55f591d7095264e67a6be201",
+            "request_id": "start-r04",
+            "writer_id": "writer-a",
+            "fence_token": 1,
+            "created_at": "2026-08-10T02:19:08.410771Z"
+          },
+          {
+            "tenant_id": "tenant-p2r",
+            "session_id": "session-p2r",
+            "run_id": "run-r04",
+            "revision": 2,
+            "parent_digest": "848bd99f4b6b55766bc4c5533840e1ec2b0f9d5c55f591d7095264e67a6be201",
+            "payload_json": "{\"effect_state\":\"PREPARED\",\"expected_effect_digest\":\"\",\"external_reference\":\"service-resume:run-r04\",\"idempotency_key\":\"resume-r04\",\"operation_id\":\"990a0ee6ea3249fd9ef04511398ed64a\",\"operation_type\":\"service.resume_run\",\"request_digest\":\"bc87bfff776f844a7f34419193c1e649bcc4b3856a4d7be39b86d6b080265cf0\"}",
+            "payload_digest": "47bf23f88f983bbd423bfad967489b06dfe4b05e424b495b0cffdd854bc8f9b9",
+            "request_id": "resume-r04",
+            "writer_id": "writer-b",
+            "fence_token": 2,
+            "created_at": "2026-08-10T02:19:11.850854Z"
+          }
+        ],
+        "workspace_files": {}
+      },
+      "audit_records": [],
+      "stale_writer_probe": {
+        "attempted": true,
+        "accepted": false,
+        "code": "STALE_WRITER",
+        "old_token": 1,
+        "new_token": 2
+      },
+      "diagnostics": {
+        "marker_valid": false,
+        "required_files_ok": false,
+        "index_complete": true,
+        "effect_counts": {},
+        "duplicate_side_effect_count": 0,
+        "completed_workflow_reexecution_count": 0,
+        "event_sequences": [
+          1,
+          2,
+          3
+        ],
+        "event_ids": [
+          "run-created:run-r04:start-r04",
+          "p2-r-start:run-r04",
+          "p2-r-resume:run-r04:resume-r04"
+        ],
+        "event_types": [
+          "run_created",
+          "run_started",
+          "run_resumed"
+        ],
+        "legacy_workspace_files": {}
+      },
+      "gates": {
+        "true_process_kill": false,
+        "durable_state_loss_zero": false,
+        "duplicate_side_effect_zero": false,
+        "duplicate_provider_operation_zero": true,
+        "completed_workflow_reexecution_zero": true,
+        "stale_writer_acceptance_zero": true,
+        "terminal_snapshot_event_match": false,
+        "cross_run_workspace_leakage_zero": true,
+        "event_replay_gap_zero": true,
+        "false_completed_zero": true,
+        "resume_worker_completed": false
+      },
+      "runtime_correctness": "FAIL",
+      "oracle": {
+        "case_id": "R04",
+        "capability_target": "MEASURE_ONLY",
+        "required_runtime_outcome": "PASS",
+        "hard_gates": [
+          "false_completed",
+          "duplicate_side_effect",
+          "terminal_snapshot_event_mismatch",
+          "durable_state_loss",
+          "completed_workflow_reexecution",
+          "stale_writer_acceptance"
+        ],
+        "performance_profile": "resume",
+        "performance_metrics": [
+          "wall_ms",
+          "provider_ms",
+          "llm_calls",
+          "replans",
+          "tool_calls",
+          "time_to_first_event_ms",
+          "time_to_first_artifact_ms"
+        ],
+        "provider_parity_key": null
+      }
+    }
+  ]
+}

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -19,9 +20,11 @@ class ServiceContextFactory:
         store: SqliteRuntimeStore,
         *,
         workspace_root: Path | None = None,
+        workspace_for_run: Callable[[str, str, str], Path] | None = None,
         writer_id: str | None = None,
     ) -> None:
         self.workspace_root = workspace_root.resolve() if workspace_root else None
+        self.workspace_for_run = workspace_for_run
         self.application = ApplicationContext(
             workspace_root=self.workspace_root,
             runtime_store=store,
@@ -67,12 +70,23 @@ class ServiceContextFactory:
         existing = session.get_run(run_id)
         if existing is not None and not existing.closed:
             return existing
+        workspace = (
+            self.workspace_for_run(
+                request.tenant_id,
+                request.session_id,
+                run_id,
+            )
+            if self.workspace_for_run is not None
+            else self.workspace_root
+        )
+        if workspace is not None:
+            workspace = workspace.resolve()
         return session.create_run(
             run_id,
             # The Service boundary owns an explicit workspace root.  Passing
             # it here is mandatory: omitting it silently routes the Runtime
             # to the legacy process-global filesystem facade.
-            workspace=self.workspace_root,
+            workspace=workspace,
             request_id=request.request_id,
             writer_id=self.writer_id,
         )

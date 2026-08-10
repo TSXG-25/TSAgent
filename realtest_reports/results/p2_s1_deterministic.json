@@ -1,0 +1,3538 @@
+{
+  "harness": "p2-s1-deterministic-soak",
+  "version": "v0.1",
+  "provider": "deterministic-fake",
+  "cases": [
+    {
+      "case_id": "S01",
+      "provider": "deterministic-fake",
+      "run_count": 50,
+      "terminal_statuses": {
+        "COMPLETED": 50
+      },
+      "records": [
+        {
+          "run_id": "run-166c12071e1245c8a811e8aa1512770d",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "8f20b4bcc446947149b96d511d53786ac378c6af8823b8097ca9c63bd3e77a9d",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-166c12071e1245c8a811e8aa1512770d:soak-start:tenant-soak:session-00:0",
+            "soak-start:run-166c12071e1245c8a811e8aa1512770d",
+            "soak-complete:run-166c12071e1245c8a811e8aa1512770d"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-ea369856505342bdb4bb2b5b7fcd38cd",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "4c1f3d747fceab1d961ccc8c72b2822ae2cfe9d0fd53eb1620819d0a14f42fde",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-ea369856505342bdb4bb2b5b7fcd38cd:soak-start:tenant-soak:session-00:1",
+            "soak-start:run-ea369856505342bdb4bb2b5b7fcd38cd",
+            "soak-complete:run-ea369856505342bdb4bb2b5b7fcd38cd"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-2460385b3a9c48f98395f985c8a084cc",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "623df7473037a84ff8e9142a019216af1749c25853c3af076617ec4ce9f01ab9",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-2460385b3a9c48f98395f985c8a084cc:soak-start:tenant-soak:session-00:2",
+            "soak-start:run-2460385b3a9c48f98395f985c8a084cc",
+            "soak-complete:run-2460385b3a9c48f98395f985c8a084cc"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-d24610a719514674bb9ee62564c53def",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "d7a115f8b00f48334ed640c7ac4938e02ea77f31ff5975332500014b0fcb8147",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-d24610a719514674bb9ee62564c53def:soak-start:tenant-soak:session-00:3",
+            "soak-start:run-d24610a719514674bb9ee62564c53def",
+            "soak-complete:run-d24610a719514674bb9ee62564c53def"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-3bbd70e8843641bebc7e73d75b3a7297",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "2f6c6fcef091985e194df79189fab01e978ca064236a72a16b18be93f0c71190",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-3bbd70e8843641bebc7e73d75b3a7297:soak-start:tenant-soak:session-00:4",
+            "soak-start:run-3bbd70e8843641bebc7e73d75b3a7297",
+            "soak-complete:run-3bbd70e8843641bebc7e73d75b3a7297"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-8d2308e4a3a3452ab59b09b8486cd878",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "9b787644177ccb93ca96115c8925c6e64279f80c29103ec4d1550c9eced7e162",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-8d2308e4a3a3452ab59b09b8486cd878:soak-start:tenant-soak:session-00:5",
+            "soak-start:run-8d2308e4a3a3452ab59b09b8486cd878",
+            "soak-complete:run-8d2308e4a3a3452ab59b09b8486cd878"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-410b4bb9c240465e9a0d08feb319b442",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "1715a570d083d1603f6e96afa2a3b7e7616abd0d30b1e114897f94262628a38f",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-410b4bb9c240465e9a0d08feb319b442:soak-start:tenant-soak:session-00:6",
+            "soak-start:run-410b4bb9c240465e9a0d08feb319b442",
+            "soak-complete:run-410b4bb9c240465e9a0d08feb319b442"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-ce1bb66584ec412695dccdc9dace243d",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "424ecea20157887426c7d2cf1c43eeee1e7590abc481be96d18fb6b5ef919463",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-ce1bb66584ec412695dccdc9dace243d:soak-start:tenant-soak:session-00:7",
+            "soak-start:run-ce1bb66584ec412695dccdc9dace243d",
+            "soak-complete:run-ce1bb66584ec412695dccdc9dace243d"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-7643ba4f1a2d43a7b4f3fc709fa8b30b",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "d39a219f0bf1f59f2ec3119d850238ac7a038d0a9721eba5ece1eafd6a70ae51",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-7643ba4f1a2d43a7b4f3fc709fa8b30b:soak-start:tenant-soak:session-00:8",
+            "soak-start:run-7643ba4f1a2d43a7b4f3fc709fa8b30b",
+            "soak-complete:run-7643ba4f1a2d43a7b4f3fc709fa8b30b"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-1d2b5ed7a3a244e1b46ad8c49e0dd4e1",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "9c7d4672b199d642edc717ee5d103a86089b404fac79fb468bcec67574993535",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-1d2b5ed7a3a244e1b46ad8c49e0dd4e1:soak-start:tenant-soak:session-00:9",
+            "soak-start:run-1d2b5ed7a3a244e1b46ad8c49e0dd4e1",
+            "soak-complete:run-1d2b5ed7a3a244e1b46ad8c49e0dd4e1"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-c8af5e1249ac498b94529564af00258c",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "62df0223e54cdd8c799bee0ea86f76649e9b31eb7a00bbf422f0c80fe6b9d8f7",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-c8af5e1249ac498b94529564af00258c:soak-start:tenant-soak:session-00:10",
+            "soak-start:run-c8af5e1249ac498b94529564af00258c",
+            "soak-complete:run-c8af5e1249ac498b94529564af00258c"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-d97bfb7a79454d9282218331154e4702",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "c593f3c4dde1d8bd2ed3a774211c2cec43086ec9f2ed15ff7840a24b226ce51b",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-d97bfb7a79454d9282218331154e4702:soak-start:tenant-soak:session-00:11",
+            "soak-start:run-d97bfb7a79454d9282218331154e4702",
+            "soak-complete:run-d97bfb7a79454d9282218331154e4702"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-4b06c992c8d4481eaba33742dc69294a",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "8efaec66c4e42e91cfe8cbe0c96671f69cec506be3b0e731170d190ab974ed01",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-4b06c992c8d4481eaba33742dc69294a:soak-start:tenant-soak:session-00:12",
+            "soak-start:run-4b06c992c8d4481eaba33742dc69294a",
+            "soak-complete:run-4b06c992c8d4481eaba33742dc69294a"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-b21fa78eeb9e46e9acc98c601e824e71",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "6baad7ac675a8f249a95198d974494dc747fc57d4ebf675b803eedbb9efc70b2",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-b21fa78eeb9e46e9acc98c601e824e71:soak-start:tenant-soak:session-00:13",
+            "soak-start:run-b21fa78eeb9e46e9acc98c601e824e71",
+            "soak-complete:run-b21fa78eeb9e46e9acc98c601e824e71"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-d04477a548354c18ae33bb88ca241cc1",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "d9e7a26e9ba8ddddd35c2a51d376717d520295e6ce48b169969f01f6055e7c93",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-d04477a548354c18ae33bb88ca241cc1:soak-start:tenant-soak:session-00:14",
+            "soak-start:run-d04477a548354c18ae33bb88ca241cc1",
+            "soak-complete:run-d04477a548354c18ae33bb88ca241cc1"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-05f68492ea6b4b949b24aeaa741f272e",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "47199b80b5d5d4ad447fd9a374bd4e76868a28654b74c68446cba57eaeca6e01",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-05f68492ea6b4b949b24aeaa741f272e:soak-start:tenant-soak:session-00:15",
+            "soak-start:run-05f68492ea6b4b949b24aeaa741f272e",
+            "soak-complete:run-05f68492ea6b4b949b24aeaa741f272e"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-b450e9c5778e4132bcd541108f49b2dc",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "9463d1279592d3a6bc417cfc61a6853712b9f7d425e77082da03e4d67209ac0a",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-b450e9c5778e4132bcd541108f49b2dc:soak-start:tenant-soak:session-00:16",
+            "soak-start:run-b450e9c5778e4132bcd541108f49b2dc",
+            "soak-complete:run-b450e9c5778e4132bcd541108f49b2dc"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-58c078ad55c346fc891593562ea773d0",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "ee507cba6e83973fbaef76116fb76e94f20a89196602218f10e3789de0a31a2f",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-58c078ad55c346fc891593562ea773d0:soak-start:tenant-soak:session-00:17",
+            "soak-start:run-58c078ad55c346fc891593562ea773d0",
+            "soak-complete:run-58c078ad55c346fc891593562ea773d0"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-4bdd20e0ea464b6b92620a2ad7aa4463",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "42ae70057925a802b82f28387f6f100710d01228a70fd25a9b5dd406341ac531",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-4bdd20e0ea464b6b92620a2ad7aa4463:soak-start:tenant-soak:session-00:18",
+            "soak-start:run-4bdd20e0ea464b6b92620a2ad7aa4463",
+            "soak-complete:run-4bdd20e0ea464b6b92620a2ad7aa4463"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-e4871228950d49a0acc7d866a4e24e6d",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "1ed7feae5fa07f1ab2bf5f0883caa386b92136e0867833fe58d6852b85901c4d",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-e4871228950d49a0acc7d866a4e24e6d:soak-start:tenant-soak:session-00:19",
+            "soak-start:run-e4871228950d49a0acc7d866a4e24e6d",
+            "soak-complete:run-e4871228950d49a0acc7d866a4e24e6d"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-f73dd59df03640e388edff9658642a9a",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "932b5736b9777b570454c27e8f061044bb9120028caa485f15e1e2f7cbe824c3",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-f73dd59df03640e388edff9658642a9a:soak-start:tenant-soak:session-00:20",
+            "soak-start:run-f73dd59df03640e388edff9658642a9a",
+            "soak-complete:run-f73dd59df03640e388edff9658642a9a"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-e585611552af436ba05346550722687e",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "4ee1fb93557416753201e5544cb4305a7565beee96d3d9ab50955cfe63952c42",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-e585611552af436ba05346550722687e:soak-start:tenant-soak:session-00:21",
+            "soak-start:run-e585611552af436ba05346550722687e",
+            "soak-complete:run-e585611552af436ba05346550722687e"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-69f344452d45449c8b552731a8c91f8b",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "e4fad00a5ab76fbf6c38041bba804c93c46d75f0b2c9111ce75ec10e7ab04643",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-69f344452d45449c8b552731a8c91f8b:soak-start:tenant-soak:session-00:22",
+            "soak-start:run-69f344452d45449c8b552731a8c91f8b",
+            "soak-complete:run-69f344452d45449c8b552731a8c91f8b"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-f43d4ec4006441c69932654bccf4e6e8",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "f15295397421b0d29721e90f06cd26b298449fc58e9c5582c6e47626c984fd0c",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-f43d4ec4006441c69932654bccf4e6e8:soak-start:tenant-soak:session-00:23",
+            "soak-start:run-f43d4ec4006441c69932654bccf4e6e8",
+            "soak-complete:run-f43d4ec4006441c69932654bccf4e6e8"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-509c0356fe30423796ba971c2d30bd20",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "9bc9aa62b852e2ed6d42f7a63ac30c3a89274bcaf4256360d8f834b30f6153d9",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-509c0356fe30423796ba971c2d30bd20:soak-start:tenant-soak:session-00:24",
+            "soak-start:run-509c0356fe30423796ba971c2d30bd20",
+            "soak-complete:run-509c0356fe30423796ba971c2d30bd20"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-ac85f6284808417a8008466ebd88bed9",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "e7c1497ad497823f874a041b94a0a39f122941cc27cd36f518b3c21e282836f6",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-ac85f6284808417a8008466ebd88bed9:soak-start:tenant-soak:session-00:25",
+            "soak-start:run-ac85f6284808417a8008466ebd88bed9",
+            "soak-complete:run-ac85f6284808417a8008466ebd88bed9"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-322d160a608b4ff0a487ac5aca93f048",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "ebac44b7b0e397dd6e1ca9699b68ce7e7fe89744aeb9aacced918e40776779c5",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-322d160a608b4ff0a487ac5aca93f048:soak-start:tenant-soak:session-00:26",
+            "soak-start:run-322d160a608b4ff0a487ac5aca93f048",
+            "soak-complete:run-322d160a608b4ff0a487ac5aca93f048"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-281e5795de1f447cb69d999cbc1f55c5",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "951991c30d2fe831db6691ae30aed19d2beb092c43884ea6aa8324fd7407e7b4",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-281e5795de1f447cb69d999cbc1f55c5:soak-start:tenant-soak:session-00:27",
+            "soak-start:run-281e5795de1f447cb69d999cbc1f55c5",
+            "soak-complete:run-281e5795de1f447cb69d999cbc1f55c5"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-38862dd4684f45a18506ff64ed218cd2",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "3338b5a296571a7ee2b1682a11208bac7f0ced29b020e5c516adde159d63320e",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-38862dd4684f45a18506ff64ed218cd2:soak-start:tenant-soak:session-00:28",
+            "soak-start:run-38862dd4684f45a18506ff64ed218cd2",
+            "soak-complete:run-38862dd4684f45a18506ff64ed218cd2"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-96ff134350e64f52bf99166e280ae58e",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "d152a64515e3e048f5f3f4bc4ee953151345bf17ea390ad2ba8dad2c8a9455d3",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-96ff134350e64f52bf99166e280ae58e:soak-start:tenant-soak:session-00:29",
+            "soak-start:run-96ff134350e64f52bf99166e280ae58e",
+            "soak-complete:run-96ff134350e64f52bf99166e280ae58e"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-b9ecd68caa8b4029a73fb2a21ddfa498",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "ce58dbd0468f275f12d30a47dc1439f8f4cc6ea1354602ceef72de786fd32070",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-b9ecd68caa8b4029a73fb2a21ddfa498:soak-start:tenant-soak:session-00:30",
+            "soak-start:run-b9ecd68caa8b4029a73fb2a21ddfa498",
+            "soak-complete:run-b9ecd68caa8b4029a73fb2a21ddfa498"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-7d2f27a531ca4ecda26f8a25e9120755",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "a71d91b5af37d946a008c150993f80cba3d2b1763d22d615dddcc8c552357a7f",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-7d2f27a531ca4ecda26f8a25e9120755:soak-start:tenant-soak:session-00:31",
+            "soak-start:run-7d2f27a531ca4ecda26f8a25e9120755",
+            "soak-complete:run-7d2f27a531ca4ecda26f8a25e9120755"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-8bc53699456c4b8eb656f0bbaa148e82",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "38b0c01638911294ab95c70c1552eabcc851149c4703219654d63fd5a937e6c5",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-8bc53699456c4b8eb656f0bbaa148e82:soak-start:tenant-soak:session-00:32",
+            "soak-start:run-8bc53699456c4b8eb656f0bbaa148e82",
+            "soak-complete:run-8bc53699456c4b8eb656f0bbaa148e82"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-10d6d27b15cd4b5990d1345fa7066060",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "db8ac327f2e4c71fb5baaaa916595cb67059eb395225c9da2103543ca2f98534",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-10d6d27b15cd4b5990d1345fa7066060:soak-start:tenant-soak:session-00:33",
+            "soak-start:run-10d6d27b15cd4b5990d1345fa7066060",
+            "soak-complete:run-10d6d27b15cd4b5990d1345fa7066060"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-29230a5b25fa4bb0b54c16894edd185d",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "79b681e2447190125b923160fbdffaa1d6a3da3e737b17b5462cfd34c259aa26",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-29230a5b25fa4bb0b54c16894edd185d:soak-start:tenant-soak:session-00:34",
+            "soak-start:run-29230a5b25fa4bb0b54c16894edd185d",
+            "soak-complete:run-29230a5b25fa4bb0b54c16894edd185d"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-25162f247d6f471490814c2c607d5865",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "31950a8f00148339f05ec1de6295f95dd875579658f4c961168ab42d6474b40b",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-25162f247d6f471490814c2c607d5865:soak-start:tenant-soak:session-00:35",
+            "soak-start:run-25162f247d6f471490814c2c607d5865",
+            "soak-complete:run-25162f247d6f471490814c2c607d5865"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-5113e79415284a5197fbd70359739cad",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "bed53afe14dc455656d09ff71b82ba8cf05c36a9bc0538d5f938c94d0d2a2fbc",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-5113e79415284a5197fbd70359739cad:soak-start:tenant-soak:session-00:36",
+            "soak-start:run-5113e79415284a5197fbd70359739cad",
+            "soak-complete:run-5113e79415284a5197fbd70359739cad"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-0bd883b9ced04572ba04be2ad238e389",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "46a744dfff571e3089e5a9264035061b90b7a9a932e596692aea579d97cd4326",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-0bd883b9ced04572ba04be2ad238e389:soak-start:tenant-soak:session-00:37",
+            "soak-start:run-0bd883b9ced04572ba04be2ad238e389",
+            "soak-complete:run-0bd883b9ced04572ba04be2ad238e389"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-648f7a7f0d4c497abc446bfe3cdf67c9",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "177e863cf6df95c638a82828aa9c756a5ed3cb83970e7099cc23645534b0fb97",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-648f7a7f0d4c497abc446bfe3cdf67c9:soak-start:tenant-soak:session-00:38",
+            "soak-start:run-648f7a7f0d4c497abc446bfe3cdf67c9",
+            "soak-complete:run-648f7a7f0d4c497abc446bfe3cdf67c9"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-d0c95b148beb4c31ba2eab969b725afc",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "86b81bbe4d6895f31219fdd958799a80d0c0784a456fa2eb20e1a3693b1c123d",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-d0c95b148beb4c31ba2eab969b725afc:soak-start:tenant-soak:session-00:39",
+            "soak-start:run-d0c95b148beb4c31ba2eab969b725afc",
+            "soak-complete:run-d0c95b148beb4c31ba2eab969b725afc"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-b1e9ba04e5104f0fb0604d473440e623",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "d1f0f5ac93a478ff5098cfc79ade3226a8290bd0ee4d2f3a11e6c51b9c669149",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-b1e9ba04e5104f0fb0604d473440e623:soak-start:tenant-soak:session-00:40",
+            "soak-start:run-b1e9ba04e5104f0fb0604d473440e623",
+            "soak-complete:run-b1e9ba04e5104f0fb0604d473440e623"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-37c4ffa8323541d3a75d9ea7da1d24b7",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "2f4a5fcb223fc82f7b672c656716c93d29ba4a9f2836c25a35aa3fe60ec498f6",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-37c4ffa8323541d3a75d9ea7da1d24b7:soak-start:tenant-soak:session-00:41",
+            "soak-start:run-37c4ffa8323541d3a75d9ea7da1d24b7",
+            "soak-complete:run-37c4ffa8323541d3a75d9ea7da1d24b7"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-626ed4bfb68e40c9971695d45155d1f6",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "0739157d90eac9d6f624b5c1dfb8dcf28150453d5290394cc1a8e17c46e0fb1d",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-626ed4bfb68e40c9971695d45155d1f6:soak-start:tenant-soak:session-00:42",
+            "soak-start:run-626ed4bfb68e40c9971695d45155d1f6",
+            "soak-complete:run-626ed4bfb68e40c9971695d45155d1f6"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-f247a4f23914481bac1262a197b9a5b6",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "a762b46bc821b6ab7ea0f0c5aaf3422a460f65dfe67f6b651d9837aa4ba43332",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-f247a4f23914481bac1262a197b9a5b6:soak-start:tenant-soak:session-00:43",
+            "soak-start:run-f247a4f23914481bac1262a197b9a5b6",
+            "soak-complete:run-f247a4f23914481bac1262a197b9a5b6"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-953939af18e2498dbf09ec3365be540d",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "75b09f26d7c3b8c545f8786c7afb0c530a8177a8f3968599a64dd9e565de8ae1",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-953939af18e2498dbf09ec3365be540d:soak-start:tenant-soak:session-00:44",
+            "soak-start:run-953939af18e2498dbf09ec3365be540d",
+            "soak-complete:run-953939af18e2498dbf09ec3365be540d"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-9d0076e62ba44ff0b357444ec204b2c0",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "a60e85345b49427ca0f73177fc2c2a5477263355b376126bd2ce7c1ac6d89018",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-9d0076e62ba44ff0b357444ec204b2c0:soak-start:tenant-soak:session-00:45",
+            "soak-start:run-9d0076e62ba44ff0b357444ec204b2c0",
+            "soak-complete:run-9d0076e62ba44ff0b357444ec204b2c0"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-43e2b5cc84864499976002cbbfd36260",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "ef7891e32b1e972f6759a83cd4c174e660f59850c53e1baefa57929cb8e72611",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-43e2b5cc84864499976002cbbfd36260:soak-start:tenant-soak:session-00:46",
+            "soak-start:run-43e2b5cc84864499976002cbbfd36260",
+            "soak-complete:run-43e2b5cc84864499976002cbbfd36260"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-bb63c8a052ae4ca2895f8a6e6c5c831a",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "9852f47d4080df044f8e2c4c7092c339fb4f3d30c598542d23efd0582dfb73a6",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-bb63c8a052ae4ca2895f8a6e6c5c831a:soak-start:tenant-soak:session-00:47",
+            "soak-start:run-bb63c8a052ae4ca2895f8a6e6c5c831a",
+            "soak-complete:run-bb63c8a052ae4ca2895f8a6e6c5c831a"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-f34434a09ea244e8a86cfad9bc7fcd6c",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "a1e8bac86e38f131d20bdb199c5e8f88c78c19a10ff5ac1c83f411b3ac8de70f",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-f34434a09ea244e8a86cfad9bc7fcd6c:soak-start:tenant-soak:session-00:48",
+            "soak-start:run-f34434a09ea244e8a86cfad9bc7fcd6c",
+            "soak-complete:run-f34434a09ea244e8a86cfad9bc7fcd6c"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-7b8113e7a9f94c818953d43554cb1381",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "cef2c87a5733f6d2cf283c37ad0bcf88d5156feb827ac762589a5c43645b0e07",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-7b8113e7a9f94c818953d43554cb1381:soak-start:tenant-soak:session-00:49",
+            "soak-start:run-7b8113e7a9f94c818953d43554cb1381",
+            "soak-complete:run-7b8113e7a9f94c818953d43554cb1381"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        }
+      ],
+      "resource_samples": [
+        {
+          "label": "baseline",
+          "rss_bytes": 301727744,
+          "open_file_descriptors": 10,
+          "pending_async_tasks": 0,
+          "active_run_contexts": 0,
+          "event_subscriptions": 0,
+          "sqlite_connections": 1,
+          "sqlite_busy_errors": 0,
+          "workspace_handles": 0,
+          "durable_active_runs": 0
+        },
+        {
+          "label": "run-10",
+          "rss_bytes": 301973504,
+          "open_file_descriptors": 10,
+          "pending_async_tasks": 0,
+          "active_run_contexts": 0,
+          "event_subscriptions": 0,
+          "sqlite_connections": 1,
+          "sqlite_busy_errors": 0,
+          "workspace_handles": 0,
+          "durable_active_runs": 0
+        },
+        {
+          "label": "run-20",
+          "rss_bytes": 302088192,
+          "open_file_descriptors": 10,
+          "pending_async_tasks": 0,
+          "active_run_contexts": 0,
+          "event_subscriptions": 0,
+          "sqlite_connections": 1,
+          "sqlite_busy_errors": 0,
+          "workspace_handles": 0,
+          "durable_active_runs": 0
+        },
+        {
+          "label": "run-30",
+          "rss_bytes": 302186496,
+          "open_file_descriptors": 10,
+          "pending_async_tasks": 0,
+          "active_run_contexts": 0,
+          "event_subscriptions": 0,
+          "sqlite_connections": 1,
+          "sqlite_busy_errors": 0,
+          "workspace_handles": 0,
+          "durable_active_runs": 0
+        },
+        {
+          "label": "run-40",
+          "rss_bytes": 302268416,
+          "open_file_descriptors": 10,
+          "pending_async_tasks": 0,
+          "active_run_contexts": 0,
+          "event_subscriptions": 0,
+          "sqlite_connections": 1,
+          "sqlite_busy_errors": 0,
+          "workspace_handles": 0,
+          "durable_active_runs": 0
+        },
+        {
+          "label": "run-50",
+          "rss_bytes": 302383104,
+          "open_file_descriptors": 10,
+          "pending_async_tasks": 0,
+          "active_run_contexts": 0,
+          "event_subscriptions": 0,
+          "sqlite_connections": 1,
+          "sqlite_busy_errors": 0,
+          "workspace_handles": 0,
+          "durable_active_runs": 0
+        },
+        {
+          "label": "pre-close",
+          "rss_bytes": 302383104,
+          "open_file_descriptors": 10,
+          "pending_async_tasks": 0,
+          "active_run_contexts": 0,
+          "event_subscriptions": 0,
+          "sqlite_connections": 1,
+          "sqlite_busy_errors": 0,
+          "workspace_handles": 0,
+          "durable_active_runs": 0
+        },
+        {
+          "label": "post-close-gc",
+          "rss_bytes": 302383104,
+          "open_file_descriptors": 7,
+          "pending_async_tasks": 0,
+          "active_run_contexts": 0,
+          "event_subscriptions": 0,
+          "sqlite_connections": 0,
+          "sqlite_busy_errors": 0,
+          "workspace_handles": 0,
+          "durable_active_runs": 0
+        }
+      ],
+      "execution_counts": {
+        "run-166c12071e1245c8a811e8aa1512770d": 1,
+        "run-ea369856505342bdb4bb2b5b7fcd38cd": 1,
+        "run-2460385b3a9c48f98395f985c8a084cc": 1,
+        "run-d24610a719514674bb9ee62564c53def": 1,
+        "run-3bbd70e8843641bebc7e73d75b3a7297": 1,
+        "run-8d2308e4a3a3452ab59b09b8486cd878": 1,
+        "run-410b4bb9c240465e9a0d08feb319b442": 1,
+        "run-ce1bb66584ec412695dccdc9dace243d": 1,
+        "run-7643ba4f1a2d43a7b4f3fc709fa8b30b": 1,
+        "run-1d2b5ed7a3a244e1b46ad8c49e0dd4e1": 1,
+        "run-c8af5e1249ac498b94529564af00258c": 1,
+        "run-d97bfb7a79454d9282218331154e4702": 1,
+        "run-4b06c992c8d4481eaba33742dc69294a": 1,
+        "run-b21fa78eeb9e46e9acc98c601e824e71": 1,
+        "run-d04477a548354c18ae33bb88ca241cc1": 1,
+        "run-05f68492ea6b4b949b24aeaa741f272e": 1,
+        "run-b450e9c5778e4132bcd541108f49b2dc": 1,
+        "run-58c078ad55c346fc891593562ea773d0": 1,
+        "run-4bdd20e0ea464b6b92620a2ad7aa4463": 1,
+        "run-e4871228950d49a0acc7d866a4e24e6d": 1,
+        "run-f73dd59df03640e388edff9658642a9a": 1,
+        "run-e585611552af436ba05346550722687e": 1,
+        "run-69f344452d45449c8b552731a8c91f8b": 1,
+        "run-f43d4ec4006441c69932654bccf4e6e8": 1,
+        "run-509c0356fe30423796ba971c2d30bd20": 1,
+        "run-ac85f6284808417a8008466ebd88bed9": 1,
+        "run-322d160a608b4ff0a487ac5aca93f048": 1,
+        "run-281e5795de1f447cb69d999cbc1f55c5": 1,
+        "run-38862dd4684f45a18506ff64ed218cd2": 1,
+        "run-96ff134350e64f52bf99166e280ae58e": 1,
+        "run-b9ecd68caa8b4029a73fb2a21ddfa498": 1,
+        "run-7d2f27a531ca4ecda26f8a25e9120755": 1,
+        "run-8bc53699456c4b8eb656f0bbaa148e82": 1,
+        "run-10d6d27b15cd4b5990d1345fa7066060": 1,
+        "run-29230a5b25fa4bb0b54c16894edd185d": 1,
+        "run-25162f247d6f471490814c2c607d5865": 1,
+        "run-5113e79415284a5197fbd70359739cad": 1,
+        "run-0bd883b9ced04572ba04be2ad238e389": 1,
+        "run-648f7a7f0d4c497abc446bfe3cdf67c9": 1,
+        "run-d0c95b148beb4c31ba2eab969b725afc": 1,
+        "run-b1e9ba04e5104f0fb0604d473440e623": 1,
+        "run-37c4ffa8323541d3a75d9ea7da1d24b7": 1,
+        "run-626ed4bfb68e40c9971695d45155d1f6": 1,
+        "run-f247a4f23914481bac1262a197b9a5b6": 1,
+        "run-953939af18e2498dbf09ec3365be540d": 1,
+        "run-9d0076e62ba44ff0b357444ec204b2c0": 1,
+        "run-43e2b5cc84864499976002cbbfd36260": 1,
+        "run-bb63c8a052ae4ca2895f8a6e6c5c831a": 1,
+        "run-f34434a09ea244e8a86cfad9bc7fcd6c": 1,
+        "run-7b8113e7a9f94c818953d43554cb1381": 1
+      },
+      "side_effect_counts": {
+        "run-166c12071e1245c8a811e8aa1512770d": 1,
+        "run-ea369856505342bdb4bb2b5b7fcd38cd": 1,
+        "run-2460385b3a9c48f98395f985c8a084cc": 1,
+        "run-d24610a719514674bb9ee62564c53def": 1,
+        "run-3bbd70e8843641bebc7e73d75b3a7297": 1,
+        "run-8d2308e4a3a3452ab59b09b8486cd878": 1,
+        "run-410b4bb9c240465e9a0d08feb319b442": 1,
+        "run-ce1bb66584ec412695dccdc9dace243d": 1,
+        "run-7643ba4f1a2d43a7b4f3fc709fa8b30b": 1,
+        "run-1d2b5ed7a3a244e1b46ad8c49e0dd4e1": 1,
+        "run-c8af5e1249ac498b94529564af00258c": 1,
+        "run-d97bfb7a79454d9282218331154e4702": 1,
+        "run-4b06c992c8d4481eaba33742dc69294a": 1,
+        "run-b21fa78eeb9e46e9acc98c601e824e71": 1,
+        "run-d04477a548354c18ae33bb88ca241cc1": 1,
+        "run-05f68492ea6b4b949b24aeaa741f272e": 1,
+        "run-b450e9c5778e4132bcd541108f49b2dc": 1,
+        "run-58c078ad55c346fc891593562ea773d0": 1,
+        "run-4bdd20e0ea464b6b92620a2ad7aa4463": 1,
+        "run-e4871228950d49a0acc7d866a4e24e6d": 1,
+        "run-f73dd59df03640e388edff9658642a9a": 1,
+        "run-e585611552af436ba05346550722687e": 1,
+        "run-69f344452d45449c8b552731a8c91f8b": 1,
+        "run-f43d4ec4006441c69932654bccf4e6e8": 1,
+        "run-509c0356fe30423796ba971c2d30bd20": 1,
+        "run-ac85f6284808417a8008466ebd88bed9": 1,
+        "run-322d160a608b4ff0a487ac5aca93f048": 1,
+        "run-281e5795de1f447cb69d999cbc1f55c5": 1,
+        "run-38862dd4684f45a18506ff64ed218cd2": 1,
+        "run-96ff134350e64f52bf99166e280ae58e": 1,
+        "run-b9ecd68caa8b4029a73fb2a21ddfa498": 1,
+        "run-7d2f27a531ca4ecda26f8a25e9120755": 1,
+        "run-8bc53699456c4b8eb656f0bbaa148e82": 1,
+        "run-10d6d27b15cd4b5990d1345fa7066060": 1,
+        "run-29230a5b25fa4bb0b54c16894edd185d": 1,
+        "run-25162f247d6f471490814c2c607d5865": 1,
+        "run-5113e79415284a5197fbd70359739cad": 1,
+        "run-0bd883b9ced04572ba04be2ad238e389": 1,
+        "run-648f7a7f0d4c497abc446bfe3cdf67c9": 1,
+        "run-d0c95b148beb4c31ba2eab969b725afc": 1,
+        "run-b1e9ba04e5104f0fb0604d473440e623": 1,
+        "run-37c4ffa8323541d3a75d9ea7da1d24b7": 1,
+        "run-626ed4bfb68e40c9971695d45155d1f6": 1,
+        "run-f247a4f23914481bac1262a197b9a5b6": 1,
+        "run-953939af18e2498dbf09ec3365be540d": 1,
+        "run-9d0076e62ba44ff0b357444ec204b2c0": 1,
+        "run-43e2b5cc84864499976002cbbfd36260": 1,
+        "run-bb63c8a052ae4ca2895f8a6e6c5c831a": 1,
+        "run-f34434a09ea244e8a86cfad9bc7fcd6c": 1,
+        "run-7b8113e7a9f94c818953d43554cb1381": 1
+      },
+      "gates": {
+        "cross_context_leakage": true,
+        "workspace_leakage": true,
+        "memory_scope": true,
+        "duplicate_side_effect": true,
+        "false_completed": true,
+        "orphan_active_run": true,
+        "subscriber_leak": true,
+        "sqlite_deadlock_or_busy_failure": true,
+        "terminal_snapshot_event_mismatch": true
+      },
+      "runtime_correctness": "PASS",
+      "capability_outcome": "PASS",
+      "provider_errors": [],
+      "notes": [],
+      "replay_cycles": 0
+    },
+    {
+      "case_id": "S02",
+      "provider": "deterministic-fake",
+      "run_count": 50,
+      "terminal_statuses": {
+        "COMPLETED": 50
+      },
+      "records": [
+        {
+          "run_id": "run-73ad66cdc756435dbace0f85190de5c2",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "c594ce051372ed3c847438ecfb11898dd59decce20ae7e14280a2b033fdbcb43",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-73ad66cdc756435dbace0f85190de5c2:soak-start:tenant-soak:session-00:0",
+            "soak-start:run-73ad66cdc756435dbace0f85190de5c2",
+            "soak-complete:run-73ad66cdc756435dbace0f85190de5c2"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-37cfefaf08ac4b66ac69e9f53692ac0e",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "d7458127c9c66f9a93866b76f2e6e72524f0ed5f6e6598b176e4e79562175cef",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-37cfefaf08ac4b66ac69e9f53692ac0e:soak-start:tenant-soak:session-00:1",
+            "soak-start:run-37cfefaf08ac4b66ac69e9f53692ac0e",
+            "soak-complete:run-37cfefaf08ac4b66ac69e9f53692ac0e"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-66a4f1e5c26741e9bec4e9be4f87430f",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "98ad4d1941941c1d0b5b0045f6dab9b482008389876a3fd4fe63e7b7bafaac38",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-66a4f1e5c26741e9bec4e9be4f87430f:soak-start:tenant-soak:session-00:2",
+            "soak-start:run-66a4f1e5c26741e9bec4e9be4f87430f",
+            "soak-complete:run-66a4f1e5c26741e9bec4e9be4f87430f"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-3b9cd3df590f4227b959701759c1d2ea",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "d33ecb208fef5b5bb19b86ec579470fa8b344db0ec3cb16293fd3772d0571c15",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-3b9cd3df590f4227b959701759c1d2ea:soak-start:tenant-soak:session-00:3",
+            "soak-start:run-3b9cd3df590f4227b959701759c1d2ea",
+            "soak-complete:run-3b9cd3df590f4227b959701759c1d2ea"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-a5765693d4c645cd882cc1e42c1a9a68",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-00",
+          "user_id": "user-tenant-soak-session-00",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "7e42480316570779804ceac321547f9eca6f7cd3e8dea3928bad2f6bb8755073",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-a5765693d4c645cd882cc1e42c1a9a68:soak-start:tenant-soak:session-00:4",
+            "soak-start:run-a5765693d4c645cd882cc1e42c1a9a68",
+            "soak-complete:run-a5765693d4c645cd882cc1e42c1a9a68"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-6aa60915bd244f249d724d4fb0451c7a",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-01",
+          "user_id": "user-tenant-soak-session-01",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "3510cd6f998a83d4791a0616c2b9852bbf9d24c8a05cd39be4c34db16da7c176",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-6aa60915bd244f249d724d4fb0451c7a:soak-start:tenant-soak:session-01:0",
+            "soak-start:run-6aa60915bd244f249d724d4fb0451c7a",
+            "soak-complete:run-6aa60915bd244f249d724d4fb0451c7a"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-6e08b425f8584a04bb70fedf02ca5fb5",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-01",
+          "user_id": "user-tenant-soak-session-01",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "5227f8e51c44cd4b2cbd205e9b4958f3adb44c16923c88fe26bd2f2cdddb4d86",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-6e08b425f8584a04bb70fedf02ca5fb5:soak-start:tenant-soak:session-01:1",
+            "soak-start:run-6e08b425f8584a04bb70fedf02ca5fb5",
+            "soak-complete:run-6e08b425f8584a04bb70fedf02ca5fb5"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-4eb85342bf9748f5883d6d6a3d750d6b",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-01",
+          "user_id": "user-tenant-soak-session-01",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "0e703fcfd18a92a07e5f28f5e9a7bcc16714f24b6504440294e0cddaa9db2003",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-4eb85342bf9748f5883d6d6a3d750d6b:soak-start:tenant-soak:session-01:2",
+            "soak-start:run-4eb85342bf9748f5883d6d6a3d750d6b",
+            "soak-complete:run-4eb85342bf9748f5883d6d6a3d750d6b"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-fc701a72917b45f9aaccae15242bc1e3",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-01",
+          "user_id": "user-tenant-soak-session-01",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "1a76741b9050bb52010d5d4c3bf519adda4e856fbf6926a80664930a227b3e60",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-fc701a72917b45f9aaccae15242bc1e3:soak-start:tenant-soak:session-01:3",
+            "soak-start:run-fc701a72917b45f9aaccae15242bc1e3",
+            "soak-complete:run-fc701a72917b45f9aaccae15242bc1e3"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-6c27e48ff7c7411c981ff5ba32be8112",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-01",
+          "user_id": "user-tenant-soak-session-01",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "a93453de70cce8639eab2efaf53e6641cc02afb687f1e17aafbad8646c667ba6",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-6c27e48ff7c7411c981ff5ba32be8112:soak-start:tenant-soak:session-01:4",
+            "soak-start:run-6c27e48ff7c7411c981ff5ba32be8112",
+            "soak-complete:run-6c27e48ff7c7411c981ff5ba32be8112"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-865ec67e13cc4f2fb3608177b1a44364",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-02",
+          "user_id": "user-tenant-soak-session-02",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "89b23ab1d7b1af5bdea0e1cdecc4dc9d0b0fc9f877950f2237bfb0bc296dd463",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-865ec67e13cc4f2fb3608177b1a44364:soak-start:tenant-soak:session-02:0",
+            "soak-start:run-865ec67e13cc4f2fb3608177b1a44364",
+            "soak-complete:run-865ec67e13cc4f2fb3608177b1a44364"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-bbcfe009587c4b9dbc4ce18e106350ee",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-02",
+          "user_id": "user-tenant-soak-session-02",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "7db6de6a912cdc4c5500babe9483a052ca779aa9c59ab6d6c185bbc2e4e5815e",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-bbcfe009587c4b9dbc4ce18e106350ee:soak-start:tenant-soak:session-02:1",
+            "soak-start:run-bbcfe009587c4b9dbc4ce18e106350ee",
+            "soak-complete:run-bbcfe009587c4b9dbc4ce18e106350ee"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-106edb1fa02b46928ea87bb030a1fabe",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-02",
+          "user_id": "user-tenant-soak-session-02",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "54c300f2992e22d15a6d544d60351e14db5e30f32b57a78e272ef812c2ba067d",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-106edb1fa02b46928ea87bb030a1fabe:soak-start:tenant-soak:session-02:2",
+            "soak-start:run-106edb1fa02b46928ea87bb030a1fabe",
+            "soak-complete:run-106edb1fa02b46928ea87bb030a1fabe"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-3ededb3add6541b89260f691e411d489",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-02",
+          "user_id": "user-tenant-soak-session-02",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "292cae463141877bc4d4b9341413bc35419c68c5cd755fd8a54bb987739c4071",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-3ededb3add6541b89260f691e411d489:soak-start:tenant-soak:session-02:3",
+            "soak-start:run-3ededb3add6541b89260f691e411d489",
+            "soak-complete:run-3ededb3add6541b89260f691e411d489"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-3643db6acda841ddb7a0209113270b59",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-02",
+          "user_id": "user-tenant-soak-session-02",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "4054699767673b40fa3667bb9fb2d8e1ac6c99a9d786f08ca24dfa6e301292cd",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-3643db6acda841ddb7a0209113270b59:soak-start:tenant-soak:session-02:4",
+            "soak-start:run-3643db6acda841ddb7a0209113270b59",
+            "soak-complete:run-3643db6acda841ddb7a0209113270b59"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-06fc1eac69b0470daacf22e40901dadd",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-03",
+          "user_id": "user-tenant-soak-session-03",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "8ab71fd885830bfad84a7ce7d3119803b8b94ae64202af1c9d0e7b1398d01280",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-06fc1eac69b0470daacf22e40901dadd:soak-start:tenant-soak:session-03:0",
+            "soak-start:run-06fc1eac69b0470daacf22e40901dadd",
+            "soak-complete:run-06fc1eac69b0470daacf22e40901dadd"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-a724fa09553c4b3a9c70e4365b3e3861",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-03",
+          "user_id": "user-tenant-soak-session-03",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "6e0b87c0fa917b7532563398be4ffa7b095b990673b6aeda755dda3664307fdb",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-a724fa09553c4b3a9c70e4365b3e3861:soak-start:tenant-soak:session-03:1",
+            "soak-start:run-a724fa09553c4b3a9c70e4365b3e3861",
+            "soak-complete:run-a724fa09553c4b3a9c70e4365b3e3861"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-8c2848540191468db1f0ae923fe2d6c7",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-03",
+          "user_id": "user-tenant-soak-session-03",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "6a639c5867723d9c308f7a89ccb1e1fe5f3fe4d972d8d4a67565297ccaeac740",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-8c2848540191468db1f0ae923fe2d6c7:soak-start:tenant-soak:session-03:2",
+            "soak-start:run-8c2848540191468db1f0ae923fe2d6c7",
+            "soak-complete:run-8c2848540191468db1f0ae923fe2d6c7"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-dbd937b80dc14354b8a34549b8df4f2d",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-03",
+          "user_id": "user-tenant-soak-session-03",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "690452c4215f8d6efaedab9e9703da9150cf1b0e2a84cebf5f6300fc4b12313a",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-dbd937b80dc14354b8a34549b8df4f2d:soak-start:tenant-soak:session-03:3",
+            "soak-start:run-dbd937b80dc14354b8a34549b8df4f2d",
+            "soak-complete:run-dbd937b80dc14354b8a34549b8df4f2d"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-252edcf8353b4cd5a138493c5a767b1c",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-03",
+          "user_id": "user-tenant-soak-session-03",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "ea33047b34f1d1cb515763a804b8de96cf69bba601f876b93bb2a0080b4e28df",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-252edcf8353b4cd5a138493c5a767b1c:soak-start:tenant-soak:session-03:4",
+            "soak-start:run-252edcf8353b4cd5a138493c5a767b1c",
+            "soak-complete:run-252edcf8353b4cd5a138493c5a767b1c"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-c6c14e66643848ecb127fef249b6d426",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-04",
+          "user_id": "user-tenant-soak-session-04",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "c56b92f32f788cf07b790b2e60d274510d23b5f91e1754f5a1d98eaa73d80753",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-c6c14e66643848ecb127fef249b6d426:soak-start:tenant-soak:session-04:0",
+            "soak-start:run-c6c14e66643848ecb127fef249b6d426",
+            "soak-complete:run-c6c14e66643848ecb127fef249b6d426"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-a0cfc9b70cd945a28c07d322c2191934",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-04",
+          "user_id": "user-tenant-soak-session-04",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "03d4c9b5f833449600c45d0495c35b66f4ee4de41e1139cbb63a8118d0fb8aed",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-a0cfc9b70cd945a28c07d322c2191934:soak-start:tenant-soak:session-04:1",
+            "soak-start:run-a0cfc9b70cd945a28c07d322c2191934",
+            "soak-complete:run-a0cfc9b70cd945a28c07d322c2191934"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-7bd873940f4b48a982afe694f79aca88",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-04",
+          "user_id": "user-tenant-soak-session-04",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "3fa302e2ce4b2ba6da06ef860bcc2b9531b3cdfd063f48b8ec0fb38bc5ed4938",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-7bd873940f4b48a982afe694f79aca88:soak-start:tenant-soak:session-04:2",
+            "soak-start:run-7bd873940f4b48a982afe694f79aca88",
+            "soak-complete:run-7bd873940f4b48a982afe694f79aca88"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-d13cf408fd7f44e39b649c3dff3473dc",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-04",
+          "user_id": "user-tenant-soak-session-04",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "51e8dd6cae3460d24d8ab88b497483a3b99ff8fac6e3704e8ed091b5e9686ddd",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-d13cf408fd7f44e39b649c3dff3473dc:soak-start:tenant-soak:session-04:3",
+            "soak-start:run-d13cf408fd7f44e39b649c3dff3473dc",
+            "soak-complete:run-d13cf408fd7f44e39b649c3dff3473dc"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-cfd5bcb595c04ca9bcccbe2d674ae05e",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-04",
+          "user_id": "user-tenant-soak-session-04",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "737e390e35c88f66e894c38f410dcb59d637b26cadfb5f06abc08e4d9957ae4e",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-cfd5bcb595c04ca9bcccbe2d674ae05e:soak-start:tenant-soak:session-04:4",
+            "soak-start:run-cfd5bcb595c04ca9bcccbe2d674ae05e",
+            "soak-complete:run-cfd5bcb595c04ca9bcccbe2d674ae05e"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-625d86f1c55a41cab5c9fa4a42f338a8",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-05",
+          "user_id": "user-tenant-soak-session-05",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "ddc53fe31ba90f4ffe7516453e575417157b4fa74950bd8066d70635b55ba719",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-625d86f1c55a41cab5c9fa4a42f338a8:soak-start:tenant-soak:session-05:0",
+            "soak-start:run-625d86f1c55a41cab5c9fa4a42f338a8",
+            "soak-complete:run-625d86f1c55a41cab5c9fa4a42f338a8"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-954130fb71cf425bbf900abf876d77cf",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-05",
+          "user_id": "user-tenant-soak-session-05",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "efa109604b81e97834aa0ec95916e9ca2eb1a1583e1bbdc128a25b164a81baa8",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-954130fb71cf425bbf900abf876d77cf:soak-start:tenant-soak:session-05:1",
+            "soak-start:run-954130fb71cf425bbf900abf876d77cf",
+            "soak-complete:run-954130fb71cf425bbf900abf876d77cf"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-9ee6bc841d4b4fd99498dcac4df72052",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-05",
+          "user_id": "user-tenant-soak-session-05",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "7af781ddaf6ac1b0e113d15dbb8d5ec06d03e9b891531192002da520edd77971",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-9ee6bc841d4b4fd99498dcac4df72052:soak-start:tenant-soak:session-05:2",
+            "soak-start:run-9ee6bc841d4b4fd99498dcac4df72052",
+            "soak-complete:run-9ee6bc841d4b4fd99498dcac4df72052"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-b956640120fb4318ba326170ad7cf913",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-05",
+          "user_id": "user-tenant-soak-session-05",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "d42c050494bfc636ec65587eec90f510328a6dca7592750f989dc01af60b90bd",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-b956640120fb4318ba326170ad7cf913:soak-start:tenant-soak:session-05:3",
+            "soak-start:run-b956640120fb4318ba326170ad7cf913",
+            "soak-complete:run-b956640120fb4318ba326170ad7cf913"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-9b9caef6bceb4fbdb2c153e170b1d21a",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-05",
+          "user_id": "user-tenant-soak-session-05",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "478de9acc5712494263aa8c12a407cfdc2e3a8a2e5ff999c7891094112abd347",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-9b9caef6bceb4fbdb2c153e170b1d21a:soak-start:tenant-soak:session-05:4",
+            "soak-start:run-9b9caef6bceb4fbdb2c153e170b1d21a",
+            "soak-complete:run-9b9caef6bceb4fbdb2c153e170b1d21a"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-9e4691ceed144291a82300d003438f87",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-06",
+          "user_id": "user-tenant-soak-session-06",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "f4a5db523c19936bce44b11d390477d6cd3a45166fb2a054d9d3983aa5ff091b",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-9e4691ceed144291a82300d003438f87:soak-start:tenant-soak:session-06:0",
+            "soak-start:run-9e4691ceed144291a82300d003438f87",
+            "soak-complete:run-9e4691ceed144291a82300d003438f87"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-6afb91d69ccb4d2ea548bd71bba65357",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-06",
+          "user_id": "user-tenant-soak-session-06",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "9d0295d2568cc1b80bd12037e045430e6b20eb96243e44f06bdd053090196a54",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-6afb91d69ccb4d2ea548bd71bba65357:soak-start:tenant-soak:session-06:1",
+            "soak-start:run-6afb91d69ccb4d2ea548bd71bba65357",
+            "soak-complete:run-6afb91d69ccb4d2ea548bd71bba65357"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-193e34a7011a479791fe67941fa8ce0d",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-06",
+          "user_id": "user-tenant-soak-session-06",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "4929e3501df8dbe6bed9352e4b8f6e41edbdda062ad0a8536008f247f3de8c1b",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-193e34a7011a479791fe67941fa8ce0d:soak-start:tenant-soak:session-06:2",
+            "soak-start:run-193e34a7011a479791fe67941fa8ce0d",
+            "soak-complete:run-193e34a7011a479791fe67941fa8ce0d"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-87833be5bd944e30bf8d5bf3e50222cf",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-06",
+          "user_id": "user-tenant-soak-session-06",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "05423817cdf10259ada7c25bfd7d18c5321c6f94c47432d0f542f64646776e9c",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-87833be5bd944e30bf8d5bf3e50222cf:soak-start:tenant-soak:session-06:3",
+            "soak-start:run-87833be5bd944e30bf8d5bf3e50222cf",
+            "soak-complete:run-87833be5bd944e30bf8d5bf3e50222cf"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-93da39d07d1f49a092369f3b97ef9dee",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-06",
+          "user_id": "user-tenant-soak-session-06",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "74a794df63708f6450f9b715e281a050e24a0609d98a0653ac3f1ef250e9988c",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-93da39d07d1f49a092369f3b97ef9dee:soak-start:tenant-soak:session-06:4",
+            "soak-start:run-93da39d07d1f49a092369f3b97ef9dee",
+            "soak-complete:run-93da39d07d1f49a092369f3b97ef9dee"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-a5dba11404d64c31a75462a0d46ec712",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-07",
+          "user_id": "user-tenant-soak-session-07",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "c87b70a039f39a45d8d7bebe5ac03bca35b500c136a2d151d852c0e95303c596",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-a5dba11404d64c31a75462a0d46ec712:soak-start:tenant-soak:session-07:0",
+            "soak-start:run-a5dba11404d64c31a75462a0d46ec712",
+            "soak-complete:run-a5dba11404d64c31a75462a0d46ec712"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-d8c88096cf3c436da4d7361dab64a5f9",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-07",
+          "user_id": "user-tenant-soak-session-07",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "958acf3ff68143c97a9eabae08139a0dc967c42fa31fdfb51cd61d647f41a713",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-d8c88096cf3c436da4d7361dab64a5f9:soak-start:tenant-soak:session-07:1",
+            "soak-start:run-d8c88096cf3c436da4d7361dab64a5f9",
+            "soak-complete:run-d8c88096cf3c436da4d7361dab64a5f9"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-26c64cef57a040a8a37b4d47ea415045",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-07",
+          "user_id": "user-tenant-soak-session-07",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "fe5380ab02a949915a61013af6790956528a2f781f2e4f71ae6a47a437abc7f5",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-26c64cef57a040a8a37b4d47ea415045:soak-start:tenant-soak:session-07:2",
+            "soak-start:run-26c64cef57a040a8a37b4d47ea415045",
+            "soak-complete:run-26c64cef57a040a8a37b4d47ea415045"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-462ff66d121842a5b310d733c8bf69c5",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-07",
+          "user_id": "user-tenant-soak-session-07",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "528efef83968130a1153b2e6faa08648392e803561133bc42070b0a5d6d5cd9c",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-462ff66d121842a5b310d733c8bf69c5:soak-start:tenant-soak:session-07:3",
+            "soak-start:run-462ff66d121842a5b310d733c8bf69c5",
+            "soak-complete:run-462ff66d121842a5b310d733c8bf69c5"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-00cd6014f5554dd2ab177c28d422bb50",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-07",
+          "user_id": "user-tenant-soak-session-07",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "2e883e650c1566dcf8d41f5434123a77bf2a4faf0fd4a3ab852a66d3adc0609a",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-00cd6014f5554dd2ab177c28d422bb50:soak-start:tenant-soak:session-07:4",
+            "soak-start:run-00cd6014f5554dd2ab177c28d422bb50",
+            "soak-complete:run-00cd6014f5554dd2ab177c28d422bb50"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-461447f316c6487fb53cbd276db1b12f",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-08",
+          "user_id": "user-tenant-soak-session-08",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "93fa828488af2cba6b6e76a5299daa2d5ac21f469d558123534b3c58f904c6bd",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-461447f316c6487fb53cbd276db1b12f:soak-start:tenant-soak:session-08:0",
+            "soak-start:run-461447f316c6487fb53cbd276db1b12f",
+            "soak-complete:run-461447f316c6487fb53cbd276db1b12f"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-2955b83b030348a198c416172a3417c2",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-08",
+          "user_id": "user-tenant-soak-session-08",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "96fe5cd1ee7902665eac12e26cea5cd2bc11c41785f86fae4a596214d1c0e109",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-2955b83b030348a198c416172a3417c2:soak-start:tenant-soak:session-08:1",
+            "soak-start:run-2955b83b030348a198c416172a3417c2",
+            "soak-complete:run-2955b83b030348a198c416172a3417c2"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-58de9536ce5c4818a2cabecef5fcff04",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-08",
+          "user_id": "user-tenant-soak-session-08",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "1e6313faeb6269d0a3c4d893cd2ea8d4ea24265cc20a2c90556255b7a7dfd0c5",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-58de9536ce5c4818a2cabecef5fcff04:soak-start:tenant-soak:session-08:2",
+            "soak-start:run-58de9536ce5c4818a2cabecef5fcff04",
+            "soak-complete:run-58de9536ce5c4818a2cabecef5fcff04"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-516cba056471496fadcdabcf6bcfddfa",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-08",
+          "user_id": "user-tenant-soak-session-08",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "5a4102e64008a0661458750e0bf92d261da043741e89327b2f6c3bfa3919658c",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-516cba056471496fadcdabcf6bcfddfa:soak-start:tenant-soak:session-08:3",
+            "soak-start:run-516cba056471496fadcdabcf6bcfddfa",
+            "soak-complete:run-516cba056471496fadcdabcf6bcfddfa"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-7c53a3bc6cb5408b87cbae9d623aff9b",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-08",
+          "user_id": "user-tenant-soak-session-08",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "29263c0e3c275d314cd28f14031db898f2385f18f28200a6d1a8368070584923",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-7c53a3bc6cb5408b87cbae9d623aff9b:soak-start:tenant-soak:session-08:4",
+            "soak-start:run-7c53a3bc6cb5408b87cbae9d623aff9b",
+            "soak-complete:run-7c53a3bc6cb5408b87cbae9d623aff9b"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-9b99ee6e4af64c51b64385040ab4752e",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-09",
+          "user_id": "user-tenant-soak-session-09",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "4fc16fd64761be0af4ce89ae02f532d92ca8695ea402e83f40015dcdb1c73bde",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-9b99ee6e4af64c51b64385040ab4752e:soak-start:tenant-soak:session-09:0",
+            "soak-start:run-9b99ee6e4af64c51b64385040ab4752e",
+            "soak-complete:run-9b99ee6e4af64c51b64385040ab4752e"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-79a1a663311e42beb6db12b47fb7ab1a",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-09",
+          "user_id": "user-tenant-soak-session-09",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "ab783a6150b5b28b134c2bf3310aeff476e600be5d61ee2a8a6a562cdbb4ace9",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-79a1a663311e42beb6db12b47fb7ab1a:soak-start:tenant-soak:session-09:1",
+            "soak-start:run-79a1a663311e42beb6db12b47fb7ab1a",
+            "soak-complete:run-79a1a663311e42beb6db12b47fb7ab1a"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-7299aa9cf44b47b1bd5068fc60de3684",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-09",
+          "user_id": "user-tenant-soak-session-09",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "939b18ef21f838de60681aeba8010d0e55717e07573f764e687ddfb88b68b040",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-7299aa9cf44b47b1bd5068fc60de3684:soak-start:tenant-soak:session-09:2",
+            "soak-start:run-7299aa9cf44b47b1bd5068fc60de3684",
+            "soak-complete:run-7299aa9cf44b47b1bd5068fc60de3684"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-f1b20a1c5bd94d70b73ac8ce699846ce",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-09",
+          "user_id": "user-tenant-soak-session-09",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "c4890b57faf33a06cd09bce0d752dddfae2cd0363daa1f98b68cc670085d7a29",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-f1b20a1c5bd94d70b73ac8ce699846ce:soak-start:tenant-soak:session-09:3",
+            "soak-start:run-f1b20a1c5bd94d70b73ac8ce699846ce",
+            "soak-complete:run-f1b20a1c5bd94d70b73ac8ce699846ce"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-4613386a9f294210a492e7051725d788",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-09",
+          "user_id": "user-tenant-soak-session-09",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "43ada375d6b34571d9383d5c94ca7d19927b1eac48470bb5cf945a8ea9a5cc71",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-4613386a9f294210a492e7051725d788:soak-start:tenant-soak:session-09:4",
+            "soak-start:run-4613386a9f294210a492e7051725d788",
+            "soak-complete:run-4613386a9f294210a492e7051725d788"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        }
+      ],
+      "resource_samples": [
+        {
+          "label": "baseline",
+          "rss_bytes": 302383104,
+          "open_file_descriptors": 10,
+          "pending_async_tasks": 0,
+          "active_run_contexts": 0,
+          "event_subscriptions": 0,
+          "sqlite_connections": 1,
+          "sqlite_busy_errors": 0,
+          "workspace_handles": 0,
+          "durable_active_runs": 0
+        },
+        {
+          "label": "run-10",
+          "rss_bytes": 302530560,
+          "open_file_descriptors": 10,
+          "pending_async_tasks": 0,
+          "active_run_contexts": 0,
+          "event_subscriptions": 0,
+          "sqlite_connections": 1,
+          "sqlite_busy_errors": 0,
+          "workspace_handles": 0,
+          "durable_active_runs": 0
+        },
+        {
+          "label": "run-20",
+          "rss_bytes": 302596096,
+          "open_file_descriptors": 10,
+          "pending_async_tasks": 0,
+          "active_run_contexts": 0,
+          "event_subscriptions": 0,
+          "sqlite_connections": 1,
+          "sqlite_busy_errors": 0,
+          "workspace_handles": 0,
+          "durable_active_runs": 0
+        },
+        {
+          "label": "run-30",
+          "rss_bytes": 302628864,
+          "open_file_descriptors": 10,
+          "pending_async_tasks": 0,
+          "active_run_contexts": 0,
+          "event_subscriptions": 0,
+          "sqlite_connections": 1,
+          "sqlite_busy_errors": 0,
+          "workspace_handles": 0,
+          "durable_active_runs": 0
+        },
+        {
+          "label": "run-40",
+          "rss_bytes": 302727168,
+          "open_file_descriptors": 10,
+          "pending_async_tasks": 0,
+          "active_run_contexts": 0,
+          "event_subscriptions": 0,
+          "sqlite_connections": 1,
+          "sqlite_busy_errors": 0,
+          "workspace_handles": 0,
+          "durable_active_runs": 0
+        },
+        {
+          "label": "run-50",
+          "rss_bytes": 302809088,
+          "open_file_descriptors": 10,
+          "pending_async_tasks": 0,
+          "active_run_contexts": 0,
+          "event_subscriptions": 0,
+          "sqlite_connections": 1,
+          "sqlite_busy_errors": 0,
+          "workspace_handles": 0,
+          "durable_active_runs": 0
+        },
+        {
+          "label": "pre-close",
+          "rss_bytes": 302809088,
+          "open_file_descriptors": 10,
+          "pending_async_tasks": 0,
+          "active_run_contexts": 0,
+          "event_subscriptions": 0,
+          "sqlite_connections": 1,
+          "sqlite_busy_errors": 0,
+          "workspace_handles": 0,
+          "durable_active_runs": 0
+        },
+        {
+          "label": "post-close-gc",
+          "rss_bytes": 302809088,
+          "open_file_descriptors": 7,
+          "pending_async_tasks": 0,
+          "active_run_contexts": 0,
+          "event_subscriptions": 0,
+          "sqlite_connections": 0,
+          "sqlite_busy_errors": 0,
+          "workspace_handles": 0,
+          "durable_active_runs": 0
+        }
+      ],
+      "execution_counts": {
+        "run-73ad66cdc756435dbace0f85190de5c2": 1,
+        "run-37cfefaf08ac4b66ac69e9f53692ac0e": 1,
+        "run-66a4f1e5c26741e9bec4e9be4f87430f": 1,
+        "run-3b9cd3df590f4227b959701759c1d2ea": 1,
+        "run-a5765693d4c645cd882cc1e42c1a9a68": 1,
+        "run-6aa60915bd244f249d724d4fb0451c7a": 1,
+        "run-6e08b425f8584a04bb70fedf02ca5fb5": 1,
+        "run-4eb85342bf9748f5883d6d6a3d750d6b": 1,
+        "run-fc701a72917b45f9aaccae15242bc1e3": 1,
+        "run-6c27e48ff7c7411c981ff5ba32be8112": 1,
+        "run-865ec67e13cc4f2fb3608177b1a44364": 1,
+        "run-bbcfe009587c4b9dbc4ce18e106350ee": 1,
+        "run-106edb1fa02b46928ea87bb030a1fabe": 1,
+        "run-3ededb3add6541b89260f691e411d489": 1,
+        "run-3643db6acda841ddb7a0209113270b59": 1,
+        "run-06fc1eac69b0470daacf22e40901dadd": 1,
+        "run-a724fa09553c4b3a9c70e4365b3e3861": 1,
+        "run-8c2848540191468db1f0ae923fe2d6c7": 1,
+        "run-dbd937b80dc14354b8a34549b8df4f2d": 1,
+        "run-252edcf8353b4cd5a138493c5a767b1c": 1,
+        "run-c6c14e66643848ecb127fef249b6d426": 1,
+        "run-a0cfc9b70cd945a28c07d322c2191934": 1,
+        "run-7bd873940f4b48a982afe694f79aca88": 1,
+        "run-d13cf408fd7f44e39b649c3dff3473dc": 1,
+        "run-cfd5bcb595c04ca9bcccbe2d674ae05e": 1,
+        "run-625d86f1c55a41cab5c9fa4a42f338a8": 1,
+        "run-954130fb71cf425bbf900abf876d77cf": 1,
+        "run-9ee6bc841d4b4fd99498dcac4df72052": 1,
+        "run-b956640120fb4318ba326170ad7cf913": 1,
+        "run-9b9caef6bceb4fbdb2c153e170b1d21a": 1,
+        "run-9e4691ceed144291a82300d003438f87": 1,
+        "run-6afb91d69ccb4d2ea548bd71bba65357": 1,
+        "run-193e34a7011a479791fe67941fa8ce0d": 1,
+        "run-87833be5bd944e30bf8d5bf3e50222cf": 1,
+        "run-93da39d07d1f49a092369f3b97ef9dee": 1,
+        "run-a5dba11404d64c31a75462a0d46ec712": 1,
+        "run-d8c88096cf3c436da4d7361dab64a5f9": 1,
+        "run-26c64cef57a040a8a37b4d47ea415045": 1,
+        "run-462ff66d121842a5b310d733c8bf69c5": 1,
+        "run-00cd6014f5554dd2ab177c28d422bb50": 1,
+        "run-461447f316c6487fb53cbd276db1b12f": 1,
+        "run-2955b83b030348a198c416172a3417c2": 1,
+        "run-58de9536ce5c4818a2cabecef5fcff04": 1,
+        "run-516cba056471496fadcdabcf6bcfddfa": 1,
+        "run-7c53a3bc6cb5408b87cbae9d623aff9b": 1,
+        "run-9b99ee6e4af64c51b64385040ab4752e": 1,
+        "run-79a1a663311e42beb6db12b47fb7ab1a": 1,
+        "run-7299aa9cf44b47b1bd5068fc60de3684": 1,
+        "run-f1b20a1c5bd94d70b73ac8ce699846ce": 1,
+        "run-4613386a9f294210a492e7051725d788": 1
+      },
+      "side_effect_counts": {
+        "run-73ad66cdc756435dbace0f85190de5c2": 1,
+        "run-37cfefaf08ac4b66ac69e9f53692ac0e": 1,
+        "run-66a4f1e5c26741e9bec4e9be4f87430f": 1,
+        "run-3b9cd3df590f4227b959701759c1d2ea": 1,
+        "run-a5765693d4c645cd882cc1e42c1a9a68": 1,
+        "run-6aa60915bd244f249d724d4fb0451c7a": 1,
+        "run-6e08b425f8584a04bb70fedf02ca5fb5": 1,
+        "run-4eb85342bf9748f5883d6d6a3d750d6b": 1,
+        "run-fc701a72917b45f9aaccae15242bc1e3": 1,
+        "run-6c27e48ff7c7411c981ff5ba32be8112": 1,
+        "run-865ec67e13cc4f2fb3608177b1a44364": 1,
+        "run-bbcfe009587c4b9dbc4ce18e106350ee": 1,
+        "run-106edb1fa02b46928ea87bb030a1fabe": 1,
+        "run-3ededb3add6541b89260f691e411d489": 1,
+        "run-3643db6acda841ddb7a0209113270b59": 1,
+        "run-06fc1eac69b0470daacf22e40901dadd": 1,
+        "run-a724fa09553c4b3a9c70e4365b3e3861": 1,
+        "run-8c2848540191468db1f0ae923fe2d6c7": 1,
+        "run-dbd937b80dc14354b8a34549b8df4f2d": 1,
+        "run-252edcf8353b4cd5a138493c5a767b1c": 1,
+        "run-c6c14e66643848ecb127fef249b6d426": 1,
+        "run-a0cfc9b70cd945a28c07d322c2191934": 1,
+        "run-7bd873940f4b48a982afe694f79aca88": 1,
+        "run-d13cf408fd7f44e39b649c3dff3473dc": 1,
+        "run-cfd5bcb595c04ca9bcccbe2d674ae05e": 1,
+        "run-625d86f1c55a41cab5c9fa4a42f338a8": 1,
+        "run-954130fb71cf425bbf900abf876d77cf": 1,
+        "run-9ee6bc841d4b4fd99498dcac4df72052": 1,
+        "run-b956640120fb4318ba326170ad7cf913": 1,
+        "run-9b9caef6bceb4fbdb2c153e170b1d21a": 1,
+        "run-9e4691ceed144291a82300d003438f87": 1,
+        "run-6afb91d69ccb4d2ea548bd71bba65357": 1,
+        "run-193e34a7011a479791fe67941fa8ce0d": 1,
+        "run-87833be5bd944e30bf8d5bf3e50222cf": 1,
+        "run-93da39d07d1f49a092369f3b97ef9dee": 1,
+        "run-a5dba11404d64c31a75462a0d46ec712": 1,
+        "run-d8c88096cf3c436da4d7361dab64a5f9": 1,
+        "run-26c64cef57a040a8a37b4d47ea415045": 1,
+        "run-462ff66d121842a5b310d733c8bf69c5": 1,
+        "run-00cd6014f5554dd2ab177c28d422bb50": 1,
+        "run-461447f316c6487fb53cbd276db1b12f": 1,
+        "run-2955b83b030348a198c416172a3417c2": 1,
+        "run-58de9536ce5c4818a2cabecef5fcff04": 1,
+        "run-516cba056471496fadcdabcf6bcfddfa": 1,
+        "run-7c53a3bc6cb5408b87cbae9d623aff9b": 1,
+        "run-9b99ee6e4af64c51b64385040ab4752e": 1,
+        "run-79a1a663311e42beb6db12b47fb7ab1a": 1,
+        "run-7299aa9cf44b47b1bd5068fc60de3684": 1,
+        "run-f1b20a1c5bd94d70b73ac8ce699846ce": 1,
+        "run-4613386a9f294210a492e7051725d788": 1
+      },
+      "gates": {
+        "cross_context_leakage": true,
+        "workspace_leakage": true,
+        "memory_scope": true,
+        "duplicate_side_effect": true,
+        "false_completed": true,
+        "orphan_active_run": true,
+        "subscriber_leak": true,
+        "sqlite_deadlock_or_busy_failure": true,
+        "terminal_snapshot_event_mismatch": true
+      },
+      "runtime_correctness": "PASS",
+      "capability_outcome": "PASS",
+      "provider_errors": [],
+      "notes": [],
+      "replay_cycles": 0
+    },
+    {
+      "case_id": "S03",
+      "provider": "deterministic-fake",
+      "run_count": 10,
+      "terminal_statuses": {
+        "COMPLETED": 10
+      },
+      "records": [
+        {
+          "run_id": "run-8fc083b5e23747a984660275b29a41d5",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-concurrent-0",
+          "user_id": "user-concurrent-0",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "98c8332e85d892b38cd0f425574f7324fbccf41c27d0fea6c9f534a5bec1e977",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-8fc083b5e23747a984660275b29a41d5:soak-concurrent:0",
+            "soak-start:run-8fc083b5e23747a984660275b29a41d5",
+            "soak-complete:run-8fc083b5e23747a984660275b29a41d5"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-315a845aae354d05bd1660c03db1ae61",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-concurrent-1",
+          "user_id": "user-concurrent-1",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "e046d3aefe265a9eacdd05e353c86edd0d6b51198c5e0991d64bc7e1403186c8",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-315a845aae354d05bd1660c03db1ae61:soak-concurrent:1",
+            "soak-start:run-315a845aae354d05bd1660c03db1ae61",
+            "soak-complete:run-315a845aae354d05bd1660c03db1ae61"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-4b3becacfbad4162a7385c37d9a979e0",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-concurrent-2",
+          "user_id": "user-concurrent-2",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "3b0262975fbf026cf08f5f49f7ea7e986ee70aa39ce602c604d36bd0ae4252d9",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-4b3becacfbad4162a7385c37d9a979e0:soak-concurrent:2",
+            "soak-start:run-4b3becacfbad4162a7385c37d9a979e0",
+            "soak-complete:run-4b3becacfbad4162a7385c37d9a979e0"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-b44ac0b3ddef4f43803af2cb1875326f",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-concurrent-3",
+          "user_id": "user-concurrent-3",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "091e51a40d49db14d5ca20f9b19704261fe9c338c0b11f20fcf56c7f79db2772",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-b44ac0b3ddef4f43803af2cb1875326f:soak-concurrent:3",
+            "soak-start:run-b44ac0b3ddef4f43803af2cb1875326f",
+            "soak-complete:run-b44ac0b3ddef4f43803af2cb1875326f"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-9a6be7f457364c2ab81665113d00ab7e",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-concurrent-4",
+          "user_id": "user-concurrent-4",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "08a3fe82f9971d8b0b3eb209152af9ccf2880e140f6d91b02f2313ceb8d1e484",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-9a6be7f457364c2ab81665113d00ab7e:soak-concurrent:4",
+            "soak-start:run-9a6be7f457364c2ab81665113d00ab7e",
+            "soak-complete:run-9a6be7f457364c2ab81665113d00ab7e"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-c85e2e0b615f4375b18d197a0c6518c6",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-concurrent-5",
+          "user_id": "user-concurrent-5",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "28f8dd0f303814b1b725366dea3b7722305e2fb18ced1da6763b39188585c893",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-c85e2e0b615f4375b18d197a0c6518c6:soak-concurrent:5",
+            "soak-start:run-c85e2e0b615f4375b18d197a0c6518c6",
+            "soak-complete:run-c85e2e0b615f4375b18d197a0c6518c6"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-c13f09cfcf3243ec8507cf2b6543a775",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-concurrent-6",
+          "user_id": "user-concurrent-6",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "a782c64a9578420a9fc6454c19840a5f1a796f79215f90827364f76f1d3b1ce0",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-c13f09cfcf3243ec8507cf2b6543a775:soak-concurrent:6",
+            "soak-start:run-c13f09cfcf3243ec8507cf2b6543a775",
+            "soak-complete:run-c13f09cfcf3243ec8507cf2b6543a775"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-c1c0f1520bc04e95b10e1343bf14656f",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-concurrent-7",
+          "user_id": "user-concurrent-7",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "c5631d1982e7d0f19f9e035adcf88236d77640f48de88c179bc914fb9494c852",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-c1c0f1520bc04e95b10e1343bf14656f:soak-concurrent:7",
+            "soak-start:run-c1c0f1520bc04e95b10e1343bf14656f",
+            "soak-complete:run-c1c0f1520bc04e95b10e1343bf14656f"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-f3e56383cb144aa0b2c5fec96b6276ed",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-concurrent-8",
+          "user_id": "user-concurrent-8",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "e98fd52022e98dd5ac77286e9d6dfa3ee0dcd697b308135d83930062b5276301",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-f3e56383cb144aa0b2c5fec96b6276ed:soak-concurrent:8",
+            "soak-start:run-f3e56383cb144aa0b2c5fec96b6276ed",
+            "soak-complete:run-f3e56383cb144aa0b2c5fec96b6276ed"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        },
+        {
+          "run_id": "run-7048c0c912f84672aa1237f7b3ee7a04",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-concurrent-9",
+          "user_id": "user-concurrent-9",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "af7542eeeb02a12efcfba2b66988da29226741705b8a10068e4f1b993eb1b520",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-7048c0c912f84672aa1237f7b3ee7a04:soak-concurrent:9",
+            "soak-start:run-7048c0c912f84672aa1237f7b3ee7a04",
+            "soak-complete:run-7048c0c912f84672aa1237f7b3ee7a04"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        }
+      ],
+      "resource_samples": [
+        {
+          "label": "baseline",
+          "rss_bytes": 302809088,
+          "open_file_descriptors": 10,
+          "pending_async_tasks": 0,
+          "active_run_contexts": 0,
+          "event_subscriptions": 0,
+          "sqlite_connections": 1,
+          "sqlite_busy_errors": 0,
+          "workspace_handles": 0,
+          "durable_active_runs": 0
+        },
+        {
+          "label": "run-10",
+          "rss_bytes": 302809088,
+          "open_file_descriptors": 10,
+          "pending_async_tasks": 0,
+          "active_run_contexts": 0,
+          "event_subscriptions": 0,
+          "sqlite_connections": 1,
+          "sqlite_busy_errors": 0,
+          "workspace_handles": 0,
+          "durable_active_runs": 0
+        },
+        {
+          "label": "pre-close",
+          "rss_bytes": 302809088,
+          "open_file_descriptors": 10,
+          "pending_async_tasks": 0,
+          "active_run_contexts": 0,
+          "event_subscriptions": 0,
+          "sqlite_connections": 1,
+          "sqlite_busy_errors": 0,
+          "workspace_handles": 0,
+          "durable_active_runs": 0
+        },
+        {
+          "label": "post-close-gc",
+          "rss_bytes": 302809088,
+          "open_file_descriptors": 7,
+          "pending_async_tasks": 0,
+          "active_run_contexts": 0,
+          "event_subscriptions": 0,
+          "sqlite_connections": 0,
+          "sqlite_busy_errors": 0,
+          "workspace_handles": 0,
+          "durable_active_runs": 0
+        }
+      ],
+      "execution_counts": {
+        "run-7048c0c912f84672aa1237f7b3ee7a04": 1,
+        "run-8fc083b5e23747a984660275b29a41d5": 1,
+        "run-315a845aae354d05bd1660c03db1ae61": 1,
+        "run-4b3becacfbad4162a7385c37d9a979e0": 1,
+        "run-b44ac0b3ddef4f43803af2cb1875326f": 1,
+        "run-9a6be7f457364c2ab81665113d00ab7e": 1,
+        "run-c85e2e0b615f4375b18d197a0c6518c6": 1,
+        "run-c13f09cfcf3243ec8507cf2b6543a775": 1,
+        "run-c1c0f1520bc04e95b10e1343bf14656f": 1,
+        "run-f3e56383cb144aa0b2c5fec96b6276ed": 1
+      },
+      "side_effect_counts": {
+        "run-7048c0c912f84672aa1237f7b3ee7a04": 1,
+        "run-8fc083b5e23747a984660275b29a41d5": 1,
+        "run-315a845aae354d05bd1660c03db1ae61": 1,
+        "run-4b3becacfbad4162a7385c37d9a979e0": 1,
+        "run-b44ac0b3ddef4f43803af2cb1875326f": 1,
+        "run-9a6be7f457364c2ab81665113d00ab7e": 1,
+        "run-c85e2e0b615f4375b18d197a0c6518c6": 1,
+        "run-c13f09cfcf3243ec8507cf2b6543a775": 1,
+        "run-c1c0f1520bc04e95b10e1343bf14656f": 1,
+        "run-f3e56383cb144aa0b2c5fec96b6276ed": 1
+      },
+      "gates": {
+        "cross_context_leakage": true,
+        "workspace_leakage": true,
+        "memory_scope": true,
+        "duplicate_side_effect": true,
+        "false_completed": true,
+        "orphan_active_run": true,
+        "subscriber_leak": true,
+        "sqlite_deadlock_or_busy_failure": true,
+        "terminal_snapshot_event_mismatch": true
+      },
+      "runtime_correctness": "PASS",
+      "capability_outcome": "PASS",
+      "provider_errors": [],
+      "notes": [
+        "forced_barrier_interleaving"
+      ],
+      "replay_cycles": 0
+    },
+    {
+      "case_id": "S04",
+      "provider": "deterministic-fake",
+      "run_count": 1,
+      "terminal_statuses": {
+        "COMPLETED": 1
+      },
+      "records": [
+        {
+          "run_id": "run-2dc2d070702448c29c2b7d66bb6c9513",
+          "tenant_id": "tenant-soak",
+          "session_id": "session-replay",
+          "user_id": "user-tenant-soak-session-replay",
+          "status": "COMPLETED",
+          "artifact_path": "output/result.txt",
+          "artifact_digest": "3f45ce42e66698bae18a735a043283b09d9be1f7113d27a98839acdd32013921",
+          "execution_count": 1,
+          "side_effect_count": 1,
+          "event_sequences": [
+            1,
+            2,
+            3
+          ],
+          "event_ids": [
+            "run-created:run-2dc2d070702448c29c2b7d66bb6c9513:soak-start:tenant-soak:session-replay:0",
+            "soak-start:run-2dc2d070702448c29c2b7d66bb6c9513",
+            "soak-complete:run-2dc2d070702448c29c2b7d66bb6c9513"
+          ],
+          "event_types": [
+            "run_created",
+            "run_started",
+            "run_completed"
+          ]
+        }
+      ],
+      "resource_samples": [
+        {
+          "label": "baseline",
+          "rss_bytes": 302809088,
+          "open_file_descriptors": 10,
+          "pending_async_tasks": 0,
+          "active_run_contexts": 0,
+          "event_subscriptions": 0,
+          "sqlite_connections": 1,
+          "sqlite_busy_errors": 0,
+          "workspace_handles": 0,
+          "durable_active_runs": 0
+        },
+        {
+          "label": "replay-500",
+          "rss_bytes": 302874624,
+          "open_file_descriptors": 10,
+          "pending_async_tasks": 0,
+          "active_run_contexts": 0,
+          "event_subscriptions": 0,
+          "sqlite_connections": 1,
+          "sqlite_busy_errors": 0,
+          "workspace_handles": 0,
+          "durable_active_runs": 0
+        },
+        {
+          "label": "pre-close",
+          "rss_bytes": 302874624,
+          "open_file_descriptors": 10,
+          "pending_async_tasks": 0,
+          "active_run_contexts": 0,
+          "event_subscriptions": 0,
+          "sqlite_connections": 1,
+          "sqlite_busy_errors": 0,
+          "workspace_handles": 0,
+          "durable_active_runs": 0
+        },
+        {
+          "label": "post-close-gc",
+          "rss_bytes": 302874624,
+          "open_file_descriptors": 7,
+          "pending_async_tasks": 0,
+          "active_run_contexts": 0,
+          "event_subscriptions": 0,
+          "sqlite_connections": 0,
+          "sqlite_busy_errors": 0,
+          "workspace_handles": 0,
+          "durable_active_runs": 0
+        }
+      ],
+      "execution_counts": {
+        "run-2dc2d070702448c29c2b7d66bb6c9513": 1
+      },
+      "side_effect_counts": {
+        "run-2dc2d070702448c29c2b7d66bb6c9513": 1
+      },
+      "gates": {
+        "cross_context_leakage": true,
+        "workspace_leakage": true,
+        "memory_scope": true,
+        "duplicate_side_effect": true,
+        "false_completed": true,
+        "orphan_active_run": true,
+        "subscriber_leak": true,
+        "sqlite_deadlock_or_busy_failure": true,
+        "terminal_snapshot_event_mismatch": true,
+        "event_gap": true,
+        "replay_does_not_append": true
+      },
+      "runtime_correctness": "PASS",
+      "capability_outcome": "PASS",
+      "provider_errors": [],
+      "notes": [
+        "event_rows_before_close=3"
+      ],
+      "replay_cycles": 500
+    }
+  ],
+  "all_runtime_gates_pass": true
+}

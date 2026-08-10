@@ -17,7 +17,12 @@ from typing import Any
 
 from benchmarks.p2.cases import P2Case, P2Group, build_cases
 
-from ..evidence import ArtifactEvidence, PerformanceEvidence, RunTraceEvidence
+from ..evidence import (
+    ArtifactEvidence,
+    PerformanceEvidence,
+    RunTraceEvidence,
+    ToolCallEvidence,
+)
 from ..report import LongHorizonResult, make_result
 
 
@@ -114,6 +119,23 @@ class _Instrumentation:
         self._originals.append((owner, name, getattr(owner, name)))
         setattr(owner, name, replacement)
 
+    @staticmethod
+    def _safe_target(args: dict[str, Any]) -> str:
+        for key in (
+            "path",
+            "destination",
+            "dst",
+            "target",
+            "spec",
+            "source",
+            "src",
+        ):
+            value = str(args.get(key, "") or "").strip()
+            if value:
+                candidate = Path(value)
+                return candidate.name if candidate.is_absolute() else value[:240]
+        return ""
+
     def _tool_wrapper(self, original: Any) -> Any:
         async def wrapped(
             owner: Any,
@@ -121,11 +143,22 @@ class _Instrumentation:
             args: dict[str, Any],
             **kwargs: Any,
         ) -> Any:
-            self.tool_calls.append({"tool": str(tool_name), "args": dict(args)})
+            record = {
+                "tool": str(tool_name),
+                "target": self._safe_target(args),
+                "success": False,
+            }
+            self.tool_calls.append(record)
             # P2-LH1 passes the scoped Run workspace through this method;
             # instrumentation must remain transparent to that production
             # contract.
-            return await original(owner, tool_name, args, **kwargs)
+            try:
+                result = await original(owner, tool_name, args, **kwargs)
+            except BaseException:
+                raise
+            else:
+                record["success"] = True
+                return result
 
         return wrapped
 
@@ -170,6 +203,23 @@ class _Instrumentation:
 
         return wrapped
 
+    @property
+    def duplicate_side_effect_count(self) -> int:
+        effect_tools = {
+            "filesystem.write",
+            "filesystem.modify",
+            "filesystem.copy",
+            "filesystem.move",
+            "filesystem.delete",
+        }
+        counts: dict[tuple[str, str], int] = {}
+        for call in self.tool_calls:
+            if not call["success"] or call["tool"] not in effect_tools:
+                continue
+            key = (str(call["tool"]), str(call["target"]))
+            counts[key] = counts.get(key, 0) + 1
+        return sum(max(count - 1, 0) for count in counts.values())
+
     def close(self) -> None:
         for owner, name, original in reversed(self._originals):
             setattr(owner, name, original)
@@ -185,6 +235,17 @@ def _case_by_id(case_id: str) -> P2Case:
         if case.id == case_id:
             return case
     raise KeyError(case_id)
+
+
+def _scope_identity(case_id: str) -> tuple[str, str, str]:
+    """Give every real case an isolated durable Memory/Conversation scope."""
+
+    token = case_id.strip().lower()
+    return (
+        f"p2-tenant-{token}",
+        f"p2-user-{token}",
+        f"p2-session-{token}",
+    )
 
 
 async def run_real_case(case_id: str, *, snapshot: Path | None = None, timeout: float = 600.0) -> LongHorizonResult:
@@ -235,10 +296,11 @@ async def run_real_case(case_id: str, *, snapshot: Path | None = None, timeout: 
     )
     request_id = f"p2-{case_id.lower()}"
     run_id = f"run-{case_id.lower()}"
+    tenant_id, user_id, session_id = _scope_identity(case_id)
     request = StartRunRequest(
-        tenant_id="p2-tenant",
-        user_id="p2-user",
-        session_id=f"p2-session-{case_id.lower()}",
+        tenant_id=tenant_id,
+        user_id=user_id,
+        session_id=session_id,
         request_id=request_id,
         run_id=run_id,
         request_text=PROMPTS[case_id],
@@ -319,8 +381,17 @@ async def run_real_case(case_id: str, *, snapshot: Path | None = None, timeout: 
                 for item in raw_runtime.get("task_failures", [])
                 if isinstance(item, dict)
             ),
+            duplicate_side_effect_count=instrumentation.duplicate_side_effect_count,
             cross_context_leakage=leaked_to_process_root,
             provider_errors=tuple(instrumentation.provider_errors),
+            tool_calls=tuple(
+                ToolCallEvidence(
+                    tool=str(call["tool"]),
+                    target=str(call["target"]),
+                    success=bool(call["success"]),
+                )
+                for call in instrumentation.tool_calls
+            ),
             performance=PerformanceEvidence(
                 wall_ms=(time.perf_counter() - started) * 1000,
                 provider_ms=instrumentation.provider_ms,

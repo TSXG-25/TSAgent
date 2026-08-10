@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any, Mapping, cast
 
 
 def _string_tuple(values: Any) -> tuple[str, ...]:
@@ -86,6 +86,30 @@ class PerformanceEvidence:
 
 
 @dataclass(frozen=True)
+class ToolCallEvidence:
+    """Secret-free tool boundary evidence retained by real harnesses."""
+
+    tool: str
+    target: str = ""
+    success: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "tool": self.tool,
+            "target": self.target,
+            "success": self.success,
+        }
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "ToolCallEvidence":
+        return cls(
+            tool=str(value.get("tool", "")),
+            target=str(value.get("target", "")),
+            success=bool(value.get("success", False)),
+        )
+
+
+@dataclass(frozen=True)
 class RunTraceEvidence:
     """Raw Run facts; no pass/fail decision is stored in this object."""
 
@@ -113,6 +137,7 @@ class RunTraceEvidence:
     subscriber_leak: bool = False
     sqlite_deadlock_or_busy_failure: bool = False
     provider_errors: tuple[str, ...] = ()
+    tool_calls: tuple[ToolCallEvidence, ...] = ()
     performance: PerformanceEvidence = PerformanceEvidence()
 
     def __post_init__(self) -> None:
@@ -124,6 +149,17 @@ class RunTraceEvidence:
         object.__setattr__(self, "provider_errors", _string_tuple(self.provider_errors))
         object.__setattr__(self, "task_execution_counts", _string_int_map(self.task_execution_counts))
         object.__setattr__(self, "artifacts", tuple(self.artifacts))
+        object.__setattr__(
+            self,
+            "tool_calls",
+            tuple(
+                item
+                if isinstance(item, ToolCallEvidence)
+                else ToolCallEvidence.from_dict(item)
+                for item in cast(tuple[Any, ...], self.tool_calls)
+                if isinstance(item, (ToolCallEvidence, Mapping))
+            ),
+        )
         if not isinstance(self.performance, PerformanceEvidence):
             object.__setattr__(
                 self,
@@ -157,6 +193,7 @@ class RunTraceEvidence:
             "subscriber_leak": self.subscriber_leak,
             "sqlite_deadlock_or_busy_failure": self.sqlite_deadlock_or_busy_failure,
             "provider_errors": list(self.provider_errors),
+            "tool_calls": [call.to_dict() for call in self.tool_calls],
             "performance": self.performance.to_dict(),
         }
 
@@ -169,6 +206,12 @@ class RunTraceEvidence:
             if isinstance(item, Mapping)
         )
         raw_performance = value.get("performance", {})
+        raw_tool_calls = value.get("tool_calls", []) or []
+        tool_calls = tuple(
+            ToolCallEvidence.from_dict(item)
+            for item in raw_tool_calls
+            if isinstance(item, Mapping)
+        )
         performance = (
             raw_performance
             if isinstance(raw_performance, PerformanceEvidence)
@@ -201,8 +244,14 @@ class RunTraceEvidence:
             subscriber_leak=bool(value.get("subscriber_leak", False)),
             sqlite_deadlock_or_busy_failure=bool(value.get("sqlite_deadlock_or_busy_failure", False)),
             provider_errors=_string_tuple(value.get("provider_errors")),
+            tool_calls=tool_calls,
             performance=performance,
         )
 
 
-__all__ = ["ArtifactEvidence", "PerformanceEvidence", "RunTraceEvidence"]
+__all__ = [
+    "ArtifactEvidence",
+    "PerformanceEvidence",
+    "RunTraceEvidence",
+    "ToolCallEvidence",
+]

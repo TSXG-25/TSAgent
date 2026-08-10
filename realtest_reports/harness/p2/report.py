@@ -9,7 +9,12 @@ from benchmarks.p2.metadata import benchmark_metadata, dataset_hash
 from benchmarks.p2.oracle import evaluate
 
 from .evidence import RunTraceEvidence
-from .invariants import RuntimeInvariantResult, evaluate_runtime_invariants
+from .invariants import (
+    RuntimeCaseScore,
+    RuntimeInvariantResult,
+    evaluate_runtime_invariants,
+    score_runtime_for_case,
+)
 
 
 @dataclass(frozen=True)
@@ -17,6 +22,7 @@ class LongHorizonResult:
     case: P2Case
     trace: RunTraceEvidence
     invariants: RuntimeInvariantResult
+    runtime: RuntimeCaseScore
     capability_outcome: str
     capability_detail: str
 
@@ -27,7 +33,7 @@ class LongHorizonResult:
                 "outcome": self.capability_outcome,
                 "detail": self.capability_detail,
             },
-            "runtime": self.invariants.to_dict(),
+            "runtime": self.runtime.to_dict(),
             "performance": self.trace.performance.to_dict(),
             "evidence": self.trace.to_dict(),
             "oracle": evaluate(self.case).to_dict(),
@@ -47,6 +53,7 @@ def make_result(
         case=case,
         trace=trace,
         invariants=evaluate_runtime_invariants(trace),
+        runtime=score_runtime_for_case(case, trace),
         capability_outcome=capability_outcome,
         capability_detail=capability_detail,
     )
@@ -60,7 +67,9 @@ def build_report(
     attempts: int = 1,
 ) -> dict[str, Any]:
     cases = tuple(result.case for result in results)
-    runtime_pass = sum(result.invariants.runtime_correctness == "PASS" for result in results)
+    runtime_pass = sum(
+        result.runtime.runtime_correctness == "PASS" for result in results
+    )
     capability_pass = sum(result.capability_outcome == "PASS" for result in results)
     return {
         "suite": "P2-L Long-horizon Harness",

@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Mapping
+
+from benchmarks.p2.cases import P2Case
 
 from .evidence import RunTraceEvidence
 
@@ -62,6 +64,22 @@ class RuntimeInvariantResult:
         return value
 
 
+@dataclass(frozen=True)
+class RuntimeCaseScore:
+    """Case-specific verdict separated from diagnostic invariant values."""
+
+    runtime_correctness: str
+    hard_gates: Mapping[str, Any]
+    diagnostics: Mapping[str, Any]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "runtime_correctness": self.runtime_correctness,
+            "hard_gates": dict(self.hard_gates),
+            "diagnostics": dict(self.diagnostics),
+        }
+
+
 def evaluate_runtime_invariants(trace: RunTraceEvidence) -> RuntimeInvariantResult:
     """Derive safety facts from raw evidence without consulting Runtime state."""
     artifact_by_id = {artifact.artifact_id: artifact for artifact in trace.artifacts}
@@ -110,4 +128,35 @@ def evaluate_runtime_invariants(trace: RunTraceEvidence) -> RuntimeInvariantResu
     )
 
 
-__all__ = ["RuntimeInvariantResult", "evaluate_runtime_invariants"]
+def score_runtime_for_case(
+    case: P2Case,
+    trace: RunTraceEvidence,
+) -> RuntimeCaseScore:
+    """Apply only the hard gates frozen by the case Dataset.
+
+    Missing required output is capability evidence on a safe FAILED/BLOCKED
+    Run.  On a COMPLETED Run it is still captured by ``false_completed``.
+    """
+
+    invariants = evaluate_runtime_invariants(trace)
+    all_values = invariants.to_gate_dict()
+    selected = {name: all_values.get(name, False) for name in case.hard_gates}
+    return RuntimeCaseScore(
+        runtime_correctness=(
+            "FAIL" if any(bool(value) for value in selected.values()) else "PASS"
+        ),
+        hard_gates=selected,
+        diagnostics={
+            "missing_required_artifacts": invariants.missing_required_artifacts,
+            "completed_task_reexecutions": invariants.completed_task_reexecutions,
+            "provider_errors": list(trace.provider_errors),
+        },
+    )
+
+
+__all__ = [
+    "RuntimeCaseScore",
+    "RuntimeInvariantResult",
+    "evaluate_runtime_invariants",
+    "score_runtime_for_case",
+]

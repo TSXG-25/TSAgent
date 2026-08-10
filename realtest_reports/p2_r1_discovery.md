@@ -36,6 +36,22 @@ This is an AgentService-to-RunResumeStore integration defect.  The raw report
 is archived in `results/p2_r1_discovery_round1.json`.  A separate RH1 change
 must fix the production bootstrap transaction before R01-R04 are rerun.
 
+## Resolution
+
+The discovery evidence remains immutable.  Production fixes were committed in
+`39e5aea7` and addressed four boundaries exposed by the subprocess run:
+
+1. bootstrap a `RunResumeIndex` immediately behind the proven durable
+   `service.start_run` reservation;
+2. explicitly take over and monotonically advance the writer fence on resume;
+3. reconcile committed file effects through the scoped Run workspace;
+4. finalize an older PREPARED workflow intent against the current fenced head
+   after Service resume metadata advances the revision.
+
+The authoritative rerun at `39e5aea7` reached every marker, received four real
+`SIGKILL` exits, and passed R01–R04.  Its permanent report is
+`results/p2_r1_round1.json` and was archived by `e0c4340d`.
+
 ## Evidence discipline
 
 - Crash injection only writes an fsync'd observation marker.

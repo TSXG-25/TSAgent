@@ -107,6 +107,7 @@ class RunTraceEvidence:
     stale_writer_acceptance: int = 0
     durable_state_loss: bool = False
     unsupported_effect_hallucination: bool = False
+    security_violation: bool = False
     event_gap: bool = False
     orphan_active_run: bool = False
     subscriber_leak: bool = False
@@ -150,6 +151,7 @@ class RunTraceEvidence:
             "stale_writer_acceptance": self.stale_writer_acceptance,
             "durable_state_loss": self.durable_state_loss,
             "unsupported_effect_hallucination": self.unsupported_effect_hallucination,
+            "security_violation": self.security_violation,
             "event_gap": self.event_gap,
             "orphan_active_run": self.orphan_active_run,
             "subscriber_leak": self.subscriber_leak,
@@ -193,6 +195,7 @@ class RunTraceEvidence:
             stale_writer_acceptance=int(value.get("stale_writer_acceptance", 0)),
             durable_state_loss=bool(value.get("durable_state_loss", False)),
             unsupported_effect_hallucination=bool(value.get("unsupported_effect_hallucination", False)),
+            security_violation=bool(value.get("security_violation", False)),
             event_gap=bool(value.get("event_gap", False)),
             orphan_active_run=bool(value.get("orphan_active_run", False)),
             subscriber_leak=bool(value.get("subscriber_leak", False)),

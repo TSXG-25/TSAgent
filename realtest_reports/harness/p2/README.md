@@ -1,6 +1,7 @@
 # P2 Harness
 
-当前 Harness 已实现 P2-L、P2-S1 和 P2-R1；P2-P 仍需第二 Provider：
+当前 Harness 已实现 P2-L、P2-S1、P2-R1 和 P2-P 的 Provider-neutral
+执行/证据管线；P2-P 的真实双 Provider 结果仍 deferred：
 
 ```text
 benchmarks/p2 Dataset
@@ -78,3 +79,55 @@ RunResumeCoordinator、WorkflowExecutor、Artifact、Checkpoint、Fence 和 dura
 - `realtest_reports/results/p2_r1_discovery_round1.json`：修复前 0/4 原始 FAIL；
 - `realtest_reports/results/p2_r1_round1.json`：修复后统一 4/4 PASS；
 - `realtest_reports/p2_r1_discovery.md`：discovery 根因及证据纪律。
+
+## P2-P Provider portability
+
+先运行离线合同与报告验证（不会调用 Provider）：
+
+```bash
+python -B -m realtest_reports.harness.p2.groups.portability \
+  --mode fixture \
+  --results /private/tmp/p2_p_fixture.json
+```
+
+fixture 会构造 primary/secondary 两个变体下的 P01–P03 六个尝试，用于验证：
+
+```text
+固定 prompt / fixture hash
+同 case 双 Provider parity
+Capability Outcome 与 Runtime Correctness 分离
+P03 unsupported-effect + malformed structured-response 两个固定 probe
+secret-free Provider evidence
+DEFERRED / INVALID / EXECUTED 状态区分
+```
+
+它明确标记 `source=fixture`、`real_executed=0`，不能作为真实 Provider 能力证据。
+
+真实双 Provider 模式：
+
+```bash
+P2_SECONDARY_PROVIDER=<provider-name> \
+P2_SECONDARY_API_KEY=<secret> \
+P2_SECONDARY_MODEL=<model> \
+P2_SECONDARY_BASE_URL=<openai-compatible-url> \
+python -B -m realtest_reports.harness.p2.groups.portability \
+  --mode real \
+  --ids P01,P02,P03 \
+  --work-root /private/tmp/tsagent-p2-p \
+  --results /private/tmp/p2_p_real.json
+```
+
+每个 case/provider 在独立子进程中运行，且在 Runtime consumer import 前只安装一个
+Provider adapter，不允许生产 Router 自动切到另一个 Provider。相同 case 使用完全
+相同的 prompt/fixture hash；任何漂移直接判 `INVALID`。缺少 Provider 配置时判
+`DEFERRED` 且不启动子进程，不会伪造 Capability FAIL。
+
+P03 的 malformed probe 是固定的边界故障注入：第一次 structured-response 调用产生
+稳定 `MALFORMED_RESPONSE`，随后只允许现有 raw JSON fallback 继续；它不是自动重跑，
+也不修改 Provider-specific prompt。
+
+当前 scenario manifest hash：
+
+```text
+f08d66b97527557e9dc455aa2d35d1bbd56ef0d74f22759557b6b6a7fb2ca3f7
+```

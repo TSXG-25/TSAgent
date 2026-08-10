@@ -27,6 +27,7 @@ class RuntimeInvariantResult:
     durable_state_loss: bool
     completed_workflow_reexecutions: int
     unsupported_effect_hallucination: bool
+    security_violation: bool
     event_gap: bool
     orphan_active_run: bool
     subscriber_leak: bool
@@ -48,6 +49,7 @@ class RuntimeInvariantResult:
             "durable_state_loss": self.durable_state_loss,
             "completed_workflow_reexecution": self.completed_workflow_reexecutions,
             "unsupported_effect_hallucination": self.unsupported_effect_hallucination,
+            "security_violation": self.security_violation,
             "event_gap": self.event_gap,
             "orphan_active_run": self.orphan_active_run,
             "subscriber_leak": self.subscriber_leak,
@@ -100,6 +102,7 @@ def evaluate_runtime_invariants(trace: RunTraceEvidence) -> RuntimeInvariantResu
         durable_state_loss=trace.durable_state_loss,
         completed_workflow_reexecutions=0,
         unsupported_effect_hallucination=trace.unsupported_effect_hallucination,
+        security_violation=trace.security_violation,
         event_gap=trace.event_gap,
         orphan_active_run=trace.orphan_active_run,
         subscriber_leak=trace.subscriber_leak,

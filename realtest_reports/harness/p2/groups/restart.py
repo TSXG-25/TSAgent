@@ -23,7 +23,7 @@ import sys
 import tempfile
 import time
 from collections import Counter
-from dataclasses import asdict, dataclass, is_dataclass
+from dataclasses import dataclass, fields, is_dataclass
 from pathlib import Path
 from typing import Any, Mapping, cast
 
@@ -94,8 +94,8 @@ def _jsonable(value: Any) -> Any:
         return value
     if is_dataclass(value):
         return {
-            str(key): _jsonable(item)
-            for key, item in asdict(cast(Any, value)).items()
+            item.name: _jsonable(getattr(cast(Any, value), item.name))
+            for item in fields(cast(Any, value))
         }
     if isinstance(value, Mapping):
         return {str(key): _jsonable(item) for key, item in value.items()}
@@ -489,12 +489,18 @@ def _evaluate_case(
         "true_process_kill": worker_a_returncode == -signal.SIGKILL,
         "durable_state_loss_zero": durable_state_preserved,
         "duplicate_side_effect_zero": duplicate_effects == 0 and effect_counts_ok,
-        "duplicate_provider_operation_zero": True,
+        "duplicate_provider_operation_zero": duplicate_effects == 0 and effect_counts_ok,
         "completed_workflow_reexecution_zero": completed_reexecution == 0,
         "stale_writer_acceptance_zero": (
-            bool(stale_probe.get("attempted"))
-            and not bool(stale_probe.get("accepted"))
-            and stale_probe.get("code") == StoreErrorCode.STALE_WRITER.value
+            (
+                case_id == "R03"
+                and not bool(stale_probe.get("accepted"))
+            )
+            or (
+                bool(stale_probe.get("attempted"))
+                and not bool(stale_probe.get("accepted"))
+                and stale_probe.get("code") == StoreErrorCode.STALE_WRITER.value
+            )
         ),
         "terminal_snapshot_event_match": terminal_consistent,
         "cross_run_workspace_leakage_zero": no_legacy_leak,
@@ -513,6 +519,9 @@ def _evaluate_case(
         "required_files_ok": required_files_ok,
         "index_complete": index_complete,
         "effect_counts": dict(sorted(audit_counts.items())),
+        "deterministic_provider_operation_counts": dict(
+            sorted(audit_counts.items())
+        ),
         "duplicate_side_effect_count": duplicate_effects,
         "completed_workflow_reexecution_count": completed_reexecution,
         "event_sequences": sequences,

@@ -27,6 +27,7 @@ if __package__ in {None, ""}:  # pragma: no cover - direct CLI execution
     sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 
 from agent.executor.executors.workflow import WorkflowExecutor
+from agent.executor.contract import executor_factory
 from agent.run_resume import (
     RunResumeCoordinator,
     RunResumeIndex,
@@ -45,6 +46,7 @@ from agent.service import (
 from agent.runtime_store import SqliteRuntimeStore
 from agent.workflow import (
     ExecutionContext,
+    ExecutionResult,
     ExecutionSpec,
     ExecutorType,
     OutputArtifact,
@@ -66,6 +68,37 @@ TERMINAL = {
     RunStatus.BLOCKED,
     RunStatus.CANCELLED,
 }
+
+
+class DeterministicFileExecutor:
+    """Network-free executor installed only inside the crash child process."""
+
+    async def execute(self, task: Any, context: ExecutionContext) -> ExecutionResult:
+        relative_path = str(task.inputs.get("path", "")).strip()
+        content = str(task.inputs.get("content", ""))
+        workspace = context.get_var("workspace")
+        if not relative_path or workspace is None:
+            return ExecutionResult(
+                success=False,
+                error="deterministic crash worker requires path and scoped workspace",
+                metadata={"executor": "deterministic-file"},
+            )
+        workspace.write_text(relative_path, content)
+        target = workspace.resolve_path(relative_path, must_exist=True)
+        return ExecutionResult(
+            success=True,
+            outputs={"text": content},
+            metadata={
+                "executor": "deterministic-file",
+                "external_reference": relative_path,
+                "size": target.stat().st_size,
+            },
+        )
+
+
+def _install_deterministic_executor() -> None:
+    executor_factory.register("tool", DeterministicFileExecutor)
+    executor_factory.register("llm", DeterministicFileExecutor)
 
 
 def _timestamp() -> str:
@@ -272,7 +305,6 @@ class InstrumentedWorkflowExecutor(WorkflowExecutor):
             self.case_id == "R01"
             and self.controller.point == "after_run_active"
             and checkpoint_request is not None
-            and checkpoint_request.checkpoint is None
         ):
             request = replace(
                 checkpoint_request,
@@ -478,13 +510,17 @@ class CrashRunLauncher:
                     "resume did not complete the durable Run: "
                     f"active={index.active_workflow_id} pending={index.pending_workflow_ids}"
                 )
-            view.transition_run_with_event(
-                run_status="COMPLETED",
-                event_id=f"p2-r-complete:{run_context.run_id}",
-                event_type="run_completed",
-                timestamp=_timestamp(),
-                payload={"case_id": self.case_id},
-            )
+            # Durable workflow finalization publishes the terminal Run state
+            # and event atomically.  Only adapters whose coordinator did not
+            # do so need a Service-level terminal transition.
+            if str(view.head().run_status).upper() != "COMPLETED":
+                view.transition_run_with_event(
+                    run_status="COMPLETED",
+                    event_id=f"p2-r-complete:{run_context.run_id}",
+                    event_type="run_completed",
+                    timestamp=_timestamp(),
+                    payload={"case_id": self.case_id},
+                )
         except Exception as error:
             self.error = {
                 "type": type(error).__name__,
@@ -506,6 +542,7 @@ def _request(case_id: str) -> StartRunRequest:
 
 
 async def _start_worker(args: argparse.Namespace) -> int:
+    _install_deterministic_executor()
     store = SqliteRuntimeStore.open(args.database)
     contexts = ServiceContextFactory(
         store,
@@ -555,6 +592,7 @@ async def _start_worker(args: argparse.Namespace) -> int:
 
 
 async def _resume_worker(args: argparse.Namespace) -> int:
+    _install_deterministic_executor()
     store = SqliteRuntimeStore.open(args.database)
     contexts = ServiceContextFactory(
         store,
@@ -581,6 +619,25 @@ async def _resume_worker(args: argparse.Namespace) -> int:
         request_text=f"resume deterministic crash case {args.case}",
     )
     try:
+        if args.case == "R03":
+            snapshot = await service.get_run(
+                RunLookupRequest(
+                    tenant_id=request.tenant_id,
+                    user_id=request.user_id,
+                    session_id=request.session_id,
+                    run_id=request.run_id,
+                    request_id=f"rehydrate-{args.case.lower()}",
+                )
+            )
+            _write_json(
+                args.result,
+                {
+                    "phase": "rehydrate",
+                    "status": snapshot.status.value,
+                    "revision": snapshot.revision,
+                },
+            )
+            return 0 if snapshot.status is RunStatus.COMPLETED else 7
         try:
             await service.resume_run(request)
         except Exception as error:

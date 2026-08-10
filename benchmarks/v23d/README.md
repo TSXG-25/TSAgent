@@ -1,7 +1,8 @@
 # v2.3D Cancellation / Timeout Contract Dataset
 
-本目录是 ADR-0023 的 D1 评测合同，不调用 Provider、Tool、SQLite 或生产 Runtime，
-也不证明 `cancel_run()` 已实现。
+本目录是 ADR-0023 的固定评测合同。Dataset/Oracle 本身不调用 Provider、Tool、
+SQLite 或生产 Runtime；D2/D3 的生产实现证据由对应 integration tests 提供，不能用
+Dataset PASS 代替 Runtime capability 结论。
 
 ## 固定范围
 
@@ -47,5 +48,6 @@ pytest -q tests/test_v23d_interruption_contract.py
 mypy agent/interruption benchmarks/v23d
 ```
 
-D2 才会实现 durable cancellation intent、AgentService `cancel_run()`、事件和状态投影；
-D3 才会接 Planner/Provider/Tool/Workflow 与故障注入。
+D2 已实现 durable cancellation intent、AgentService `cancel_run()`、事件和状态投影；
+D3 已接入 Planner/Provider/Tool/Workflow 安全边界、Provider 可中止等待和 Run timeout
+watchdog。真实 Provider/CLI E2E 继续由 D4 验证。

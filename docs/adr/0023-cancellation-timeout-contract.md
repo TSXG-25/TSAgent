@@ -1,6 +1,6 @@
 # ADR-0023: Cancellation / Timeout Contract（v2.3D）
 
-- 状态: Accepted — v2.3D-1 Contract / Dataset / Oracle Frozen
+- 状态: Accepted — v2.3D-3 Propagation and Side-effect Safety Implemented and Verified
 - 日期: 2026-08-10
 - 关联: ADR-0016（RunCheckpoint）、ADR-0019（Context Ownership）、ADR-0020（Durable Store）、ADR-0021（AgentService/Event Stream）、ADR-0022（P2 Acceptance）
 - Dataset: `benchmarks/v23d/`
@@ -357,3 +357,46 @@ Real E2E:               DEFERRED to D4
 
 D1 完成后，ADR 状态保持 `Contract / Dataset / Oracle Frozen`，不能表述为 production
 cancellation 已实现。真实 Cancel 按钮必须等待 D2/D3 完成后才能接入。
+
+## 十一、D2 / D3 实现证据
+
+v2.3D-2 已将 cancellation 从进程内信号提升为 durable Runtime fact：
+
+```text
+Durable intent / idempotency / CAS / fence        PASS
+CANCELLING → CANCELLED / TIMED_OUT lifecycle      PASS
+Terminal Snapshot/Event atomicity                 PASS
+Restart rehydration and stale-writer rejection    PASS
+```
+
+v2.3D-3 在不引入第二套状态机的前提下完成执行传播：
+
+```text
+RunContext read-only CancellationView             PASS
+Planner / Task / Workflow no-new-work gate        PASS
+Provider interruptible wait                       PASS
+Provider fallback after cancellation                0
+Boundary-only current effect preservation         PASS
+Post-cancel subsequent side effects                 0
+Run timeout durable watchdog                      PASS
+Provider/Tool timeout misclassified as Run timeout  0
+False COMPLETED                                     0
+Terminal Snapshot/Event mismatch                    0
+```
+
+实现保持以下职责分离：
+
+```text
+CancellationView       = 只读观察 durable intent
+Runtime / Executor     = 只在声明的 safe boundary 停止新工作
+CancellationCoordinator = 使用当前 fence 收敛 durable lifecycle
+```
+
+`RUN_TIMEOUT` watchdog 不使用 `asyncio.wait_for(runtime.run())` 撕裂 Runtime；它先写入
+durable timeout intent，再等待 Provider/Tool/Workflow 的下一个安全边界。文件和其他
+`BOUNDARY_ONLY` 操作若已开始，会完成当前原子操作并保留部分执行证据，然后阻止下一
+副作用。`PROVIDER_TIMEOUT`、`TOOL_TIMEOUT` 仍由 Decision policy 处理，不会自动生成
+`run_timed_out`。
+
+真实 Provider、CLI/前端 Cancel adapter 和端到端 latency evidence 仍属于 v2.3D-4；
+因此 D3 的确定性收口不应表述为真实环境 cancellation 已完成。

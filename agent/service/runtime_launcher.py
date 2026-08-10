@@ -8,6 +8,8 @@ the SQLite transaction owned by ``DurableRuntimeStoreView``.
 
 from __future__ import annotations
 
+import asyncio
+import os
 from datetime import datetime, timezone
 from typing import Any, Callable
 
@@ -86,55 +88,115 @@ class RuntimeExecutionLauncher:
             session_context=session_context,
             run_context=run_context,
         )
+        watchdog = self._start_timeout_watchdog(run_context, request)
         try:
-            await runtime.run(request.request_text)
-        except BaseException:
             try:
-                durable_view.transition_run_with_event(
-                    run_status="FAILED_TERMINAL",
-                    event_id=f"run-failed:{run_context.run_id}:{request.request_id}",
-                    event_type="run_failed",
-                    timestamp=_timestamp(),
-                    payload=self._failure_payload(
-                        None,
-                        "RUNTIME_EXCEPTION",
-                        request.request_id,
-                    ),
-                )
-            finally:
-                self._close_runtime(runtime)
-            raise
-        else:
-            try:
-                if self._converge_interruption(run_context, runtime):
-                    return
-                run_status, event_type, failure_code = self._terminal_outcome(runtime)
-                event_id = (
-                    f"run-completed:{run_context.run_id}:{request.request_id}"
-                    if event_type == "run_completed"
-                    else (
-                        f"run-blocked:{run_context.run_id}:{request.request_id}"
-                        if event_type == "run_blocked"
-                        else f"run-failed:{run_context.run_id}:{request.request_id}"
-                    )
-                )
-                durable_view.transition_run_with_event(
-                    run_status=run_status,
-                    event_id=event_id,
-                    event_type=event_type,
-                    timestamp=_timestamp(),
-                    payload=(
-                        {"request_id": request.request_id}
-                        if not failure_code
-                        else self._failure_payload(
-                            runtime,
-                            failure_code,
+                await runtime.run(request.request_text)
+            except BaseException:
+                try:
+                    durable_view.transition_run_with_event(
+                        run_status="FAILED_TERMINAL",
+                        event_id=f"run-failed:{run_context.run_id}:{request.request_id}",
+                        event_type="run_failed",
+                        timestamp=_timestamp(),
+                        payload=self._failure_payload(
+                            None,
+                            "RUNTIME_EXCEPTION",
                             request.request_id,
+                        ),
+                    )
+                finally:
+                    self._close_runtime(runtime)
+                raise
+            else:
+                try:
+                    if self._converge_interruption(run_context, runtime):
+                        return
+                    run_status, event_type, failure_code = self._terminal_outcome(runtime)
+                    event_id = (
+                        f"run-completed:{run_context.run_id}:{request.request_id}"
+                        if event_type == "run_completed"
+                        else (
+                            f"run-blocked:{run_context.run_id}:{request.request_id}"
+                            if event_type == "run_blocked"
+                            else f"run-failed:{run_context.run_id}:{request.request_id}"
                         )
-                    ),
-                )
-            finally:
-                self._close_runtime(runtime)
+                    )
+                    durable_view.transition_run_with_event(
+                        run_status=run_status,
+                        event_id=event_id,
+                        event_type=event_type,
+                        timestamp=_timestamp(),
+                        payload=(
+                            {"request_id": request.request_id}
+                            if not failure_code
+                            else self._failure_payload(
+                                runtime,
+                                failure_code,
+                                request.request_id,
+                            )
+                        ),
+                    )
+                finally:
+                    self._close_runtime(runtime)
+        finally:
+            await self._stop_timeout_watchdog(watchdog)
+
+    @staticmethod
+    def _run_timeout_seconds(request: StartRunRequest | ResumeRunRequest) -> float:
+        metadata = getattr(request, "metadata", {}) or {}
+        raw = metadata.get("run_timeout_seconds")
+        if raw is None:
+            raw = os.getenv("TSAGENT_RUN_TIMEOUT_SECONDS", "0")
+        try:
+            seconds = float(raw)
+        except (TypeError, ValueError):
+            raise ValueError("run_timeout_seconds must be a finite positive number")
+        if seconds < 0 or seconds == float("inf") or seconds != seconds:
+            raise ValueError("run_timeout_seconds must be a finite positive number")
+        return seconds
+
+    def _start_timeout_watchdog(
+        self,
+        run_context: Any,
+        request: StartRunRequest | ResumeRunRequest,
+    ) -> asyncio.Task[None] | None:
+        seconds = self._run_timeout_seconds(request)
+        if seconds == 0:
+            return None
+        return asyncio.create_task(
+            self._run_timeout_watchdog(run_context, request, seconds),
+            name=f"tsagent-run-timeout:{run_context.run_id}",
+        )
+
+    @staticmethod
+    async def _run_timeout_watchdog(
+        run_context: Any,
+        request: StartRunRequest | ResumeRunRequest,
+        seconds: float,
+    ) -> None:
+        await asyncio.sleep(seconds)
+        durable_view = run_context.durable_store_view
+        if durable_view is None:
+            return
+        CancellationCoordinator(durable_view.store).request_run_timeout(
+            tenant_id=run_context.tenant_id,
+            user_id=run_context.user_id,
+            session_id=run_context.session_id,
+            run_id=run_context.run_id,
+            request_id=f"timeout:{run_context.run_id}:{request.request_id}",
+            requested_by="runtime-watchdog",
+        )
+
+    @staticmethod
+    async def _stop_timeout_watchdog(
+        watchdog: asyncio.Task[None] | None,
+    ) -> None:
+        if watchdog is None:
+            return
+        if not watchdog.done():
+            watchdog.cancel()
+        await asyncio.gather(watchdog, return_exceptions=True)
 
     @staticmethod
     def _converge_interruption(run_context: Any, runtime: Any) -> bool:

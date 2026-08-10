@@ -91,7 +91,10 @@ def main() -> int:
         "v2.3D Cancellation/Timeout Validation: PASS "
         f"({metadata['case_count']} cases; dataset_hash={metadata['dataset_hash']})"
     )
-    print("Scope: D1 Contract/Dataset/Oracle only; cancel_run implementation is deferred")
+    print(
+        "Scope: Dataset/Oracle only; production D2/D3 evidence is "
+        "validated separately"
+    )
     return 0
 
 

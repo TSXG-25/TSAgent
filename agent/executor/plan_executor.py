@@ -103,18 +103,28 @@ class PlanExecutor:
                     if workspace is None:
                         # Preserve the unscoped legacy/test hook signature;
                         # scoped Runtime calls always take the explicit path.
-                        result = await self._exec_tool(
-                            tool_name,
-                            args,
-                            cancellation_view=cancellation_view,
-                        )
+                        if cancellation_view is None:
+                            result = await self._exec_tool(tool_name, args)
+                        else:
+                            result = await self._exec_tool(
+                                tool_name,
+                                args,
+                                cancellation_view=cancellation_view,
+                            )
                     else:
-                        result = await self._exec_tool(
-                            tool_name,
-                            args,
-                            workspace=workspace,
-                            cancellation_view=cancellation_view,
-                        )
+                        if cancellation_view is None:
+                            result = await self._exec_tool(
+                                tool_name,
+                                args,
+                                workspace=workspace,
+                            )
+                        else:
+                            result = await self._exec_tool(
+                                tool_name,
+                                args,
+                                workspace=workspace,
+                                cancellation_view=cancellation_view,
+                            )
 
                 # ── 收集世界状态痕迹（Verifier 的唯一输入，ADR-0012）──
                 # 写入是否真正生效由 ExecutionVerifier 在 Pipeline 末端判定，

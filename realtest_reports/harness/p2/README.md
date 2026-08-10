@@ -1,7 +1,7 @@
 # P2 Harness
 
 当前 Harness 已实现 P2-L、P2-S1、P2-R1 和 P2-P 的 Provider-neutral
-执行/证据管线；P2-P 的真实双 Provider 结果仍 deferred：
+执行/证据管线；P2-P 的真实双 Provider 已完成收口：
 
 ```text
 benchmarks/p2 Dataset
@@ -150,7 +150,25 @@ Provider 的聚合修正版分别保存在：
 - `realtest_reports/results/p2_p_primary_corrected_697ce06d.json`。
 
 修正版只修复 `python -m` 导致的跨模块 Enum identity 聚合错误，不改变任何 attempt
-证据；双 Provider parity 仍明确保持 `DEFERRED`。
+证据；在该 primary discovery 轮次中，双 Provider parity 明确保留为 `DEFERRED`。
+
+最终 secondary acceptance 在固定 baseline `8fec07c9` 上使用本地 Ollama
+`qwen2.5:14b`，P01–P03 各执行一次且不自动重跑：
+
+```text
+Secondary Capability: 2 PASS + 1 PARTIAL
+Secondary Runtime:    3/3 PASS
+Prompt parity:        3/3 PASS
+Fixture parity:       3/3 PASS
+Fallback count:       0
+```
+
+永久证据：
+
+- `realtest_reports/results/p2_p_secondary_ollama_qwen25_14b_8fec07c9_round1.json`；
+- `realtest_reports/results/p2_p_dual_closeout_8fec07c9.json`；
+- `realtest_reports/v2.3/p2_freeze.json`；
+- `realtest_reports/v2.3/p2_freeze.md`。
 
 P03 的 malformed probe 是固定的边界故障注入：第一次 structured-response 调用产生
 稳定 `MALFORMED_RESPONSE`，随后只允许现有 raw JSON fallback 继续；它不是自动重跑，

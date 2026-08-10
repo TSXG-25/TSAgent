@@ -1,6 +1,6 @@
 # ADR-0022: Runtime Endurance & Provider Portability Acceptance（P2）
 
-- 状态: Accepted — Contract Frozen; P2-L/R/S + Primary Provider Verified; Secondary Provider Deferred
+- 状态: Accepted — Implemented and Verified
 - 日期: 2026-08-09
 - 最后更新: 2026-08-10
 - 关联: ADR-0016（Run Checkpoint）、ADR-0018（Run-Level Resume）、ADR-0019（Context Ownership）、ADR-0020（Durable Store）、ADR-0021（AgentService/Event Stream）
@@ -150,7 +150,7 @@ profile 至少区分：`simple`、`single_tool`、`multi_tool`、`event_replay`�
 
 ## 九、阶段边界与 Deferred Validation
 
-当前阶段只完成：
+P2 从 Contract / Dataset / Oracle 开始，并已按以下顺序完成实现与验收：
 
 ```text
 Contract / Dataset / Oracle / Validation
@@ -188,8 +188,8 @@ P2 的真实能力结果不得回写覆盖 P1 的 `31/32`，也不得将 Provide
 
 ## 十一、当前 Runtime 实现证据
 
-P2 仍未整体收口：Long-horizon 的真实 Provider Capability 和第二 Provider
-Portability 保持 deferred。但以下 Runtime 子阶段已经独立冻结：
+以下 Runtime 子阶段已经独立冻结；Long-horizon 和双 Provider 的最终真实证据见
+第十三、十四节：
 
 ```text
 P2-LH1 Workspace Boundary
@@ -263,10 +263,9 @@ reason: sandbox DNS unavailable for example.com
 后续边界保持不变：P2-L 的真实 Provider Capability 只补证据，不重新打开 LH1；
 Cancellation、Provider Failover 和分布式恢复不进入 P2-R1。
 
-## 十二、P2-P Harness 状态
+## 十二、P2-P Harness 合同
 
-P2-P 的真实双 Provider Capability 仍 deferred，但 Harness 已完成，不再依赖第二
-Provider 到场后临时设计评测逻辑：
+P2-P Harness 在第二 Provider 到场前已经完成，避免根据模型结果临时设计评测逻辑：
 
 ```text
 P01 simple Tool execution
@@ -310,8 +309,8 @@ Capability Outcome = FAIL
 Runtime Correctness = PASS
 ```
 
-当前准确状态是：`P2-P Harness/Oracle implemented`，`real two-Provider evidence
-DEFERRED`；不得将 fixture 的 6/6 表述为 Provider Capability 通过。
+fixture 的 6/6 只证明 Harness/Oracle；真实双 Provider 结论由第十三、十四节的
+六次正式 attempt 单独证明，不得混用两类证据。
 
 永久 fixture 证据：
 
@@ -361,8 +360,8 @@ L01/L03 因 Provider 错误安全进入 `FAILED_TERMINAL`，因此 Capability FA
 PASS。L05 在 post-fix 中完成，重规划任务使用新的 `replan-*` ID，已完成 Task 与副作用
 均未重复。
 
-真实 P01–P03 使用固定 primary Provider 各执行一次；secondary 缺少独立配置，在调用前
-判为 `DEFERRED`，没有启动子进程：
+真实 P01–P03 首轮使用固定 primary Provider 各执行一次；当时 secondary 缺少独立配置，
+在调用前判为 `DEFERRED`，没有启动子进程：
 
 ```text
 Primary Capability:       3/3 PASS
@@ -383,12 +382,26 @@ realtest_reports/results/p2_l_real_rescored_697ce06d.json
 realtest_reports/results/p2_l_real_postfix_68480d91.json
 realtest_reports/results/p2_p_primary_discovery_697ce06d.json
 realtest_reports/results/p2_p_primary_corrected_697ce06d.json
+realtest_reports/results/p2_p_secondary_ollama_qwen25_14b_8fec07c9_round1.json
+realtest_reports/results/p2_p_dual_closeout_8fec07c9.json
 ```
 
-当前统一结论：P2-L、P2-R、P2-S 和 primary P2-P 的所有适用 Runtime 硬门禁均为零；
-P2 尚不标记最终双 Provider closeout，唯一剩余外部证据是使用同一 manifest/hash 的
-secondary P01–P03。它保持 `DEFERRED`，不得写成 FAIL、PASS 或由 primary fallback
-替代。
+secondary 在固定 baseline `8fec07c9` 上使用本地 Ollama `qwen2.5:14b`，对相同
+P01–P03 各执行一次。没有自动复跑、Provider-specific prompt/fixture 或 fallback：
+
+```text
+Secondary Capability:    2 PASS + 1 PARTIAL
+Secondary Runtime:       3/3 PASS
+Prompt parity:           3/3 PASS
+Fixture parity:          3/3 PASS
+Fallback count:          0
+```
+
+P02 的多目标任务 Capability 为 `PARTIAL`，但 Runtime 正确表达未完成部分，没有产生
+假成功或错误副作用。因此它符合本 ADR 的双层评分合同，不阻塞 Portability 收口。
+
+当前统一结论：P2-L、P2-R、P2-S 与双 Provider P2-P 的所有适用 Runtime 门禁均已
+通过，P2 不再包含 deferred 外部证据。
 
 本轮门禁：
 
@@ -400,3 +413,52 @@ Architecture Verification:                        PASS
 Contract Verification:                            PASS
 mypy (changed modules):                            PASS
 ```
+
+## 十四、P2 最终冻结
+
+```text
+Acceptance baseline: 8fec07c9
+
+L Long-horizon
+Capability:          3/5
+Runtime Correctness: 5/5 PASS
+
+R Real SIGKILL Recovery
+Runtime Correctness: 4/4 PASS
+
+S Deterministic Soak
+Runtime Correctness: 4/4 PASS
+
+P Provider Portability
+Primary Capability:   3/3 PASS
+Primary Runtime:      3/3 PASS
+Secondary Capability: 2 PASS + 1 PARTIAL
+Secondary Runtime:    3/3 PASS
+Pair Runtime:         3/3 PASS
+```
+
+最终硬门禁：
+
+```text
+False COMPLETED                    0
+Duplicate Side Effect              0
+Cross-context Leakage              0
+Workspace Leakage                  0
+Durable State Loss                 0
+Stale Writer Acceptance            0
+Completed Workflow Re-execution    0
+Event Replay Gap                   0
+Terminal Snapshot/Event Mismatch   0
+Unsupported Effect Hallucination   0
+Implicit Provider Fallback         0
+Credential Leakage                 0
+```
+
+最终摘要与机器可读证据：
+
+```text
+realtest_reports/v2.3/p2_freeze.md
+realtest_reports/v2.3/p2_freeze.json
+```
+
+P2 至此冻结；Cancellation / Timeout 继续属于下一里程碑 v2.3D，不回填到本 ADR。

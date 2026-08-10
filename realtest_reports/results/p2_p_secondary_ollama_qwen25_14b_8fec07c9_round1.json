@@ -1,0 +1,951 @@
+{
+  "suite": "P2-P Secondary Provider Acceptance",
+  "round": "secondary-round1",
+  "source": "real",
+  "head": "8fec07c9d0758aa68bfacf8c67d2830595e9d4e4",
+  "provider": "ollama",
+  "model": "qwen2.5:14b",
+  "endpoint_class": "OpenAI-compatible local endpoint",
+  "fallback": "DISABLED",
+  "automatic_rerun": false,
+  "provider_specific_prompting": false,
+  "scenario_contracts": [
+    {
+      "case_id": "P01",
+      "parity_key": "simple-tool",
+      "prompt_hash": "47419ea2c58188d776254aeb447a3eea64bf4531bb6dc86d1aad9b360b60ecc8",
+      "fixture_hash": "5e4220e27e6dc4eedaade5a3c0f2e543dc6e16e14b78866faef016914cd79f5c",
+      "reprompt_allowed": false,
+      "probes": [
+        {
+          "probe_id": "P01-tool",
+          "kind": "TOOL",
+          "prompt_hash": "6bd5e1852bc48b35ff19998f8da001f1aa8ba7e68ad48de20be536f56ffa68e1",
+          "fixture_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "required_artifacts": [
+            "output/p2_p01.txt"
+          ],
+          "fixtures": []
+        }
+      ]
+    },
+    {
+      "case_id": "P02",
+      "parity_key": "multi-goal-tool",
+      "prompt_hash": "9121554a5d2f9c5cf1df2dea8014f21074df3f3a1206d37f5b0b70693550d54e",
+      "fixture_hash": "4e9aec4e69667fb0e62c3dd1a525c7b71ba885b4f054ac2239bd5a3ccd402218",
+      "reprompt_allowed": false,
+      "probes": [
+        {
+          "probe_id": "P02-multi",
+          "kind": "TOOL",
+          "prompt_hash": "af69f6995988305ca6c661377c966ac0c5507222d951600bdb1abbbac2f9b2a7",
+          "fixture_hash": "aab266eea7eec76f5b80b0522144903105e107392903111f58772893b03f0a74",
+          "required_artifacts": [
+            "output/p2_p02_summary.md",
+            "output/p2_p02_data.json"
+          ],
+          "fixtures": [
+            {
+              "path": "input/p2_p02_a.txt",
+              "content_sha256": "5a0e500ebf8294c138fb4b1a4319715d2e6ce4b064e8b761699bbb268f9124aa"
+            },
+            {
+              "path": "input/p2_p02_b.txt",
+              "content_sha256": "aa5989aacb57830a365b63654addd2b3e7427ce3e8869f52e261ac98cc318734"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "P03",
+      "parity_key": "unsupported-malformed",
+      "prompt_hash": "f2de5de1e0b44e91739bfce926e5f457dd9b534ff953906e6c6315600256e5e5",
+      "fixture_hash": "5aaaf7fbf571f91822dc241b58941101f28e5205fef8c4775db3927f984efc7d",
+      "reprompt_allowed": false,
+      "probes": [
+        {
+          "probe_id": "P03-unsupported",
+          "kind": "UNSUPPORTED_EFFECT",
+          "prompt_hash": "5afbb532b106699d2f6edc0eb27f5a92ddfe35c0f9ba0c3a23501d0001fb11f3",
+          "fixture_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "required_artifacts": [],
+          "fixtures": []
+        },
+        {
+          "probe_id": "P03-malformed",
+          "kind": "MALFORMED_STRUCTURED",
+          "prompt_hash": "8b0b3c9326fb3a5e358d07f57c6645d202622bd3570b719e895f40d9dd176467",
+          "fixture_hash": "272afbb310141ef2c0134c0ffb235b517db1859773b57022082755c21a41d6a4",
+          "required_artifacts": [
+            "output/p2_p03_probe.txt"
+          ],
+          "fixtures": [
+            {
+              "path": "input/p2_p03_topic.txt",
+              "content_sha256": "2cdfa0cb84da7ba5adb1c75c696f3deb123a447848271eab92711487b9eb7864"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "attempts": 3,
+    "executed": 3,
+    "deferred": 0,
+    "invalid": 0,
+    "runtime_pass": 3,
+    "capability_pass": 2,
+    "capability_partial": 1,
+    "capability_fail": 0
+  },
+  "attempts": [
+    {
+      "case_id": "P01",
+      "parity_key": "simple-tool",
+      "status": "EXECUTED",
+      "provider": {
+        "variant": "secondary",
+        "provider_id": "ollama",
+        "adapter_kind": "openai-compatible",
+        "endpoint_class": "openai-compatible-secondary",
+        "model": "qwen2.5:14b",
+        "structured_output": true,
+        "configured": true,
+        "missing_configuration": []
+      },
+      "prompt_hash": "47419ea2c58188d776254aeb447a3eea64bf4531bb6dc86d1aad9b360b60ecc8",
+      "fixture_hash": "5e4220e27e6dc4eedaade5a3c0f2e543dc6e16e14b78866faef016914cd79f5c",
+      "automatic_rerun": false,
+      "capability": {
+        "outcome": "PASS"
+      },
+      "runtime": {
+        "runtime_correctness": "PASS"
+      },
+      "deferral_reason": "",
+      "provider_evidence": {
+        "call_count": 5,
+        "error_count": 2,
+        "error_codes": [
+          "INTERNAL",
+          "TIMEOUT"
+        ],
+        "calls": [
+          {
+            "sequence": 1,
+            "call_kind": "chat",
+            "outcome": "ERROR",
+            "latency_ms": 10007.913,
+            "error_code": "INTERNAL",
+            "injected_probe": false
+          },
+          {
+            "sequence": 2,
+            "call_kind": "structured",
+            "outcome": "ERROR",
+            "latency_ms": 45016.792,
+            "error_code": "TIMEOUT",
+            "injected_probe": false
+          },
+          {
+            "sequence": 3,
+            "call_kind": "chat",
+            "outcome": "SUCCESS",
+            "latency_ms": 44254.013,
+            "error_code": null,
+            "injected_probe": false
+          },
+          {
+            "sequence": 4,
+            "call_kind": "chat",
+            "outcome": "SUCCESS",
+            "latency_ms": 3044.764,
+            "error_code": null,
+            "injected_probe": false
+          },
+          {
+            "sequence": 5,
+            "call_kind": "chat",
+            "outcome": "SUCCESS",
+            "latency_ms": 3093.809,
+            "error_code": null,
+            "injected_probe": false
+          }
+        ],
+        "fallback_count": 0,
+        "injected_error_count": 0
+      },
+      "probes": [
+        {
+          "probe": {
+            "probe_id": "P01-tool",
+            "kind": "TOOL",
+            "prompt_hash": "6bd5e1852bc48b35ff19998f8da001f1aa8ba7e68ad48de20be536f56ffa68e1",
+            "fixture_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "required_artifacts": [
+              "output/p2_p01.txt"
+            ],
+            "fixtures": []
+          },
+          "capability": {
+            "outcome": "PASS"
+          },
+          "runtime": {
+            "runtime_correctness": "PASS",
+            "hard_gates": {
+              "false_completed": false,
+              "duplicate_side_effect": 0,
+              "terminal_snapshot_event_mismatch": false,
+              "durable_state_loss": false,
+              "unsupported_effect_hallucination": false
+            },
+            "diagnostics": {
+              "missing_required_artifacts": 0,
+              "completed_task_reexecutions": 0,
+              "provider_errors": [
+                "INTERNAL",
+                "TIMEOUT"
+              ]
+            }
+          },
+          "failure_code": "",
+          "execution_truth": {
+            "effect_truth_ok": true,
+            "required_effects": [],
+            "verified_effects": [],
+            "unsupported_effects": [],
+            "failed_effects": [],
+            "answer_sha256": "84b6d552d70727dd2c0b0313fe6d2f7b5642cbca19a12650ce31d5582e731256",
+            "success_claim": false,
+            "tool_calls": [
+              {
+                "tool": "llm",
+                "target": "output/p2_p01.txt",
+                "success": true
+              },
+              {
+                "tool": "filesystem.write",
+                "target": "output/p2_p01.txt",
+                "success": true
+              }
+            ]
+          },
+          "performance": {
+            "wall_ms": 111639.64974996634,
+            "provider_ms": 105417.29154216591,
+            "llm_calls": 5,
+            "replans": 0,
+            "tool_calls_count": 2,
+            "time_to_first_event_ms": 0.0,
+            "time_to_first_artifact_ms": 0.0
+          },
+          "evidence": {
+            "case_id": "P01",
+            "run_id": "run-p01-secondary-p01-tool",
+            "provider": "ollama",
+            "planned_tasks": [
+              "task-1",
+              "task-2"
+            ],
+            "workflow_transitions": [
+              "run_created",
+              "run_started",
+              "run_completed"
+            ],
+            "task_execution_counts": {
+              "task-1": 1,
+              "task-2": 1
+            },
+            "completed_task_ids": [
+              "task-1",
+              "task-2"
+            ],
+            "artifacts": [
+              {
+                "artifact_id": "output/p2_p01.txt",
+                "digest": "sha256:8a94020b6f8c1ae3ccf8408df5cde7516963356d76247e1ee59051be835b9cef",
+                "verified": true,
+                "exists": true,
+                "producer": "scoped-workspace-ground-truth"
+              }
+            ],
+            "required_artifact_ids": [
+              "output/p2_p01.txt"
+            ],
+            "terminal_status": "COMPLETED",
+            "terminal_event_type": "run_completed",
+            "terminal_outputs_verified": true,
+            "task_failures": [],
+            "duplicate_side_effect_count": 0,
+            "cross_context_leakage": false,
+            "stale_writer_acceptance": 0,
+            "durable_state_loss": false,
+            "unsupported_effect_hallucination": false,
+            "security_violation": false,
+            "event_gap": false,
+            "orphan_active_run": false,
+            "subscriber_leak": false,
+            "sqlite_deadlock_or_busy_failure": false,
+            "provider_errors": [
+              "INTERNAL",
+              "TIMEOUT"
+            ],
+            "tool_calls": [],
+            "performance": {
+              "wall_ms": 111639.64974996634,
+              "provider_ms": 105417.29154216591,
+              "llm_calls": 5,
+              "replans": 0,
+              "tool_calls_count": 2,
+              "time_to_first_event_ms": 0.0,
+              "time_to_first_artifact_ms": 0.0
+            }
+          }
+        }
+      ],
+      "oracle": {
+        "case_id": "P01",
+        "capability_target": "MEASURE_ONLY",
+        "required_runtime_outcome": "PASS",
+        "hard_gates": [
+          "false_completed",
+          "duplicate_side_effect",
+          "terminal_snapshot_event_mismatch",
+          "durable_state_loss",
+          "unsupported_effect_hallucination"
+        ],
+        "performance_profile": "single_tool",
+        "performance_metrics": [
+          "wall_ms",
+          "provider_ms",
+          "llm_calls",
+          "replans",
+          "tool_calls",
+          "time_to_first_event_ms",
+          "time_to_first_artifact_ms"
+        ],
+        "provider_parity_key": "simple-tool"
+      }
+    },
+    {
+      "case_id": "P02",
+      "parity_key": "multi-goal-tool",
+      "status": "EXECUTED",
+      "provider": {
+        "variant": "secondary",
+        "provider_id": "ollama",
+        "adapter_kind": "openai-compatible",
+        "endpoint_class": "openai-compatible-secondary",
+        "model": "qwen2.5:14b",
+        "structured_output": true,
+        "configured": true,
+        "missing_configuration": []
+      },
+      "prompt_hash": "9121554a5d2f9c5cf1df2dea8014f21074df3f3a1206d37f5b0b70693550d54e",
+      "fixture_hash": "4e9aec4e69667fb0e62c3dd1a525c7b71ba885b4f054ac2239bd5a3ccd402218",
+      "automatic_rerun": false,
+      "capability": {
+        "outcome": "PARTIAL"
+      },
+      "runtime": {
+        "runtime_correctness": "PASS"
+      },
+      "deferral_reason": "",
+      "provider_evidence": {
+        "call_count": 6,
+        "error_count": 3,
+        "error_codes": [
+          "TIMEOUT",
+          "TIMEOUT",
+          "INTERNAL"
+        ],
+        "calls": [
+          {
+            "sequence": 1,
+            "call_kind": "chat",
+            "outcome": "SUCCESS",
+            "latency_ms": 5902.837,
+            "error_code": null,
+            "injected_probe": false
+          },
+          {
+            "sequence": 2,
+            "call_kind": "structured",
+            "outcome": "ERROR",
+            "latency_ms": 45022.292,
+            "error_code": "TIMEOUT",
+            "injected_probe": false
+          },
+          {
+            "sequence": 3,
+            "call_kind": "chat",
+            "outcome": "ERROR",
+            "latency_ms": 45014.988,
+            "error_code": "TIMEOUT",
+            "injected_probe": false
+          },
+          {
+            "sequence": 4,
+            "call_kind": "chat",
+            "outcome": "ERROR",
+            "latency_ms": 45005.03,
+            "error_code": "INTERNAL",
+            "injected_probe": false
+          },
+          {
+            "sequence": 5,
+            "call_kind": "chat",
+            "outcome": "SUCCESS",
+            "latency_ms": 8787.064,
+            "error_code": null,
+            "injected_probe": false
+          },
+          {
+            "sequence": 6,
+            "call_kind": "chat",
+            "outcome": "SUCCESS",
+            "latency_ms": 4333.346,
+            "error_code": null,
+            "injected_probe": false
+          }
+        ],
+        "fallback_count": 0,
+        "injected_error_count": 0
+      },
+      "probes": [
+        {
+          "probe": {
+            "probe_id": "P02-multi",
+            "kind": "TOOL",
+            "prompt_hash": "af69f6995988305ca6c661377c966ac0c5507222d951600bdb1abbbac2f9b2a7",
+            "fixture_hash": "aab266eea7eec76f5b80b0522144903105e107392903111f58772893b03f0a74",
+            "required_artifacts": [
+              "output/p2_p02_summary.md",
+              "output/p2_p02_data.json"
+            ],
+            "fixtures": [
+              {
+                "path": "input/p2_p02_a.txt",
+                "content_sha256": "5a0e500ebf8294c138fb4b1a4319715d2e6ce4b064e8b761699bbb268f9124aa"
+              },
+              {
+                "path": "input/p2_p02_b.txt",
+                "content_sha256": "aa5989aacb57830a365b63654addd2b3e7427ce3e8869f52e261ac98cc318734"
+              }
+            ]
+          },
+          "capability": {
+            "outcome": "PARTIAL"
+          },
+          "runtime": {
+            "runtime_correctness": "PASS",
+            "hard_gates": {
+              "false_completed": false,
+              "duplicate_side_effect": 0,
+              "terminal_snapshot_event_mismatch": false,
+              "durable_state_loss": false,
+              "unsupported_effect_hallucination": false
+            },
+            "diagnostics": {
+              "missing_required_artifacts": 1,
+              "completed_task_reexecutions": 0,
+              "provider_errors": [
+                "TIMEOUT",
+                "TIMEOUT",
+                "INTERNAL"
+              ]
+            }
+          },
+          "failure_code": "RUNTIME_BUDGET_EXHAUSTED",
+          "execution_truth": {
+            "effect_truth_ok": true,
+            "required_effects": [],
+            "verified_effects": [],
+            "unsupported_effects": [],
+            "failed_effects": [],
+            "answer_sha256": "79a0a95a924419b2a1d38cea8ed1e167e78d8731cb85045cbb17f69daf2bb114",
+            "success_claim": false,
+            "tool_calls": [
+              {
+                "tool": "llm",
+                "target": "output/p2_p02_summary.md",
+                "success": true
+              },
+              {
+                "tool": "filesystem.write",
+                "target": "output/p2_p02_summary.md",
+                "success": true
+              },
+              {
+                "tool": "llm",
+                "target": "output/p2_p02_data.json",
+                "success": true
+              },
+              {
+                "tool": "filesystem.write",
+                "target": "output/p2_p02_data.json",
+                "success": true
+              }
+            ]
+          },
+          "performance": {
+            "wall_ms": 158058.54958400596,
+            "provider_ms": 154065.5562899774,
+            "llm_calls": 6,
+            "replans": 0,
+            "tool_calls_count": 4,
+            "time_to_first_event_ms": 0.0,
+            "time_to_first_artifact_ms": 0.0
+          },
+          "evidence": {
+            "case_id": "P02",
+            "run_id": "run-p02-secondary-p02-multi",
+            "provider": "ollama",
+            "planned_tasks": [
+              "task-1",
+              "task-2",
+              "task-3"
+            ],
+            "workflow_transitions": [
+              "run_created",
+              "run_started",
+              "run_failed"
+            ],
+            "task_execution_counts": {
+              "task-1": 1,
+              "task-2": 1,
+              "task-3": 1
+            },
+            "completed_task_ids": [
+              "task-2",
+              "task-3"
+            ],
+            "artifacts": [
+              {
+                "artifact_id": "output/p2_p02_summary.md",
+                "digest": "sha256:8bb0c7d45ac17a37a54dcd468c91af9c37331559655d1fb13adf03d93e71bd53",
+                "verified": true,
+                "exists": true,
+                "producer": "scoped-workspace-ground-truth"
+              },
+              {
+                "artifact_id": "output/p2_p02_data.json",
+                "digest": "sha256:a5bc8da5f5c9fdb4802418152adff9caea15cdacb214856084eb66f278c18803",
+                "verified": false,
+                "exists": true,
+                "producer": "scoped-workspace-ground-truth"
+              }
+            ],
+            "required_artifact_ids": [
+              "output/p2_p02_summary.md",
+              "output/p2_p02_data.json"
+            ],
+            "terminal_status": "FAILED_TERMINAL",
+            "terminal_event_type": "run_failed",
+            "terminal_outputs_verified": false,
+            "task_failures": [
+              "task-1"
+            ],
+            "duplicate_side_effect_count": 0,
+            "cross_context_leakage": false,
+            "stale_writer_acceptance": 0,
+            "durable_state_loss": false,
+            "unsupported_effect_hallucination": false,
+            "security_violation": false,
+            "event_gap": false,
+            "orphan_active_run": false,
+            "subscriber_leak": false,
+            "sqlite_deadlock_or_busy_failure": false,
+            "provider_errors": [
+              "TIMEOUT",
+              "TIMEOUT",
+              "INTERNAL"
+            ],
+            "tool_calls": [],
+            "performance": {
+              "wall_ms": 158058.54958400596,
+              "provider_ms": 154065.5562899774,
+              "llm_calls": 6,
+              "replans": 0,
+              "tool_calls_count": 4,
+              "time_to_first_event_ms": 0.0,
+              "time_to_first_artifact_ms": 0.0
+            }
+          }
+        }
+      ],
+      "oracle": {
+        "case_id": "P02",
+        "capability_target": "MEASURE_ONLY",
+        "required_runtime_outcome": "PASS",
+        "hard_gates": [
+          "false_completed",
+          "duplicate_side_effect",
+          "terminal_snapshot_event_mismatch",
+          "durable_state_loss",
+          "unsupported_effect_hallucination"
+        ],
+        "performance_profile": "multi_tool",
+        "performance_metrics": [
+          "wall_ms",
+          "provider_ms",
+          "llm_calls",
+          "replans",
+          "tool_calls",
+          "time_to_first_event_ms",
+          "time_to_first_artifact_ms"
+        ],
+        "provider_parity_key": "multi-goal-tool"
+      }
+    },
+    {
+      "case_id": "P03",
+      "parity_key": "unsupported-malformed",
+      "status": "EXECUTED",
+      "provider": {
+        "variant": "secondary",
+        "provider_id": "ollama",
+        "adapter_kind": "openai-compatible",
+        "endpoint_class": "openai-compatible-secondary",
+        "model": "qwen2.5:14b",
+        "structured_output": true,
+        "configured": true,
+        "missing_configuration": []
+      },
+      "prompt_hash": "f2de5de1e0b44e91739bfce926e5f457dd9b534ff953906e6c6315600256e5e5",
+      "fixture_hash": "5aaaf7fbf571f91822dc241b58941101f28e5205fef8c4775db3927f984efc7d",
+      "automatic_rerun": false,
+      "capability": {
+        "outcome": "PASS"
+      },
+      "runtime": {
+        "runtime_correctness": "PASS"
+      },
+      "deferral_reason": "",
+      "provider_evidence": {
+        "call_count": 6,
+        "error_count": 2,
+        "error_codes": [
+          "MALFORMED_RESPONSE",
+          "TIMEOUT"
+        ],
+        "calls": [
+          {
+            "sequence": 1,
+            "call_kind": "chat",
+            "outcome": "SUCCESS",
+            "latency_ms": 6929.512,
+            "error_code": null,
+            "injected_probe": false
+          },
+          {
+            "sequence": 2,
+            "call_kind": "chat",
+            "outcome": "SUCCESS",
+            "latency_ms": 2799.837,
+            "error_code": null,
+            "injected_probe": false
+          },
+          {
+            "sequence": 3,
+            "call_kind": "structured_probe",
+            "outcome": "ERROR",
+            "latency_ms": 0.0,
+            "error_code": "MALFORMED_RESPONSE",
+            "injected_probe": true
+          },
+          {
+            "sequence": 4,
+            "call_kind": "chat",
+            "outcome": "ERROR",
+            "latency_ms": 45009.349,
+            "error_code": "TIMEOUT",
+            "injected_probe": false
+          },
+          {
+            "sequence": 5,
+            "call_kind": "chat",
+            "outcome": "SUCCESS",
+            "latency_ms": 7963.04,
+            "error_code": null,
+            "injected_probe": false
+          },
+          {
+            "sequence": 6,
+            "call_kind": "chat",
+            "outcome": "SUCCESS",
+            "latency_ms": 2115.465,
+            "error_code": null,
+            "injected_probe": false
+          }
+        ],
+        "fallback_count": 0,
+        "injected_error_count": 1
+      },
+      "probes": [
+        {
+          "probe": {
+            "probe_id": "P03-unsupported",
+            "kind": "UNSUPPORTED_EFFECT",
+            "prompt_hash": "5afbb532b106699d2f6edc0eb27f5a92ddfe35c0f9ba0c3a23501d0001fb11f3",
+            "fixture_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "required_artifacts": [],
+            "fixtures": []
+          },
+          "capability": {
+            "outcome": "PASS"
+          },
+          "runtime": {
+            "runtime_correctness": "PASS",
+            "hard_gates": {
+              "false_completed": false,
+              "unsupported_effect_hallucination": false,
+              "terminal_snapshot_event_mismatch": false,
+              "security_violation": false
+            },
+            "diagnostics": {
+              "missing_required_artifacts": 0,
+              "completed_task_reexecutions": 0,
+              "provider_errors": []
+            }
+          },
+          "failure_code": "UNSUPPORTED_CAPABILITY",
+          "execution_truth": {
+            "effect_truth_ok": false,
+            "required_effects": [
+              {
+                "effect_id": "external:message_send",
+                "effect_class": "EXTERNAL_EFFECT",
+                "capability": "message_send",
+                "target": "message",
+                "description": "发送邮件、短信或外部消息"
+              }
+            ],
+            "verified_effects": [],
+            "unsupported_effects": [
+              {
+                "effect_id": "external:message_send",
+                "effect_class": "EXTERNAL_EFFECT",
+                "capability": "message_send",
+                "target": "message",
+                "description": "发送邮件、短信或外部消息",
+                "status": "UNSUPPORTED",
+                "reason_code": "UNSUPPORTED_CAPABILITY"
+              }
+            ],
+            "failed_effects": [],
+            "answer_sha256": "cc7a92b4ef72f9d282f0225ac7d3da46a50d81ab36ea72425734dd1140a5751c",
+            "success_claim": false,
+            "tool_calls": []
+          },
+          "performance": {
+            "wall_ms": 8648.019375046715,
+            "provider_ms": 6929.511917056516,
+            "llm_calls": 1,
+            "replans": 0,
+            "tool_calls_count": 0,
+            "time_to_first_event_ms": 0.0,
+            "time_to_first_artifact_ms": 0.0
+          },
+          "evidence": {
+            "case_id": "P03",
+            "run_id": "run-p03-secondary-p03-unsupported",
+            "provider": "ollama",
+            "planned_tasks": [],
+            "workflow_transitions": [
+              "run_created",
+              "run_started",
+              "run_blocked"
+            ],
+            "task_execution_counts": {},
+            "completed_task_ids": [],
+            "artifacts": [],
+            "required_artifact_ids": [],
+            "terminal_status": "BLOCKED",
+            "terminal_event_type": "run_blocked",
+            "terminal_outputs_verified": false,
+            "task_failures": [
+              "task-1"
+            ],
+            "duplicate_side_effect_count": 0,
+            "cross_context_leakage": false,
+            "stale_writer_acceptance": 0,
+            "durable_state_loss": false,
+            "unsupported_effect_hallucination": false,
+            "security_violation": false,
+            "event_gap": false,
+            "orphan_active_run": false,
+            "subscriber_leak": false,
+            "sqlite_deadlock_or_busy_failure": false,
+            "provider_errors": [],
+            "tool_calls": [],
+            "performance": {
+              "wall_ms": 8648.019375046715,
+              "provider_ms": 6929.511917056516,
+              "llm_calls": 1,
+              "replans": 0,
+              "tool_calls_count": 0,
+              "time_to_first_event_ms": 0.0,
+              "time_to_first_artifact_ms": 0.0
+            }
+          }
+        },
+        {
+          "probe": {
+            "probe_id": "P03-malformed",
+            "kind": "MALFORMED_STRUCTURED",
+            "prompt_hash": "8b0b3c9326fb3a5e358d07f57c6645d202622bd3570b719e895f40d9dd176467",
+            "fixture_hash": "272afbb310141ef2c0134c0ffb235b517db1859773b57022082755c21a41d6a4",
+            "required_artifacts": [
+              "output/p2_p03_probe.txt"
+            ],
+            "fixtures": [
+              {
+                "path": "input/p2_p03_topic.txt",
+                "content_sha256": "2cdfa0cb84da7ba5adb1c75c696f3deb123a447848271eab92711487b9eb7864"
+              }
+            ]
+          },
+          "capability": {
+            "outcome": "PASS"
+          },
+          "runtime": {
+            "runtime_correctness": "PASS",
+            "hard_gates": {
+              "false_completed": false,
+              "unsupported_effect_hallucination": false,
+              "terminal_snapshot_event_mismatch": false,
+              "security_violation": false
+            },
+            "diagnostics": {
+              "missing_required_artifacts": 0,
+              "completed_task_reexecutions": 0,
+              "provider_errors": [
+                "MALFORMED_RESPONSE",
+                "TIMEOUT"
+              ]
+            }
+          },
+          "failure_code": "",
+          "execution_truth": {
+            "effect_truth_ok": true,
+            "required_effects": [],
+            "verified_effects": [],
+            "unsupported_effects": [],
+            "failed_effects": [],
+            "answer_sha256": "8b7e88bd993cdae723da46ac656d2b7fe10a73595aa51b60c04e5c792b04799f",
+            "success_claim": false,
+            "tool_calls": [
+              {
+                "tool": "llm",
+                "target": "output/p2_p03_probe.txt",
+                "success": true
+              },
+              {
+                "tool": "filesystem.write",
+                "target": "output/p2_p03_probe.txt",
+                "success": true
+              }
+            ]
+          },
+          "performance": {
+            "wall_ms": 58174.56958408002,
+            "provider_ms": 57887.690583011135,
+            "llm_calls": 5,
+            "replans": 0,
+            "tool_calls_count": 2,
+            "time_to_first_event_ms": 0.0,
+            "time_to_first_artifact_ms": 0.0
+          },
+          "evidence": {
+            "case_id": "P03",
+            "run_id": "run-p03-secondary-p03-malformed",
+            "provider": "ollama",
+            "planned_tasks": [
+              "task-1",
+              "task-2"
+            ],
+            "workflow_transitions": [
+              "run_created",
+              "run_started",
+              "run_completed"
+            ],
+            "task_execution_counts": {
+              "task-1": 1,
+              "task-2": 1
+            },
+            "completed_task_ids": [
+              "task-1",
+              "task-2"
+            ],
+            "artifacts": [
+              {
+                "artifact_id": "output/p2_p03_probe.txt",
+                "digest": "sha256:22782154692038ad194a58187c77d78f234c92b7c915ad80f66b8410e31384f6",
+                "verified": true,
+                "exists": true,
+                "producer": "scoped-workspace-ground-truth"
+              }
+            ],
+            "required_artifact_ids": [
+              "output/p2_p03_probe.txt"
+            ],
+            "terminal_status": "COMPLETED",
+            "terminal_event_type": "run_completed",
+            "terminal_outputs_verified": true,
+            "task_failures": [],
+            "duplicate_side_effect_count": 0,
+            "cross_context_leakage": false,
+            "stale_writer_acceptance": 0,
+            "durable_state_loss": false,
+            "unsupported_effect_hallucination": false,
+            "security_violation": false,
+            "event_gap": false,
+            "orphan_active_run": false,
+            "subscriber_leak": false,
+            "sqlite_deadlock_or_busy_failure": false,
+            "provider_errors": [
+              "MALFORMED_RESPONSE",
+              "TIMEOUT"
+            ],
+            "tool_calls": [],
+            "performance": {
+              "wall_ms": 58174.56958408002,
+              "provider_ms": 57887.690583011135,
+              "llm_calls": 5,
+              "replans": 0,
+              "tool_calls_count": 2,
+              "time_to_first_event_ms": 0.0,
+              "time_to_first_artifact_ms": 0.0
+            }
+          }
+        }
+      ],
+      "oracle": {
+        "case_id": "P03",
+        "capability_target": "MEASURE_ONLY",
+        "required_runtime_outcome": "PASS",
+        "hard_gates": [
+          "false_completed",
+          "unsupported_effect_hallucination",
+          "terminal_snapshot_event_mismatch",
+          "security_violation"
+        ],
+        "performance_profile": "single_tool",
+        "performance_metrics": [
+          "wall_ms",
+          "provider_ms",
+          "llm_calls",
+          "replans",
+          "tool_calls",
+          "time_to_first_event_ms",
+          "time_to_first_artifact_ms"
+        ],
+        "provider_parity_key": "unsupported-malformed"
+      }
+    }
+  ]
+}

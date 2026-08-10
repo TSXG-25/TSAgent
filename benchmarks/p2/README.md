@@ -68,6 +68,7 @@ mypy benchmarks/p2 tests/test_p2_acceptance_contract.py
 ```
 
 P2-L/R/S 已有独立执行 Harness；P2-P 已有固定 P01–P03、统一 Provider adapter、
-子进程隔离、证据采集和双层评分 Harness。真实双 Provider 结果仍需在端点可用时
-运行一次并永久记录 Provider、commit、dataset/scenario hash、执行次数、Provider
-Error 和两层评分；fixture 结果不得计为真实能力。
+子进程隔离、证据采集和双层评分 Harness。真实双 Provider 已按相同
+dataset/scenario hash 各执行一次：primary Runtime `3/3 PASS`，secondary Runtime
+`3/3 PASS`；最终证据见 `realtest_reports/v2.3/p2_freeze.*`。fixture 结果仍不得计为
+真实能力。

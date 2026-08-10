@@ -1,0 +1,78 @@
+{
+  "milestone": "P2 Runtime Endurance & Provider Portability Acceptance",
+  "status": "Accepted — Implemented and Verified",
+  "freeze_date": "2026-08-10",
+  "acceptance_baseline": "8fec07c9d0758aa68bfacf8c67d2830595e9d4e4",
+  "contract_version": "adr-0022-v1",
+  "full_p2_dataset_hash": "f51c5fef7a13d82e20003bf08bcb593b482511477a5c493bdff8df6bfbf9baef",
+  "provider_scenario_manifest_hash": "f08d66b97527557e9dc455aa2d35d1bbd56ef0d74f22759557b6b6a7fb2ca3f7",
+  "groups": {
+    "long_horizon": {
+      "evidence_commit": "68480d9109808753f881d3d1d98498e6c61024e8",
+      "capability": {"passed": 3, "total": 5},
+      "runtime_correctness": {"passed": 5, "total": 5},
+      "provider_error_cases": 2
+    },
+    "crash_restart": {
+      "runtime_correctness": {"passed": 4, "total": 4},
+      "true_process_kill": {"passed": 4, "total": 4}
+    },
+    "soak": {
+      "runtime_correctness": {"passed": 4, "total": 4},
+      "scenarios": [
+        "50 sequential runs",
+        "10 sessions × 5 runs",
+        "10 concurrent interleaved runs",
+        "500 durable event replays"
+      ]
+    },
+    "provider_portability": {
+      "primary": {
+        "provider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "evidence_commit": "697ce06d0f6dd1b6da209a087aa88dfa5d973d8b",
+        "capability": {"passed": 3, "partial": 0, "failed": 0, "total": 3},
+        "runtime_correctness": {"passed": 3, "total": 3}
+      },
+      "secondary": {
+        "provider": "ollama",
+        "model": "qwen2.5:14b",
+        "endpoint_class": "OpenAI-compatible local endpoint",
+        "evidence_commit": "8fec07c9d0758aa68bfacf8c67d2830595e9d4e4",
+        "acceptance_round": "secondary-round1",
+        "attempts": 3,
+        "automatic_rerun": false,
+        "capability": {"passed": 2, "partial": 1, "failed": 0, "total": 3},
+        "runtime_correctness": {"passed": 3, "total": 3},
+        "fallback_count": 0
+      },
+      "pair_runtime_correctness": {"passed": 3, "total": 3},
+      "prompt_parity": {"passed": 3, "total": 3},
+      "fixture_parity": {"passed": 3, "total": 3},
+      "prompt_or_fixture_drift": 0
+    }
+  },
+  "hard_invariants": {
+    "false_completed": 0,
+    "duplicate_side_effect": 0,
+    "cross_context_leakage": 0,
+    "workspace_leakage": 0,
+    "durable_state_loss": 0,
+    "stale_writer_acceptance": 0,
+    "completed_workflow_reexecution": 0,
+    "event_replay_gap": 0,
+    "terminal_snapshot_event_mismatch": 0,
+    "unsupported_effect_hallucination": 0,
+    "implicit_provider_fallback": 0,
+    "credential_leakage": 0
+  },
+  "evidence": {
+    "long_horizon": "realtest_reports/results/p2_l_real_postfix_68480d91.json",
+    "crash_restart": "realtest_reports/results/p2_r1_round1.json",
+    "soak": "realtest_reports/results/p2_s1_deterministic.json",
+    "primary_provider": "realtest_reports/results/p2_p_primary_corrected_697ce06d.json",
+    "secondary_provider": "realtest_reports/results/p2_p_secondary_ollama_qwen25_14b_8fec07c9_round1.json",
+    "dual_provider": "realtest_reports/results/p2_p_dual_closeout_8fec07c9.json"
+  },
+  "next_milestone": "v2.3D Cancellation / Timeout Contract"
+}

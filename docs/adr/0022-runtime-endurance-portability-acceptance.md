@@ -260,4 +260,60 @@ reason: sandbox DNS unavailable for example.com
 不计入 P2-R1 的 deterministic process-recovery 能力结论。
 
 后续边界保持不变：P2-L 的真实 Provider Capability 只补证据，不重新打开 LH1；
-P2-P 等待第二 Provider；Cancellation、Provider Failover 和分布式恢复不进入 P2-R1。
+Cancellation、Provider Failover 和分布式恢复不进入 P2-R1。
+
+## 十二、P2-P Harness 状态
+
+P2-P 的真实双 Provider Capability 仍 deferred，但 Harness 已完成，不再依赖第二
+Provider 到场后临时设计评测逻辑：
+
+```text
+P01 simple Tool execution
+P02 multi-goal / multi-tool
+P03 unsupported effect + malformed structured-response probe
+
+fixed prompt/fixture manifest
+unified OpenAI-compatible adapter contract
+one child process per case/provider
+single Provider per process; fallback count = 0
+stable Provider error taxonomy
+Capability Outcome / Runtime Correctness dual scoring
+secret-free evidence
+DEFERRED without process launch when configuration is absent
+```
+
+P03 包含两个预先冻结的 probe，不是失败后的自动重试。Malformed probe 只在第一次
+structured-response 边界注入稳定错误，随后验证现有 raw-JSON fallback；两个 Provider
+使用相同 prompt、fixture 和故障注入，不允许 Provider-specific 调整。
+
+Harness fixture evidence：
+
+```text
+Harness commit: 23732c31
+P01–P03 × primary/secondary fixture attempts: 6/6 pipeline PASS
+provider prompt parity: 3/3 PASS
+provider fixture parity: 3/3 PASS
+Runtime dual-score oracle: 6/6 PASS
+real Provider attempts: 0
+scope: Harness/Oracle validation only
+
+Scenario manifest hash:
+f08d66b97527557e9dc455aa2d35d1bbd56ef0d74f22759557b6b6a7fb2ca3f7
+```
+
+真实收口时只允许每个 case/provider 一次正式 attempt。Provider 无法完成任务但
+Runtime 正确 FAILED/BLOCKED、无假成功或错误副作用时，必须记录为：
+
+```text
+Capability Outcome = FAIL
+Runtime Correctness = PASS
+```
+
+当前准确状态是：`P2-P Harness/Oracle implemented`，`real two-Provider evidence
+DEFERRED`；不得将 fixture 的 6/6 表述为 Provider Capability 通过。
+
+永久 fixture 证据：
+
+```text
+realtest_reports/results/p2_p_fixture.json
+```

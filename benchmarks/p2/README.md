@@ -1,7 +1,8 @@
 # P2 Runtime Endurance & Portability Acceptance
 
-这是 P1 之后的 Contract / Dataset / Oracle 第一切片。它定义评测证据，不声称
-长链执行、真实进程崩溃恢复、Soak 或第二 Provider 已经实现。
+这是 P1 之后冻结的 Contract / Dataset / Oracle。它定义评测证据；各 Runtime
+实现切片的完成状态与真实 Provider 证据必须在 Harness/ADR 中单独记录，不能由
+Dataset 存在本身推导。
 
 ## Dataset
 
@@ -66,5 +67,7 @@ python -B -m benchmarks.p2.validate
 mypy benchmarks/p2 tests/test_p2_acceptance_contract.py
 ```
 
-当前只做 Dataset/Oracle 验证；实际执行器应在后续 P2-L/R/S/P 切片中接入，并
-永久记录 Provider、commit、dataset hash、执行次数、Provider Error 和两层评分。
+P2-L/R/S 已有独立执行 Harness；P2-P 已有固定 P01–P03、统一 Provider adapter、
+子进程隔离、证据采集和双层评分 Harness。真实双 Provider 结果仍需在端点可用时
+运行一次并永久记录 Provider、commit、dataset/scenario hash、执行次数、Provider
+Error 和两层评分；fixture 结果不得计为真实能力。

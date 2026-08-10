@@ -1543,6 +1543,214 @@ class SqliteRuntimeStore:
             assert saved is not None
             return self._interruption_contract(saved)
 
+    def finalize_interruption(
+        self,
+        tenant_id: str,
+        session_id: str,
+        run_id: str,
+        *,
+        request_id: str,
+        writer_id: str,
+        fence_token: int,
+        failure_point: InterruptionFailurePoint | None = None,
+    ) -> DurableInterruptionRecord:
+        """Atomically finalize an observed cancellation or Run timeout."""
+
+        with self._write_transaction() as connection:
+            head = self._fetch_head_tx(
+                connection,
+                tenant_id,
+                run_id,
+                session_id=session_id,
+            )
+            if (
+                str(head["current_writer_id"]) != writer_id
+                or int(head["current_fence_token"]) != fence_token
+            ):
+                raise DurableStoreError(
+                    StoreErrorCode.STALE_WRITER,
+                    "only the current fence owner may finalize interruption",
+                )
+            row = connection.execute(
+                f"""
+                SELECT {self._interruption_columns()}
+                FROM run_interruption_intents
+                WHERE tenant_id = ? AND run_id = ?
+                """,
+                (tenant_id, run_id),
+            ).fetchone()
+            if row is None:
+                raise DurableStoreError(
+                    StoreErrorCode.INTERRUPTION_INTENT_NOT_FOUND,
+                    "Run has no durable interruption intent",
+                )
+            if str(row["cancel_request_id"]) != request_id:
+                raise DurableStoreError(
+                    StoreErrorCode.INTERRUPTION_REQUEST_CONFLICT,
+                    "request_id does not identify the current interruption",
+                )
+
+            reason = InterruptionReason(str(row["reason"]))
+            target_status, event_type_value = {
+                InterruptionReason.USER_CANCEL: ("CANCELLED", "run_cancelled"),
+                InterruptionReason.RUN_TIMEOUT: ("TIMED_OUT", "run_timed_out"),
+            }[reason]
+            current_phase = InterruptionPhase(str(row["intent_phase"]))
+            if current_phase is InterruptionPhase.FINALIZED:
+                if str(head["run_status"]) != target_status:
+                    raise DurableStoreError(
+                        StoreErrorCode.INTERRUPTION_PHASE_CONFLICT,
+                        "finalized intent disagrees with Run terminal status",
+                    )
+                return self._interruption_contract(row, idempotent=True)
+            if current_phase not in {
+                InterruptionPhase.OBSERVED,
+                InterruptionPhase.CANCELLING,
+            }:
+                raise DurableStoreError(
+                    StoreErrorCode.INTERRUPTION_PHASE_CONFLICT,
+                    "interruption must be observed before terminalization",
+                )
+            if str(head["run_status"]) != "CANCELLING":
+                raise DurableStoreError(
+                    StoreErrorCode.INTERRUPTION_PHASE_CONFLICT,
+                    "only a CANCELLING Run may finalize interruption",
+                )
+
+            revision = int(head["current_revision"]) + 1
+            now = _now()
+            cursor = connection.execute(
+                """
+                UPDATE run_interruption_intents
+                SET intent_phase = 'FINALIZED', updated_revision = ?, updated_at = ?
+                WHERE tenant_id = ? AND run_id = ? AND intent_phase = ?
+                """,
+                (
+                    revision,
+                    now,
+                    tenant_id,
+                    run_id,
+                    current_phase.value,
+                ),
+            )
+            if cursor.rowcount != 1:
+                raise DurableStoreError(
+                    StoreErrorCode.REVISION_CONFLICT,
+                    "interruption finalization phase CAS failed",
+                )
+            self._raise_interruption_fault(
+                failure_point,
+                InterruptionFailurePoint.AFTER_PHASE_UPDATE,
+            )
+
+            revision_payload = {
+                "interruption_phase": "FINALIZED",
+                "reason": reason.value,
+                "request_id": request_id,
+                "run_status": target_status,
+            }
+            payload_json = _canonical_json(revision_payload)
+            payload_digest = _digest_text(payload_json)
+            connection.execute(
+                """
+                INSERT INTO run_resume_revisions
+                    (tenant_id, session_id, run_id, revision, parent_digest,
+                     payload_json, payload_digest, request_id, writer_id,
+                     fence_token, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    tenant_id,
+                    session_id,
+                    run_id,
+                    revision,
+                    str(head["current_digest"]),
+                    payload_json,
+                    payload_digest,
+                    request_id,
+                    writer_id,
+                    fence_token,
+                    now,
+                ),
+            )
+            self._raise_interruption_fault(
+                failure_point,
+                InterruptionFailurePoint.AFTER_REVISION_INSERT,
+            )
+
+            event_payload = {
+                "request_id": request_id,
+                "reason": reason.value,
+            }
+            event_payload_json = _canonical_json(event_payload)
+            self._append_event_tx(
+                connection,
+                tenant_id=tenant_id,
+                session_id=session_id,
+                run_id=run_id,
+                event_id=f"{event_type_value.replace('_', '-')}:{run_id}:{request_id}",
+                event_type_value=event_type_value,
+                timestamp=now,
+                optional_ids={
+                    "workflow_id": None,
+                    "stage_id": None,
+                    "task_id": None,
+                },
+                payload_json=event_payload_json,
+                payload_digest=_digest_text(event_payload_json),
+                run_revision=revision,
+            )
+            self._raise_interruption_fault(
+                failure_point,
+                InterruptionFailurePoint.AFTER_EVENT_APPEND,
+            )
+            cursor = connection.execute(
+                """
+                UPDATE run_heads
+                SET current_revision = ?, current_digest = ?, run_status = ?,
+                    request_id = ?, updated_at = ?
+                WHERE tenant_id = ? AND run_id = ?
+                  AND current_revision = ? AND current_digest = ?
+                  AND current_writer_id = ? AND current_fence_token = ?
+                """,
+                (
+                    revision,
+                    payload_digest,
+                    target_status,
+                    request_id,
+                    now,
+                    tenant_id,
+                    run_id,
+                    int(head["current_revision"]),
+                    str(head["current_digest"]),
+                    writer_id,
+                    fence_token,
+                ),
+            )
+            if cursor.rowcount != 1:
+                raise DurableStoreError(
+                    StoreErrorCode.REVISION_CONFLICT,
+                    "interruption finalization head CAS failed",
+                )
+            self._raise_interruption_fault(
+                failure_point,
+                InterruptionFailurePoint.AFTER_HEAD_UPDATE,
+            )
+            self._raise_interruption_fault(
+                failure_point,
+                InterruptionFailurePoint.BEFORE_COMMIT,
+            )
+            saved = connection.execute(
+                f"""
+                SELECT {self._interruption_columns()}
+                FROM run_interruption_intents
+                WHERE tenant_id = ? AND run_id = ?
+                """,
+                (tenant_id, run_id),
+            ).fetchone()
+            assert saved is not None
+            return self._interruption_contract(saved)
+
     def _validate_write_head_tx(
         self,
         connection: sqlite3.Connection,
@@ -2985,6 +3193,11 @@ class SqliteRuntimeStore:
         workflow_id: str,
         head: sqlite3.Row,
     ) -> None:
+        if str(head["run_status"]) in {"CANCELLING", "CANCELLED", "TIMED_OUT"}:
+            raise DurableStoreError(
+                StoreErrorCode.INTERRUPTION_PHASE_CONFLICT,
+                "interrupted Run cannot accept a Workflow Finalization Bundle",
+            )
         checkpoint = bundle.checkpoint
         index = bundle.next_run_index
         chain = bundle.checkpoint_chain
@@ -3350,7 +3563,10 @@ class SqliteRuntimeStore:
                     SELECT {self._event_columns()}
                     FROM run_events
                     WHERE tenant_id = ? AND run_id = ?
-                      AND event_type IN ('run_completed', 'run_failed', 'run_blocked')
+                      AND event_type IN (
+                          'run_completed', 'run_failed', 'run_blocked',
+                          'run_cancelled', 'run_timed_out'
+                      )
                     ORDER BY sequence_number DESC
                     LIMIT 1
                     """,
@@ -3457,6 +3673,8 @@ class SqliteRuntimeStore:
             "run_completed",
             "run_failed",
             "run_blocked",
+            "run_cancelled",
+            "run_timed_out",
         }:
             raise DurableStoreError(
                 StoreErrorCode.INVALID_ARGUMENT,
@@ -3668,6 +3886,7 @@ class SqliteRuntimeStore:
                 "FAILED_TERMINAL",
                 "BLOCKED",
                 "CANCELLED",
+                "TIMED_OUT",
             }
             if current_status in terminal_statuses and run_status != current_status:
                 raise DurableStoreError(
@@ -3676,10 +3895,37 @@ class SqliteRuntimeStore:
                 )
             expected_event_for_status = {
                 "RUNNING": {"run_started", "run_resumed"},
+                "CANCELLING": {"run_cancelling"},
                 "COMPLETED": {"run_completed"},
                 "FAILED_TERMINAL": {"run_failed"},
                 "BLOCKED": {"run_blocked"},
+                "CANCELLED": {"run_cancelled"},
+                "TIMED_OUT": {"run_timed_out"},
             }
+            allowed_targets = {
+                "CREATED": {"RUNNING", "CANCELLING"},
+                "RUNNING": {
+                    "RUNNING",
+                    "CANCELLING",
+                    "COMPLETED",
+                    "FAILED_TERMINAL",
+                    "BLOCKED",
+                },
+                "SUSPENDED": {"RUNNING", "CANCELLING"},
+                "WAITING_USER": {"RUNNING", "CANCELLING"},
+                "FAILED_RECOVERABLE": {"RUNNING", "CANCELLING"},
+                "CANCELLING": {"CANCELLED", "TIMED_OUT"},
+                "COMPLETED": {"COMPLETED"},
+                "FAILED_TERMINAL": {"FAILED_TERMINAL"},
+                "BLOCKED": {"BLOCKED"},
+                "CANCELLED": {"CANCELLED"},
+                "TIMED_OUT": {"TIMED_OUT"},
+            }
+            if run_status not in allowed_targets.get(current_status, set()):
+                raise DurableStoreError(
+                    StoreErrorCode.REVISION_CONFLICT,
+                    "Run lifecycle transition is not allowed",
+                )
             if event_type_value not in expected_event_for_status.get(run_status, set()):
                 raise DurableStoreError(
                     StoreErrorCode.INVALID_ARGUMENT,
@@ -3779,7 +4025,10 @@ class SqliteRuntimeStore:
                     SELECT sequence_number
                     FROM run_events
                     WHERE tenant_id = ? AND run_id = ?
-                      AND event_type IN ('run_completed', 'run_failed', 'run_blocked')
+                      AND event_type IN (
+                          'run_completed', 'run_failed', 'run_blocked',
+                          'run_cancelled', 'run_timed_out'
+                      )
                     ORDER BY sequence_number ASC
                     LIMIT 1
                     """,

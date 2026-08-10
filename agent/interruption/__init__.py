@@ -13,6 +13,7 @@ from .contracts import (
     InterruptionResultStatus,
     SafeCancellationBoundary,
 )
+from .coordinator import CancellationCoordinator
 from .lifecycle import (
     ALLOWED_PHASE_TRANSITIONS,
     InvalidInterruptionTransition,
@@ -25,6 +26,7 @@ from .policy import (
     interruption_policy,
     interruption_policy_contract,
 )
+from .projector import InterruptionProjection, InterruptionProjector
 from .store import (
     CancellationStore,
     DurableInterruptionRecord,
@@ -35,6 +37,7 @@ __all__ = [
     "ALLOWED_PHASE_TRANSITIONS",
     "AtomicRegion",
     "CancellationIntent",
+    "CancellationCoordinator",
     "CancellationSafetyClass",
     "CancellationStore",
     "CancelRunRequest",
@@ -43,6 +46,8 @@ __all__ = [
     "InterruptionIntent",
     "InterruptionPhase",
     "InterruptionPolicy",
+    "InterruptionProjection",
+    "InterruptionProjector",
     "InterruptionReason",
     "InterruptionResultStatus",
     "DurableInterruptionRecord",

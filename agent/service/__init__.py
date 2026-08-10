@@ -5,6 +5,8 @@ v2.3C-1.  The concrete service implementation is intentionally deferred to
 v2.3C-2.
 """
 
+from agent.interruption import CancelRunRequest
+
 from .contracts import (
     AgentService as AgentServiceProtocol,
     ArtifactSummary,
@@ -48,6 +50,7 @@ __all__ = [
     "AgentService",
     "AgentServiceContract",
     "AgentServiceError",
+    "CancelRunRequest",
     "ArtifactSummary",
     "ArtifactView",
     "EventOrderingOracle",

@@ -75,6 +75,18 @@ class CancellationStore(Protocol):
         failure_point: InterruptionFailurePoint | None = None,
     ) -> DurableInterruptionRecord: ...
 
+    def finalize_interruption(
+        self,
+        tenant_id: str,
+        session_id: str,
+        run_id: str,
+        *,
+        request_id: str,
+        writer_id: str,
+        fence_token: int,
+        failure_point: InterruptionFailurePoint | None = None,
+    ) -> DurableInterruptionRecord: ...
+
 
 __all__ = [
     "CancellationStore",

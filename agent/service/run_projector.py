@@ -187,11 +187,16 @@ class RunProjector:
             RunStatus.FAILED_TERMINAL,
             RunStatus.BLOCKED,
             RunStatus.CANCELLED,
+            RunStatus.TIMED_OUT,
         }
         # The durable Run head and terminal event are authoritative.  An old
         # or partially published RunResumeIndex must not turn a failed Run
         # into a public COMPLETED snapshot.
-        if read.terminal_event is not None or head_status in terminal_statuses:
+        if (
+            read.terminal_event is not None
+            or head_status in terminal_statuses
+            or head_status is RunStatus.CANCELLING
+        ):
             status = head_status
             verifier = "VERIFIED" if status is RunStatus.COMPLETED else None
         elif active is not None:

@@ -6,6 +6,7 @@ import asyncio
 from dataclasses import dataclass
 from typing import Any
 
+from agent.interruption import CancelRunRequest, CancellationCoordinator
 from agent.runtime_store import DurableStoreError, SqliteRuntimeStore, StoreErrorCode
 
 from .context_factory import ServiceContextFactory
@@ -53,6 +54,7 @@ class AgentService:
         # back to an in-memory/empty stream.
         self._events = event_repository or SqliteEventRepository(runtime_store)
         self._projector = RunProjector()
+        self._cancellation = CancellationCoordinator(runtime_store)
         self._runs: dict[str, _ManagedRun] = {}
         self._task_errors: dict[str, AgentServiceError] = {}
         self._operation_lock = asyncio.Lock()
@@ -88,6 +90,11 @@ class AgentService:
                 ServiceErrorCode, "STORE_BUSY", ServiceErrorCode.INVALID_REQUEST
             ),
             StoreErrorCode.STORE_CLOSED: ServiceErrorCode.SERVICE_CLOSED,
+            StoreErrorCode.INTERRUPTION_REQUEST_CONFLICT: ServiceErrorCode.REQUEST_ID_CONFLICT,
+            StoreErrorCode.RUN_ALREADY_CANCELLING: ServiceErrorCode.RUN_ALREADY_CANCELLING,
+            StoreErrorCode.RUN_ALREADY_CANCELLED: ServiceErrorCode.ALREADY_CANCELLED,
+            StoreErrorCode.RUN_ALREADY_TIMED_OUT: ServiceErrorCode.ALREADY_TIMED_OUT,
+            StoreErrorCode.RUN_NOT_CANCELLABLE: ServiceErrorCode.RUN_NOT_CANCELLABLE,
         }
         code = code_map.get(error.code, getattr(
             ServiceErrorCode, "INTERNAL_ERROR", ServiceErrorCode.INVALID_REQUEST
@@ -208,8 +215,13 @@ class AgentService:
                         StoreErrorCode.RUN_NOT_FOUND,
                         "run not found",
                     )
-                if str(head.run_status).upper() in {"COMPLETED", "CANCELLED"}:
-                    code = getattr(ServiceErrorCode, "ALREADY_COMPLETED", ServiceErrorCode.INVALID_REQUEST)
+                status = str(head.run_status).upper()
+                if status in {"COMPLETED", "CANCELLED", "TIMED_OUT", "CANCELLING"}:
+                    code = (
+                        ServiceErrorCode.RUN_ALREADY_CANCELLING
+                        if status == "CANCELLING"
+                        else ServiceErrorCode.RESUME_NOT_ALLOWED
+                    )
                     raise AgentServiceError(code, "Run cannot be resumed in its terminal state")
                 if request.run_id in self._runs and not self._runs[request.run_id].task.done():
                     raise AgentServiceError(
@@ -270,6 +282,35 @@ class AgentService:
             if managed is not None and managed.run_context is context:
                 self._runs.pop(run_id, None)
             self._contexts.release_run(context)
+
+    async def cancel_run(self, request: CancelRunRequest) -> RunSnapshot:
+        """Durably accept cancellation without claiming execution has stopped."""
+
+        self._ensure_open()
+        lookup = RunLookupRequest(
+            tenant_id=request.tenant_id,
+            user_id=request.user_id,
+            session_id=request.session_id,
+            run_id=request.run_id,
+            request_id=request.request_id,
+        )
+        # Verify the complete public identity before the Store writes the
+        # control-plane intent.  The transaction revalidates scope/lifecycle.
+        await self.get_run(lookup)
+        try:
+            self._cancellation.request_cancel(request)
+            return await self.get_run(lookup)
+        except AgentServiceError:
+            raise
+        except DurableStoreError as error:
+            raise self._store_error(
+                error,
+                run_id=request.run_id,
+                request_id=request.request_id,
+                lookup=error.code is StoreErrorCode.IDENTITY_MISMATCH,
+            ) from error
+        except Exception as error:
+            raise self._runtime_error(error, run_id=request.run_id) from error
 
     async def list_artifacts(
         self,

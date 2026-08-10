@@ -14,7 +14,10 @@ from collections.abc import AsyncIterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from types import MappingProxyType
-from typing import Any, Protocol, cast
+from typing import TYPE_CHECKING, Any, Protocol, cast
+
+if TYPE_CHECKING:
+    from agent.interruption import CancelRunRequest
 
 
 JSONValue = Any
@@ -112,6 +115,7 @@ def _validate_identity(
 class RunStatus(str, Enum):
     CREATED = "CREATED"
     RUNNING = "RUNNING"
+    CANCELLING = "CANCELLING"
     SUSPENDED = "SUSPENDED"
     WAITING_USER = "WAITING_USER"
     FAILED_RECOVERABLE = "FAILED_RECOVERABLE"
@@ -119,6 +123,7 @@ class RunStatus(str, Enum):
     BLOCKED = "BLOCKED"
     COMPLETED = "COMPLETED"
     CANCELLED = "CANCELLED"
+    TIMED_OUT = "TIMED_OUT"
 
 
 class ResumeDisposition(str, Enum):
@@ -148,9 +153,12 @@ class EventType(str, Enum):
     ARTIFACT_PUBLISHED = "artifact_published"
     CHECKPOINT_COMMITTED = "checkpoint_committed"
     RESUME_DECIDED = "resume_decided"
+    RUN_CANCELLING = "run_cancelling"
     RUN_COMPLETED = "run_completed"
     RUN_FAILED = "run_failed"
     RUN_BLOCKED = "run_blocked"
+    RUN_CANCELLED = "run_cancelled"
+    RUN_TIMED_OUT = "run_timed_out"
 
     @property
     def is_terminal(self) -> bool:
@@ -158,6 +166,8 @@ class EventType(str, Enum):
             EventType.RUN_COMPLETED,
             EventType.RUN_FAILED,
             EventType.RUN_BLOCKED,
+            EventType.RUN_CANCELLED,
+            EventType.RUN_TIMED_OUT,
         }
 
 
@@ -702,6 +712,9 @@ class AgentService(Protocol):
         ...
 
     async def resume_run(self, request: ResumeRunRequest) -> RunHandle:
+        ...
+
+    async def cancel_run(self, request: "CancelRunRequest") -> RunSnapshot:
         ...
 
     async def list_artifacts(

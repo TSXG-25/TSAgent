@@ -84,6 +84,21 @@ RULES = (
             "agent.workflow",
         ),
     ),
+    BoundaryRule(
+        "interruption-contract",
+        "agent/interruption",
+        (
+            "agent.runtime",
+            "agent.runtime_store",
+            "agent.services",
+            "agent.service.service",
+            "agent.orchestrator",
+            "agent.planner",
+            "agent.executor",
+            "agent.workflow",
+            "agent.checkpoint",
+        ),
+    ),
 )
 
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 
 import pytest
 
@@ -12,12 +13,17 @@ from agent.interruption import (
     InterruptionPhase,
     RunInterruptionRequested,
     SafeCancellationBoundary,
+    cancellation_scope,
 )
+from agent.executor.plan_executor import PlanExecutor
+from agent.bootstrap import load_all
+from agent.llm import LLMRouter
 from agent.runtime import UniversalAgent
 from agent.runtime_context import ApplicationContext
 from agent.runtime_store import SqliteRuntimeStore
 from agent.service import StartRunRequest
 from agent.service.runtime_launcher import RuntimeExecutionLauncher
+from agent.task import ExecutionPlan, ExecutionStep, Task, Verb
 
 
 def _cancel(run_context, *, request_id: str = "cancel-1") -> CancelRunRequest:
@@ -165,6 +171,109 @@ def test_launcher_converges_observed_intent_to_single_cancelled_terminal(tmp_pat
             intent = store.get_interruption("tenant-a", run.run_id)
             assert intent is not None
             assert intent.intent.phase is InterruptionPhase.FINALIZED
+        finally:
+            application.close()
+
+    asyncio.run(scenario())
+
+
+def test_interruptible_provider_wait_aborts_without_fallback(tmp_path) -> None:
+    class _Provider:
+        def __init__(self) -> None:
+            self.calls = 0
+            self.started = asyncio.Event()
+            self.stopped = asyncio.Event()
+
+        async def ainvoke(self, _messages, **_kwargs):
+            self.calls += 1
+            self.started.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                self.stopped.set()
+
+    async def scenario() -> None:
+        store, application, _session, run = _scoped_run(
+            tmp_path, run_id="provider-run"
+        )
+        primary = _Provider()
+        fallback = _Provider()
+        router = LLMRouter()
+        router._deepseek = primary  # type: ignore[assignment]
+        router._ollama = fallback  # type: ignore[assignment]
+        try:
+            assert run.cancellation_view is not None
+            started_at = time.perf_counter()
+            with cancellation_scope(run.cancellation_view):
+                operation = asyncio.create_task(router.ainvoke([]))
+                await asyncio.wait_for(primary.started.wait(), timeout=1)
+                CancellationCoordinator(store).request_cancel(_cancel(run))
+                with pytest.raises(RunInterruptionRequested):
+                    await asyncio.wait_for(operation, timeout=1)
+
+            assert time.perf_counter() - started_at < 1
+            assert primary.calls == 1
+            assert fallback.calls == 0
+            assert primary.stopped.is_set()
+        finally:
+            application.close()
+
+    asyncio.run(scenario())
+
+
+def test_boundary_only_file_effect_finishes_then_blocks_next_effect(
+    tmp_path, monkeypatch
+) -> None:
+    async def scenario() -> None:
+        load_all()
+        store, application, _session, run = _scoped_run(
+            tmp_path, run_id="file-run"
+        )
+        original_write = run.workspace.write_text
+        calls: list[str] = []
+
+        def write_then_cancel(path: str, content: str, *, mode: str = "overwrite"):
+            calls.append(path)
+            result = original_write(path, content, mode=mode)
+            if len(calls) == 1:
+                CancellationCoordinator(store).request_cancel(_cancel(run))
+            return result
+
+        monkeypatch.setattr(run.workspace, "write_text", write_then_cancel)
+        plan = ExecutionPlan(
+            task=Task(
+                id="two-writes",
+                verb=Verb.WRITE,
+                target="output/first.txt",
+                target_type="file",
+            ),
+            steps=[
+                ExecutionStep(
+                    tool="filesystem.write",
+                    args={"path": "output/first.txt", "content": "first"},
+                ),
+                ExecutionStep(
+                    tool="filesystem.write",
+                    args={"path": "output/second.txt", "content": "second"},
+                ),
+            ],
+        )
+        try:
+            assert run.cancellation_view is not None
+            with pytest.raises(RunInterruptionRequested) as caught:
+                await PlanExecutor().execute(
+                    plan,
+                    workspace=run.workspace,
+                    cancellation_view=run.cancellation_view,
+                )
+
+            assert calls == ["output/first.txt"]
+            assert (tmp_path / "file-run/output/first.txt").read_text() == "first"
+            assert not (tmp_path / "file-run/output/second.txt").exists()
+            assert caught.value.execution_evidence["completed_tool"] == "filesystem.write"
+            assert caught.value.execution_evidence["files_written"] == [
+                "output/first.txt"
+            ]
         finally:
             application.close()
 

@@ -36,7 +36,11 @@ from .view import (
     CancellationView,
     InterruptionObservation,
     RunInterruptionRequested,
+    await_interruptibly,
+    cancellation_scope,
+    current_cancellation_view,
 )
+from .safety import tool_cancellation_safety
 
 __all__ = [
     "ALLOWED_PHASE_TRANSITIONS",
@@ -61,10 +65,14 @@ __all__ = [
     "InvalidInterruptionTransition",
     "SafeCancellationBoundary",
     "RunInterruptionRequested",
+    "await_interruptibly",
     "allowed_phase_transition",
     "can_observe_interruption",
+    "cancellation_scope",
+    "current_cancellation_view",
     "interruption_policy",
     "interruption_policy_contract",
     "phase_lifecycle_contract",
+    "tool_cancellation_safety",
     "validate_phase_transition",
 ]

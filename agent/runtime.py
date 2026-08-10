@@ -33,6 +33,7 @@ from agent.interruption import (
     InterruptionReason,
     RunInterruptionRequested,
     SafeCancellationBoundary,
+    cancellation_scope,
 )
 
 logger = logging.getLogger(__name__)
@@ -409,11 +410,17 @@ class UniversalAgent:
     async def run(self, user_input: str) -> str:
         """Run one message inside the attached logical RunContext."""
         self._ensure_run_subscription()
-        try:
-            self._interruption_boundary(SafeCancellationBoundary.BEFORE_PLANNER)
-            return await self._run_in_context(user_input)
-        except RunInterruptionRequested as interruption:
-            return self._interrupted_result(interruption)
+        view = (
+            self._run_context.cancellation_view
+            if self._run_context is not None
+            else None
+        )
+        with cancellation_scope(view):
+            try:
+                self._interruption_boundary(SafeCancellationBoundary.BEFORE_PLANNER)
+                return await self._run_in_context(user_input)
+            except RunInterruptionRequested as interruption:
+                return self._interrupted_result(interruption)
 
     def _interruption_boundary(
         self,
@@ -447,6 +454,7 @@ class UniversalAgent:
             "interruption_phase": intent.phase.value,
             "interruption_boundary": signal.observation.boundary.value,
             "interruption_intent_revision": intent.revision,
+            "partial_execution_evidence": dict(signal.execution_evidence),
         }
         return answer
 

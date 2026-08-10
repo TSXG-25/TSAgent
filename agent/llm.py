@@ -13,6 +13,7 @@ load_dotenv()
 
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, BaseMessage
+from agent.interruption import RunInterruptionRequested, await_interruptibly
 
 logger = logging.getLogger(__name__)
 
@@ -160,23 +161,38 @@ class LLMRouter:
         messages = _inject_time_to_system(messages)
         provider, name = self._get_active_provider()
         try:
-            result = await provider.ainvoke(messages, **kwargs)
+            result = await await_interruptibly(
+                provider.ainvoke(messages, **kwargs),
+                timeout=LLM_REQUEST_TIMEOUT,
+            )
             self._on_success(name)
             return result
+        except RunInterruptionRequested:
+            raise
         except Exception as e:
             self._on_failure(name, e)
             fallback_provider, fallback_name = self._get_active_provider()
             if fallback_name != name:
                 try:
-                    result = await fallback_provider.ainvoke(messages, **kwargs)
+                    result = await await_interruptibly(
+                        fallback_provider.ainvoke(messages, **kwargs),
+                        timeout=LLM_REQUEST_TIMEOUT,
+                    )
                     self._on_success(fallback_name)
                     return result
+                except RunInterruptionRequested:
+                    raise
                 except Exception as e2:
                     self._on_failure(fallback_name, e2)
             try:
-                result = await self._provider_deepseek.ainvoke(messages, **kwargs)
+                result = await await_interruptibly(
+                    self._provider_deepseek.ainvoke(messages, **kwargs),
+                    timeout=LLM_REQUEST_TIMEOUT,
+                )
                 self._deepseek_available = True
                 return result
+            except RunInterruptionRequested:
+                raise
             except Exception as e3:
                 raise RuntimeError(
                     f"所有 LLM 提供商均不可用。最后一次错误: {e3}"

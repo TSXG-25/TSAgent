@@ -15,6 +15,7 @@ from agent.llm import llm
 from agent.planner.constraint_extractor import extract_constraints, detect_abstention
 from agent.planner.schemas import TaskList
 from agent.task import Task
+from agent.interruption import RunInterruptionRequested, await_interruptibly
 
 logger = logging.getLogger(__name__)
 
@@ -202,7 +203,9 @@ async def plan_with_metadata(
             try:
                 provider, _ = llm._get_active_provider()
                 structured_llm = provider.with_structured_output(TaskList)
-                result: TaskList = await structured_llm.ainvoke(messages)
+                result: TaskList = await await_interruptibly(
+                    structured_llm.ainvoke(messages)
+                )
                 tasks_out = [t.model_dump() for t in result.tasks]
                 if tasks_out:
                     logger.info(f"Planner: {len(tasks_out)} tasks")
@@ -213,6 +216,8 @@ async def plan_with_metadata(
                     )
                 # 空计划：落到 JSON 模式重试（避免过度 abstain）
                 logger.warning("Structured 输出空计划，落 JSON 模式重试")
+            except RunInterruptionRequested:
+                raise
             except Exception as e:
                 logger.warning(f"Structured output 失败，永久关闭: {e}")
                 llm.disable_structured_output()
@@ -248,6 +253,8 @@ async def plan_with_metadata(
                 ]
 
         raise ValueError("无法解析 Planner 输出")
+    except RunInterruptionRequested:
+        raise
     except Exception as e:
         logger.error(f"Planner 失败: {e}")
         return PlanOutput(tasks=[{

@@ -21,6 +21,7 @@ from agent.llm import llm
 from agent.task import Task
 from agent.workflow import ExecutionContext, ExecutionResult
 from agent.execution_errors import classify_execution_error
+from agent.interruption import RunInterruptionRequested, await_interruptibly
 
 LLM_EXECUTION_TIMEOUT = float(os.getenv("TSAGENT_LLM_TIMEOUT", "45"))
 
@@ -93,9 +94,10 @@ class LLMExecutor:
         ]
 
         try:
-            response = await asyncio.wait_for(
+            response = await await_interruptibly(
                 llm.ainvoke(messages),
                 timeout=float(task.policy.timeout or LLM_EXECUTION_TIMEOUT),
+                view=(context.get_var("cancellation_view") if context else None),
             )
             elapsed = time.time() - t0
             content = response.content.strip() if hasattr(response, 'content') else str(response)
@@ -113,6 +115,8 @@ class LLMExecutor:
                 outputs={"text": content},
                 metadata={"time_s": round(elapsed, 2), "task_id": task.id},
             )
+        except RunInterruptionRequested:
+            raise
         except Exception as e:
             elapsed = time.time() - t0
             error_code = classify_execution_error(e)

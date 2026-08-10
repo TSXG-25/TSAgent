@@ -20,6 +20,13 @@ from agent.task import ExecutionPlan, ExecutionStep
 from agent.security import redact_sensitive_text
 from agent.registry.tool_registry import registry as tool_registry
 from agent.services.workspace_service import WorkspaceService
+from agent.interruption import (
+    CancellationView,
+    RunInterruptionRequested,
+    SafeCancellationBoundary,
+    await_interruptibly,
+    tool_cancellation_safety,
+)
 
 logger = logging.getLogger(__name__)
 LLM_STEP_TIMEOUT = float(os.getenv("TSAGENT_LLM_TIMEOUT", "45"))
@@ -36,6 +43,7 @@ class PlanExecutor:
         self,
         plan: ExecutionPlan,
         workspace: Optional[WorkspaceService] = None,
+        cancellation_view: CancellationView | None = None,
     ) -> Dict[str, Any]:
         """执行 plan 的所有 steps。
 
@@ -71,6 +79,13 @@ class PlanExecutor:
         for step_idx, step in enumerate(plan.steps):
             tool_name = step.tool
             args = self._substitute_args(step.args, variables)
+            safety_class = tool_cancellation_safety(tool_name)
+
+            if cancellation_view is not None:
+                cancellation_view.raise_if_requested(
+                    SafeCancellationBoundary.BEFORE_TOOL,
+                    safety_class,
+                )
 
             try:
                 if tool_name == "workspace":
@@ -88,12 +103,17 @@ class PlanExecutor:
                     if workspace is None:
                         # Preserve the unscoped legacy/test hook signature;
                         # scoped Runtime calls always take the explicit path.
-                        result = await self._exec_tool(tool_name, args)
+                        result = await self._exec_tool(
+                            tool_name,
+                            args,
+                            cancellation_view=cancellation_view,
+                        )
                     else:
                         result = await self._exec_tool(
                             tool_name,
                             args,
                             workspace=workspace,
+                            cancellation_view=cancellation_view,
                         )
 
                 # ── 收集世界状态痕迹（Verifier 的唯一输入，ADR-0012）──
@@ -131,6 +151,23 @@ class PlanExecutor:
                 else:
                     last_output = str(result)[:300]
 
+                if cancellation_view is not None:
+                    try:
+                        cancellation_view.raise_if_requested(
+                            SafeCancellationBoundary.AFTER_TOOL,
+                            safety_class,
+                        )
+                    except RunInterruptionRequested as interruption:
+                        interruption.execution_evidence.update({
+                            "completed_tool": tool_name,
+                            "files_written": list(files_written),
+                            "file_operations": list(file_operations),
+                            "last_output": last_output,
+                        })
+                        raise
+
+            except RunInterruptionRequested:
+                raise
             except Exception as e:
                 error_msg = f"PlanExecutor: step {step_idx} ({tool_name}) 失败: {e}"
                 logger.error(error_msg)
@@ -312,6 +349,7 @@ class PlanExecutor:
         args: Dict[str, Any],
         *,
         workspace: Optional[WorkspaceService] = None,
+        cancellation_view: CancellationView | None = None,
     ) -> Dict[str, Any]:
         """通过 ToolRegistry 调用工具。
 
@@ -357,9 +395,10 @@ class PlanExecutor:
             if not messages:
                 messages.append({"role": "user", "content": str(args)})
 
-            response = await asyncio.wait_for(
+            response = await await_interruptibly(
                 llm_engine.ainvoke(messages),
                 timeout=float(args.get("timeout", LLM_STEP_TIMEOUT)),
+                view=cancellation_view,
             )
             content = response.content if hasattr(response, 'content') else str(response)
             if args.get("verb") in {"write", "generate", "create", "edit"}:
@@ -463,7 +502,14 @@ class PlanExecutor:
             raise ValueError(f"未找到工具: {tool_name} (尝试: {actual_name})")
 
         if hasattr(tool_obj, 'ainvoke'):
-            result = await tool_obj.ainvoke(str_args)
+            invocation = tool_obj.ainvoke(str_args)
+            if tool_cancellation_safety(tool_name).value == "INTERRUPTIBLE":
+                result = await await_interruptibly(
+                    invocation,
+                    view=cancellation_view,
+                )
+            else:
+                result = await invocation
         else:
             result = await asyncio.to_thread(tool_obj.invoke, str_args)
 

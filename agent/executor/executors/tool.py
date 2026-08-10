@@ -36,8 +36,13 @@ class ToolExecutor:
             )
 
         workspace = context.get_var("workspace")
+        cancellation_view = context.get_var("cancellation_view")
         t0 = time.time()
-        result = await plan_executor.execute(plan, workspace=workspace)
+        result = await plan_executor.execute(
+            plan,
+            workspace=workspace,
+            cancellation_view=cancellation_view,
+        )
 
         if result.get("_error"):
             error = str(result["_error"])

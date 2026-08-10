@@ -8,7 +8,11 @@ start more work.  Durable lifecycle convergence remains owned by
 
 from __future__ import annotations
 
+import asyncio
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
+from typing import Any, Awaitable, Iterator, TypeVar
 
 from .contracts import (
     AtomicRegion,
@@ -28,7 +32,7 @@ class InterruptionObservation:
     safety_class: CancellationSafetyClass
 
 
-class RunInterruptionRequested(RuntimeError):
+class RunInterruptionRequested(BaseException):
     """Cooperative control signal raised only at a declared safe boundary."""
 
     def __init__(self, observation: InterruptionObservation) -> None:
@@ -38,6 +42,7 @@ class RunInterruptionRequested(RuntimeError):
             f"Run interruption requested: {intent.reason.value} "
             f"at {observation.boundary.value}"
         )
+        self.execution_evidence: dict[str, Any] = {}
 
 
 class CancellationView:
@@ -105,8 +110,83 @@ class CancellationView:
             raise RunInterruptionRequested(observation)
 
 
+_CURRENT_CANCELLATION_VIEW: ContextVar[CancellationView | None] = ContextVar(
+    "tsagent_cancellation_view",
+    default=None,
+)
+
+
+@contextmanager
+def cancellation_scope(view: CancellationView | None) -> Iterator[None]:
+    """Bind one Run's view to provider calls in this async context."""
+
+    token = _CURRENT_CANCELLATION_VIEW.set(view)
+    try:
+        yield
+    finally:
+        _CURRENT_CANCELLATION_VIEW.reset(token)
+
+
+def current_cancellation_view() -> CancellationView | None:
+    return _CURRENT_CANCELLATION_VIEW.get()
+
+
+_T = TypeVar("_T")
+
+
+async def await_interruptibly(
+    awaitable: Awaitable[_T],
+    *,
+    view: CancellationView | None = None,
+    timeout: float | None = None,
+    poll_interval: float = 0.05,
+    abort_timeout: float = 0.25,
+) -> _T:
+    """Await an INTERRUPTIBLE operation while polling durable intent."""
+
+    active_view = view if view is not None else current_cancellation_view()
+    operation_awaitable: Awaitable[_T] = awaitable
+    if timeout is not None:
+        operation_awaitable = asyncio.wait_for(awaitable, timeout=timeout)
+    if active_view is None:
+        return await operation_awaitable
+
+    operation = asyncio.ensure_future(operation_awaitable)
+    try:
+        active_view.raise_if_requested(
+            SafeCancellationBoundary.DURING_INTERRUPTIBLE_WAIT,
+            CancellationSafetyClass.INTERRUPTIBLE,
+        )
+        while True:
+            done, _ = await asyncio.wait(
+                {operation},
+                timeout=max(float(poll_interval), 0.001),
+            )
+            if operation in done:
+                return await operation
+            observation = active_view.observe_at(
+                SafeCancellationBoundary.DURING_INTERRUPTIBLE_WAIT,
+                CancellationSafetyClass.INTERRUPTIBLE,
+            )
+            if observation is None:
+                continue
+            operation.cancel()
+            try:
+                await asyncio.wait_for(operation, timeout=max(abort_timeout, 0.001))
+            except (asyncio.CancelledError, asyncio.TimeoutError):
+                pass
+            raise RunInterruptionRequested(observation)
+    except BaseException:
+        if not operation.done():
+            operation.cancel()
+        raise
+
+
 __all__ = [
     "CancellationView",
     "InterruptionObservation",
     "RunInterruptionRequested",
+    "await_interruptibly",
+    "cancellation_scope",
+    "current_cancellation_view",
 ]

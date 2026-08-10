@@ -1,0 +1,793 @@
+{
+  "suite": "P2-L Long-horizon Harness",
+  "source": "real",
+  "commit": "68480d9109808753f881d3d1d98498e6c61024e8",
+  "attempts_per_case": 1,
+  "automatic_rerun": false,
+  "scope": "one real AgentService attempt; no automatic rerun",
+  "dataset": {
+    "benchmark_name": "runtime-endurance-portability-v2.3-p2",
+    "benchmark_version": "v0.1",
+    "contract_version": "adr-0022-v1",
+    "case_count": 5,
+    "dataset_hash": "9f33d2ee400651a2980cf876d054aef93fc86a50dd4791ffbceff2558df934f6",
+    "scoring": {
+      "capability_outcome": [
+        "PASS",
+        "FAIL",
+        "PARTIAL"
+      ],
+      "runtime_correctness": [
+        "PASS",
+        "FAIL"
+      ],
+      "hard_gate_zero_required": true
+    }
+  },
+  "dataset_hash": "9f33d2ee400651a2980cf876d054aef93fc86a50dd4791ffbceff2558df934f6",
+  "summary": {
+    "total": 5,
+    "capability_pass": 3,
+    "runtime_correctness_pass": 5,
+    "runtime_correctness_rate": 1.0,
+    "provider_error_count": 2
+  },
+  "results": [
+    {
+      "case_id": "L01",
+      "capability": {
+        "outcome": "FAIL",
+        "detail": "real AgentService attempt; artifact ground truth collected from isolated workspace"
+      },
+      "runtime": {
+        "runtime_correctness": "PASS",
+        "hard_gates": {
+          "false_completed": false,
+          "duplicate_side_effect": 0,
+          "terminal_snapshot_event_mismatch": false,
+          "durable_state_loss": false,
+          "completed_workflow_reexecution": 0
+        },
+        "diagnostics": {
+          "missing_required_artifacts": 0,
+          "completed_task_reexecutions": 0,
+          "provider_errors": [
+            "RuntimeError"
+          ]
+        }
+      },
+      "performance": {
+        "wall_ms": 131216.13358298782,
+        "provider_ms": 125748.02204000298,
+        "llm_calls": 4,
+        "replans": 0,
+        "tool_calls_count": 2,
+        "time_to_first_event_ms": 0.0,
+        "time_to_first_artifact_ms": 0.0
+      },
+      "evidence": {
+        "case_id": "L01",
+        "run_id": "run-l01",
+        "provider": "primary",
+        "planned_tasks": [
+          "task-1",
+          "task-2"
+        ],
+        "workflow_transitions": [
+          "run_created",
+          "run_started",
+          "run_failed"
+        ],
+        "task_execution_counts": {
+          "task-1": 1,
+          "task-2": 1
+        },
+        "completed_task_ids": [
+          "task-1",
+          "task-2"
+        ],
+        "artifacts": [
+          {
+            "artifact_id": "output/p2_l01.md",
+            "digest": "sha256:cdcf41fda32b332ae8d02b95adf100ab217037e8e9d79190c1ecadd7788943e0",
+            "verified": true,
+            "exists": true,
+            "producer": "workspace-ground-truth"
+          }
+        ],
+        "required_artifact_ids": [
+          "output/p2_l01.md"
+        ],
+        "terminal_status": "FAILED_TERMINAL",
+        "terminal_event_type": "run_failed",
+        "terminal_outputs_verified": false,
+        "task_failures": [],
+        "duplicate_side_effect_count": 0,
+        "cross_context_leakage": false,
+        "stale_writer_acceptance": 0,
+        "durable_state_loss": false,
+        "unsupported_effect_hallucination": false,
+        "security_violation": false,
+        "event_gap": false,
+        "orphan_active_run": false,
+        "subscriber_leak": false,
+        "sqlite_deadlock_or_busy_failure": false,
+        "provider_errors": [
+          "RuntimeError"
+        ],
+        "tool_calls": [
+          {
+            "tool": "llm",
+            "target": "output/p2_l01.md",
+            "success": true
+          },
+          {
+            "tool": "filesystem.write",
+            "target": "output/p2_l01.md",
+            "success": true
+          }
+        ],
+        "performance": {
+          "wall_ms": 131216.13358298782,
+          "provider_ms": 125748.02204000298,
+          "llm_calls": 4,
+          "replans": 0,
+          "tool_calls_count": 2,
+          "time_to_first_event_ms": 0.0,
+          "time_to_first_artifact_ms": 0.0
+        }
+      },
+      "oracle": {
+        "case_id": "L01",
+        "capability_target": "MEASURE_ONLY",
+        "required_runtime_outcome": "PASS",
+        "hard_gates": [
+          "false_completed",
+          "duplicate_side_effect",
+          "terminal_snapshot_event_mismatch",
+          "durable_state_loss",
+          "completed_workflow_reexecution"
+        ],
+        "performance_profile": "long_horizon",
+        "performance_metrics": [
+          "wall_ms",
+          "provider_ms",
+          "llm_calls",
+          "replans",
+          "tool_calls",
+          "time_to_first_event_ms",
+          "time_to_first_artifact_ms"
+        ],
+        "provider_parity_key": null
+      }
+    },
+    {
+      "case_id": "L02",
+      "capability": {
+        "outcome": "PASS",
+        "detail": "real AgentService attempt; artifact ground truth collected from isolated workspace"
+      },
+      "runtime": {
+        "runtime_correctness": "PASS",
+        "hard_gates": {
+          "false_completed": false,
+          "duplicate_side_effect": 0,
+          "terminal_snapshot_event_mismatch": false,
+          "durable_state_loss": false,
+          "completed_workflow_reexecution": 0
+        },
+        "diagnostics": {
+          "missing_required_artifacts": 0,
+          "completed_task_reexecutions": 0,
+          "provider_errors": []
+        }
+      },
+      "performance": {
+        "wall_ms": 94142.86679192446,
+        "provider_ms": 94018.40824785177,
+        "llm_calls": 6,
+        "replans": 0,
+        "tool_calls_count": 6,
+        "time_to_first_event_ms": 0.0,
+        "time_to_first_artifact_ms": 0.0
+      },
+      "evidence": {
+        "case_id": "L02",
+        "run_id": "run-l02",
+        "provider": "primary",
+        "planned_tasks": [
+          "task-1",
+          "task-2",
+          "task-3",
+          "task-4",
+          "task-5",
+          "task-6"
+        ],
+        "workflow_transitions": [
+          "run_created",
+          "run_started",
+          "run_completed"
+        ],
+        "task_execution_counts": {
+          "task-1": 1,
+          "task-2": 1,
+          "task-3": 1,
+          "task-4": 1,
+          "task-5": 1,
+          "task-6": 1
+        },
+        "completed_task_ids": [
+          "task-1",
+          "task-2",
+          "task-3",
+          "task-4",
+          "task-5",
+          "task-6"
+        ],
+        "artifacts": [
+          {
+            "artifact_id": "output/p2_l02_summary.md",
+            "digest": "sha256:5213a4b511c90226710372f4bc9a64e6236ccbd42a75079c222d7eedf4ea6088",
+            "verified": true,
+            "exists": true,
+            "producer": "workspace-ground-truth"
+          },
+          {
+            "artifact_id": "output/p2_l02_data.json",
+            "digest": "sha256:1ff2a907c1e0dd59e22f4f8e29cf6fffcaa3e3bc2f5ef13d1b56c9a9b0522f79",
+            "verified": true,
+            "exists": true,
+            "producer": "workspace-ground-truth"
+          }
+        ],
+        "required_artifact_ids": [
+          "output/p2_l02_summary.md",
+          "output/p2_l02_data.json"
+        ],
+        "terminal_status": "COMPLETED",
+        "terminal_event_type": "run_completed",
+        "terminal_outputs_verified": true,
+        "task_failures": [],
+        "duplicate_side_effect_count": 0,
+        "cross_context_leakage": false,
+        "stale_writer_acceptance": 0,
+        "durable_state_loss": false,
+        "unsupported_effect_hallucination": false,
+        "security_violation": false,
+        "event_gap": false,
+        "orphan_active_run": false,
+        "subscriber_leak": false,
+        "sqlite_deadlock_or_busy_failure": false,
+        "provider_errors": [],
+        "tool_calls": [
+          {
+            "tool": "llm",
+            "target": "output/p2_l02_summary.md",
+            "success": true
+          },
+          {
+            "tool": "filesystem.write",
+            "target": "output/p2_l02_summary.md",
+            "success": true
+          },
+          {
+            "tool": "llm",
+            "target": "output/p2_l02_data.json",
+            "success": true
+          },
+          {
+            "tool": "filesystem.write",
+            "target": "output/p2_l02_data.json",
+            "success": true
+          },
+          {
+            "tool": "filesystem.read",
+            "target": "p2_l02_summary.md",
+            "success": true
+          },
+          {
+            "tool": "filesystem.read",
+            "target": "p2_l02_data.json",
+            "success": true
+          }
+        ],
+        "performance": {
+          "wall_ms": 94142.86679192446,
+          "provider_ms": 94018.40824785177,
+          "llm_calls": 6,
+          "replans": 0,
+          "tool_calls_count": 6,
+          "time_to_first_event_ms": 0.0,
+          "time_to_first_artifact_ms": 0.0
+        }
+      },
+      "oracle": {
+        "case_id": "L02",
+        "capability_target": "MEASURE_ONLY",
+        "required_runtime_outcome": "PASS",
+        "hard_gates": [
+          "false_completed",
+          "duplicate_side_effect",
+          "terminal_snapshot_event_mismatch",
+          "durable_state_loss",
+          "completed_workflow_reexecution"
+        ],
+        "performance_profile": "long_horizon",
+        "performance_metrics": [
+          "wall_ms",
+          "provider_ms",
+          "llm_calls",
+          "replans",
+          "tool_calls",
+          "time_to_first_event_ms",
+          "time_to_first_artifact_ms"
+        ],
+        "provider_parity_key": null
+      }
+    },
+    {
+      "case_id": "L03",
+      "capability": {
+        "outcome": "FAIL",
+        "detail": "real AgentService attempt; artifact ground truth collected from isolated workspace"
+      },
+      "runtime": {
+        "runtime_correctness": "PASS",
+        "hard_gates": {
+          "false_completed": false,
+          "duplicate_side_effect": 0,
+          "terminal_snapshot_event_mismatch": false,
+          "durable_state_loss": false,
+          "completed_workflow_reexecution": 0
+        },
+        "diagnostics": {
+          "missing_required_artifacts": 1,
+          "completed_task_reexecutions": 0,
+          "provider_errors": [
+            "RuntimeError"
+          ]
+        }
+      },
+      "performance": {
+        "wall_ms": 168334.46574991103,
+        "provider_ms": 150043.98874903563,
+        "llm_calls": 4,
+        "replans": 0,
+        "tool_calls_count": 0,
+        "time_to_first_event_ms": 0.0,
+        "time_to_first_artifact_ms": 0.0
+      },
+      "evidence": {
+        "case_id": "L03",
+        "run_id": "run-l03",
+        "provider": "primary",
+        "planned_tasks": [
+          "task-1"
+        ],
+        "workflow_transitions": [
+          "run_created",
+          "run_started",
+          "run_failed"
+        ],
+        "task_execution_counts": {
+          "task-1": 1
+        },
+        "completed_task_ids": [],
+        "artifacts": [],
+        "required_artifact_ids": [
+          "output/p2_l03.md"
+        ],
+        "terminal_status": "FAILED_TERMINAL",
+        "terminal_event_type": "run_failed",
+        "terminal_outputs_verified": false,
+        "task_failures": [
+          "task-1"
+        ],
+        "duplicate_side_effect_count": 0,
+        "cross_context_leakage": false,
+        "stale_writer_acceptance": 0,
+        "durable_state_loss": false,
+        "unsupported_effect_hallucination": false,
+        "security_violation": false,
+        "event_gap": false,
+        "orphan_active_run": false,
+        "subscriber_leak": false,
+        "sqlite_deadlock_or_busy_failure": false,
+        "provider_errors": [
+          "RuntimeError"
+        ],
+        "tool_calls": [],
+        "performance": {
+          "wall_ms": 168334.46574991103,
+          "provider_ms": 150043.98874903563,
+          "llm_calls": 4,
+          "replans": 0,
+          "tool_calls_count": 0,
+          "time_to_first_event_ms": 0.0,
+          "time_to_first_artifact_ms": 0.0
+        }
+      },
+      "oracle": {
+        "case_id": "L03",
+        "capability_target": "MEASURE_ONLY",
+        "required_runtime_outcome": "PASS",
+        "hard_gates": [
+          "false_completed",
+          "duplicate_side_effect",
+          "terminal_snapshot_event_mismatch",
+          "durable_state_loss",
+          "completed_workflow_reexecution"
+        ],
+        "performance_profile": "long_horizon",
+        "performance_metrics": [
+          "wall_ms",
+          "provider_ms",
+          "llm_calls",
+          "replans",
+          "tool_calls",
+          "time_to_first_event_ms",
+          "time_to_first_artifact_ms"
+        ],
+        "provider_parity_key": null
+      }
+    },
+    {
+      "case_id": "L04",
+      "capability": {
+        "outcome": "PASS",
+        "detail": "real AgentService attempt; artifact ground truth collected from isolated workspace"
+      },
+      "runtime": {
+        "runtime_correctness": "PASS",
+        "hard_gates": {
+          "false_completed": false,
+          "duplicate_side_effect": 0,
+          "terminal_snapshot_event_mismatch": false,
+          "durable_state_loss": false
+        },
+        "diagnostics": {
+          "missing_required_artifacts": 0,
+          "completed_task_reexecutions": 0,
+          "provider_errors": []
+        }
+      },
+      "performance": {
+        "wall_ms": 98460.53787495475,
+        "provider_ms": 87987.40816500504,
+        "llm_calls": 5,
+        "replans": 0,
+        "tool_calls_count": 9,
+        "time_to_first_event_ms": 0.0,
+        "time_to_first_artifact_ms": 0.0
+      },
+      "evidence": {
+        "case_id": "L04",
+        "run_id": "run-l04",
+        "provider": "primary",
+        "planned_tasks": [
+          "task-1",
+          "task-2",
+          "task-3",
+          "task-4",
+          "task-5",
+          "task-6"
+        ],
+        "workflow_transitions": [
+          "run_created",
+          "run_started",
+          "run_completed"
+        ],
+        "task_execution_counts": {
+          "task-1": 1,
+          "task-2": 1,
+          "task-3": 1,
+          "task-4": 1,
+          "task-5": 1,
+          "task-6": 1
+        },
+        "completed_task_ids": [
+          "task-1",
+          "task-2",
+          "task-3",
+          "task-4",
+          "task-5",
+          "task-6"
+        ],
+        "artifacts": [
+          {
+            "artifact_id": "output/p2_l04_summary.md",
+            "digest": "sha256:3b72123f06e376aa9efa42b61fc2184aedf91ef49ca4b48960ee84c398524328",
+            "verified": true,
+            "exists": true,
+            "producer": "workspace-ground-truth"
+          },
+          {
+            "artifact_id": "output/p2_l04_sources.json",
+            "digest": "sha256:5c7b1a46d7b66f6547db55bb77f2d8d9ecf8cc784009eed74f2924e0d7aa9d49",
+            "verified": true,
+            "exists": true,
+            "producer": "workspace-ground-truth"
+          },
+          {
+            "artifact_id": "output/p2_l04_report.md",
+            "digest": "sha256:505b1eedeb8cb295c398c7d1dd87b715eb540acefc9cae390589186c15b26890",
+            "verified": true,
+            "exists": true,
+            "producer": "workspace-ground-truth"
+          }
+        ],
+        "required_artifact_ids": [
+          "output/p2_l04_summary.md",
+          "output/p2_l04_sources.json",
+          "output/p2_l04_report.md"
+        ],
+        "terminal_status": "COMPLETED",
+        "terminal_event_type": "run_completed",
+        "terminal_outputs_verified": true,
+        "task_failures": [],
+        "duplicate_side_effect_count": 0,
+        "cross_context_leakage": false,
+        "stale_writer_acceptance": 0,
+        "durable_state_loss": false,
+        "unsupported_effect_hallucination": false,
+        "security_violation": false,
+        "event_gap": false,
+        "orphan_active_run": false,
+        "subscriber_leak": false,
+        "sqlite_deadlock_or_busy_failure": false,
+        "provider_errors": [],
+        "tool_calls": [
+          {
+            "tool": "llm",
+            "target": "output/p2_l04_summary.md",
+            "success": true
+          },
+          {
+            "tool": "filesystem.write",
+            "target": "output/p2_l04_summary.md",
+            "success": true
+          },
+          {
+            "tool": "llm",
+            "target": "output/p2_l04_sources.json",
+            "success": true
+          },
+          {
+            "tool": "filesystem.write",
+            "target": "output/p2_l04_sources.json",
+            "success": true
+          },
+          {
+            "tool": "llm",
+            "target": "output/p2_l04_report.md",
+            "success": true
+          },
+          {
+            "tool": "filesystem.write",
+            "target": "output/p2_l04_report.md",
+            "success": true
+          },
+          {
+            "tool": "filesystem.read",
+            "target": "p2_l04_summary.md",
+            "success": true
+          },
+          {
+            "tool": "filesystem.read",
+            "target": "p2_l04_sources.json",
+            "success": true
+          },
+          {
+            "tool": "filesystem.read",
+            "target": "p2_l04_report.md",
+            "success": true
+          }
+        ],
+        "performance": {
+          "wall_ms": 98460.53787495475,
+          "provider_ms": 87987.40816500504,
+          "llm_calls": 5,
+          "replans": 0,
+          "tool_calls_count": 9,
+          "time_to_first_event_ms": 0.0,
+          "time_to_first_artifact_ms": 0.0
+        }
+      },
+      "oracle": {
+        "case_id": "L04",
+        "capability_target": "MEASURE_ONLY",
+        "required_runtime_outcome": "PASS",
+        "hard_gates": [
+          "false_completed",
+          "duplicate_side_effect",
+          "terminal_snapshot_event_mismatch",
+          "durable_state_loss"
+        ],
+        "performance_profile": "long_horizon",
+        "performance_metrics": [
+          "wall_ms",
+          "provider_ms",
+          "llm_calls",
+          "replans",
+          "tool_calls",
+          "time_to_first_event_ms",
+          "time_to_first_artifact_ms"
+        ],
+        "provider_parity_key": null
+      }
+    },
+    {
+      "case_id": "L05",
+      "capability": {
+        "outcome": "PASS",
+        "detail": "real AgentService attempt; artifact ground truth collected from isolated workspace"
+      },
+      "runtime": {
+        "runtime_correctness": "PASS",
+        "hard_gates": {
+          "false_completed": false,
+          "duplicate_side_effect": 0,
+          "terminal_snapshot_event_mismatch": false,
+          "durable_state_loss": false,
+          "completed_workflow_reexecution": 0
+        },
+        "diagnostics": {
+          "missing_required_artifacts": 0,
+          "completed_task_reexecutions": 0,
+          "provider_errors": []
+        }
+      },
+      "performance": {
+        "wall_ms": 65547.83787496854,
+        "provider_ms": 52127.35770910513,
+        "llm_calls": 5,
+        "replans": 1,
+        "tool_calls_count": 8,
+        "time_to_first_event_ms": 0.0,
+        "time_to_first_artifact_ms": 0.0
+      },
+      "evidence": {
+        "case_id": "L05",
+        "run_id": "run-l05",
+        "provider": "primary",
+        "planned_tasks": [
+          "task-1",
+          "task-2",
+          "task-3",
+          "task-4",
+          "task-5",
+          "replan-1-1"
+        ],
+        "workflow_transitions": [
+          "run_created",
+          "run_started",
+          "run_completed"
+        ],
+        "task_execution_counts": {
+          "task-1": 1,
+          "task-2": 1,
+          "task-3": 1,
+          "task-4": 1,
+          "task-5": 1,
+          "replan-1-1": 1
+        },
+        "completed_task_ids": [
+          "replan-1-1",
+          "task-2",
+          "task-3",
+          "task-4",
+          "task-5"
+        ],
+        "artifacts": [
+          {
+            "artifact_id": "output/p2_l05.md",
+            "digest": "sha256:3988d46ea083fbaffb86f79fdfa82ee0e59dd9b7d1cee66a56625d554e870756",
+            "verified": true,
+            "exists": true,
+            "producer": "workspace-ground-truth"
+          },
+          {
+            "artifact_id": "output/p2_l05_checklist.md",
+            "digest": "sha256:e2da43a553ff5a8fb962f95722bd395f5c911aca715b409b89a4b0d005005a25",
+            "verified": true,
+            "exists": true,
+            "producer": "workspace-ground-truth"
+          }
+        ],
+        "required_artifact_ids": [
+          "output/p2_l05.md",
+          "output/p2_l05_checklist.md"
+        ],
+        "terminal_status": "COMPLETED",
+        "terminal_event_type": "run_completed",
+        "terminal_outputs_verified": true,
+        "task_failures": [],
+        "duplicate_side_effect_count": 0,
+        "cross_context_leakage": false,
+        "stale_writer_acceptance": 0,
+        "durable_state_loss": false,
+        "unsupported_effect_hallucination": false,
+        "security_violation": false,
+        "event_gap": false,
+        "orphan_active_run": false,
+        "subscriber_leak": false,
+        "sqlite_deadlock_or_busy_failure": false,
+        "provider_errors": [],
+        "tool_calls": [
+          {
+            "tool": "filesystem.read",
+            "target": "output/p2_l05.md",
+            "success": false
+          },
+          {
+            "tool": "llm",
+            "target": "output/p2_l05.md",
+            "success": true
+          },
+          {
+            "tool": "filesystem.write",
+            "target": "output/p2_l05.md",
+            "success": true
+          },
+          {
+            "tool": "llm",
+            "target": "output/p2_l05_checklist.md",
+            "success": true
+          },
+          {
+            "tool": "filesystem.write",
+            "target": "output/p2_l05_checklist.md",
+            "success": true
+          },
+          {
+            "tool": "filesystem.read",
+            "target": "p2_l05.md",
+            "success": true
+          },
+          {
+            "tool": "filesystem.read",
+            "target": "p2_l05_checklist.md",
+            "success": true
+          },
+          {
+            "tool": "filesystem.read",
+            "target": "p2_l05.md",
+            "success": true
+          }
+        ],
+        "performance": {
+          "wall_ms": 65547.83787496854,
+          "provider_ms": 52127.35770910513,
+          "llm_calls": 5,
+          "replans": 1,
+          "tool_calls_count": 8,
+          "time_to_first_event_ms": 0.0,
+          "time_to_first_artifact_ms": 0.0
+        }
+      },
+      "oracle": {
+        "case_id": "L05",
+        "capability_target": "MEASURE_ONLY",
+        "required_runtime_outcome": "PASS",
+        "hard_gates": [
+          "false_completed",
+          "duplicate_side_effect",
+          "terminal_snapshot_event_mismatch",
+          "durable_state_loss",
+          "completed_workflow_reexecution"
+        ],
+        "performance_profile": "resume",
+        "performance_metrics": [
+          "wall_ms",
+          "provider_ms",
+          "llm_calls",
+          "replans",
+          "tool_calls",
+          "time_to_first_event_ms",
+          "time_to_first_artifact_ms"
+        ],
+        "provider_parity_key": null
+      }
+    }
+  ]
+}

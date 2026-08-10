@@ -50,7 +50,12 @@ Runtime 判定只使用 Dataset 为该 case 冻结的 `hard_gates`。例如缺�
 - `realtest_reports/results/p2_l_real_discovery_697ce06d.json`：原始 5-case 报告；
 - `realtest_reports/results/p2_l_real_rescored_697ce06d.json`：不重跑 Provider，按冻结的
   case hard gates 重算。结果为 Capability `2/5`、Runtime `4/5`；L05 因重规划重复
-  已完成 Task 保持 Runtime FAIL，并由独立生产 hotfix 处理。
+  已完成 Task 保持 Runtime FAIL。
+
+独立 `P2-LH3` 生产 hotfix 后只执行一次固定 post-fix acceptance，并保存在
+`realtest_reports/results/p2_l_real_postfix_68480d91.json`：Capability `3/5`、Runtime
+`5/5`。L01/L03 的 Provider 失败均安全进入 `FAILED_TERMINAL`；L05 为
+`COMPLETED`，`completed_task_reexecution=0`、`duplicate_side_effect=0`，没有自动重跑。
 
 ## P2-S1 deterministic soak
 

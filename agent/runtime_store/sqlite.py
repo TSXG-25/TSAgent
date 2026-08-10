@@ -30,6 +30,16 @@ from agent.run_resume.codec import (
     run_index_digest,
     serialize_run_index,
 )
+from agent.interruption.contracts import (
+    CancellationIntent,
+    InterruptionPhase,
+    InterruptionReason,
+)
+from agent.interruption.lifecycle import validate_phase_transition
+from agent.interruption.store import (
+    DurableInterruptionRecord,
+    InterruptionFailurePoint,
+)
 
 from .contracts import (
     ArtifactCommitFact,
@@ -48,8 +58,8 @@ from .contracts import (
 from .errors import DurableStoreError, StoreErrorCode
 
 
-SCHEMA_VERSION = "v2.3C-3"
-_PREVIOUS_SCHEMA_VERSION = "v2.3B-3"
+SCHEMA_VERSION = "v2.3D-2"
+_MIGRATABLE_SCHEMA_VERSIONS = frozenset({"v2.3B-3", "v2.3C-3"})
 DEFAULT_BUSY_TIMEOUT_MS = 5_000
 DEFAULT_WAL_AUTOCHECKPOINT = 1_000
 _MAX_BUSY_TIMEOUT_MS = 60_000
@@ -472,12 +482,39 @@ class SqliteRuntimeStore:
                         REFERENCES run_heads (tenant_id, run_id)
                 );
 
+                CREATE TABLE IF NOT EXISTS run_interruption_intents (
+                    tenant_id TEXT NOT NULL,
+                    session_id TEXT NOT NULL,
+                    run_id TEXT NOT NULL,
+                    cancel_request_id TEXT NOT NULL,
+                    user_id TEXT NOT NULL,
+                    reason TEXT NOT NULL,
+                    requested_by TEXT NOT NULL,
+                    requested_at TEXT NOT NULL,
+                    intent_phase TEXT NOT NULL CHECK (
+                        intent_phase IN ('REQUESTED', 'OBSERVED', 'CANCELLING', 'FINALIZED')
+                    ),
+                    request_digest TEXT NOT NULL,
+                    details_json TEXT NOT NULL,
+                    details_digest TEXT NOT NULL,
+                    created_revision INTEGER NOT NULL CHECK (created_revision > 0),
+                    updated_revision INTEGER NOT NULL CHECK (updated_revision >= created_revision),
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY (tenant_id, run_id),
+                    UNIQUE (tenant_id, cancel_request_id),
+                    FOREIGN KEY (tenant_id, run_id)
+                        REFERENCES run_heads (tenant_id, run_id)
+                );
+
                 CREATE INDEX IF NOT EXISTS idx_run_revisions_latest
                     ON run_resume_revisions (tenant_id, run_id, revision DESC);
                 CREATE INDEX IF NOT EXISTS idx_run_fences_current
                     ON run_fences (tenant_id, run_id, fence_token DESC);
                 CREATE INDEX IF NOT EXISTS idx_run_events_replay
                     ON run_events (tenant_id, run_id, sequence_number ASC);
+                CREATE INDEX IF NOT EXISTS idx_run_interruptions_request
+                    ON run_interruption_intents (tenant_id, cancel_request_id);
                 """
             )
             connection.execute("BEGIN IMMEDIATE")
@@ -505,12 +542,12 @@ class SqliteRuntimeStore:
                 generation = str(row["store_generation"])
                 if stored_schema != schema_version:
                     if (
-                        stored_schema == _PREVIOUS_SCHEMA_VERSION
+                        stored_schema in _MIGRATABLE_SCHEMA_VERSIONS
                         and schema_version == SCHEMA_VERSION
                     ):
-                        # C-3 only adds tables and indexes.  DDL above is
-                        # idempotent, so upgrading the metadata in this
-                        # transaction is sufficient and preserves all B data.
+                        # D2 only adds interruption facts and indexes.  DDL
+                        # above is idempotent, so updating metadata preserves
+                        # all prior B/C durable facts.
                         stored_schema = schema_version
                         connection.execute(
                             """
@@ -1015,6 +1052,496 @@ class SqliteRuntimeStore:
                     "Run head belongs to another store generation",
                 )
             return self._head_contract(row)
+
+    @staticmethod
+    def _interruption_contract(
+        row: sqlite3.Row,
+        *,
+        idempotent: bool = False,
+    ) -> DurableInterruptionRecord:
+        try:
+            details = json.loads(str(row["details_json"]))
+        except (TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise DurableStoreError(
+                StoreErrorCode.SCHEMA_INCOMPATIBLE,
+                "durable interruption details are invalid",
+            ) from exc
+        if not isinstance(details, dict):
+            raise DurableStoreError(
+                StoreErrorCode.SCHEMA_INCOMPATIBLE,
+                "durable interruption details must be a JSON object",
+            )
+        intent = CancellationIntent(
+            tenant_id=str(row["tenant_id"]),
+            user_id=str(row["user_id"]),
+            session_id=str(row["session_id"]),
+            run_id=str(row["run_id"]),
+            request_id=str(row["cancel_request_id"]),
+            requested_at=str(row["requested_at"]),
+            requested_by=str(row["requested_by"]),
+            reason=InterruptionReason(str(row["reason"])),
+            revision=int(row["updated_revision"]),
+            phase=InterruptionPhase(str(row["intent_phase"])),
+            details=details,
+        )
+        return DurableInterruptionRecord(
+            intent=intent,
+            request_digest=str(row["request_digest"]),
+            created_revision=int(row["created_revision"]),
+            updated_revision=int(row["updated_revision"]),
+            idempotent=idempotent,
+        )
+
+    @staticmethod
+    def _interruption_columns() -> str:
+        return """
+            tenant_id, session_id, run_id, cancel_request_id, user_id,
+            reason, requested_by, requested_at, intent_phase,
+            request_digest, details_json, details_digest,
+            created_revision, updated_revision, created_at, updated_at
+        """
+
+    @staticmethod
+    def _raise_interruption_fault(
+        actual: InterruptionFailurePoint | None,
+        expected: InterruptionFailurePoint,
+    ) -> None:
+        if actual is expected:
+            raise DurableStoreError(
+                StoreErrorCode.INTERRUPTION_INJECTED_FAILURE,
+                f"injected interruption transaction failure: {expected.value}",
+            )
+
+    def get_interruption(
+        self,
+        tenant_id: str,
+        run_id: str,
+        *,
+        session_id: str | None = None,
+    ) -> DurableInterruptionRecord | None:
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        run_id = _require_text(run_id, "run_id")
+        if session_id is not None:
+            session_id = _require_text(session_id, "session_id")
+        with self._lock:
+            self._ensure_open()
+            # Resolve ownership first so another tenant cannot use this API as
+            # an interruption-intent existence oracle.
+            self._fetch_head_tx(
+                self._connection,
+                tenant_id,
+                run_id,
+                session_id=session_id,
+            )
+            row = self._connection.execute(
+                f"""
+                SELECT {self._interruption_columns()}
+                FROM run_interruption_intents
+                WHERE tenant_id = ? AND run_id = ?
+                """,
+                (tenant_id, run_id),
+            ).fetchone()
+            return None if row is None else self._interruption_contract(row)
+
+    def request_interruption(
+        self,
+        intent: CancellationIntent,
+        *,
+        request_digest: str,
+        failure_point: InterruptionFailurePoint | None = None,
+    ) -> DurableInterruptionRecord:
+        """Atomically persist an intent, CANCELLING head and state event.
+
+        This is a control-plane CAS: it does not steal the execution writer's
+        fence.  Advancing or terminalizing the intent remains fence-owned by
+        the worker that observes a safe boundary.
+        """
+
+        request_digest = _require_text(request_digest, "request_digest")
+        if intent.reason not in {
+            InterruptionReason.USER_CANCEL,
+            InterruptionReason.RUN_TIMEOUT,
+        }:
+            raise DurableStoreError(
+                StoreErrorCode.INVALID_ARGUMENT,
+                "D2 durable interruption only accepts USER_CANCEL or RUN_TIMEOUT",
+            )
+        if intent.phase is not InterruptionPhase.REQUESTED:
+            raise DurableStoreError(
+                StoreErrorCode.INVALID_ARGUMENT,
+                "new interruption intent must start in REQUESTED",
+            )
+
+        with self._write_transaction() as connection:
+            request_row = connection.execute(
+                f"""
+                SELECT {self._interruption_columns()}
+                FROM run_interruption_intents
+                WHERE tenant_id = ? AND cancel_request_id = ?
+                """,
+                (intent.tenant_id, intent.request_id),
+            ).fetchone()
+            if request_row is not None:
+                if (
+                    str(request_row["run_id"]) != intent.run_id
+                    or str(request_row["request_digest"]) != request_digest
+                ):
+                    raise DurableStoreError(
+                        StoreErrorCode.INTERRUPTION_REQUEST_CONFLICT,
+                        "cancel request_id is bound to different input",
+                    )
+                return self._interruption_contract(request_row, idempotent=True)
+
+            head = self._fetch_head_tx(
+                connection,
+                intent.tenant_id,
+                intent.run_id,
+                session_id=intent.session_id,
+            )
+            existing = connection.execute(
+                f"""
+                SELECT {self._interruption_columns()}
+                FROM run_interruption_intents
+                WHERE tenant_id = ? AND run_id = ?
+                """,
+                (intent.tenant_id, intent.run_id),
+            ).fetchone()
+            if existing is not None:
+                status = str(head["run_status"])
+                code = {
+                    "CANCELLING": StoreErrorCode.RUN_ALREADY_CANCELLING,
+                    "CANCELLED": StoreErrorCode.RUN_ALREADY_CANCELLED,
+                    "TIMED_OUT": StoreErrorCode.RUN_ALREADY_TIMED_OUT,
+                }.get(status, StoreErrorCode.INTERRUPTION_REQUEST_CONFLICT)
+                raise DurableStoreError(code, "Run already has an interruption intent")
+
+            current_status = str(head["run_status"])
+            if current_status == "CANCELLING":
+                raise DurableStoreError(
+                    StoreErrorCode.RUN_ALREADY_CANCELLING,
+                    "Run is already cancelling",
+                )
+            if current_status == "CANCELLED":
+                raise DurableStoreError(
+                    StoreErrorCode.RUN_ALREADY_CANCELLED,
+                    "Run is already cancelled",
+                )
+            if current_status == "TIMED_OUT":
+                raise DurableStoreError(
+                    StoreErrorCode.RUN_ALREADY_TIMED_OUT,
+                    "Run has already timed out",
+                )
+            if current_status in {"COMPLETED", "FAILED_TERMINAL", "BLOCKED"}:
+                raise DurableStoreError(
+                    StoreErrorCode.RUN_NOT_CANCELLABLE,
+                    "terminal Run does not accept cancellation",
+                )
+
+            revision = int(head["current_revision"]) + 1
+            details = intent.to_dict()["details"]
+            details_json = _canonical_json(details)
+            details_digest = _digest_text(details_json)
+            now = _now()
+            connection.execute(
+                """
+                INSERT INTO run_interruption_intents
+                    (tenant_id, session_id, run_id, cancel_request_id, user_id,
+                     reason, requested_by, requested_at, intent_phase,
+                     request_digest, details_json, details_digest,
+                     created_revision, updated_revision, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'REQUESTED', ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    intent.tenant_id,
+                    intent.session_id,
+                    intent.run_id,
+                    intent.request_id,
+                    intent.user_id,
+                    intent.reason.value,
+                    intent.requested_by,
+                    intent.requested_at,
+                    request_digest,
+                    details_json,
+                    details_digest,
+                    revision,
+                    revision,
+                    now,
+                    now,
+                ),
+            )
+            self._raise_interruption_fault(
+                failure_point,
+                InterruptionFailurePoint.AFTER_INTENT_INSERT,
+            )
+
+            revision_payload = {
+                "interruption": {
+                    **intent.to_dict(),
+                    "revision": revision,
+                },
+                "run_status": "CANCELLING",
+            }
+            payload_json = _canonical_json(revision_payload)
+            payload_digest = _digest_text(payload_json)
+            connection.execute(
+                """
+                INSERT INTO run_resume_revisions
+                    (tenant_id, session_id, run_id, revision, parent_digest,
+                     payload_json, payload_digest, request_id, writer_id,
+                     fence_token, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
+                """,
+                (
+                    intent.tenant_id,
+                    intent.session_id,
+                    intent.run_id,
+                    revision,
+                    str(head["current_digest"]),
+                    payload_json,
+                    payload_digest,
+                    intent.request_id,
+                    f"control:{intent.requested_by}",
+                    now,
+                ),
+            )
+            self._raise_interruption_fault(
+                failure_point,
+                InterruptionFailurePoint.AFTER_REVISION_INSERT,
+            )
+
+            event_payload = {
+                "request_id": intent.request_id,
+                "reason": intent.reason.value,
+                "requested_by": intent.requested_by,
+            }
+            event_payload_json = _canonical_json(event_payload)
+            self._append_event_tx(
+                connection,
+                tenant_id=intent.tenant_id,
+                session_id=intent.session_id,
+                run_id=intent.run_id,
+                event_id=f"run-cancelling:{intent.run_id}:{intent.request_id}",
+                event_type_value="run_cancelling",
+                timestamp=intent.requested_at,
+                optional_ids={
+                    "workflow_id": None,
+                    "stage_id": None,
+                    "task_id": None,
+                },
+                payload_json=event_payload_json,
+                payload_digest=_digest_text(event_payload_json),
+                run_revision=revision,
+            )
+            self._raise_interruption_fault(
+                failure_point,
+                InterruptionFailurePoint.AFTER_EVENT_APPEND,
+            )
+
+            cursor = connection.execute(
+                """
+                UPDATE run_heads
+                SET current_revision = ?, current_digest = ?, run_status = 'CANCELLING',
+                    request_id = ?, updated_at = ?
+                WHERE tenant_id = ? AND run_id = ?
+                  AND current_revision = ? AND current_digest = ?
+                """,
+                (
+                    revision,
+                    payload_digest,
+                    intent.request_id,
+                    now,
+                    intent.tenant_id,
+                    intent.run_id,
+                    int(head["current_revision"]),
+                    str(head["current_digest"]),
+                ),
+            )
+            if cursor.rowcount != 1:
+                raise DurableStoreError(
+                    StoreErrorCode.REVISION_CONFLICT,
+                    "cancellation control revision CAS failed",
+                )
+            self._raise_interruption_fault(
+                failure_point,
+                InterruptionFailurePoint.AFTER_HEAD_UPDATE,
+            )
+            self._raise_interruption_fault(
+                failure_point,
+                InterruptionFailurePoint.BEFORE_COMMIT,
+            )
+            saved = connection.execute(
+                f"""
+                SELECT {self._interruption_columns()}
+                FROM run_interruption_intents
+                WHERE tenant_id = ? AND run_id = ?
+                """,
+                (intent.tenant_id, intent.run_id),
+            ).fetchone()
+            assert saved is not None
+            return self._interruption_contract(saved)
+
+    def advance_interruption_phase(
+        self,
+        tenant_id: str,
+        session_id: str,
+        run_id: str,
+        *,
+        request_id: str,
+        target_phase: InterruptionPhase,
+        writer_id: str,
+        fence_token: int,
+        failure_point: InterruptionFailurePoint | None = None,
+    ) -> DurableInterruptionRecord:
+        """Advance an intent lifecycle under the current execution fence."""
+
+        target_phase = InterruptionPhase(target_phase)
+        with self._write_transaction() as connection:
+            head = self._fetch_head_tx(
+                connection,
+                tenant_id,
+                run_id,
+                session_id=session_id,
+            )
+            if (
+                str(head["current_writer_id"]) != writer_id
+                or int(head["current_fence_token"]) != fence_token
+            ):
+                raise DurableStoreError(
+                    StoreErrorCode.STALE_WRITER,
+                    "only the current fence owner may observe interruption",
+                )
+            row = connection.execute(
+                f"""
+                SELECT {self._interruption_columns()}
+                FROM run_interruption_intents
+                WHERE tenant_id = ? AND run_id = ?
+                """,
+                (tenant_id, run_id),
+            ).fetchone()
+            if row is None:
+                raise DurableStoreError(
+                    StoreErrorCode.INTERRUPTION_INTENT_NOT_FOUND,
+                    "Run has no durable interruption intent",
+                )
+            if str(row["cancel_request_id"]) != request_id:
+                raise DurableStoreError(
+                    StoreErrorCode.INTERRUPTION_REQUEST_CONFLICT,
+                    "request_id does not identify the current interruption",
+                )
+            current_phase = InterruptionPhase(str(row["intent_phase"]))
+            if current_phase is target_phase:
+                return self._interruption_contract(row, idempotent=True)
+            try:
+                validate_phase_transition(current_phase, target_phase)
+            except ValueError as exc:
+                raise DurableStoreError(
+                    StoreErrorCode.INTERRUPTION_PHASE_CONFLICT,
+                    "interruption phase transition is not allowed",
+                ) from exc
+            if str(head["run_status"]) != "CANCELLING":
+                raise DurableStoreError(
+                    StoreErrorCode.INTERRUPTION_PHASE_CONFLICT,
+                    "only a CANCELLING Run may advance interruption phase",
+                )
+
+            revision = int(head["current_revision"]) + 1
+            updated_at = _now()
+            cursor = connection.execute(
+                """
+                UPDATE run_interruption_intents
+                SET intent_phase = ?, updated_revision = ?, updated_at = ?
+                WHERE tenant_id = ? AND run_id = ? AND intent_phase = ?
+                """,
+                (
+                    target_phase.value,
+                    revision,
+                    updated_at,
+                    tenant_id,
+                    run_id,
+                    current_phase.value,
+                ),
+            )
+            if cursor.rowcount != 1:
+                raise DurableStoreError(
+                    StoreErrorCode.REVISION_CONFLICT,
+                    "interruption phase CAS failed",
+                )
+            self._raise_interruption_fault(
+                failure_point,
+                InterruptionFailurePoint.AFTER_PHASE_UPDATE,
+            )
+            payload = {
+                "interruption_phase": target_phase.value,
+                "request_id": request_id,
+                "run_status": "CANCELLING",
+            }
+            payload_json = _canonical_json(payload)
+            payload_digest = _digest_text(payload_json)
+            connection.execute(
+                """
+                INSERT INTO run_resume_revisions
+                    (tenant_id, session_id, run_id, revision, parent_digest,
+                     payload_json, payload_digest, request_id, writer_id,
+                     fence_token, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    tenant_id,
+                    session_id,
+                    run_id,
+                    revision,
+                    str(head["current_digest"]),
+                    payload_json,
+                    payload_digest,
+                    request_id,
+                    writer_id,
+                    fence_token,
+                    updated_at,
+                ),
+            )
+            cursor = connection.execute(
+                """
+                UPDATE run_heads
+                SET current_revision = ?, current_digest = ?, updated_at = ?
+                WHERE tenant_id = ? AND run_id = ?
+                  AND current_revision = ? AND current_digest = ?
+                  AND current_writer_id = ? AND current_fence_token = ?
+                """,
+                (
+                    revision,
+                    payload_digest,
+                    updated_at,
+                    tenant_id,
+                    run_id,
+                    int(head["current_revision"]),
+                    str(head["current_digest"]),
+                    writer_id,
+                    fence_token,
+                ),
+            )
+            if cursor.rowcount != 1:
+                raise DurableStoreError(
+                    StoreErrorCode.REVISION_CONFLICT,
+                    "interruption phase head CAS failed",
+                )
+            self._raise_interruption_fault(
+                failure_point,
+                InterruptionFailurePoint.AFTER_HEAD_UPDATE,
+            )
+            self._raise_interruption_fault(
+                failure_point,
+                InterruptionFailurePoint.BEFORE_COMMIT,
+            )
+            saved = connection.execute(
+                f"""
+                SELECT {self._interruption_columns()}
+                FROM run_interruption_intents
+                WHERE tenant_id = ? AND run_id = ?
+                """,
+                (tenant_id, run_id),
+            ).fetchone()
+            assert saved is not None
+            return self._interruption_contract(saved)
 
     def _validate_write_head_tx(
         self,

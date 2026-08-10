@@ -25,19 +25,27 @@ from .policy import (
     interruption_policy,
     interruption_policy_contract,
 )
+from .store import (
+    CancellationStore,
+    DurableInterruptionRecord,
+    InterruptionFailurePoint,
+)
 
 __all__ = [
     "ALLOWED_PHASE_TRANSITIONS",
     "AtomicRegion",
     "CancellationIntent",
     "CancellationSafetyClass",
+    "CancellationStore",
     "CancelRunRequest",
     "InterruptionAction",
+    "InterruptionFailurePoint",
     "InterruptionIntent",
     "InterruptionPhase",
     "InterruptionPolicy",
     "InterruptionReason",
     "InterruptionResultStatus",
+    "DurableInterruptionRecord",
     "InvalidInterruptionTransition",
     "SafeCancellationBoundary",
     "allowed_phase_transition",

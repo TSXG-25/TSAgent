@@ -23,7 +23,7 @@ from benchmarks.p2.metadata import benchmark_metadata, dataset_hash
 from benchmarks.p2.oracle import evaluate
 
 from ..evidence import ArtifactEvidence, PerformanceEvidence, RunTraceEvidence
-from ..invariants import RuntimeInvariantResult, evaluate_runtime_invariants
+from ..invariants import evaluate_runtime_invariants
 from ..provider_adapter import ProviderSpec, default_provider_specs
 
 
@@ -38,6 +38,12 @@ class AttemptStatus(str, Enum):
     EXECUTED = "EXECUTED"
     DEFERRED = "DEFERRED"
     INVALID = "INVALID"
+
+
+def _status_value(value: Any) -> str:
+    """Compare attempt states across ``python -m`` module aliases safely."""
+
+    return str(getattr(value, "value", value))
 
 
 @dataclass(frozen=True)
@@ -408,15 +414,18 @@ class PortabilityAttemptResult:
 
     @property
     def capability_outcome(self) -> str | None:
-        if self.status in {AttemptStatus.DEFERRED, AttemptStatus.INVALID}:
+        if _status_value(self.status) in {
+            AttemptStatus.DEFERRED.value,
+            AttemptStatus.INVALID.value,
+        }:
             return None
         return _aggregate_capability(self.probes)
 
     @property
     def runtime_correctness(self) -> str | None:
-        if self.status is AttemptStatus.DEFERRED:
+        if _status_value(self.status) == AttemptStatus.DEFERRED.value:
             return None
-        if self.status is AttemptStatus.INVALID:
+        if _status_value(self.status) == AttemptStatus.INVALID.value:
             return "FAIL"
         return (
             "PASS"
@@ -534,10 +543,16 @@ def evaluate_pair(attempts: Iterable[PortabilityAttemptResult]) -> PortabilityPa
         problems.append("PROMPT_HASH_MISMATCH")
     if len(fixture_hashes) != 1:
         problems.append("FIXTURE_HASH_MISMATCH")
-    if any(attempt.status is AttemptStatus.INVALID for attempt in values):
+    if any(
+        _status_value(attempt.status) == AttemptStatus.INVALID.value
+        for attempt in values
+    ):
         status = "INVALID"
         runtime = "FAIL"
-    elif any(attempt.status is AttemptStatus.DEFERRED for attempt in values):
+    elif any(
+        _status_value(attempt.status) == AttemptStatus.DEFERRED.value
+        for attempt in values
+    ):
         status = "DEFERRED"
         runtime = None
     elif problems:
@@ -708,9 +723,18 @@ def build_report(
     for attempt in values:
         grouped.setdefault(attempt.scenario.case.id, []).append(attempt)
     pairs = tuple(evaluate_pair(grouped[case_id]) for case_id in sorted(grouped))
-    real_executed = sum(attempt.status is AttemptStatus.EXECUTED for attempt in values)
-    deferred = sum(attempt.status is AttemptStatus.DEFERRED for attempt in values)
-    fixture = sum(attempt.status is AttemptStatus.FIXTURE for attempt in values)
+    real_executed = sum(
+        _status_value(attempt.status) == AttemptStatus.EXECUTED.value
+        for attempt in values
+    )
+    deferred = sum(
+        _status_value(attempt.status) == AttemptStatus.DEFERRED.value
+        for attempt in values
+    )
+    fixture = sum(
+        _status_value(attempt.status) == AttemptStatus.FIXTURE.value
+        for attempt in values
+    )
     runtime_pass = sum(attempt.runtime_correctness == "PASS" for attempt in values)
     capability_counts = {
         outcome: sum(attempt.capability_outcome == outcome for attempt in values)
@@ -835,6 +859,16 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    # ``portability_worker`` imports this module by its canonical name.  When
+    # this file is launched with ``python -m`` it otherwise creates a second
+    # copy of AttemptStatus/PortabilityAttemptResult, making Enum identity
+    # checks silently misclassify DEFERRED attempts.
+    import sys
+
+    sys.modules.setdefault(
+        "realtest_reports.harness.p2.groups.portability",
+        sys.modules[__name__],
+    )
     raise SystemExit(main())
 
 

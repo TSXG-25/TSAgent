@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 from dataclasses import replace
 import json
+import os
+from pathlib import Path
 import subprocess
 import sys
 
@@ -263,6 +265,54 @@ def test_worker_module_does_not_import_runtime_consumers_before_provider_install
     )
 
     assert process.stdout.splitlines() == ["False", "False"]
+
+
+def test_module_entrypoint_aggregates_deferred_attempts_across_module_aliases(
+    tmp_path,
+) -> None:
+    """Exercise the real CLI path that previously loaded two Enum classes."""
+
+    report_path = tmp_path / "report.json"
+    work_root = tmp_path / "work"
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "OPENAI_API_KEY": "",
+            "P2_SECONDARY_API_KEY": "",
+            "P2_SECONDARY_MODEL": "",
+            "P2_SECONDARY_BASE_URL": "",
+        }
+    )
+    subprocess.run(
+        [
+            sys.executable,
+            "-B",
+            "-m",
+            "realtest_reports.harness.p2.groups.portability",
+            "--mode",
+            "real",
+            "--work-root",
+            str(work_root),
+            "--results",
+            str(report_path),
+        ],
+        cwd=str(Path(__file__).resolve().parents[1]),
+        env=environment,
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report["summary"]["attempts"] == 6
+    assert report["summary"]["real_executed"] == 0
+    assert report["summary"]["deferred"] == 6
+    assert report["summary"]["runtime_correctness_pass"] == 0
+    assert [pair["status"] for pair in report["pairs"]] == [
+        "DEFERRED",
+        "DEFERRED",
+        "DEFERRED",
+    ]
 
 
 def test_deferred_report_does_not_leak_key_value() -> None:

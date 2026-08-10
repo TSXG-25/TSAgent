@@ -14,6 +14,8 @@ from agent.service import (
     EventStreamRequest,
     EventType,
     RunLookupRequest,
+    RunSnapshot,
+    RunStatus,
     StartRunRequest,
     create_default_agent_service,
 )
@@ -58,6 +60,23 @@ class ServiceCLI:
         self._user_id = user_id
         self._session_id = session_id
 
+    @staticmethod
+    def _print_snapshot(snapshot: RunSnapshot) -> None:
+        """Render the durable result, not only the Run lifecycle status."""
+        print(f"🤖 状态: {snapshot.status.value}")
+        if snapshot.output is not None and snapshot.output.text.strip():
+            print("\n📝 输出:")
+            print(snapshot.output.text)
+        elif snapshot.failure_summary is not None:
+            print(
+                f"⚠️ {snapshot.failure_summary.code}: "
+                f"{snapshot.failure_summary.message}"
+            )
+        elif snapshot.status is RunStatus.COMPLETED:
+            # A completed Run without a public output is a projection/runtime
+            # regression; make it visible instead of presenting a blank success.
+            print("⚠️ Run 已完成，但没有可展示的用户输出。")
+
     async def run_request(self, request_text: str) -> None:
         request_id = f"cli-{uuid.uuid4().hex}"
         run_id = f"run-{uuid.uuid4().hex}"
@@ -97,7 +116,7 @@ class ServiceCLI:
                 request_id=f"lookup-{uuid.uuid4().hex}",
             )
         )
-        print(f"🤖 状态: {snapshot.status.value}")
+        self._print_snapshot(snapshot)
 
 
 async def main() -> None:

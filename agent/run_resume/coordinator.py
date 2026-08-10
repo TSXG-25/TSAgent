@@ -546,7 +546,11 @@ class RunResumeCoordinator:
             request_id=self._durable_store.request_id,
             writer_id=self._durable_store.writer_id,
             fence_epoch=self._durable_store.fence_epoch,
-            expected_revision=prepared_operation.prepared_revision,
+            # A Service resume reservation or another metadata-only durable
+            # operation may advance the head after the original workflow
+            # PREPARED intent.  Finalization still consumes that same intent,
+            # but its CAS parent must always be the current fenced Run head.
+            expected_revision=head.current_revision,
             expected_parent_digest=head.current_digest,
             idempotency_key=prepared_operation.idempotency_key,
             operation_type=prepared_operation.operation_type,

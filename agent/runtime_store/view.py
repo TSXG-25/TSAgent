@@ -33,6 +33,7 @@ class DurableRuntimeStoreView:
         request_id: str,
         writer_id: str,
         ensure_run: bool = True,
+        takeover_fence: bool = False,
     ) -> None:
         self._store = store
         self.tenant_id = str(tenant_id).strip()
@@ -58,7 +59,7 @@ class DurableRuntimeStoreView:
                 self.run_id,
                 self.request_id,
             )
-        self._acquire_or_reuse_fence()
+        self._acquire_or_reuse_fence(takeover=takeover_fence)
 
     @property
     def store(self) -> SqliteRuntimeStore:
@@ -98,17 +99,28 @@ class DurableRuntimeStoreView:
                 f"durable Run view is closed: {self.run_id}",
             )
 
-    def _acquire_or_reuse_fence(self) -> None:
+    def _acquire_or_reuse_fence(self, *, takeover: bool = False) -> None:
         current = self._store.get_current_fence(
             self.tenant_id,
             self.run_id,
             session_id=self.session_id,
         )
         if current is not None and current.writer_id != self.writer_id:
-            raise DurableStoreError(
-                StoreErrorCode.FENCE_CONFLICT,
-                f"Run is already owned by writer {current.writer_id}",
+            if not takeover:
+                raise DurableStoreError(
+                    StoreErrorCode.FENCE_CONFLICT,
+                    f"Run is already owned by writer {current.writer_id}",
+                )
+            grant = self._store.takeover_fence(
+                self.tenant_id,
+                self.session_id,
+                self.run_id,
+                self.writer_id,
+                expected_fence_token=current.fence_token,
+                request_id=self.request_id,
             )
+            self._fence_token = grant.fence_token
+            return
         grant = self._store.acquire_fence(
             self.tenant_id,
             self.session_id,
@@ -277,15 +289,37 @@ class DurableRuntimeStoreView:
         if existing is not None:
             return existing
         head = self.head()
-        if head.current_revision != 0 or head.current_digest:
+        expected_revision = head.current_revision
+        expected_parent_digest = head.current_digest
+        if expected_revision == 0 and not expected_parent_digest:
+            pass
+        elif expected_revision == 1 and expected_parent_digest:
+            start_intent = self._store.get_idempotency(
+                self.tenant_id,
+                self.run_id,
+                self.request_id,
+                session_id=self.session_id,
+            )
+            if (
+                start_intent is None
+                or start_intent.operation_type != "service.start_run"
+                or start_intent.prepared_revision != expected_revision
+                or start_intent.run_revision != expected_revision
+                or start_intent.fence_epoch != self._fence_token
+            ):
+                raise DurableStoreError(
+                    StoreErrorCode.RUN_INDEX_CONFLICT,
+                    "Run revision is not the durable Service start reservation",
+                )
+        else:
             raise DurableStoreError(
                 StoreErrorCode.RUN_INDEX_CONFLICT,
-                "cannot bootstrap an index after the Run has begun writing",
+                "cannot bootstrap an index after Runtime execution has begun",
             )
         seeded = replace(
             index,
-            revision=1,
-            parent_digest="",
+            revision=expected_revision + 1,
+            parent_digest=expected_parent_digest,
             store_generation=self.store_generation,
         )
         self._store.append_revision(
@@ -296,8 +330,8 @@ class DurableRuntimeStoreView:
             payload=seeded.to_dict(),
             writer_id=self.writer_id,
             fence_token=self._fence_token,
-            expected_revision=0,
-            expected_parent_digest="",
+            expected_revision=expected_revision,
+            expected_parent_digest=expected_parent_digest,
             run_status="COMPLETED"
             if not seeded.active_workflow_id and not seeded.pending_workflow_ids
             else "RUNNING",

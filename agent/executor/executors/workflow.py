@@ -253,6 +253,7 @@ class WorkflowExecutor:
             recovery = self._recover_committed_file_effect(
                 task,
                 resolved_inputs,
+                context=context,
                 resume_mode=resume_mode,
             )
             if recovery[0] == "MISMATCH":
@@ -627,6 +628,7 @@ class WorkflowExecutor:
         task: Task,
         resolved_inputs: dict[str, Any],
         *,
+        context: ExecutionContext,
         resume_mode: bool,
     ) -> tuple[str, str]:
         """Reconcile a file write that committed before its checkpoint.
@@ -643,7 +645,16 @@ class WorkflowExecutor:
         path_value = resolved_inputs.get("path")
         if path_value is None or "content" not in resolved_inputs:
             return "NONE", ""
-        path = Path(str(path_value))
+        workspace = context.get_var("workspace")
+        if workspace is not None and hasattr(workspace, "resolve_path"):
+            try:
+                path = workspace.resolve_path(str(path_value), must_exist=False)
+            except (OSError, ValueError) as exc:
+                return "MISMATCH", f"恢复副作用目标不属于当前 Run workspace: {exc}"
+        else:
+            # Legacy non-Service workflows may still supply an absolute path.
+            # Production AgentService execution always binds a scoped workspace.
+            path = Path(str(path_value))
         if not path.exists():
             return "NONE", str(path)
         if not path.is_file():

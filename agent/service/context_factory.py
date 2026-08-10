@@ -46,6 +46,7 @@ class ServiceContextFactory:
         request: StartRunRequest | ResumeRunRequest,
         *,
         run_id: str,
+        takeover_writer: bool = False,
     ) -> RunContext:
         if self._closed:
             raise RuntimeError("service context factory is closed")
@@ -62,7 +63,7 @@ class ServiceContextFactory:
             # ApplicationContext predates tenant-scoped session keys.  Keep
             # the composite key here so equal session IDs in two tenants do
             # not collide while the underlying durable identity stays exact.
-            self.application._sessions[key] = session  # type: ignore[attr-defined]
+            self.application._sessions[key] = session  # type: ignore[attr-defined,index]
             self._sessions[key] = session
         elif session.user_id != request.user_id:
             raise ValueError("session identity belongs to another user")
@@ -89,6 +90,7 @@ class ServiceContextFactory:
             workspace=workspace,
             request_id=request.request_id,
             writer_id=self.writer_id,
+            takeover_writer=takeover_writer,
         )
 
     def release_run(self, run: RunContext) -> None:

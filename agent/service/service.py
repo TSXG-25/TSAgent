@@ -221,7 +221,11 @@ class AgentService:
                         "Run already has an active local execution",
                     )
 
-                context = self._contexts.create_run(request, run_id=request.run_id)
+                context = self._contexts.create_run(
+                    request,
+                    run_id=request.run_id,
+                    takeover_writer=True,
+                )
                 if context.durable_store_view is None:
                     raise AgentServiceError(
                         ServiceErrorCode.INVALID_REQUEST,

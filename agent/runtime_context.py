@@ -164,6 +164,7 @@ class SessionContext:
         checkpoint_store: Any = None,
         run_resume_store: Any = None,
         writer_id: Optional[str] = None,
+        takeover_writer: bool = False,
     ) -> "RunContext":
         if self._closed:
             raise ContextClosedError("session context is closed")
@@ -179,6 +180,7 @@ class SessionContext:
             checkpoint_store=checkpoint_store,
             run_resume_store=run_resume_store,
             writer_id=writer_id,
+            takeover_writer=takeover_writer,
         )
         self._runs[rid] = run
         self._current_run_id = rid
@@ -234,6 +236,7 @@ class RunContext:
         checkpoint_store: Any = None,
         run_resume_store: Any = None,
         writer_id: Optional[str] = None,
+        takeover_writer: bool = False,
     ) -> None:
         self.session = session
         self.application = session.application
@@ -259,6 +262,7 @@ class RunContext:
                 run_id=self.run_id,
                 request_id=self.request_id,
                 writer_id=writer_id or self.application.runtime_writer_id,
+                takeover_fence=takeover_writer,
             )
             self.checkpoint_store = self.durable_store_view.checkpoint_store
             self.run_resume_store = self.durable_store_view.run_resume_store

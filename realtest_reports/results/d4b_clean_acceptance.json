@@ -1,0 +1,189 @@
+{
+  "report": "v2.3D-4b Cancellation / Timeout Clean Acceptance",
+  "status": "ACCEPTED_WITH_PROVIDER_ERROR",
+  "baseline": {
+    "head": "9290011b",
+    "head_full": "9290011bd53bf0e82c1a87aa7dd914d6eba1be71",
+    "runtime_changes": 0,
+    "cli_changes": 0,
+    "dataset_changes": 0,
+    "automatic_rerun": false,
+    "provider": "ollama",
+    "model": "qwen2.5:14b",
+    "fallback": "disabled for D401/D408; contrast policy for D409",
+    "manifest_hash": "0e41ce5586d778351620cb6714b3a2243f8ddc9f4411a2a2d87552e76501fe3a"
+  },
+  "cases": [
+    {
+      "case_id": "D401",
+      "case_result": "PASS",
+      "runtime_correctness": "PASS",
+      "capability_outcome": "N/A",
+      "provider_mode": "REAL_PROVIDER",
+      "final_status": "CANCELLED",
+      "events": ["run_created", "run_started", "run_cancelling", "run_cancelled"],
+      "provider_started": true,
+      "run_cancelled_count": 1,
+      "run_completed_count": 0,
+      "provider_fallback_count": 0,
+      "evidence": "clean real Ollama run via ServiceCLI.cancel_run"
+    },
+    {
+      "case_id": "D402",
+      "case_result": "PASS",
+      "runtime_correctness": "PASS",
+      "capability_outcome": "N/A",
+      "provider_mode": "DETERMINISTIC",
+      "final_status": "CANCELLED",
+      "tests": [
+        "test_runtime_stops_before_planner_without_finalizer_or_new_work",
+        "test_launcher_converges_observed_intent_to_single_cancelled_terminal"
+      ],
+      "tool_started_after_cancel": false,
+      "run_completed_count": 0
+    },
+    {
+      "case_id": "D403",
+      "case_result": "PASS",
+      "runtime_correctness": "PASS",
+      "capability_outcome": "N/A",
+      "provider_mode": "DETERMINISTIC",
+      "final_status": "CANCELLED",
+      "test": "test_boundary_only_file_effect_finishes_then_blocks_next_effect",
+      "committed_effect_preserved": true,
+      "later_effect_started": false,
+      "duplicate_side_effect_count": 0
+    },
+    {
+      "case_id": "D404",
+      "case_result": "PASS",
+      "runtime_correctness": "PASS",
+      "capability_outcome": "N/A",
+      "provider_mode": "DETERMINISTIC",
+      "final_status": "CANCELLED",
+      "test": "test_d404_cancel_preserves_completed_workflow_and_pending_tail",
+      "completed_workflows": ["workflow-a"],
+      "active_workflow": "workflow-b",
+      "pending_workflows": ["workflow-c"],
+      "workflow_c_activation_count": 0,
+      "preserved_artifact": "artifact-a"
+    },
+    {
+      "case_id": "D405",
+      "case_result": "PASS",
+      "runtime_correctness": "PASS",
+      "capability_outcome": "N/A",
+      "provider_mode": "DETERMINISTIC",
+      "final_status": "CANCELLED",
+      "test": "test_service_cancel_is_fast_durable_acceptance_not_false_cancelled",
+      "one_cancelling_transition": true,
+      "duplicate_terminal_event_count": 0
+    },
+    {
+      "case_id": "D406",
+      "case_result": "PASS",
+      "runtime_correctness": "PASS",
+      "capability_outcome": "N/A",
+      "provider_mode": "DETERMINISTIC",
+      "final_status": "CANCELLED",
+      "tests": [
+        "test_client_disconnect_does_not_lose_terminal_event_on_restart",
+        "test_cancelling_survives_restart_and_resume_is_rejected"
+      ],
+      "event_replay_gap": 0,
+      "client_disconnect_affects_runtime": false
+    },
+    {
+      "case_id": "D407",
+      "case_result": "PASS",
+      "runtime_correctness": "PASS",
+      "capability_outcome": "N/A",
+      "provider_mode": "DETERMINISTIC",
+      "final_status": "CANCELLED",
+      "child_process_exit_after_sigkill": -9,
+      "status_before_kill": "CANCELLING",
+      "intent_phase_after_restart": "FINALIZED",
+      "takeover_fence": 2,
+      "normal_resume_called": false,
+      "run_cancelled_count": 1,
+      "run_completed_count": 0,
+      "evidence": "clean child-process SIGKILL/restart harness"
+    },
+    {
+      "case_id": "D408",
+      "case_result": "PASS",
+      "runtime_correctness": "PASS",
+      "capability_outcome": "N/A",
+      "provider_mode": "REAL_PROVIDER",
+      "final_status": "TIMED_OUT",
+      "events": ["run_created", "run_started", "run_cancelling", "run_timed_out"],
+      "provider_started": true,
+      "run_timeout_seconds": 5.0,
+      "run_timed_out_count": 1,
+      "run_completed_count": 0,
+      "provider_fallback_count": 0,
+      "evidence": "clean real Ollama run with durable watchdog"
+    },
+    {
+      "case_id": "D409",
+      "case_result": "PROVIDER_ERROR",
+      "runtime_correctness": "PASS",
+      "capability_outcome": "N/A",
+      "provider_mode": "DETERMINISTIC_CONTRAST_WITH_REAL_PROVIDER",
+      "final_status": "FAILED_TERMINAL",
+      "terminal_event": "run_failed",
+      "failure_code": "REPLAN_EXHAUSTED",
+      "provider_timeout_to_run_timeout": 0,
+      "provider_timeout_to_completed": 0,
+      "evidence": "Ollama timed out under TSAGENT_LLM_TIMEOUT=0.01; DeepSeek fallback unavailable; Runtime ended in stable FAILED_TERMINAL",
+      "note": "Provider infrastructure outcome is retained; no cancellation/runtime hotfix is opened."
+    },
+    {
+      "case_id": "D410",
+      "case_result": "PASS",
+      "runtime_correctness": "PASS",
+      "capability_outcome": "N/A",
+      "provider_mode": "DETERMINISTIC",
+      "final_status": "COMPLETED",
+      "test": "test_completed_run_rejects_cancel_without_creating_intent",
+      "cancel_transition_created": false,
+      "new_side_effect_count": 0
+    }
+  ],
+  "summary": {
+    "case_pass_count": 9,
+    "provider_error_count": 1,
+    "runtime_correctness_pass_count": 10,
+    "runtime_correctness_fail_count": 0,
+    "hard_invariant_violation_count": 0
+  },
+  "hard_gates": {
+    "post_cancel_new_side_effect": 0,
+    "pending_task_started_after_cancel": 0,
+    "false_cancelled": 0,
+    "false_completed_after_cancellation": 0,
+    "duplicate_cancellation_transition": 0,
+    "duplicate_side_effect": 0,
+    "committed_artifact_lost": 0,
+    "cancellation_intent_lost_after_restart": 0,
+    "cancelled_run_normal_resumed": 0,
+    "run_timeout_reported_completed": 0,
+    "provider_timeout_promoted_to_run_timeout": 0,
+    "snapshot_terminal_event_mismatch": 0,
+    "provider_fallback_caused_by_cancellation": 0,
+    "client_disconnect_affected_convergence": 0
+  },
+  "latency_observations": {
+    "D401_cancel_request_to_terminal_seconds": 0.104297375,
+    "D408_timeout_terminal_overshoot_seconds": 0.462345917,
+    "thresholds_enforced": false
+  },
+  "acceptance": {
+    "real_provider_cancellation": "PASS",
+    "real_run_timeout": "PASS",
+    "real_sigkill_cancel_recovery": "PASS",
+    "provider_timeout_isolation": "PASS",
+    "d4b_runtime_gate": "PASS",
+    "capability_claim": "9 cases PASS; D409 provider error retained"
+  }
+}

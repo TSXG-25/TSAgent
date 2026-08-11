@@ -201,7 +201,7 @@ async def main() -> None:
             "provider_timeout_not_run_timeout": (
                 None
                 if not is_provider_timeout
-                else final_snapshot.status is RunStatus.TIMED_OUT
+                else final_snapshot.status is not RunStatus.TIMED_OUT
             ),
             "cancelled_event_count_matches": (
                 sum(event["event_type"] == "run_cancelled" for event in events)

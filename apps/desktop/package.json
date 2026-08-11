@@ -9,6 +9,7 @@
     "test:local-client": "node scripts/test-local-client.mjs",
     "test:desktop4a": "node scripts/test-desktop4a.mjs",
     "test:desktop4b1": "node scripts/test-desktop4b1.mjs",
+    "test:desktop4b2": "node scripts/test-desktop4b2.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

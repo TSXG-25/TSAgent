@@ -3,6 +3,7 @@ import {
   type DesktopAgentServiceClient,
   type EventStreamRequest,
   type GetRunRequest,
+  type ResumeRunRequest,
   type RunSnapshot,
   type ServiceErrorDTO,
   type StartRunRequest,
@@ -15,6 +16,7 @@ export interface RunControllerState {
   activeRunId: string;
   isLoading: boolean;
   error: ServiceErrorDTO | null;
+  operationState: "idle" | "starting" | "resuming" | "cancelling";
 }
 
 export interface RunControllerOptions {
@@ -68,6 +70,7 @@ export class RunController {
   private activeRunId = "";
   private loading = true;
   private currentError: ServiceErrorDTO | null = null;
+  private operationState: RunControllerState["operationState"] = "idle";
   private initialization: Promise<void> | null = null;
 
   constructor(
@@ -86,6 +89,7 @@ export class RunController {
       activeRunId: this.activeRunId,
       isLoading: this.loading,
       error: this.currentError,
+      operationState: this.operationState,
     };
   }
 
@@ -102,6 +106,12 @@ export class RunController {
   }
 
   async startRun(request: StartRunRequest): Promise<RunView> {
+    if (this.operationState !== "idle") {
+      const current = this.runs.get(this.activeRunId);
+      if (current) return current;
+    }
+    this.operationState = "starting";
+    this.emit();
     this.clearError();
     try {
       const handle = await this.client.startRun(request);
@@ -116,6 +126,62 @@ export class RunController {
     } catch (error) {
       this.setError(error);
       throw error;
+    } finally {
+      this.operationState = "idle";
+      this.emit();
+    }
+  }
+
+  async resumeRun(runId: string): Promise<RunView | undefined> {
+    const current = this.runs.get(runId);
+    if (!current || !current.resume || current.resume.action === null) return current;
+    if (this.operationState !== "idle") return current;
+
+    const request: ResumeRunRequest = {
+      tenantId: current.tenantId ?? this.client.identity.tenantId,
+      sessionId: current.sessionId,
+      runId: current.runId,
+      resumeRequestId: `${current.runId}.resume-request`,
+      checkpointId: current.resume.checkpointId,
+      action: current.resume.action,
+    };
+    this.operationState = "resuming";
+    this.clearError();
+    this.emit();
+    try {
+      await this.client.resumeRun(request);
+      return await this.refreshRun(runId);
+    } catch (error) {
+      this.setError(error);
+      throw error;
+    } finally {
+      this.operationState = "idle";
+      this.emit();
+    }
+  }
+
+  async cancelRun(runId: string): Promise<RunView | undefined> {
+    const current = this.runs.get(runId);
+    if (!current || current.status !== "active" || this.operationState !== "idle") return current;
+
+    this.operationState = "cancelling";
+    this.clearError();
+    this.emit();
+    try {
+      const snapshot = await this.client.cancelRun({
+        tenantId: current.tenantId ?? this.client.identity.tenantId,
+        sessionId: current.sessionId,
+        runId: current.runId,
+        requestId: `cancel-${current.runId}`,
+        requestedBy: this.client.identity.userId,
+      });
+      return await this.applySnapshot(snapshot, current);
+    } catch (error) {
+      this.setError(error);
+      throw error;
+    } finally {
+      this.operationState = "idle";
+      this.emit();
     }
   }
 
@@ -126,27 +192,8 @@ export class RunController {
     this.inFlight.add(runId);
     try {
       const request = locator({ tenantId: current.tenantId ?? this.client.identity.tenantId, sessionId: current.sessionId, runId });
-      const afterSequence = this.cursors.get(runId)?.lastSequence ?? -1;
-      const [snapshot, artifacts, incomingEvents] = await Promise.all([
-        this.client.getRun(request),
-        this.client.listArtifacts(request),
-        this.client.readEvents({ ...request, afterSequence } satisfies EventStreamRequest),
-      ]);
-
-      const cursor = this.cursors.get(runId) ?? { lastSequence: afterSequence, eventIds: new Set<string>() };
-      const unseenEvents = incomingEvents.filter((event) => !cursor.eventIds.has(event.eventId));
-      for (const event of incomingEvents) cursor.eventIds.add(event.eventId);
-      cursor.lastSequence = Math.max(afterSequence, ...incomingEvents.map((event) => event.sequenceNumber));
-      this.cursors.set(runId, cursor);
-
-      const next = toRunView(snapshot, artifacts, []);
-      next.events = mergeRunEvents(current.events, unseenEvents);
-      this.runs.set(runId, next);
-      this.currentError = null;
-      this.emit();
-      if (isLiveStatus(next.status)) this.startPollingIfLive(next);
-      else this.stopPolling(runId);
-      return next;
+      const snapshot = await this.client.getRun(request);
+      return await this.applySnapshot(snapshot, current);
     } catch (error) {
       this.setError(error);
       throw error;
@@ -163,6 +210,11 @@ export class RunController {
 
   stopAllPolling(): void {
     for (const runId of this.pollTimers.keys()) this.stopPolling(runId);
+  }
+
+  dispose(): void {
+    this.stopAllPolling();
+    this.listeners.clear();
   }
 
   private async initializeCatalog(): Promise<void> {
@@ -187,6 +239,30 @@ export class RunController {
       this.loading = false;
       this.emit();
     }
+  }
+
+  private async applySnapshot(snapshot: RunSnapshot, current: RunView): Promise<RunView> {
+    const request = locator(snapshot);
+    const afterSequence = this.cursors.get(snapshot.runId)?.lastSequence ?? -1;
+    const [artifacts, incomingEvents] = await Promise.all([
+      this.client.listArtifacts(request),
+      this.client.readEvents({ ...request, afterSequence } satisfies EventStreamRequest),
+    ]);
+
+    const cursor = this.cursors.get(snapshot.runId) ?? { lastSequence: afterSequence, eventIds: new Set<string>() };
+    const unseenEvents = incomingEvents.filter((event) => !cursor.eventIds.has(event.eventId));
+    for (const event of incomingEvents) cursor.eventIds.add(event.eventId);
+    cursor.lastSequence = Math.max(afterSequence, ...incomingEvents.map((event) => event.sequenceNumber));
+    this.cursors.set(snapshot.runId, cursor);
+
+    const next = toRunView(snapshot, artifacts, []);
+    next.events = mergeRunEvents(current.events, unseenEvents);
+    this.runs.set(snapshot.runId, next);
+    this.currentError = null;
+    this.emit();
+    if (isLiveStatus(next.status)) this.startPollingIfLive(next);
+    else this.stopPolling(snapshot.runId);
+    return next;
   }
 
   private async hydrateRun(snapshot: RunSnapshot, afterSequence: number): Promise<RunView> {

@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState, type FormEvent, type SVGProps } from "rea
 import type { EventTone, RunStatus, StageStatus } from "./types";
 import {
   AgentServiceClientError,
-  type DesktopAgentServiceClient,
   type ServiceErrorDTO,
 } from "./types/service";
 import { createAgentServiceClient } from "./service/clientFactory";
@@ -102,12 +101,6 @@ function requestIdForRun(sequenceHint: number): string {
   return `desktop-${randomId}`;
 }
 
-function cancellationRequestId(runId: string): string {
-  // One logical Run has one cancellation intent. Keeping this stable makes a
-  // retry after a lost response idempotent at the AgentService boundary.
-  return `cancel-${runId}`;
-}
-
 function Icon({ name, size = 16, className = "", ...props }: { name: IconName; size?: number; className?: string } & SVGProps<SVGSVGElement>) {
   return (
     <svg
@@ -138,8 +131,7 @@ function stageIcon(status: StageStatus): IconName {
 
 function App() {
   const service = useMemo(() => createAgentServiceClient(), []);
-  const client: DesktopAgentServiceClient = service;
-  const controller = useMemo(() => new RunController(client), [client]);
+  const controller = useMemo(() => new RunController(service), [service]);
   const runtimeLabel = service.mode === "local" ? "Local AgentService" : "Mock AgentService";
   const [controllerState, setControllerState] = useState<RunControllerState>(() => controller.getState());
   const runs = controllerState.runs;
@@ -151,15 +143,15 @@ function App() {
   const [requestDraft, setRequestDraft] = useState("");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [serviceError, setServiceError] = useState<ServiceErrorDTO | null>(null);
-  const [isResuming, setIsResuming] = useState(false);
-  const [isCancelling, setIsCancelling] = useState(false);
+  const isResuming = controllerState.operationState === "resuming";
+  const isCancelling = controllerState.operationState === "cancelling";
 
   useEffect(() => {
     const unsubscribe = controller.subscribe(setControllerState);
     void controller.initialize();
     return () => {
       unsubscribe();
-      controller.stopAllPolling();
+      controller.dispose();
     };
   }, [controller]);
 
@@ -191,8 +183,7 @@ function App() {
   const selectedArtifact = activeRun.artifacts.find((artifact) => artifact.artifactId === selectedArtifactId) ?? activeRun.artifacts[0];
   const canResume =
     activeRun.status === "blocked" &&
-    activeRun.resume?.outcome === "ready" &&
-    activeRun.resume.action !== null;
+    activeRun.resume?.outcome === "ready";
   const canCancel = activeRun.status === "active";
   const partialArtifacts = activeRun.artifacts.filter((artifact) => artifact.status === "verified");
   const notExecutedTasks = activeRun.workflows.flatMap((item) =>
@@ -233,19 +224,9 @@ function App() {
 
     try {
       setServiceError(null);
-      setIsCancelling(true);
-      await client.cancelRun({
-        tenantId: activeRun.tenantId ?? service.identity.tenantId,
-        sessionId: activeRun.sessionId,
-        runId: activeRun.runId,
-        requestId: cancellationRequestId(activeRun.runId),
-        requestedBy: service.identity.userId,
-      });
-      await controller.refreshRun(activeRun.runId);
+      await controller.cancelRun(activeRun.runId);
     } catch (error) {
       setServiceError(toServiceError(error));
-    } finally {
-      setIsCancelling(false);
     }
   }
 
@@ -274,25 +255,13 @@ function App() {
   }
 
   async function resumeActiveRun() {
-    const resume = activeRun.resume;
-    if (!canResume || !resume || resume.action === null) return;
+    if (!canResume) return;
 
     try {
       setServiceError(null);
-      setIsResuming(true);
-      await client.resumeRun({
-        tenantId: activeRun.tenantId ?? service.identity.tenantId,
-        sessionId: activeRun.sessionId,
-        runId: activeRun.runId,
-        resumeRequestId: `${activeRun.runId}.resume-request`,
-        checkpointId: resume.checkpointId,
-        action: resume.action,
-      });
-      await controller.refreshRun(activeRun.runId);
+      await controller.resumeRun(activeRun.runId);
     } catch (error) {
       setServiceError(toServiceError(error));
-    } finally {
-      setIsResuming(false);
     }
   }
 
@@ -413,8 +382,8 @@ function App() {
             </div>
             <div className="run-actions">
               {(canCancel || activeRun.status === "cancelling") && <button aria-label="Cancel Run" className={`cancel-action ${activeRun.status === "cancelling" ? "pending" : ""}`} disabled={!canCancel || isCancelling} onClick={() => void cancelActiveRun()} type="button"><Icon name="x" size={14} /><span>{activeRun.status === "cancelling" || isCancelling ? "Cancelling…" : "Cancel run"}</span></button>}
-              {activeRun.resume && <button className="quiet-action" onClick={() => setActiveTab("events")} type="button"><Icon name="box" size={14} /><span>{activeRun.resume.checkpointId}</span></button>}
-              {activeRun.resume && <button className={`resume-action ${activeRun.resume.outcome === "completed" ? "complete" : ""}`} disabled={!canResume || isResuming} onClick={() => void resumeActiveRun()} type="button"><Icon name={activeRun.resume.outcome === "completed" ? "check" : "play"} size={14} /><span>{isResuming ? "Requesting resume…" : activeRun.resume.outcome === "completed" ? "Resume exact · done" : "Resume exact"}</span></button>}
+              {activeRun.resume && <button className="quiet-action" onClick={() => setActiveTab("events")} type="button"><Icon name="box" size={14} /><span>Recovery checkpoint available</span></button>}
+              {activeRun.resume && <button className={`resume-action ${activeRun.resume.outcome === "completed" ? "complete" : ""}`} disabled={!canResume || isResuming} onClick={() => void resumeActiveRun()} type="button"><Icon name={activeRun.resume.outcome === "completed" ? "check" : "play"} size={14} /><span>{isResuming ? "Requesting resume…" : activeRun.resume.outcome === "completed" ? "Resume · done" : "Resume"}</span></button>}
             </div>
           </section>
 
@@ -442,7 +411,7 @@ function App() {
                 ))}
                 {activeRun.output && <article aria-label="Durable RunOutput" className="message assistant durable-output"><div className="message-heading"><span className="message-role">TSAgent · RunOutput</span><time>{activeRun.output.createdAt}</time></div><div className="message-content">{activeRun.output.text}</div><div className="run-output-meta"><span>revision {activeRun.output.revision}</span><span>{activeRun.output.artifactIds.length} artifacts</span><span>{activeRun.output.evidenceIds.length} evidence items</span></div></article>}
                 {!activeRun.output && activeRun.failure && <article aria-label="Run failure" className="message system run-failure"><div className="message-heading"><span className="message-role">{activeRun.status.toUpperCase()}</span><time>{activeRun.updatedAt}</time></div><div className="message-content">{activeRun.failure.message}</div><div className="run-output-meta"><span>{activeRun.failure.code}</span><span>{activeRun.failure.retryable ? "retryable" : "terminal"}</span></div></article>}
-                {activeRun.resume && <div className={`checkpoint-message ${activeRun.resume.outcome === "completed" ? "complete" : ""}`}><div className="checkpoint-message-icon"><Icon name={activeRun.resume.outcome === "completed" ? "check" : "box"} size={14} /></div><div><strong>{activeRun.resume.outcome === "completed" ? "Resume completed" : "Checkpoint persisted"}</strong><span>{activeRun.resume.checkpointId} <span>·</span> {activeRun.resume.outcome === "completed" ? "RESUME_EXACT committed" : `active stage: ${activeRun.resume.sourceStage}`}</span></div><em>{activeRun.resume.outcome === "completed" ? "DONE" : "RESUMABLE"}</em></div>}
+                {activeRun.resume && <div className={`checkpoint-message ${activeRun.resume.outcome === "completed" ? "complete" : ""}`}><div className="checkpoint-message-icon"><Icon name={activeRun.resume.outcome === "completed" ? "check" : "box"} size={14} /></div><div><strong>{activeRun.resume.outcome === "completed" ? "Resume completed" : "Recovery checkpoint persisted"}</strong><span>{activeRun.resume.outcome === "completed" ? "authoritative resume result committed" : "run is eligible for service-managed recovery"}</span></div><em>{activeRun.resume.outcome === "completed" ? "DONE" : "RESUMABLE"}</em></div>}
               </div>
 
               <form className="task-composer" onSubmit={createRun}>

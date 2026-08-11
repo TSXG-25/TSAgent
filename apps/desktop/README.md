@@ -60,6 +60,10 @@ Desktop-4b1 将 Run 生命周期集中到 `src/features/runs/runController.ts`�
 Snapshot 是页面事实，事件只负责唤醒增量刷新；完成后的用户可见文本直接来自 durable
 `RunOutput`，不会由前端重新调用 LLM 生成。
 
+Desktop-4b2 继续通过同一 Controller 委派 Resume/Cancel，并刷新真实 Artifact metadata。
+UI 不选择 Resume action、不生成取消策略、不访问 artifact path；五类终态
+`COMPLETED / BLOCKED / FAILED / CANCELLED / TIMED_OUT` 分别消费 Service 的公开投影。
+
 `src/service/localTransport.ts` 定义 JSONL protocol seam，
 `src/service/tauriSidecarTransport.ts` 定义 request correlation、超时、进程退出和关闭
 语义，`src/service/localAgentServiceClient.ts` 负责 public DTO 到 wire DTO 的映射。

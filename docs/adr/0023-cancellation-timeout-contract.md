@@ -1,6 +1,6 @@
 # ADR-0023: Cancellation / Timeout Contract（v2.3D）
 
-- 状态: Accepted — v2.3D-3 Propagation and Side-effect Safety Implemented and Verified
+- 状态: Accepted — Implemented and Verified
 - 日期: 2026-08-10
 - 关联: ADR-0016（RunCheckpoint）、ADR-0019（Context Ownership）、ADR-0020（Durable Store）、ADR-0021（AgentService/Event Stream）、ADR-0022（P2 Acceptance）
 - Dataset: `benchmarks/v23d/`
@@ -398,5 +398,72 @@ durable timeout intent，再等待 Provider/Tool/Workflow 的下一个安全边�
 副作用。`PROVIDER_TIMEOUT`、`TOOL_TIMEOUT` 仍由 Decision policy 处理，不会自动生成
 `run_timed_out`。
 
-真实 Provider、CLI/前端 Cancel adapter 和端到端 latency evidence 仍属于 v2.3D-4；
-因此 D3 的确定性收口不应表述为真实环境 cancellation 已完成。
+在 D3 阶段，真实 Provider、CLI/前端 Cancel adapter 和端到端 latency evidence
+仍留待 v2.3D-4；因此当时的确定性收口不应表述为真实环境 cancellation 已完成。
+这些证据现已由下方 Final Closeout 节补齐。
+
+## 十二、v2.3D Final Closeout（2026-08-11）
+
+v2.3D-4a、v2.3D-4b 与 v2.3D-4c 已完成。本 ADR 现在冻结完整的
+Cancellation / Timeout Runtime、CLI 与桌面客户端合同；真实 LocalAgentServiceClient、
+FastAPI、WebSocket 和前端真实进程接线不属于本里程碑。
+
+最终证据基线：
+
+```text
+implementation baseline: 7fcb5bb4
+dataset / oracle:        16/16 PASS
+dataset hash:            090adaf6a972f812e11990fe2b04e7736e1d74455e34ddcb10ad7c12bd55654c
+D2 durable core:         PASS
+D3 propagation:          PASS
+D4a CLI contract:        PASS
+D4c desktop contract:    PASS
+```
+
+D4b 保留真实 Provider 的原始结果，不将 Provider 基础设施错误改写为能力成功：
+
+```text
+D401 real Ollama cancellation:       PASS
+D408 real Ollama Run timeout:        PASS
+D407 real child-process SIGKILL:     PASS
+D409 Provider timeout contrast:      PROVIDER_ERROR / Runtime Correctness PASS
+Runtime Correctness:                 10/10
+Hard invariant violations:           0
+```
+
+v2.3D 最终硬不变量全部为零：
+
+```text
+lost cancellation intent                  0
+post-cancel new side effect               0
+pending task started after cancel         0
+duplicate cancellation transition        0
+duplicate side effect                     0
+false CANCELLED                           0
+false COMPLETED after cancellation        0
+committed effect/artifact lost            0
+cancelled Run normal-resumed              0
+stale writer accepted                     0
+atomic transaction torn                   0
+Run timeout reported COMPLETED            0
+Provider timeout promoted to RUN_TIMEOUT  0
+Snapshot / terminal-event mismatch        0
+cancel-triggered provider fallback       0
+client disconnect implicit cancellation  0
+frontend optimistic CANCELLED             0
+```
+
+本次 closeout 的本地验证为：v2.3D 相关 pytest `50 passed`，D1 Dataset/Oracle
+validator `16/16 PASS`，`mypy agent/interruption benchmarks/v23d` 通过（15 个文件），
+桌面端 `npm run build` 通过，Architecture/Contract 相关测试通过。全量 pytest 为
+`553 passed, 17 skipped, 1 environment failure`；唯一失败是 `test_web_fetch` 的沙箱
+DNS 不可达，已作为环境异常保留，不影响 v2.3D Runtime 证据。全仓库 mypy 当前仍有
+146 个既有类型错误，超出本 ADR 的 D4 closeout scope，不能将其表述为全仓库 mypy
+通过。
+
+完整冻结报告归档于：
+
+```text
+realtest_reports/v2.3/v23d_freeze.md
+realtest_reports/v2.3/v23d_freeze.json
+```

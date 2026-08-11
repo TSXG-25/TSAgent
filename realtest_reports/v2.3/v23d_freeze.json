@@ -1,0 +1,91 @@
+{
+  "version": "v2.3D",
+  "status": "PASS",
+  "status_qualifier": "declared environment exceptions are recorded below",
+  "implementation_baseline": {
+    "short_head": "7fcb5bb4",
+    "full_head": "7fcb5bb4315a2bbf5bc642612002d58243bd24cc",
+    "commit": "v2.3D-4c: expose cancellation contract to desktop client"
+  },
+  "dataset": {
+    "case_count": 16,
+    "dataset_hash": "090adaf6a972f812e11990fe2b04e7736e1d74455e34ddcb10ad7c12bd55654c",
+    "oracle_determinism": "PASS",
+    "validator": "16/16 PASS"
+  },
+  "milestones": {
+    "d1_contract_dataset_oracle": "PASS",
+    "d2_durable_cancellation_core": "PASS",
+    "d3_propagation_side_effect_safety": "PASS",
+    "d4a_cli_cancellation_control": "PASS",
+    "d4c_desktop_cancellation_contract": "PASS"
+  },
+  "d4b_real_evidence": {
+    "source": "realtest_reports/results/d4b_clean_acceptance.json",
+    "provider": "ollama",
+    "model": "qwen2.5:14b",
+    "case_results": "9 PASS, 1 PROVIDER_ERROR",
+    "runtime_correctness": "10/10",
+    "d401_real_provider_cancel": "PASS",
+    "d407_real_sigkill_recovery": "PASS",
+    "d408_real_run_timeout": "PASS",
+    "d409_provider_timeout_isolation": "Runtime Correctness PASS; PROVIDER_ERROR retained",
+    "automatic_rerun": false,
+    "hard_invariant_violations": 0
+  },
+  "d4c_evidence": {
+    "commit": "7fcb5bb4",
+    "public_cancel_run_dto": "PASS",
+    "authoritative_snapshot_state_flow": "ACTIVE -> CANCELLING -> CANCELLED/TIMED_OUT",
+    "partial_verified_artifacts_visible": "PASS",
+    "implicit_cancel_on_disconnect": 0,
+    "frontend_runtime_sqlite_imports": 0,
+    "desktop_build": "PASS"
+  },
+  "hard_invariants": {
+    "lost_cancellation_intent": 0,
+    "post_cancel_new_side_effect": 0,
+    "pending_task_started_after_cancel": 0,
+    "duplicate_cancellation_transition": 0,
+    "duplicate_side_effect": 0,
+    "false_cancelled": 0,
+    "false_completed_after_cancellation": 0,
+    "committed_effect_artifact_lost": 0,
+    "cancelled_run_normal_resumed": 0,
+    "stale_writer_accepted": 0,
+    "atomic_transaction_torn": 0,
+    "run_timeout_reported_completed": 0,
+    "provider_timeout_promoted_to_run_timeout": 0,
+    "snapshot_terminal_event_mismatch": 0,
+    "cancel_triggered_provider_fallback": 0,
+    "client_disconnect_implicit_cancellation": 0,
+    "frontend_optimistic_cancelled": 0
+  },
+  "local_verification": {
+    "v23d_pytest": "50 passed, 1 warning",
+    "full_pytest": "553 passed, 17 skipped, 1 environment failure",
+    "relevant_mypy": "PASS: mypy agent/interruption benchmarks/v23d; 15 files",
+    "desktop_build": "PASS: npm run build",
+    "architecture_contract_tests": "PASS"
+  },
+  "environment_exceptions": [
+    {
+      "check": "tests/test_tools_execution.py::test_web_fetch",
+      "classification": "ENVIRONMENT_FAILURE",
+      "reason": "sandbox DNS cannot resolve example.com",
+      "impact": "does not exercise v2.3D cancellation semantics"
+    },
+    {
+      "check": "mypy agent benchmarks tests",
+      "classification": "OUT_OF_SCOPE_BASELINE",
+      "reason": "146 existing errors across 26 files outside the v2.3D scoped check",
+      "impact": "v2.3D scoped mypy remains PASS"
+    }
+  ],
+  "deferred": [
+    "Real LocalAgentServiceClient / Python sidecar integration",
+    "FastAPI and WebSocket transport adapters",
+    "D409 provider infrastructure recovery",
+    "Full-repository mypy cleanup"
+  ]
+}

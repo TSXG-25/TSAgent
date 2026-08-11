@@ -41,6 +41,7 @@ type CaseResult = {
   capability_outcome: "PASS" | "PARTIAL" | "FAIL" | "N/A" | "DEFERRED";
   run_id?: string;
   terminal_status?: string;
+  failure_code?: string;
   events_seen: string[];
   event_sequences: number[];
   duplicate_ui_events: number;
@@ -78,6 +79,9 @@ function repositoryRoot(): string {
 
 function providerLabel(): string {
   const model = process.env.OLLAMA_MODEL ?? "qwen2.5:14b";
+  if (process.env.DESKTOP4C_FORCE_OLLAMA === "1") {
+    return `ollama:${model} (test-forced-no-fallback)`;
+  }
   return `configured-primary-with-ollama-fallback:${model}`;
 }
 
@@ -116,6 +120,10 @@ function artifactViews(snapshot: RunSnapshot | undefined): CaseResult["artifacts
     exists: artifact.exists,
     verified: artifact.verified,
   }));
+}
+
+function failureCode(snapshot: RunSnapshot | undefined): string | undefined {
+  return snapshot?.failureSummary?.code;
 }
 
 function eventTypes(events: RunEvent[]): string[] {
@@ -185,9 +193,26 @@ class ChildProcessSidecar implements TauriSidecarProcess {
   ) {
     this.keepAliveOnClose = options.keepAliveOnClose ?? false;
     const root = repositoryRoot();
+    const forceOllama = process.env.DESKTOP4C_FORCE_OLLAMA === "1";
+    const sidecarArguments = forceOllama
+      ? [
+          "-c",
+          "from agent.llm import llm; llm._deepseek_available = False; llm._ollama_available = True; import runpy; runpy.run_module('agent.service.local_sidecar', run_name='__main__')",
+        ]
+      : [
+          "-m",
+          "agent.service.local_sidecar",
+          "--database",
+          database,
+          "--workspace-root",
+          workspace,
+        ];
+    if (forceOllama) {
+      sidecarArguments.push("--database", database, "--workspace-root", workspace);
+    }
     this.child = spawn(
       process.env.TSAGENT_PYTHON ?? "python3",
-      ["-m", "agent.service.local_sidecar", "--database", database, "--workspace-root", workspace],
+      sidecarArguments,
       {
         cwd: root,
         env: {
@@ -392,6 +417,7 @@ function evaluateCompletedCase(caseId: CaseId, capture: RunCapture, notes: strin
     capability_outcome: capability,
     ...(capture.runId ? { run_id: capture.runId } : {}),
     ...(snapshot ? { terminal_status: snapshot.status } : {}),
+    ...(failureCode(snapshot) ? { failure_code: failureCode(snapshot) } : {}),
     events_seen: eventTypes(capture.events),
     event_sequences: capture.events.map((event) => event.sequenceNumber),
     duplicate_ui_events: duplicateCount(capture.events),
@@ -438,12 +464,15 @@ async function runDt02Dt03Dt07(): Promise<[CaseResult, CaseResult, CaseResult]> 
     const dt02 = evaluateCompletedCase("DT02", capture, ["DT03 and DT07 reuse this known durable Run as read-only follow-up cases."]);
     const artifactScopeOk = capture.artifacts.every((artifact) => artifact.reference === `artifact://${environment.currentIdentity.tenantId}/${capture.runId}/${artifact.artifact_id}`);
     const artifactVerified = capture.artifacts.length > 0 && capture.artifacts.every((artifact) => artifact.exists && artifact.verified);
+    const prerequisiteUnavailable =
+      capture.providerError || capture.snapshot?.status !== "completed";
     const dt03 = safeCaseResult("DT03", {
-      result: capture.providerError ? "PROVIDER_ERROR" : artifactScopeOk && artifactVerified ? "PASS" : "FAIL",
-      runtime_correctness: capture.providerError ? "DEFERRED" : artifactScopeOk && artifactVerified ? "PASS" : "FAIL",
-      capability_outcome: capture.providerError ? "DEFERRED" : artifactVerified ? "PASS" : "FAIL",
+      result: prerequisiteUnavailable ? "DEFERRED" : artifactScopeOk && artifactVerified ? "PASS" : "FAIL",
+      runtime_correctness: prerequisiteUnavailable ? "DEFERRED" : artifactScopeOk && artifactVerified ? "PASS" : "FAIL",
+      capability_outcome: prerequisiteUnavailable ? "DEFERRED" : artifactVerified ? "PASS" : "FAIL",
       ...(capture.runId ? { run_id: capture.runId } : {}),
       ...(capture.snapshot ? { terminal_status: capture.snapshot.status } : {}),
+      ...(failureCode(capture.snapshot) ? { failure_code: failureCode(capture.snapshot) } : {}),
       events_seen: eventTypes(capture.events),
       event_sequences: capture.events.map((event) => event.sequenceNumber),
       artifacts: capture.artifacts,
@@ -453,7 +482,9 @@ async function runDt02Dt03Dt07(): Promise<[CaseResult, CaseResult, CaseResult]> 
         artifact_verified: capture.artifacts.length > 0 ? artifactVerified : null,
         frontend_direct_workspace_access_zero: true,
       },
-      notes: capture.providerError ? ["capability deferred because the real Provider did not complete DT02"] : [],
+      notes: prerequisiteUnavailable
+        ? ["capability deferred because DT02 did not provide a completed Run with verified artifacts"]
+        : [],
     });
     if (!capture.runId || capture.providerError) {
       return [dt02, dt03, safeCaseResult("DT07", { result: "DEFERRED", runtime_correctness: "DEFERRED", capability_outcome: "DEFERRED", notes: ["no durable completed Run was available for restart rehydration"] })];
@@ -472,7 +503,7 @@ async function runDt02Dt03Dt07(): Promise<[CaseResult, CaseResult, CaseResult]> 
       return [dt02, dt03, safeCaseResult("DT07", {
         result: rehydrated ? "PASS" : "FAIL",
         runtime_correctness: rehydrated && terminalEventMatches(snapshot, events) ? "PASS" : "FAIL",
-        capability_outcome: "PASS",
+        capability_outcome: snapshot.status === "completed" ? "PASS" : "N/A",
         run_id: capture.runId,
         terminal_status: snapshot.status,
         events_seen: eventTypes(events),

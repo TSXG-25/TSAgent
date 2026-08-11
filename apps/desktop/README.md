@@ -73,6 +73,18 @@ sidecar，并通过 `LocalAgentServiceClient` 验证 health、Run、事件 curso
 标成 capability PASS；仓库没有 Tauri/Rust host 时，手动 Tauri smoke 也保持
 `DEFERRED`。证据归档到 `realtest_reports/desktop/desktop_mvp2_e2e.json` 和 `.md`。
 
+真实本地 Provider 验收可显式固定为已安装的 Ollama 模型，并关闭回退：
+
+```bash
+DESKTOP4C_FORCE_OLLAMA=1 \
+OLLAMA_MODEL=qwen2.5:14b \
+npm run test:desktop4c
+```
+
+该开关只存在于测试 harness；它不改变 Python Runtime 的 Provider 选择逻辑。
+DT05 需要一个可恢复 Run fixture；在没有 deterministic launcher 注入点时保持
+`DEFERRED`，不把失败的能力前置条件误报为桌面 Runtime 失败。
+
 `src/service/localTransport.ts` 定义 JSONL protocol seam，
 `src/service/tauriSidecarTransport.ts` 定义 request correlation、超时、进程退出和关闭
 语义，`src/service/localAgentServiceClient.ts` 负责 public DTO 到 wire DTO 的映射。

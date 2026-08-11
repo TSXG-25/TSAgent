@@ -40,10 +40,20 @@ npm run build
 
 Desktop-1 已冻结 `docs/adr/0025-desktop-local-transport-contract.md` 定义的
 stdin/stdout JSON Lines envelope。当前仍不启动 sidecar，也不把 `LocalTransport`
-接入页面；后续 Desktop-2–5 才依次实现 Python sidecar、真实 Local client、UI 接线
-和本地 E2E。协议只允许 `health`、`start_run`、`get_run`、`resume_run`、`cancel_run`、
+接入页面；Desktop-2 已实现 Python sidecar，但尚未接入页面。后续 Desktop-3–5 才依次
+实现真实 Local client、UI 接线和本地 E2E。协议只允许 `health`、`start_run`、`get_run`、`resume_run`、`cancel_run`、
 `list_artifacts`、`read_events`、`shutdown` 八个方法，业务身份与幂等仍由
 AgentService DTO 负责。
+
+Desktop-2 sidecar 的本地启动入口为：
+
+```bash
+python -m agent.service.local_sidecar \
+  --database /path/to/runtime.sqlite \
+  --workspace-root /path/to/workspace
+```
+
+sidecar 的 stdout 只输出 JSONL 响应，诊断信息输出 stderr；页面仍未切换到该入口。
 
 `RunSnapshot`、`ArtifactSummary` 和 `RunEvent` 是稳定的公开 DTO。Artifact 内容当前仅允许 Mock preview；客户端不提交任意本地路径，也不读取 SQLite、checkpoint payload 或 Runtime 内部对象。
 

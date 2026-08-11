@@ -119,6 +119,7 @@ class RunReadSnapshot:
     start_intent: PreparedOperation | None
     terminal_event: DurableEventRecord | None = None
     output: RunOutputRecord | None = None
+    artifacts: tuple[ArtifactCommitFact, ...] = ()
 
 
 @dataclass(frozen=True)

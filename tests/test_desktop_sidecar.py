@@ -8,7 +8,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -217,6 +217,60 @@ def test_cancel_projection_remains_cancelling() -> None:
         await dispatcher.close()
 
     _run(scenario())
+
+
+def test_sidecar_bootstraps_builtin_tools_for_scoped_runtime_compile(
+    tmp_path: Path,
+) -> None:
+    """A real sidecar must expose compiler registrations before a Run starts.
+
+    This is the deterministic regression for Desktop-H1 DT02: without the
+    application bootstrap, a literal file-write request reaches the compiler
+    with an empty ToolRegistry and is reported as a generic RUNTIME_EXCEPTION.
+    The check stops before any Provider call or filesystem side effect.
+    """
+
+    from agent.compiler.context import CompilerContext
+    from agent.compiler.rules import DEFAULT_RULES
+    from agent.compiler.tool_selector import Compiler
+    from agent.registry.tool_registry import registry
+    from agent.service.local_sidecar.lifecycle import SidecarConfig, create_service
+    from agent.task import Task
+
+    service = create_service(
+        SidecarConfig(
+            database_path=tmp_path / "h1.sqlite",
+            workspace_root=tmp_path / "workspace",
+        )
+    )
+    try:
+        assert registry.get("write_file") is not None
+        compiler = Compiler()
+        for rule in DEFAULT_RULES:
+            compiler.add_rule(rule)
+        task = Task.from_dict(
+            {
+                "id": "h1-write",
+                "verb": "write",
+                "target": "output/result.txt",
+                "target_type": "file",
+                "inputs": {"content": "desktop-h1"},
+            }
+        )
+        plan = compiler.compile(
+            task,
+            context=CompilerContext(
+                workspace=tmp_path / "workspace",
+                registry=registry,
+            ),
+        )
+        assert plan.executor == "tool"
+        assert [step.tool for step in plan.steps] == [
+            "workspace",
+            "filesystem.write",
+        ]
+    finally:
+        _run(cast(Any, service).close())
 
 
 def test_sidecar_has_no_direct_runtime_or_store_imports() -> None:

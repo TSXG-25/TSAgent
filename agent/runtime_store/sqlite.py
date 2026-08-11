@@ -3614,6 +3614,35 @@ class SqliteRuntimeStore:
                     if output_row is not None
                     else None
                 )
+                artifact_rows = self._connection.execute(
+                    """
+                    SELECT artifact_id, artifact_type, digest, reference,
+                           exists_flag, verified, verification_evidence_digest,
+                           producer_workflow_id, producer_stage_id,
+                           producer_task_id
+                    FROM artifact_metadata
+                    WHERE tenant_id = ? AND run_id = ?
+                    ORDER BY created_revision ASC, artifact_id ASC
+                    """,
+                    (tenant_id, run_id),
+                ).fetchall()
+                artifacts = tuple(
+                    ArtifactCommitFact(
+                        artifact_id=str(row["artifact_id"]),
+                        artifact_type=str(row["artifact_type"]),
+                        reference=str(row["reference"]),
+                        digest=str(row["digest"]),
+                        producer_workflow_id=str(row["producer_workflow_id"]),
+                        producer_stage_id=str(row["producer_stage_id"]),
+                        exists=bool(row["exists_flag"]),
+                        verified=bool(row["verified"]),
+                        verification_evidence_digest=str(
+                            row["verification_evidence_digest"]
+                        ),
+                        producer_task_id=str(row["producer_task_id"]),
+                    )
+                    for row in artifact_rows
+                )
                 self._connection.execute("COMMIT")
                 return RunReadSnapshot(
                     head=head,
@@ -3621,6 +3650,7 @@ class SqliteRuntimeStore:
                     start_intent=start_intent,
                     terminal_event=terminal_event,
                     output=output,
+                    artifacts=artifacts,
                 )
             except Exception:
                 if self._connection.in_transaction:
@@ -3983,6 +4013,7 @@ class SqliteRuntimeStore:
         expected_status: str | None = None,
         expected_store_generation: str | None = None,
         run_output: Mapping[str, Any] | None = None,
+        artifacts: Sequence[ArtifactCommitFact] | None = None,
     ) -> RunHead:
         """Commit a Run status change and its state event atomically."""
 
@@ -4092,6 +4123,86 @@ class SqliteRuntimeStore:
                     revision=int(row["current_revision"]),
                     output=run_output,
                 )
+            for artifact in artifacts or ():
+                if not isinstance(artifact, ArtifactCommitFact):
+                    raise DurableStoreError(
+                        StoreErrorCode.INVALID_ARGUMENT,
+                        "transition artifacts must be ArtifactCommitFact values",
+                    )
+                existing_artifact = connection.execute(
+                    """
+                    SELECT digest, reference
+                    FROM artifact_metadata
+                    WHERE tenant_id = ? AND run_id = ? AND artifact_id = ?
+                    """,
+                    (tenant_id, run_id, artifact.artifact_id),
+                ).fetchone()
+                if existing_artifact is not None and (
+                    str(existing_artifact["digest"]) != artifact.digest
+                    or str(existing_artifact["reference"]) != artifact.reference
+                ):
+                    raise DurableStoreError(
+                        StoreErrorCode.ARTIFACT_DIGEST_MISMATCH,
+                        f"artifact already has a different digest/reference: {artifact.artifact_id}",
+                    )
+                if existing_artifact is None:
+                    connection.execute(
+                        """
+                        INSERT INTO artifact_metadata
+                            (tenant_id, session_id, run_id, artifact_id,
+                             artifact_type, digest, reference, exists_flag, verified,
+                             verification_evidence_digest, producer_workflow_id,
+                             producer_stage_id, producer_task_id, created_revision,
+                             last_updated_revision, request_id, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            tenant_id,
+                            session_id,
+                            run_id,
+                            artifact.artifact_id,
+                            artifact.artifact_type,
+                            artifact.digest,
+                            artifact.reference,
+                            int(artifact.exists),
+                            int(artifact.verified),
+                            artifact.verification_evidence_digest,
+                            artifact.producer_workflow_id,
+                            artifact.producer_stage_id,
+                            artifact.producer_task_id,
+                            int(row["current_revision"]),
+                            int(row["current_revision"]),
+                            request_id,
+                            _now(),
+                        ),
+                    )
+                else:
+                    connection.execute(
+                        """
+                        UPDATE artifact_metadata
+                        SET artifact_type = ?, exists_flag = ?, verified = ?,
+                            verification_evidence_digest = ?,
+                            producer_workflow_id = ?, producer_stage_id = ?,
+                            producer_task_id = ?, last_updated_revision = ?,
+                            request_id = ?, updated_at = ?
+                        WHERE tenant_id = ? AND run_id = ? AND artifact_id = ?
+                        """,
+                        (
+                            artifact.artifact_type,
+                            int(artifact.exists),
+                            int(artifact.verified),
+                            artifact.verification_evidence_digest,
+                            artifact.producer_workflow_id,
+                            artifact.producer_stage_id,
+                            artifact.producer_task_id,
+                            int(row["current_revision"]),
+                            request_id,
+                            _now(),
+                            tenant_id,
+                            run_id,
+                            artifact.artifact_id,
+                        ),
+                    )
             self._append_event_tx(
                 connection,
                 tenant_id=tenant_id,

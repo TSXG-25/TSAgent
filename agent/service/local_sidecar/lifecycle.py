@@ -44,7 +44,33 @@ def parse_args(argv: Sequence[str] | None = None) -> SidecarConfig:
 
 
 def create_service(config: SidecarConfig) -> object:
-    """Construct only through the existing public AgentService factory."""
+    """Construct the local Service with the application registries ready.
+
+    The sidecar is an application entry point, just like the CLI.  The
+    ``AgentService`` factory intentionally does not import process-wide tool
+    modules as a hidden side effect, but the Runtime compiler still needs the
+    immutable application-level registry populated before a Run starts.  In
+    particular, omitting this bootstrap makes the scoped ``filesystem.*``
+    plans fail their static tool-existence check before they can reach the
+    RunContext workspace.
+
+    This loads registrations only; it does not initialize the legacy global
+    workspace or make it a source of filesystem truth.  Actual filesystem
+    execution remains bound to the RunContext by PlanExecutor.
+    """
+
+    from agent.bootstrap import load_all_tools, load_all_workflows
+
+    load_all_tools()
+    load_all_workflows()
+
+    # Capability resolution is an application-level registry lookup used by
+    # the effect-truth gate.  Registering it here keeps the sidecar and CLI
+    # on the same runtime capability surface without creating a second
+    # service-local registry.
+    from agent.registry.capability_registry import register_default_capabilities
+
+    register_default_capabilities()
 
     from ..factory import create_default_agent_service
 

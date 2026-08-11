@@ -15,7 +15,12 @@ from typing import Any
 from agent.run_resume.store import RunResumeActivationError
 from agent.run_resume.contracts import RunResumeIndex
 
-from .contracts import FinalizationBundle, FinalizationResult, PreparedOperation
+from .contracts import (
+    ArtifactCommitFact,
+    FinalizationBundle,
+    FinalizationResult,
+    PreparedOperation,
+)
 from .errors import DurableStoreError, StoreErrorCode
 from .sqlite import SqliteRuntimeStore
 
@@ -205,6 +210,7 @@ class DurableRuntimeStoreView:
         payload: dict[str, Any],
         expected_status: str | None = None,
         run_output: dict[str, Any] | None = None,
+        artifacts: tuple[ArtifactCommitFact, ...] | None = None,
     ):
         """Atomically publish a Service-visible Run state and event."""
 
@@ -224,6 +230,7 @@ class DurableRuntimeStoreView:
             expected_status=expected_status,
             expected_store_generation=self.store_generation,
             run_output=run_output,
+            artifacts=artifacts,
         )
 
     def latest_run_id(self, *, exclude_run_id: str | None = None) -> str | None:

@@ -9,12 +9,14 @@ the SQLite transaction owned by ``DurableRuntimeStoreView``.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import os
 from datetime import datetime, timezone
 from typing import Any, Callable
 
 from agent.runtime import UniversalAgent
 from agent.interruption import CancellationCoordinator
+from agent.runtime_store import ArtifactCommitFact
 
 from .contracts import ResumeRunRequest, StartRunRequest
 
@@ -123,6 +125,7 @@ class RuntimeExecutionLauncher:
                             else f"run-failed:{run_context.run_id}:{request.request_id}"
                         )
                     )
+                    artifact_facts = self._artifact_commit_facts(runtime)
                     durable_view.transition_run_with_event(
                         run_status=run_status,
                         event_id=event_id,
@@ -137,7 +140,14 @@ class RuntimeExecutionLauncher:
                                 request.request_id,
                             )
                         ),
-                        run_output=self._run_output_payload(runtime, runtime_answer),
+                        run_output=self._run_output_payload(
+                            runtime,
+                            runtime_answer,
+                            artifact_ids=tuple(
+                                artifact.artifact_id for artifact in artifact_facts
+                            ),
+                        ),
+                        artifacts=artifact_facts,
                     )
                 finally:
                     self._close_runtime(runtime)
@@ -281,7 +291,12 @@ class RuntimeExecutionLauncher:
         return "FAILED_TERMINAL", "run_failed", failure_code
 
     @staticmethod
-    def _run_output_payload(runtime: Any, runtime_answer: str) -> dict[str, Any] | None:
+    def _run_output_payload(
+        runtime: Any,
+        runtime_answer: str,
+        *,
+        artifact_ids: tuple[str, ...] = (),
+    ) -> dict[str, Any] | None:
         """Project only a non-empty user-visible answer into durable storage."""
 
         raw_evidence = getattr(runtime, "last_run_evidence", None)
@@ -296,12 +311,87 @@ class RuntimeExecutionLauncher:
         if not text.strip():
             return None
         evidence_ids = evidence.get("evidence_ids", ()) if evidence is not None else ()
-        artifact_ids = evidence.get("artifact_ids", ()) if evidence is not None else ()
+        existing_artifact_ids = (
+            evidence.get("artifact_ids", ()) if evidence is not None else ()
+        )
+        if isinstance(existing_artifact_ids, str) or not isinstance(
+            existing_artifact_ids,
+            (list, tuple, set),
+        ):
+            existing_artifact_ids = ()
+        all_artifact_ids: list[str] = []
+        for artifact_id in (*existing_artifact_ids, *artifact_ids):
+            value = str(artifact_id or "").strip()
+            if value and value not in all_artifact_ids:
+                all_artifact_ids.append(value)
         return {
             "text": text,
             "evidence_ids": list(evidence_ids) if isinstance(evidence_ids, (list, tuple)) else [],
-            "artifact_ids": list(artifact_ids) if isinstance(artifact_ids, (list, tuple)) else [],
+            "artifact_ids": all_artifact_ids,
         }
+
+    @staticmethod
+    def _artifact_commit_facts(runtime: Any) -> tuple[ArtifactCommitFact, ...]:
+        """Turn scoped, verifier-approved files into durable artifact facts."""
+
+        evidence = getattr(runtime, "last_run_evidence", None)
+        if not isinstance(evidence, dict):
+            return ()
+        run_context = getattr(runtime, "run_context", None)
+        workspace = getattr(run_context, "workspace", None)
+        run_id = str(getattr(run_context, "run_id", "") or "")
+        if workspace is None or not run_id:
+            return ()
+
+        facts: list[ArtifactCommitFact] = []
+        seen: set[str] = set()
+        for item in evidence.get("verified_artifacts", ()) or ():
+            if not isinstance(item, dict):
+                continue
+            reference = str(item.get("reference", "") or "").strip()
+            if not reference:
+                continue
+            try:
+                resolved = workspace.resolve_path(reference, must_exist=True)
+                if resolved.is_dir():
+                    continue
+                canonical_reference = workspace.relative_path(resolved)
+                content_digest = hashlib.sha256(resolved.read_bytes()).hexdigest()
+            except (OSError, ValueError, PermissionError):
+                # A task that lost its verified file must not be published as
+                # a durable artifact. The task verifier remains authoritative.
+                continue
+            artifact_id = "artifact-" + hashlib.sha256(
+                f"{run_id}:{canonical_reference}".encode("utf-8")
+            ).hexdigest()[:24]
+            if artifact_id in seen:
+                continue
+            seen.add(artifact_id)
+            producer_task_id = str(item.get("producer_task_id", "") or "")
+            producer_stage_id = str(
+                item.get("producer_stage_id", "task:unknown") or "task:unknown"
+            )
+            evidence_digest = hashlib.sha256(
+                f"{canonical_reference}:{content_digest}".encode("utf-8")
+            ).hexdigest()
+            facts.append(
+                ArtifactCommitFact(
+                    artifact_id=artifact_id,
+                    artifact_type=str(item.get("artifact_type", "file") or "file"),
+                    reference=canonical_reference,
+                    digest=content_digest,
+                    producer_workflow_id=str(
+                        item.get("producer_workflow_id", "runtime-execution")
+                        or "runtime-execution"
+                    ),
+                    producer_stage_id=producer_stage_id,
+                    exists=True,
+                    verified=True,
+                    verification_evidence_digest=evidence_digest,
+                    producer_task_id=producer_task_id,
+                )
+            )
+        return tuple(facts)
 
     @staticmethod
     def _failure_payload(

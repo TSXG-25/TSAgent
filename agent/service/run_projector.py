@@ -227,6 +227,8 @@ class RunProjector:
             status = _public_status(read.head.run_status)
             verifier = None
 
+        durable_artifacts = tuple(getattr(read, "artifacts", ()) or ())
+        indexed_artifacts = tuple(getattr(index, "artifacts", ()) if index else ())
         artifacts = tuple(
             _artifact_summary(
                 artifact,
@@ -234,7 +236,7 @@ class RunProjector:
                 run_id=request.run_id,
                 revision=read.head.current_revision,
             )
-            for artifact in (getattr(index, "artifacts", ()) if index else ())
+            for artifact in (durable_artifacts or indexed_artifacts)
         )
         values: dict[str, Any] = {
             "tenant_id": request.tenant_id,

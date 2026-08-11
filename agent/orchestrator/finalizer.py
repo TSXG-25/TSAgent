@@ -78,8 +78,14 @@ class Finalizer:
         if failure_answer and not best_answer:
             self._memory().record_full_exchange(user_input, failure_answer)
             return failure_answer
+        run_context = getattr(self._orch, "run_context", None)
+        workspace = getattr(run_context, "workspace", None)
         if best_answer:
-            checked = self._verify_written_files(state, best_answer)
+            checked = self._verify_written_files(
+                state,
+                best_answer,
+                workspace=workspace,
+            )
             if checked is not None:
                 self._memory().record_full_exchange(user_input, checked)
                 return checked
@@ -93,7 +99,11 @@ class Finalizer:
 
         t_answer = time.perf_counter()
         final_answer = await generate_final_answer(state, user_input)
-        checked = self._verify_written_files(state, final_answer)
+        checked = self._verify_written_files(
+            state,
+            final_answer,
+            workspace=workspace,
+        )
         if checked is not None:
             final_answer = checked
         self._memory().record_full_exchange(user_input, final_answer)
@@ -198,7 +208,12 @@ class Finalizer:
         return f"任务未完成，未确认目标文件已成功写入：{failures[-1][:240]}"
 
     @staticmethod
-    def _verify_written_files(state: AgentState, answer: str) -> Optional[str]:
+    def _verify_written_files(
+        state: AgentState,
+        answer: str,
+        *,
+        workspace=None,
+    ) -> Optional[str]:
         """假成功拦截：声称已写入/已生成但目标文件不存在的回答 → 如实纠正。
 
         以文件系统为准（确定性）；只有计划里存在 write 任务时才启用。
@@ -233,7 +248,10 @@ class Finalizer:
         if not write_targets:
             return None
         from agent.executor.verifier import verify_write
-        missing = [t for t in write_targets if not verify_write(t)]
+        missing = [
+            t for t in write_targets
+            if not verify_write(t, workspace=workspace)
+        ]
         if missing:
             return (
                 f"任务未完成：未能确认 {missing[0]} 已成功创建。"

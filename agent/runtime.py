@@ -78,6 +78,42 @@ def _runtime_pending_target(state: AgentState) -> str:
     return ""
 
 
+def _verified_file_artifacts(state: AgentState) -> list[dict[str, str]]:
+    """Project only verifier-approved file outputs for durable publication.
+
+    ``ExecutionStage`` marks a task succeeded only after its scoped workspace
+    verification passes. This projection carries that fact to the Service
+    boundary; it does not trust planner prose or tool return strings.
+    """
+
+    artifacts: list[dict[str, str]] = []
+    for task in state.get("plan", []) or []:
+        if not isinstance(task, dict) or str(task.get("status", "")) != "succeeded":
+            continue
+        verb = str(task.get("verb", "")).lower()
+        inputs = task.get("inputs") or {}
+        reference = ""
+        if verb in {"write", "modify"}:
+            reference = str(task.get("target", "") or "").strip()
+        elif verb in {"copy", "move"}:
+            reference = str(
+                inputs.get("destination", task.get("target", "")) or ""
+            ).strip()
+        if not reference:
+            continue
+        task_id = str(task.get("id", "") or "").strip()
+        artifacts.append(
+            {
+                "reference": reference,
+                "artifact_type": "file",
+                "producer_workflow_id": "runtime-execution",
+                "producer_stage_id": f"task:{task_id or 'unknown'}",
+                "producer_task_id": task_id,
+            }
+        )
+    return artifacts
+
+
 def _build_run_evidence(
     state: AgentState,
     final_answer: str,
@@ -209,6 +245,7 @@ def _build_run_evidence(
         "unresolved_required_effects": [
             dict(item) for item in truth.unresolved_required_effects
         ],
+        "verified_artifacts": _verified_file_artifacts(state),
         "task_failures": [
             {
                 "id": str(task.get("id", "")),

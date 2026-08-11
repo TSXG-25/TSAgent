@@ -54,6 +54,12 @@ npm run build
 `LocalAgentServiceClient`。Desktop-3 提供 Local client 与 Tauri transport；Desktop-4a
 负责 health bootstrap、稳定 identity 和失败可见性。
 
+Desktop-4b1 将 Run 生命周期集中到 `src/features/runs/runController.ts`：
+`startRun()` 返回 durable handle 后立即 hydrate Snapshot，使用 exclusive
+`afterSequence` polling 增量读取事件，按 `event_id` 去重，并在终态停止 polling。
+Snapshot 是页面事实，事件只负责唤醒增量刷新；完成后的用户可见文本直接来自 durable
+`RunOutput`，不会由前端重新调用 LLM 生成。
+
 `src/service/localTransport.ts` 定义 JSONL protocol seam，
 `src/service/tauriSidecarTransport.ts` 定义 request correlation、超时、进程退出和关闭
 语义，`src/service/localAgentServiceClient.ts` 负责 public DTO 到 wire DTO 的映射。

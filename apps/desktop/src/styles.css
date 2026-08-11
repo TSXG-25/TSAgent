@@ -196,6 +196,10 @@ h1 { max-width: 790px; color: #f0f0f0; font-size: clamp(22px, 2.1vw, 30px); font
 .message time { color: #666666; font-family: var(--mono); font-size: 8px; }
 .message-content { color: #c0c0c0; font-size: 11px; line-height: 1.7; }
 .message.user .message-content { color: #dfdfdf; line-height: 1.55; }
+.durable-output { border-color: #315644; background: rgba(22, 35, 29, 0.72); }
+.run-failure { border-color: #603b42; background: rgba(47, 24, 31, 0.72); }
+.run-output-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; color: #6da487; font-family: var(--mono); font-size: 8px; }
+.run-failure .run-output-meta { color: #d28f9b; }
 .checkpoint-message { display: flex; align-items: center; gap: 9px; width: min(100%, 560px); margin-top: 2px; padding: 9px 10px; border: 1px solid #514126; border-radius: 7px; background: #211c14; }
 .checkpoint-message.complete { border-color: #315644; background: #16231d; }
 .checkpoint-message-icon { display: grid; width: 24px; height: 24px; flex: 0 0 auto; place-items: center; border-radius: 6px; color: var(--amber); background: #302516; }

@@ -164,6 +164,17 @@ export function toRunView(
     })),
     events: events.map(toRunEventView),
     conversation: snapshot.conversation.map((message: ConversationMessageSnapshot) => ({ ...message })),
+    output: snapshot.output
+      ? {
+          runId: snapshot.output.runId,
+          revision: snapshot.output.revision,
+          text: snapshot.output.text,
+          evidenceIds: [...snapshot.output.evidenceIds],
+          artifactIds: [...snapshot.output.artifactIds],
+          createdAt: snapshot.output.createdAt,
+        }
+      : undefined,
+    failure: snapshot.failureSummary ? { ...snapshot.failureSummary } : undefined,
     resume: snapshot.resumeSummary ? { ...snapshot.resumeSummary } : undefined,
     verifier,
   };

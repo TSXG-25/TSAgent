@@ -97,6 +97,21 @@ export interface ConversationMessageView {
   at: string;
 }
 
+export interface RunOutputView {
+  runId: string;
+  revision: number;
+  text: string;
+  evidenceIds: string[];
+  artifactIds: string[];
+  createdAt: string;
+}
+
+export interface FailureView {
+  code: string;
+  message: string;
+  retryable: boolean;
+}
+
 export interface VerifierView {
   status: "waiting" | "verified" | "failed";
   checks: string;
@@ -120,6 +135,8 @@ export interface RunView {
   artifacts: ArtifactView[];
   events: RunEventView[];
   conversation: ConversationMessageView[];
+  output?: RunOutputView;
+  failure?: FailureView;
   resume?: ResumeView;
   verifier: VerifierView;
 }

@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "test:local-client": "node scripts/test-local-client.mjs",
     "test:desktop4a": "node scripts/test-desktop4a.mjs",
+    "test:desktop4b1": "node scripts/test-desktop4b1.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

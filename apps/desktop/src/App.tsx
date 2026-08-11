@@ -1,12 +1,12 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type SVGProps } from "react";
-import type { RunEventView, EventTone, RunStatus, RunView, StageStatus } from "./types";
+import { useEffect, useMemo, useState, type FormEvent, type SVGProps } from "react";
+import type { EventTone, RunStatus, StageStatus } from "./types";
 import {
   AgentServiceClientError,
   type DesktopAgentServiceClient,
   type ServiceErrorDTO,
 } from "./types/service";
 import { createAgentServiceClient } from "./service/clientFactory";
-import { mergeRunEvents, toRunView } from "./service/viewMapper";
+import { RunController, type RunControllerState } from "./features/runs/runController";
 import "./styles.css";
 
 type InspectorTab = "files" | "events";
@@ -97,10 +97,6 @@ function toServiceError(error: unknown): ServiceErrorDTO {
   };
 }
 
-function highestSequence(events: RunEventView[]): number {
-  return events.reduce((highest, event) => Math.max(highest, event.sequenceNumber ?? 0), -1);
-}
-
 function requestIdForRun(sequenceHint: number): string {
   const randomId = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${sequenceHint}`;
   return `desktop-${randomId}`;
@@ -143,11 +139,11 @@ function stageIcon(status: StageStatus): IconName {
 function App() {
   const service = useMemo(() => createAgentServiceClient(), []);
   const client: DesktopAgentServiceClient = service;
+  const controller = useMemo(() => new RunController(client), [client]);
   const runtimeLabel = service.mode === "local" ? "Local AgentService" : "Mock AgentService";
-  const lastSequenceRef = useRef<Record<string, number>>({});
-  const seenEventIdsRef = useRef<Record<string, Set<string>>>({});
-  const [runs, setRuns] = useState<RunView[]>([]);
-  const [activeRunId, setActiveRunId] = useState("run-2048");
+  const [controllerState, setControllerState] = useState<RunControllerState>(() => controller.getState());
+  const runs = controllerState.runs;
+  const activeRunId = controllerState.activeRunId;
   const [selectedArtifactId, setSelectedArtifactId] = useState("run-2048.solution");
   const [selectedStageId, setSelectedStageId] = useState("implementation");
   const [activeTab, setActiveTab] = useState<InspectorTab>("files");
@@ -155,67 +151,27 @@ function App() {
   const [requestDraft, setRequestDraft] = useState("");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [serviceError, setServiceError] = useState<ServiceErrorDTO | null>(null);
-  const [isLoadingRuns, setIsLoadingRuns] = useState(true);
   const [isResuming, setIsResuming] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
 
   useEffect(() => {
-    let cancelled = false;
-
-    async function loadRuns() {
-      try {
-        await service.ready();
-        const snapshots = await service.listRuns();
-        const views = await Promise.all(
-          snapshots.map(async (snapshot) => {
-            const locator = { tenantId: snapshot.tenantId, sessionId: snapshot.sessionId, runId: snapshot.runId };
-            const [artifacts, events] = await Promise.all([
-              client.listArtifacts(locator),
-              client.readEvents({ ...locator, afterSequence: -1 }),
-            ]);
-            return toRunView(snapshot, artifacts, events);
-          }),
-        );
-        if (cancelled) return;
-        for (const run of views) {
-          lastSequenceRef.current[run.runId] = highestSequence(run.events);
-          seenEventIdsRef.current[run.runId] = new Set(run.events.map((event) => event.eventId));
-        }
-        setRuns(views);
-        setActiveRunId((current) => (views.some((run) => run.runId === current) ? current : views[0]?.runId ?? ""));
-      } catch (error) {
-        if (!cancelled) setServiceError(toServiceError(error));
-      } finally {
-        if (!cancelled) setIsLoadingRuns(false);
-      }
-    }
-
-    void loadRuns();
+    const unsubscribe = controller.subscribe(setControllerState);
+    void controller.initialize();
     return () => {
-      cancelled = true;
+      unsubscribe();
+      controller.stopAllPolling();
     };
-  }, [client, service]);
+  }, [controller]);
 
   const activeRun = runs.find((run) => run.runId === activeRunId) ?? runs[0];
 
-  // The desktop adapter uses the durable cursor on every refresh. Keeping the
-  // hook above the loading return preserves React's hook ordering while still
-  // allowing the initial empty catalog to render its loading state.
-  useEffect(() => {
-    const currentRun = runs.find((run) => run.runId === activeRunId);
-    if (!currentRun || (currentRun.status !== "active" && currentRun.status !== "cancelling")) return;
-
-    const timer = globalThis.setInterval(() => {
-      void refreshRun(currentRun.runId).catch((error) => setServiceError(toServiceError(error)));
-    }, 250);
-    return () => globalThis.clearInterval(timer);
-  }, [activeRunId, client, runs]);
+  const visibleServiceError = serviceError ?? controllerState.error;
 
   if (!activeRun) {
     return (
       <div className="app-loading">
-        <div>{serviceError ? `${serviceError.code}: ${serviceError.message}` : isLoadingRuns ? `Connecting to ${runtimeLabel}…` : "No runs in this desktop session."}</div>
-        {!isLoadingRuns && !serviceError && (
+        <div>{visibleServiceError ? `${visibleServiceError.code}: ${visibleServiceError.message}` : controllerState.isLoading ? `Connecting to ${runtimeLabel}…` : "No runs in this desktop session."}</div>
+        {!controllerState.isLoading && !visibleServiceError && (
           <form className="empty-run-form" onSubmit={createRun}>
             <textarea
               onChange={(event) => setRequestDraft(event.target.value)}
@@ -251,7 +207,7 @@ function App() {
     const nextRun = runs.find((run) => run.runId === runId);
     if (!nextRun) return;
 
-    setActiveRunId(runId);
+    controller.selectRun(runId);
     setSelectedArtifactId(nextRun.artifacts[0]?.artifactId ?? "");
     setActiveTab("files");
     setView("inspector");
@@ -264,37 +220,9 @@ function App() {
     );
   }
 
-  async function refreshRun(runId: string) {
-    const currentRun = runs.find((run) => run.runId === runId);
-    if (!currentRun) return;
-
-    setServiceError(null);
-    const locator = { tenantId: currentRun.tenantId ?? service.identity.tenantId, sessionId: currentRun.sessionId, runId };
-    const afterSequence = lastSequenceRef.current[runId] ?? -1;
-    const [snapshot, artifacts, incomingEvents] = await Promise.all([
-      client.getRun(locator),
-      client.listArtifacts(locator),
-      client.readEvents({ ...locator, afterSequence }),
-    ]);
-
-    const seenEventIds = seenEventIdsRef.current[runId] ?? new Set<string>();
-    const unseenEvents = incomingEvents.filter((event) => !seenEventIds.has(event.eventId));
-    for (const event of incomingEvents) seenEventIds.add(event.eventId);
-    seenEventIdsRef.current[runId] = seenEventIds;
-    lastSequenceRef.current[runId] = Math.max(afterSequence, ...incomingEvents.map((event) => event.sequenceNumber));
-
-    setRuns((current) =>
-      current.map((run) => {
-        if (run.runId !== runId) return run;
-        const mergedEvents = mergeRunEvents(run.events, unseenEvents);
-        return { ...toRunView(snapshot, artifacts, []), events: mergedEvents };
-      }),
-    );
-  }
-
   async function refreshActiveRun() {
     try {
-      await refreshRun(activeRun.runId);
+      await controller.refreshRun(activeRun.runId);
     } catch (error) {
       setServiceError(toServiceError(error));
     }
@@ -313,7 +241,7 @@ function App() {
         requestId: cancellationRequestId(activeRun.runId),
         requestedBy: service.identity.userId,
       });
-      await refreshRun(activeRun.runId);
+      await controller.refreshRun(activeRun.runId);
     } catch (error) {
       setServiceError(toServiceError(error));
     } finally {
@@ -328,24 +256,12 @@ function App() {
 
     try {
       setServiceError(null);
-      const handle = await client.startRun({
+      const nextRun = await controller.startRun({
         tenantId: service.identity.tenantId,
         sessionId: service.identity.sessionId,
         requestId,
         requestText: request,
       });
-      const locator = { tenantId: handle.tenantId, sessionId: handle.sessionId, runId: handle.runId };
-      const [snapshot, artifacts, events] = await Promise.all([
-        client.getRun(locator),
-        client.listArtifacts(locator),
-        client.readEvents({ ...locator, afterSequence: -1 }),
-      ]);
-      const nextRun = toRunView(snapshot, artifacts, events);
-      lastSequenceRef.current[nextRun.runId] = highestSequence(nextRun.events);
-      seenEventIdsRef.current[nextRun.runId] = new Set(events.map((item) => item.eventId));
-
-      setRuns((current) => [nextRun, ...current]);
-      setActiveRunId(nextRun.runId);
       setSelectedArtifactId("");
       setSelectedStageId("analysis");
       setActiveTab("files");
@@ -372,7 +288,7 @@ function App() {
         checkpointId: resume.checkpointId,
         action: resume.action,
       });
-      await refreshRun(activeRun.runId);
+      await controller.refreshRun(activeRun.runId);
     } catch (error) {
       setServiceError(toServiceError(error));
     } finally {
@@ -388,7 +304,7 @@ function App() {
             <div className="product-mark"><Icon name="spark" size={16} /></div>
             <div className="product-name"><strong>TSAgent</strong><span>Studio</span></div>
           </div>
-          <span className="phase-badge">V2.3D-4C</span>
+          <span className="phase-badge">V2.3D-4B1</span>
         </div>
 
         <button className="new-task-button" onClick={() => setIsCreateOpen(true)} type="button">
@@ -423,7 +339,7 @@ function App() {
         </div>
 
         <div className="sidebar-footer">
-          <div className="runtime-row"><span className="live-dot" /><span>{runtimeLabel}</span><code>D4C</code></div>
+          <div className="runtime-row"><span className="live-dot" /><span>{runtimeLabel}</span><code>D4B1</code></div>
           <div className="profile-row"><span className="profile-avatar">A</span><span><strong>Alex / Developer</strong><small>Personal workspace</small></span><Icon name="settings" size={14} /></div>
         </div>
       </aside>
@@ -440,10 +356,10 @@ function App() {
             <button onClick={() => { setView("inspector"); setActiveTab("files"); }} type="button">Artifacts</button>
             <button onClick={() => { setView("inspector"); setActiveTab("events"); }} type="button">Events</button>
           </nav>
-          <div className="topbar-actions"><span className="runtime-pill"><span className="live-dot" /> {runtimeLabel} · D4C</span><button className="topbar-button" onClick={() => void refreshActiveRun()} title="Replay events from the last cursor" type="button"><Icon name="refresh" size={15} /></button></div>
+          <div className="topbar-actions"><span className="runtime-pill"><span className="live-dot" /> {runtimeLabel} · D4B1</span><button className="topbar-button" onClick={() => void refreshActiveRun()} title="Replay events from the last cursor" type="button"><Icon name="refresh" size={15} /></button></div>
         </header>
 
-        {serviceError && <div className="service-error-banner" role="alert"><span className="service-error-icon"><Icon name="x" size={13} /></span><div><strong>{serviceError.code}</strong><span>{serviceError.message}</span></div><button onClick={() => setServiceError(null)} title="Dismiss error" type="button"><Icon name="x" size={13} /></button></div>}
+        {visibleServiceError && <div className="service-error-banner" role="alert"><span className="service-error-icon"><Icon name="x" size={13} /></span><div><strong>{visibleServiceError.code}</strong><span>{visibleServiceError.message}</span></div><button onClick={() => setServiceError(null)} title="Dismiss error" type="button"><Icon name="x" size={13} /></button></div>}
 
         {view === "home" ? <div className="home-scroll">
           <div className="home-content">
@@ -524,6 +440,8 @@ function App() {
                     <div className="message-content">{message.content}</div>
                   </article>
                 ))}
+                {activeRun.output && <article aria-label="Durable RunOutput" className="message assistant durable-output"><div className="message-heading"><span className="message-role">TSAgent · RunOutput</span><time>{activeRun.output.createdAt}</time></div><div className="message-content">{activeRun.output.text}</div><div className="run-output-meta"><span>revision {activeRun.output.revision}</span><span>{activeRun.output.artifactIds.length} artifacts</span><span>{activeRun.output.evidenceIds.length} evidence items</span></div></article>}
+                {!activeRun.output && activeRun.failure && <article aria-label="Run failure" className="message system run-failure"><div className="message-heading"><span className="message-role">{activeRun.status.toUpperCase()}</span><time>{activeRun.updatedAt}</time></div><div className="message-content">{activeRun.failure.message}</div><div className="run-output-meta"><span>{activeRun.failure.code}</span><span>{activeRun.failure.retryable ? "retryable" : "terminal"}</span></div></article>}
                 {activeRun.resume && <div className={`checkpoint-message ${activeRun.resume.outcome === "completed" ? "complete" : ""}`}><div className="checkpoint-message-icon"><Icon name={activeRun.resume.outcome === "completed" ? "check" : "box"} size={14} /></div><div><strong>{activeRun.resume.outcome === "completed" ? "Resume completed" : "Checkpoint persisted"}</strong><span>{activeRun.resume.checkpointId} <span>·</span> {activeRun.resume.outcome === "completed" ? "RESUME_EXACT committed" : `active stage: ${activeRun.resume.sourceStage}`}</span></div><em>{activeRun.resume.outcome === "completed" ? "DONE" : "RESUMABLE"}</em></div>}
               </div>
 

@@ -1,14 +1,14 @@
 {
   "version": "v2.3D-4c",
-  "head": "434d4882298f24b108894418169286b658b0bc75",
+  "head": "14a79f8a",
   "dataset_hash": "bda9f690fff05f4e947d7088c4c95d414cab5b220f5c2082a4985f10a04d4185",
   "mode": "local",
-  "provider_configuration": "configured-primary-with-ollama-fallback:qwen2.5:14b",
+  "provider_configuration": "ollama:qwen2.5:14b (test-forced-no-fallback)",
   "cases": [
     {
       "case_id": "DT01",
       "mode": "local",
-      "provider": "configured-primary-with-ollama-fallback:qwen2.5:14b",
+      "provider": "ollama:qwen2.5:14b (test-forced-no-fallback)",
       "events_seen": [],
       "event_sequences": [],
       "duplicate_ui_events": 0,
@@ -31,18 +31,20 @@
     {
       "case_id": "DT02",
       "mode": "local",
-      "provider": "configured-primary-with-ollama-fallback:qwen2.5:14b",
+      "provider": "ollama:qwen2.5:14b (test-forced-no-fallback)",
       "events_seen": [
         "run_created",
-        "run_started"
+        "run_started",
+        "run_failed"
       ],
       "event_sequences": [
         1,
-        2
+        2,
+        3
       ],
       "duplicate_ui_events": 0,
       "artifacts": [],
-      "run_output_present": false,
+      "run_output_present": true,
       "resume_calls": 0,
       "cancel_calls": 0,
       "runtime_invariants": {
@@ -53,29 +55,32 @@
       },
       "notes": [
         "DT03 and DT07 reuse this known durable Run as read-only follow-up cases.",
-        "service_error=PROVIDER_WAIT_UNAVAILABLE"
+        "service_error=PROVIDER_UNAVAILABLE"
       ],
       "result": "PROVIDER_ERROR",
-      "runtime_correctness": "DEFERRED",
+      "runtime_correctness": "PASS",
       "capability_outcome": "DEFERRED",
-      "run_id": "run-699bd23330844308af13540bbb0043b2",
-      "terminal_status": "active"
+      "run_id": "run-1990ab65a19942a49a6296cad0e308d5",
+      "terminal_status": "failed",
+      "failure_code": "RUNTIME_EXCEPTION"
     },
     {
       "case_id": "DT03",
       "mode": "local",
-      "provider": "configured-primary-with-ollama-fallback:qwen2.5:14b",
+      "provider": "ollama:qwen2.5:14b (test-forced-no-fallback)",
       "events_seen": [
         "run_created",
-        "run_started"
+        "run_started",
+        "run_failed"
       ],
       "event_sequences": [
         1,
-        2
+        2,
+        3
       ],
       "duplicate_ui_events": 0,
       "artifacts": [],
-      "run_output_present": false,
+      "run_output_present": true,
       "resume_calls": 0,
       "cancel_calls": 0,
       "runtime_invariants": {
@@ -84,37 +89,53 @@
         "frontend_direct_workspace_access_zero": true
       },
       "notes": [
-        "capability deferred because the real Provider did not complete DT02"
+        "capability deferred because DT02 did not provide a completed Run with verified artifacts"
       ],
-      "result": "PROVIDER_ERROR",
+      "result": "DEFERRED",
       "runtime_correctness": "DEFERRED",
       "capability_outcome": "DEFERRED",
-      "run_id": "run-699bd23330844308af13540bbb0043b2",
-      "terminal_status": "active"
+      "run_id": "run-1990ab65a19942a49a6296cad0e308d5",
+      "terminal_status": "failed",
+      "failure_code": "RUNTIME_EXCEPTION"
     },
     {
       "case_id": "DT04",
       "mode": "local",
-      "provider": "configured-primary-with-ollama-fallback:qwen2.5:14b",
-      "events_seen": [],
-      "event_sequences": [],
+      "provider": "ollama:qwen2.5:14b (test-forced-no-fallback)",
+      "events_seen": [
+        "run_created",
+        "run_started",
+        "run_failed"
+      ],
+      "event_sequences": [
+        1,
+        2,
+        3
+      ],
       "duplicate_ui_events": 0,
       "artifacts": [],
-      "run_output_present": false,
+      "run_output_present": true,
       "resume_calls": 0,
       "cancel_calls": 0,
-      "runtime_invariants": {},
+      "runtime_invariants": {
+        "event_replay_gap_zero": true,
+        "duplicate_ui_events_zero": true,
+        "client_disconnect_does_not_stop_runtime": true,
+        "terminal_snapshot_event_match": true
+      },
       "notes": [
-        "disconnect/reconnect error=unknown"
+        "transport disconnected while the sidecar stayed alive; reconnect used after_sequence"
       ],
-      "result": "PROVIDER_ERROR",
-      "runtime_correctness": "DEFERRED",
-      "capability_outcome": "DEFERRED"
+      "result": "PASS",
+      "runtime_correctness": "PASS",
+      "capability_outcome": "PARTIAL",
+      "run_id": "run-b8d2681e3d684320a04898d75be3b7e4",
+      "terminal_status": "failed"
     },
     {
       "case_id": "DT05",
       "mode": "local",
-      "provider": "configured-primary-with-ollama-fallback:qwen2.5:14b",
+      "provider": "ollama:qwen2.5:14b (test-forced-no-fallback)",
       "events_seen": [],
       "event_sequences": [],
       "duplicate_ui_events": 0,
@@ -133,26 +154,43 @@
     {
       "case_id": "DT06",
       "mode": "local",
-      "provider": "configured-primary-with-ollama-fallback:qwen2.5:14b",
-      "events_seen": [],
-      "event_sequences": [],
+      "provider": "ollama:qwen2.5:14b (test-forced-no-fallback)",
+      "events_seen": [
+        "run_created",
+        "run_started",
+        "run_cancelling",
+        "run_cancelled"
+      ],
+      "event_sequences": [
+        1,
+        2,
+        3,
+        4
+      ],
       "duplicate_ui_events": 0,
       "artifacts": [],
       "run_output_present": false,
       "resume_calls": 0,
-      "cancel_calls": 0,
-      "runtime_invariants": {},
+      "cancel_calls": 1,
+      "runtime_invariants": {
+        "cancelling_acknowledged": true,
+        "terminal_cancelled": true,
+        "false_completed_after_cancel_zero": true,
+        "terminal_snapshot_event_match": true
+      },
       "notes": [
-        "cancel E2E error=unknown"
+        "cancel issued through LocalAgentServiceClient after ACTIVE was observed"
       ],
-      "result": "PROVIDER_ERROR",
-      "runtime_correctness": "DEFERRED",
-      "capability_outcome": "DEFERRED"
+      "result": "PASS",
+      "runtime_correctness": "PASS",
+      "capability_outcome": "PARTIAL",
+      "run_id": "run-3687da21340e4d8fba10b4dde867b3fd",
+      "terminal_status": "cancelled"
     },
     {
       "case_id": "DT07",
       "mode": "local",
-      "provider": "configured-primary-with-ollama-fallback:qwen2.5:14b",
+      "provider": "ollama:qwen2.5:14b (test-forced-no-fallback)",
       "events_seen": [],
       "event_sequences": [],
       "duplicate_ui_events": 0,
@@ -171,14 +209,18 @@
     {
       "case_id": "DT08",
       "mode": "local",
-      "provider": "configured-primary-with-ollama-fallback:qwen2.5:14b",
+      "provider": "ollama:qwen2.5:14b (test-forced-no-fallback)",
       "events_seen": [
         "run_created",
-        "run_started"
+        "run_started",
+        "run_cancelling",
+        "run_timed_out"
       ],
       "event_sequences": [
         1,
-        2
+        2,
+        3,
+        4
       ],
       "duplicate_ui_events": 0,
       "artifacts": [],
@@ -186,24 +228,24 @@
       "resume_calls": 0,
       "cancel_calls": 0,
       "runtime_invariants": {
-        "run_timeout_terminal": null,
-        "run_timeout_reported_completed_zero": null,
-        "run_timeout_reported_cancelled_zero": null,
-        "terminal_snapshot_event_match": null
+        "run_timeout_terminal": true,
+        "run_timeout_reported_completed_zero": true,
+        "run_timeout_reported_cancelled_zero": true,
+        "terminal_snapshot_event_match": true
       },
       "notes": [
-        "Provider did not reach the real watchdog boundary; timeout capability deferred"
+        "TSAGENT_RUN_TIMEOUT_SECONDS=1 was supplied to the sidecar process"
       ],
-      "result": "PROVIDER_ERROR",
-      "runtime_correctness": "DEFERRED",
-      "capability_outcome": "DEFERRED",
-      "run_id": "run-cfd90091489047d1b987adc6865ed8b4",
-      "terminal_status": "active"
+      "result": "PASS",
+      "runtime_correctness": "PASS",
+      "capability_outcome": "PASS",
+      "run_id": "run-cbd31a8da59c4280893d2164faf3aa64",
+      "terminal_status": "timed_out"
     },
     {
       "case_id": "DT09",
       "mode": "local",
-      "provider": "configured-primary-with-ollama-fallback:qwen2.5:14b",
+      "provider": "ollama:qwen2.5:14b (test-forced-no-fallback)",
       "events_seen": [],
       "event_sequences": [],
       "duplicate_ui_events": 0,

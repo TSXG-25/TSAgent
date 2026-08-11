@@ -32,16 +32,22 @@ npm run build
 
 ## 前端边界
 
-页面只依赖 `src/types/service.ts` 中的 `AgentServiceClient`，当前由 `src/service/mockAgentService.ts` 实现。后续接入 C-4 AgentService 时，新增 `LocalAgentServiceClient`（Tauri sidecar / JSON Lines 或其他 LocalTransport），不修改页面组件。
+页面只依赖 `src/types/service.ts` 中的 `AgentServiceClient`，当前组合根仍由
+`src/service/mockAgentService.ts` 实现。Desktop-3 已新增
+`LocalAgentServiceClient` 与 `TauriSidecarTransport`；它们不改变页面抽象，Desktop-4
+才会通过明确配置把组合根切换到 Local。
 
-`src/service/localTransport.ts` 只定义未来 sidecar 的调用/关闭 seam；本轮不会启动本地进程、监听端口或引入 FastAPI。
+`src/service/localTransport.ts` 定义 JSONL protocol seam，
+`src/service/tauriSidecarTransport.ts` 定义 request correlation、超时、进程退出和关闭
+语义，`src/service/localAgentServiceClient.ts` 负责 public DTO 到 wire DTO 的映射。
+Tauri/Rust host 通过 `TauriSidecarBridge` 注入实际 child-process 实现；本轮不引入
+FastAPI、WebSocket，也不在页面中隐式 fallback 到 Mock。
 
 ### Desktop-1 Local JSONL Contract
 
 Desktop-1 已冻结 `docs/adr/0025-desktop-local-transport-contract.md` 定义的
-stdin/stdout JSON Lines envelope。当前仍不启动 sidecar，也不把 `LocalTransport`
-接入页面；Desktop-2 已实现 Python sidecar，但尚未接入页面。后续 Desktop-3–5 才依次
-实现真实 Local client、UI 接线和本地 E2E。协议只允许 `health`、`start_run`、`get_run`、`resume_run`、`cancel_run`、
+stdin/stdout JSON Lines envelope。Desktop-2 已实现 Python sidecar，Desktop-3 已实现
+真实 Local client contract，但页面仍未切换到该入口。协议只允许 `health`、`start_run`、`get_run`、`resume_run`、`cancel_run`、
 `list_artifacts`、`read_events`、`shutdown` 八个方法，业务身份与幂等仍由
 AgentService DTO 负责。
 
@@ -61,7 +67,9 @@ sidecar 的 stdout 只输出 JSONL 响应，诊断信息输出 stderr；页面�
 
 原始展示剧本仍在 `src/mocks/runData.ts`，但页面不直接导入它；Mock Adapter 负责把剧本转换为 ADR-0021 DTO，再由 view mapper 投影成界面模型。
 
-当前不包含真实 Runtime/REST 调用、Tauri 壳、Pause、拖拽 Workflow 编辑器或真实场景验证。D4c 只冻结桌面客户端与 AgentService 的取消 DTO/状态契约；真实 Provider 取消证据属于已冻结的 D4b。
+当前仍不包含 Desktop-4 的真实 UI 组合根切换、Tauri Rust 壳、REST、Pause、拖拽
+Workflow 编辑器或真实 Provider Desktop E2E。D4c 只冻结桌面客户端与 AgentService
+的取消 DTO/状态契约；真实 Provider 取消证据属于已冻结的 D4b。
 
 ## D4c contract checklist
 

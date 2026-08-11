@@ -213,7 +213,10 @@ function App() {
   const workflow = activeRun.workflows.find((item) => item.workflowId === activeRun.activeWorkflowId) ?? activeRun.workflows[0];
   const selectedStage = workflow?.stages.find((stage) => stage.stageId === selectedStageId) ?? workflow?.stages[0];
   const selectedArtifact = activeRun.artifacts.find((artifact) => artifact.artifactId === selectedArtifactId) ?? activeRun.artifacts[0];
-  const canResume = activeRun.status === "blocked" && activeRun.resume?.outcome === "ready";
+  const canResume =
+    activeRun.status === "blocked" &&
+    activeRun.resume?.outcome === "ready" &&
+    activeRun.resume.action !== null;
   const canCancel = activeRun.status === "active";
   const partialArtifacts = activeRun.artifacts.filter((artifact) => artifact.status === "verified");
   const notExecutedTasks = activeRun.workflows.flatMap((item) =>
@@ -335,7 +338,8 @@ function App() {
   }
 
   async function resumeActiveRun() {
-    if (!canResume || !activeRun.resume) return;
+    const resume = activeRun.resume;
+    if (!canResume || !resume || resume.action === null) return;
 
     try {
       setServiceError(null);
@@ -345,8 +349,8 @@ function App() {
         sessionId: activeRun.sessionId,
         runId: activeRun.runId,
         resumeRequestId: `${activeRun.runId}.resume-request`,
-        checkpointId: activeRun.resume.checkpointId,
-        action: activeRun.resume.action,
+        checkpointId: resume.checkpointId,
+        action: resume.action,
       });
       await refreshRun(activeRun.runId);
     } catch (error) {

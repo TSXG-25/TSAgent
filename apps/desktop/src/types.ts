@@ -78,7 +78,12 @@ export interface RunEventView {
 
 export interface ResumeView {
   checkpointId: string;
-  action: "RESUME_EXACT" | "REPLAY_FROM_STAGE";
+  action:
+    | "RESUME_EXACT"
+    | "REPLAY_FROM_STAGE"
+    | "REPLAN_FROM_CHECKPOINT"
+    | "ABANDON_AND_RESTART"
+    | null;
   reason: string;
   sourceStage: string;
   resumedAt?: string;

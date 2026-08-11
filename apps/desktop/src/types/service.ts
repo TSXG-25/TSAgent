@@ -38,7 +38,11 @@ export interface CancelRunRequest {
   requestedBy: string;
 }
 
-export type ResumeAction = "RESUME_EXACT" | "REPLAY_FROM_STAGE";
+export type ResumeAction =
+  | "RESUME_EXACT"
+  | "REPLAY_FROM_STAGE"
+  | "REPLAN_FROM_CHECKPOINT"
+  | "ABANDON_AND_RESTART";
 
 export interface ResumeRunRequest {
   tenantId: string;
@@ -116,11 +120,20 @@ export interface VerifierSummary {
 
 export interface ResumeSummary {
   checkpointId: string;
-  action: ResumeAction;
+  action: ResumeAction | null;
   reason: string;
   sourceStage: string;
   resumedAt?: string;
   outcome: "ready" | "completed";
+}
+
+export interface RunOutputSummary {
+  runId: string;
+  revision: number;
+  text: string;
+  evidenceIds: string[];
+  artifactIds: string[];
+  createdAt: string;
 }
 
 export interface FailureSummary {
@@ -183,6 +196,10 @@ export interface RunSnapshot {
   pendingWorkflows: string[];
   workflows: WorkflowSnapshot[];
   conversation: ConversationMessageSnapshot[];
+  /** Optional durable projection supplied by a real AgentService. */
+  artifacts?: ArtifactSummary[];
+  /** Optional durable terminal output supplied by a real AgentService. */
+  output?: RunOutputSummary;
   verifierSummary?: VerifierSummary;
   resumeSummary?: ResumeSummary;
   failureSummary?: FailureSummary;
@@ -196,13 +213,17 @@ export type ServiceErrorCode =
   | "RUN_ALREADY_CANCELLING"
   | "ALREADY_CANCELLED"
   | "RUN_NOT_CANCELLABLE"
+  | "ALREADY_TIMED_OUT"
   | "ALREADY_COMPLETED"
   | "RESUME_NOT_ALLOWED"
   | "IDEMPOTENCY_CONFLICT"
   | "EVENT_CURSOR_EXPIRED"
+  | "EVENT_SEQUENCE_INVALID"
   | "CURSOR_INVALID"
   | "STORE_BUSY"
   | "PROVIDER_UNAVAILABLE"
+  | "SERVICE_CLOSED"
+  | "UNSUPPORTED_OPERATION"
   | "INTERNAL_ERROR";
 
 export interface ServiceErrorDTO {
@@ -251,6 +272,12 @@ export interface AgentServiceClient {
   resumeRun(request: ResumeRunRequest): Promise<RunHandle>;
   listArtifacts(request: ListArtifactsRequest): Promise<ArtifactSummary[]>;
   readEvents(request: EventStreamRequest): Promise<RunEvent[]>;
+}
+
+export interface HealthSnapshot {
+  status: "ok";
+  protocolVersion: string;
+  service: string;
 }
 
 /** Run List is a desktop catalog capability; the core contract remains above. */

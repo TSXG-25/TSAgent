@@ -36,6 +36,15 @@ npm run build
 
 `src/service/localTransport.ts` 只定义未来 sidecar 的调用/关闭 seam；本轮不会启动本地进程、监听端口或引入 FastAPI。
 
+### Desktop-1 Local JSONL Contract
+
+Desktop-1 已冻结 `docs/adr/0025-desktop-local-transport-contract.md` 定义的
+stdin/stdout JSON Lines envelope。当前仍不启动 sidecar，也不把 `LocalTransport`
+接入页面；后续 Desktop-2–5 才依次实现 Python sidecar、真实 Local client、UI 接线
+和本地 E2E。协议只允许 `health`、`start_run`、`get_run`、`resume_run`、`cancel_run`、
+`list_artifacts`、`read_events`、`shutdown` 八个方法，业务身份与幂等仍由
+AgentService DTO 负责。
+
 `RunSnapshot`、`ArtifactSummary` 和 `RunEvent` 是稳定的公开 DTO。Artifact 内容当前仅允许 Mock preview；客户端不提交任意本地路径，也不读取 SQLite、checkpoint payload 或 Runtime 内部对象。
 
 ## 边界

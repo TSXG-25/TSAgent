@@ -180,7 +180,11 @@ class StubTransport implements LocalTransport {
 }
 
 const deterministicClientOptions: LocalAgentServiceClientOptions = {
-  userId: "user-1",
+  identity: {
+    tenantId: "tenant-1",
+    userId: "user-1",
+    sessionId: "session-1",
+  },
   requestIdFactory: (operation, sequence) => `${operation}-lookup-${sequence}`,
 };
 
@@ -426,7 +430,9 @@ test("LC16 real Python sidecar JSONL smoke", async () => {
     },
   };
   const transport = new TauriSidecarTransport(bridge, { requestTimeoutMs: 30_000 });
-  const client = new LocalAgentServiceClient(transport, { userId: "user-1" });
+  const client = new LocalAgentServiceClient(transport, {
+    identity: { tenantId: "tenant-1", userId: "user-1", sessionId: "session-1" },
+  });
   try {
     const health = await client.health();
     assert.equal(health.protocolVersion, "desktop-local-jsonl-v1");

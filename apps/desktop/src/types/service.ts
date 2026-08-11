@@ -280,9 +280,22 @@ export interface HealthSnapshot {
   service: string;
 }
 
+export interface DesktopIdentity {
+  tenantId: string;
+  userId: string;
+  sessionId: string;
+}
+
+export type DesktopAgentServiceMode = "mock" | "local";
+
 /** Run List is a desktop catalog capability; the core contract remains above. */
 export interface RunCatalogClient {
   listRuns(): Promise<RunSnapshot[]>;
 }
 
-export type DesktopAgentServiceClient = AgentServiceClient & RunCatalogClient;
+export interface DesktopAgentServiceClient extends AgentServiceClient, RunCatalogClient {
+  readonly mode: DesktopAgentServiceMode;
+  readonly identity: DesktopIdentity;
+  /** Resolve the backend health before the UI begins using the client. */
+  ready(): Promise<void>;
+}

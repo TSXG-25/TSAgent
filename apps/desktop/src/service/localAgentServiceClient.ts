@@ -1,8 +1,9 @@
 import {
   AgentServiceClientError,
-  type AgentServiceClient,
   type ArtifactSummary,
   type CancelRunRequest,
+  type DesktopAgentServiceClient,
+  type DesktopIdentity,
   type EventStreamRequest,
   type FailureSummary,
   type GetRunRequest,
@@ -35,7 +36,7 @@ export type LocalClientOperation =
 
 export interface LocalAgentServiceClientOptions {
   /** Identity is explicit configuration; there is no default user fallback. */
-  userId: string;
+  identity: DesktopIdentity;
   requestIdFactory?: (operation: LocalClientOperation, sequence: number) => string;
 }
 
@@ -294,26 +295,48 @@ function mapHealth(value: unknown): HealthSnapshot {
   };
 }
 
-export class LocalAgentServiceClient implements AgentServiceClient {
+function clone<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+export class LocalAgentServiceClient implements DesktopAgentServiceClient {
+  readonly mode = "local" as const;
+  readonly identity: DesktopIdentity;
   private requestSequence = 0;
+  private readonly knownSnapshots = new Map<string, RunSnapshot>();
 
   constructor(
     private readonly transport: LocalTransport,
     private readonly options: LocalAgentServiceClientOptions,
   ) {
-    if (!options.userId || options.userId.trim().length === 0) {
-      throw new Error("LocalAgentServiceClient requires an explicit userId");
+    if (!options.identity.tenantId.trim() || !options.identity.userId.trim() || !options.identity.sessionId.trim()) {
+      throw new Error("LocalAgentServiceClient requires an explicit tenant, user, and session identity");
     }
+    this.identity = { ...options.identity };
   }
 
   async health(): Promise<LocalHealthSnapshot> {
     return mapHealth(await this.call("health", {}));
   }
 
+  async ready(): Promise<void> {
+    await this.health();
+  }
+
+  /**
+   * The local transport has no list_runs wire method yet. This catalog is
+   * deliberately limited to snapshots observed by this client instance; it
+   * never reads SQLite or reconstructs durable history in the UI layer.
+   */
+  async listRuns(): Promise<RunSnapshot[]> {
+    return [...this.knownSnapshots.values()].map((snapshot) => clone(snapshot));
+  }
+
   async startRun(request: StartRunRequest): Promise<RunHandle> {
+    this.assertIdentity(request);
     const params: LocalRpcParams = {
       tenant_id: request.tenantId,
-      user_id: this.options.userId,
+      user_id: this.identity.userId,
       session_id: request.sessionId,
       request_id: request.requestId,
       request_text: request.requestText,
@@ -324,7 +347,11 @@ export class LocalAgentServiceClient implements AgentServiceClient {
 
   async getRun(request: GetRunRequest): Promise<RunSnapshot> {
     const params = this.lookupParams(request, "get_run");
-    return this.project(async () => mapSnapshot(await this.call("get_run", params)));
+    return this.project(async () => {
+      const snapshot = mapSnapshot(await this.call("get_run", params));
+      this.rememberSnapshot(snapshot);
+      return snapshot;
+    });
   }
 
   async cancelRun(request: CancelRunRequest): Promise<RunSnapshot> {
@@ -332,13 +359,18 @@ export class LocalAgentServiceClient implements AgentServiceClient {
       ...this.lookupParams(request, "cancel_run", request.requestId),
       requested_by: request.requestedBy,
     };
-    return this.project(async () => mapSnapshot(await this.call("cancel_run", params)));
+    return this.project(async () => {
+      const snapshot = mapSnapshot(await this.call("cancel_run", params));
+      this.rememberSnapshot(snapshot);
+      return snapshot;
+    });
   }
 
   async resumeRun(request: ResumeRunRequest): Promise<RunHandle> {
+    this.assertIdentity(request);
     const params: LocalRpcParams = {
       tenant_id: request.tenantId,
-      user_id: this.options.userId,
+      user_id: this.identity.userId,
       session_id: request.sessionId,
       run_id: request.runId,
       request_id: request.resumeRequestId,
@@ -401,9 +433,10 @@ export class LocalAgentServiceClient implements AgentServiceClient {
     operation: LocalClientOperation,
     requestId = this.nextRequestId(operation),
   ): LocalRpcParams {
+    this.assertIdentity(request);
     return {
       tenant_id: request.tenantId,
-      user_id: this.options.userId,
+      user_id: this.identity.userId,
       session_id: request.sessionId,
       run_id: request.runId,
       request_id: requestId,
@@ -419,6 +452,20 @@ export class LocalAgentServiceClient implements AgentServiceClient {
     }
     const uuid = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${sequence}`;
     return `desktop-${operation}-${uuid}`;
+  }
+
+  private assertIdentity(request: { tenantId: string; sessionId: string }): void {
+    if (request.tenantId !== this.identity.tenantId || request.sessionId !== this.identity.sessionId) {
+      throw new AgentServiceClientError({
+        code: "IDENTITY_MISMATCH",
+        message: "request identity does not match the local desktop session",
+        retryable: false,
+      });
+    }
+  }
+
+  private rememberSnapshot(snapshot: RunSnapshot): void {
+    this.knownSnapshots.set(snapshot.runId, clone(snapshot));
   }
 
   private async call(method: LocalTransportMethod, params: LocalRpcParams): Promise<unknown> {

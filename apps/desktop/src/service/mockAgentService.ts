@@ -5,6 +5,7 @@ import {
   type ArtifactSummary,
   type CancelRunRequest,
   type DesktopAgentServiceClient,
+  type DesktopIdentity,
   type EventStreamRequest,
   type GetRunRequest,
   type ListArtifactsRequest,
@@ -24,6 +25,11 @@ import {
 } from "./viewMapper";
 
 const LOCAL_TENANT_ID = "tenant-local";
+const DEFAULT_IDENTITY: DesktopIdentity = {
+  tenantId: LOCAL_TENANT_ID,
+  userId: "user-local",
+  sessionId: "session-desktop-mock",
+};
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -103,6 +109,8 @@ function event(
 }
 
 export class MockAgentServiceClient implements DesktopAgentServiceClient {
+  readonly mode = "mock" as const;
+  readonly identity: DesktopIdentity;
   private readonly snapshots = new Map<string, RunSnapshot>();
   private readonly artifacts = new Map<string, ArtifactSummary[]>();
   private readonly events = new Map<string, RunEvent[]>();
@@ -112,8 +120,14 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
   private readonly oldestRetainedSequence = new Map<string, number>();
   private nextRunSequence = 2050;
 
-  constructor(seed: RunView[] = createMockRuns()) {
+  constructor(seed: RunView[] = createMockRuns(), identity: DesktopIdentity = DEFAULT_IDENTITY) {
+    this.identity = { ...identity };
     seed.forEach((run, index) => this.addSeedRun(run, index));
+  }
+
+  async ready(): Promise<void> {
+    // The mock has no external process to probe, but it still participates in
+    // the same composition-root readiness contract as the local client.
   }
 
   /** Composition-root helper for the first render; the UI still gets data from this adapter. */

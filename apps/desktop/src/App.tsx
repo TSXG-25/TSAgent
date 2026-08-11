@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent, type SVGProps } f
 import type { RunEventView, EventTone, RunStatus, RunView, StageStatus } from "./types";
 import {
   AgentServiceClientError,
-  type AgentServiceClient,
+  type DesktopAgentServiceClient,
   type ServiceErrorDTO,
 } from "./types/service";
 import { createAgentServiceClient } from "./service/clientFactory";
@@ -92,7 +92,7 @@ function toServiceError(error: unknown): ServiceErrorDTO {
   if (error instanceof AgentServiceClientError) return error.toDTO();
   return {
     code: "INTERNAL_ERROR",
-    message: "Mock AgentService returned an unexpected error.",
+    message: "AgentService returned an unexpected error.",
     retryable: false,
   };
 }
@@ -142,7 +142,8 @@ function stageIcon(status: StageStatus): IconName {
 
 function App() {
   const service = useMemo(() => createAgentServiceClient(), []);
-  const client: AgentServiceClient = service;
+  const client: DesktopAgentServiceClient = service;
+  const runtimeLabel = service.mode === "local" ? "Local AgentService" : "Mock AgentService";
   const lastSequenceRef = useRef<Record<string, number>>({});
   const seenEventIdsRef = useRef<Record<string, Set<string>>>({});
   const [runs, setRuns] = useState<RunView[]>([]);
@@ -154,6 +155,7 @@ function App() {
   const [requestDraft, setRequestDraft] = useState("");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [serviceError, setServiceError] = useState<ServiceErrorDTO | null>(null);
+  const [isLoadingRuns, setIsLoadingRuns] = useState(true);
   const [isResuming, setIsResuming] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
 
@@ -162,6 +164,7 @@ function App() {
 
     async function loadRuns() {
       try {
+        await service.ready();
         const snapshots = await service.listRuns();
         const views = await Promise.all(
           snapshots.map(async (snapshot) => {
@@ -182,6 +185,8 @@ function App() {
         setActiveRunId((current) => (views.some((run) => run.runId === current) ? current : views[0]?.runId ?? ""));
       } catch (error) {
         if (!cancelled) setServiceError(toServiceError(error));
+      } finally {
+        if (!cancelled) setIsLoadingRuns(false);
       }
     }
 
@@ -207,7 +212,22 @@ function App() {
   }, [activeRunId, client, runs]);
 
   if (!activeRun) {
-    return <div className="app-loading">{serviceError ? `${serviceError.code}: ${serviceError.message}` : "Loading Mock AgentService…"}</div>;
+    return (
+      <div className="app-loading">
+        <div>{serviceError ? `${serviceError.code}: ${serviceError.message}` : isLoadingRuns ? `Connecting to ${runtimeLabel}…` : "No runs in this desktop session."}</div>
+        {!isLoadingRuns && !serviceError && (
+          <form className="empty-run-form" onSubmit={createRun}>
+            <textarea
+              onChange={(event) => setRequestDraft(event.target.value)}
+              placeholder="Describe a task for TSAgent…"
+              rows={3}
+              value={requestDraft}
+            />
+            <button className="composer-send" type="submit">Create Run</button>
+          </form>
+        )}
+      </div>
+    );
   }
 
   const workflow = activeRun.workflows.find((item) => item.workflowId === activeRun.activeWorkflowId) ?? activeRun.workflows[0];
@@ -249,7 +269,7 @@ function App() {
     if (!currentRun) return;
 
     setServiceError(null);
-    const locator = { tenantId: currentRun.tenantId ?? "tenant-local", sessionId: currentRun.sessionId, runId };
+    const locator = { tenantId: currentRun.tenantId ?? service.identity.tenantId, sessionId: currentRun.sessionId, runId };
     const afterSequence = lastSequenceRef.current[runId] ?? -1;
     const [snapshot, artifacts, incomingEvents] = await Promise.all([
       client.getRun(locator),
@@ -287,11 +307,11 @@ function App() {
       setServiceError(null);
       setIsCancelling(true);
       await client.cancelRun({
-        tenantId: activeRun.tenantId ?? "tenant-local",
+        tenantId: activeRun.tenantId ?? service.identity.tenantId,
         sessionId: activeRun.sessionId,
         runId: activeRun.runId,
         requestId: cancellationRequestId(activeRun.runId),
-        requestedBy: "desktop-user",
+        requestedBy: service.identity.userId,
       });
       await refreshRun(activeRun.runId);
     } catch (error) {
@@ -309,8 +329,8 @@ function App() {
     try {
       setServiceError(null);
       const handle = await client.startRun({
-        tenantId: "tenant-local",
-        sessionId: `session-desktop-${Date.now().toString(16)}`,
+        tenantId: service.identity.tenantId,
+        sessionId: service.identity.sessionId,
         requestId,
         requestText: request,
       });
@@ -345,7 +365,7 @@ function App() {
       setServiceError(null);
       setIsResuming(true);
       await client.resumeRun({
-        tenantId: activeRun.tenantId ?? "tenant-local",
+        tenantId: activeRun.tenantId ?? service.identity.tenantId,
         sessionId: activeRun.sessionId,
         runId: activeRun.runId,
         resumeRequestId: `${activeRun.runId}.resume-request`,
@@ -403,7 +423,7 @@ function App() {
         </div>
 
         <div className="sidebar-footer">
-          <div className="runtime-row"><span className="live-dot" /><span>Mock AgentService</span><code>D4C</code></div>
+          <div className="runtime-row"><span className="live-dot" /><span>{runtimeLabel}</span><code>D4C</code></div>
           <div className="profile-row"><span className="profile-avatar">A</span><span><strong>Alex / Developer</strong><small>Personal workspace</small></span><Icon name="settings" size={14} /></div>
         </div>
       </aside>
@@ -420,7 +440,7 @@ function App() {
             <button onClick={() => { setView("inspector"); setActiveTab("files"); }} type="button">Artifacts</button>
             <button onClick={() => { setView("inspector"); setActiveTab("events"); }} type="button">Events</button>
           </nav>
-          <div className="topbar-actions"><span className="runtime-pill"><span className="live-dot" /> Mock AgentService · D4C</span><button className="topbar-button" onClick={() => void refreshActiveRun()} title="Replay events from the last cursor" type="button"><Icon name="refresh" size={15} /></button></div>
+          <div className="topbar-actions"><span className="runtime-pill"><span className="live-dot" /> {runtimeLabel} · D4C</span><button className="topbar-button" onClick={() => void refreshActiveRun()} title="Replay events from the last cursor" type="button"><Icon name="refresh" size={15} /></button></div>
         </header>
 
         {serviceError && <div className="service-error-banner" role="alert"><span className="service-error-icon"><Icon name="x" size={13} /></span><div><strong>{serviceError.code}</strong><span>{serviceError.message}</span></div><button onClick={() => setServiceError(null)} title="Dismiss error" type="button"><Icon name="x" size={13} /></button></div>}
@@ -466,7 +486,7 @@ function App() {
           <form className="home-composer" onSubmit={createRun}>
             <div className="home-composer-top"><span>NEW RUN</span><span>Enter to create an isolated RunContext</span></div>
             <textarea onChange={(event) => setRequestDraft(event.target.value)} placeholder="Describe a task for TSAgent…" rows={2} value={requestDraft} />
-            <div className="home-composer-footer"><span><Icon name="spark" size={12} /> Mock Runtime · no external side effects</span><button className="composer-send" type="submit"><span>Create Run</span><Icon name="send" size={13} /></button></div>
+            <div className="home-composer-footer"><span><Icon name="spark" size={12} /> {runtimeLabel} · no implicit fallback</span><button className="composer-send" type="submit"><span>Create Run</span><Icon name="send" size={13} /></button></div>
           </form>
         </div> : <div className="main-scroll">
           <section className="run-header">
@@ -540,7 +560,7 @@ function App() {
         </div>}
       </main>
 
-      {isCreateOpen && <div className="modal-backdrop" onMouseDown={() => setIsCreateOpen(false)}><div className="create-modal" onMouseDown={(event) => event.stopPropagation()}><div className="modal-heading"><div><span className="panel-eyebrow">NEW TASK</span><h2>Create an isolated Run</h2></div><button className="modal-close" onClick={() => setIsCreateOpen(false)} type="button"><Icon name="x" size={16} /></button></div><p>先用 Mock AgentService 建立一个独立的 Run。正式接入后，这里会继续映射到稳定的 Service Contract。</p><form onSubmit={createRun}><label htmlFor="new-run-request">Task</label><textarea autoFocus id="new-run-request" onChange={(event) => setRequestDraft(event.target.value)} placeholder="例如：生成一个 Python 程序，计算 7 的平方并保存" rows={5} value={requestDraft} /><div className="modal-footer"><span>V2.3C · no external side effects</span><button className="composer-send" type="submit"><span>Create Run</span><Icon name="arrow-up-right" size={13} /></button></div></form></div></div>}
+      {isCreateOpen && <div className="modal-backdrop" onMouseDown={() => setIsCreateOpen(false)}><div className="create-modal" onMouseDown={(event) => event.stopPropagation()}><div className="modal-heading"><div><span className="panel-eyebrow">NEW TASK</span><h2>Create an isolated Run</h2></div><button className="modal-close" onClick={() => setIsCreateOpen(false)} type="button"><Icon name="x" size={16} /></button></div><p>{runtimeLabel} 将通过稳定的 AgentService Contract 创建 Run；local 模式不可用时不会回退到 Mock。</p><form onSubmit={createRun}><label htmlFor="new-run-request">Task</label><textarea autoFocus id="new-run-request" onChange={(event) => setRequestDraft(event.target.value)} placeholder="例如：生成一个 Python 程序，计算 7 的平方并保存" rows={5} value={requestDraft} /><div className="modal-footer"><span>Desktop-4a · explicit runtime mode</span><button className="composer-send" type="submit"><span>Create Run</span><Icon name="arrow-up-right" size={13} /></button></div></form></div></div>}
     </div>
   );
 }

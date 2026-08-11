@@ -1,0 +1,199 @@
+{
+  "report": "v2.3D-4b cancellation and timeout discovery round 1",
+  "status": "DISCOVERY_COMPLETE",
+  "head": "25088745c0117f80c751cfc54a74a4007b34e52c",
+  "manifest": {
+    "name": "cancellation-timeout-service-e2e-v2.3d-4",
+    "version": "v0.1",
+    "hash": "0e41ce5586d778351620cb6714b3a2243f8ddc9f4411a2a2d87552e76501fe3a"
+  },
+  "provider": {
+    "name": "ollama",
+    "model": "qwen2.5:14b",
+    "endpoint_class": "OpenAI-compatible local endpoint",
+    "fallback": "disabled for D401/D408; contrast policy for D409",
+    "credential_material_archived": false
+  },
+  "case_results": [
+    {
+      "case_id": "D401",
+      "classification": "PASS",
+      "capability_outcome": "NOT_APPLICABLE",
+      "runtime_correctness": "PASS",
+      "evidence": {
+        "provider_started": true,
+        "service_cancel_status": "CANCELLING",
+        "final_status": "CANCELLED",
+        "events": ["run_created", "run_started", "run_cancelling", "run_cancelled"],
+        "run_cancelled_count": 1,
+        "run_completed_count": 0,
+        "provider_fallback_count": 0,
+        "cancel_request_to_terminal_seconds": 0.052793542
+      },
+      "source": "real Ollama run via ServiceCLI.cancel_run"
+    },
+    {
+      "case_id": "D402",
+      "classification": "PASS",
+      "capability_outcome": "NOT_APPLICABLE",
+      "runtime_correctness": "PASS",
+      "evidence": {
+        "deterministic_test": "test_runtime_stops_before_planner_without_finalizer_or_new_work",
+        "planner_started_after_cancel": false,
+        "new_tool_started": false,
+        "final_status": "CANCELLING"
+      },
+      "source": "deterministic v2.3D propagation regression"
+    },
+    {
+      "case_id": "D403",
+      "classification": "PASS",
+      "capability_outcome": "NOT_APPLICABLE",
+      "runtime_correctness": "PASS",
+      "evidence": {
+        "deterministic_test": "test_boundary_only_file_effect_finishes_then_blocks_next_effect",
+        "committed_effect_preserved": true,
+        "later_effect_started": false,
+        "duplicate_side_effect_count": 0
+      },
+      "source": "deterministic v2.3D propagation regression"
+    },
+    {
+      "case_id": "D404",
+      "classification": "PASS",
+      "capability_outcome": "NOT_APPLICABLE",
+      "runtime_correctness": "PASS",
+      "evidence": {
+        "deterministic_test": "test_d404_cancel_preserves_completed_workflow_and_pending_tail",
+        "completed_workflows": ["workflow-a"],
+        "active_workflow": "workflow-b",
+        "pending_workflows": ["workflow-c"],
+        "preserved_artifact": "artifact-a",
+        "events": ["run_cancelling", "run_cancelled"],
+        "workflow_c_activation_count": 0,
+        "final_status": "CANCELLED"
+      },
+      "source": "deterministic SQLite Run-index cancellation fixture"
+    },
+    {
+      "case_id": "D405",
+      "classification": "PASS",
+      "capability_outcome": "NOT_APPLICABLE",
+      "runtime_correctness": "PASS",
+      "evidence": {
+        "deterministic_test": "test_service_cancel_is_fast_durable_acceptance_not_false_cancelled",
+        "one_cancelling_transition": true,
+        "duplicate_terminal_event_count": 0,
+        "final_status": "CANCELLED"
+      },
+      "source": "deterministic AgentService regression"
+    },
+    {
+      "case_id": "D406",
+      "classification": "PASS",
+      "capability_outcome": "NOT_APPLICABLE",
+      "runtime_correctness": "PASS",
+      "evidence": {
+        "deterministic_tests": [
+          "test_client_disconnect_does_not_lose_terminal_event_on_restart",
+          "test_cancelling_survives_restart_and_resume_is_rejected"
+        ],
+        "event_replay_gap": 0,
+        "runtime_interrupted_by_client_disconnect": false,
+        "normal_resume_allowed_while_cancelling": false
+      },
+      "source": "deterministic AgentService restart/replay regression"
+    },
+    {
+      "case_id": "D407",
+      "classification": "PASS",
+      "capability_outcome": "NOT_APPLICABLE",
+      "runtime_correctness": "PASS",
+      "evidence": {
+        "child_process_exit_after_sigkill": -9,
+        "status_before_kill": "CANCELLING",
+        "status_after_restart": "CANCELLED",
+        "intent_phase_after_restart": "FINALIZED",
+        "takeover_fence": 2,
+        "normal_resume_called": false,
+        "run_cancelled_count": 1,
+        "run_completed_count": 0
+      },
+      "source": "real child-process SIGKILL/restart harness"
+    },
+    {
+      "case_id": "D408",
+      "classification": "PASS",
+      "capability_outcome": "NOT_APPLICABLE",
+      "runtime_correctness": "PASS",
+      "evidence": {
+        "provider_started": true,
+        "run_timeout_seconds": 5.0,
+        "final_status": "TIMED_OUT",
+        "events": ["run_created", "run_started", "run_cancelling", "run_timed_out"],
+        "run_timed_out_count": 1,
+        "run_completed_count": 0,
+        "provider_fallback_count": 0
+      },
+      "source": "real Ollama run with durable watchdog timeout"
+    },
+    {
+      "case_id": "D409",
+      "classification": "PROVIDER_ERROR",
+      "capability_outcome": "PROVIDER_ERROR",
+      "runtime_correctness": "PASS_FOR_TIMEOUT_BOUNDARY",
+      "evidence": {
+        "provider_started": true,
+        "forced_provider_timeout_seconds": 0.01,
+        "final_status": "FAILED_TERMINAL",
+        "terminal_event": "run_failed",
+        "failure_code": "REPLAN_EXHAUSTED",
+        "run_timed_out_count": 0,
+        "run_completed_count": 0,
+        "provider_fallback_success": false,
+        "raw_observation": "Ollama timed out; DeepSeek fallback was unavailable; Runtime ended in stable FAILED_TERMINAL"
+      },
+      "source": "real Ollama timeout contrast run; provider infrastructure failure is retained"
+    },
+    {
+      "case_id": "D410",
+      "classification": "PASS",
+      "capability_outcome": "NOT_APPLICABLE",
+      "runtime_correctness": "PASS",
+      "evidence": {
+        "deterministic_test": "test_completed_run_rejects_cancel_without_creating_intent",
+        "original_terminal_state_preserved": true,
+        "cancel_transition_created": false,
+        "new_side_effect_count": 0
+      },
+      "source": "deterministic AgentService terminal-state regression"
+    }
+  ],
+  "hard_gate_summary": {
+    "post_cancel_new_side_effect": 0,
+    "pending_task_started_after_cancel": 0,
+    "false_cancelled": 0,
+    "false_completed_after_interruption": 0,
+    "duplicate_cancellation_transition": 0,
+    "duplicate_side_effect": 0,
+    "committed_artifact_loss": 0,
+    "cancel_intent_loss_after_restart": 0,
+    "cancelled_run_normal_resume": 0,
+    "run_timeout_to_completed": 0,
+    "provider_timeout_to_run_timeout": 0,
+    "snapshot_terminal_event_mismatch": 0,
+    "provider_fallback_after_cancel": 0,
+    "client_disconnect_affects_cancellation": 0
+  },
+  "harness_notes": [
+    "An initial D401 attempt lacked PYTHONPATH and is classified HARNESS_FAILURE, not capability evidence.",
+    "A second D401 attempt used an incomplete ChatOpenAI model-field probe and is classified HARNESS_FAILURE; the corrected CLI-path run is the authoritative D401 evidence.",
+    "D401 raw output from the early corrected harness encoded non-applicable timeout flags as false; this report treats those fields as NOT_APPLICABLE and evaluates only the D401 cancellation gates.",
+    "No production Runtime source was changed for this discovery round."
+  ],
+  "next": [
+    "Keep the raw discovery evidence and classification unchanged.",
+    "If D409 failure-code normalization is pursued, open a separate provider-resilience hotfix; it is not a cancellation contract failure in this round.",
+    "Run the remaining D4b clean acceptance only after discovery review; do not rerun to replace a failed Provider observation."
+  ]
+}

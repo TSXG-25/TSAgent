@@ -10,6 +10,7 @@
     "test:desktop4a": "node scripts/test-desktop4a.mjs",
     "test:desktop4b1": "node scripts/test-desktop4b1.mjs",
     "test:desktop4b2": "node scripts/test-desktop4b2.mjs",
+    "test:desktop4c": "node scripts/test-desktop4c.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

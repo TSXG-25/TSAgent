@@ -1,0 +1,229 @@
+{
+  "version": "v2.3D-4c",
+  "head": "434d4882298f24b108894418169286b658b0bc75",
+  "dataset_hash": "bda9f690fff05f4e947d7088c4c95d414cab5b220f5c2082a4985f10a04d4185",
+  "mode": "local",
+  "provider_configuration": "configured-primary-with-ollama-fallback:qwen2.5:14b",
+  "cases": [
+    {
+      "case_id": "DT01",
+      "mode": "local",
+      "provider": "configured-primary-with-ollama-fallback:qwen2.5:14b",
+      "events_seen": [],
+      "event_sequences": [],
+      "duplicate_ui_events": 0,
+      "artifacts": [],
+      "run_output_present": false,
+      "resume_calls": 0,
+      "cancel_calls": 0,
+      "runtime_invariants": {
+        "sidecar_health": true,
+        "protocol_version": true,
+        "mock_fallback_not_used": true
+      },
+      "notes": [
+        "real Python sidecar health over injected Tauri bridge"
+      ],
+      "result": "PASS",
+      "runtime_correctness": "PASS",
+      "capability_outcome": "N/A"
+    },
+    {
+      "case_id": "DT02",
+      "mode": "local",
+      "provider": "configured-primary-with-ollama-fallback:qwen2.5:14b",
+      "events_seen": [
+        "run_created",
+        "run_started"
+      ],
+      "event_sequences": [
+        1,
+        2
+      ],
+      "duplicate_ui_events": 0,
+      "artifacts": [],
+      "run_output_present": false,
+      "resume_calls": 0,
+      "cancel_calls": 0,
+      "runtime_invariants": {
+        "terminal_snapshot_event_match": null,
+        "event_sequence_contiguous": true,
+        "false_completed_zero": true,
+        "duplicate_ui_events_zero": true
+      },
+      "notes": [
+        "DT03 and DT07 reuse this known durable Run as read-only follow-up cases.",
+        "service_error=PROVIDER_WAIT_UNAVAILABLE"
+      ],
+      "result": "PROVIDER_ERROR",
+      "runtime_correctness": "DEFERRED",
+      "capability_outcome": "DEFERRED",
+      "run_id": "run-699bd23330844308af13540bbb0043b2",
+      "terminal_status": "active"
+    },
+    {
+      "case_id": "DT03",
+      "mode": "local",
+      "provider": "configured-primary-with-ollama-fallback:qwen2.5:14b",
+      "events_seen": [
+        "run_created",
+        "run_started"
+      ],
+      "event_sequences": [
+        1,
+        2
+      ],
+      "duplicate_ui_events": 0,
+      "artifacts": [],
+      "run_output_present": false,
+      "resume_calls": 0,
+      "cancel_calls": 0,
+      "runtime_invariants": {
+        "artifact_reference_is_opaque_and_scoped": null,
+        "artifact_verified": null,
+        "frontend_direct_workspace_access_zero": true
+      },
+      "notes": [
+        "capability deferred because the real Provider did not complete DT02"
+      ],
+      "result": "PROVIDER_ERROR",
+      "runtime_correctness": "DEFERRED",
+      "capability_outcome": "DEFERRED",
+      "run_id": "run-699bd23330844308af13540bbb0043b2",
+      "terminal_status": "active"
+    },
+    {
+      "case_id": "DT04",
+      "mode": "local",
+      "provider": "configured-primary-with-ollama-fallback:qwen2.5:14b",
+      "events_seen": [],
+      "event_sequences": [],
+      "duplicate_ui_events": 0,
+      "artifacts": [],
+      "run_output_present": false,
+      "resume_calls": 0,
+      "cancel_calls": 0,
+      "runtime_invariants": {},
+      "notes": [
+        "disconnect/reconnect error=unknown"
+      ],
+      "result": "PROVIDER_ERROR",
+      "runtime_correctness": "DEFERRED",
+      "capability_outcome": "DEFERRED"
+    },
+    {
+      "case_id": "DT05",
+      "mode": "local",
+      "provider": "configured-primary-with-ollama-fallback:qwen2.5:14b",
+      "events_seen": [],
+      "event_sequences": [],
+      "duplicate_ui_events": 0,
+      "artifacts": [],
+      "run_output_present": false,
+      "resume_calls": 0,
+      "cancel_calls": 0,
+      "runtime_invariants": {},
+      "notes": [
+        "requires a recoverable Run fixture; the production sidecar has no deterministic launcher injection point"
+      ],
+      "result": "DEFERRED",
+      "runtime_correctness": "DEFERRED",
+      "capability_outcome": "DEFERRED"
+    },
+    {
+      "case_id": "DT06",
+      "mode": "local",
+      "provider": "configured-primary-with-ollama-fallback:qwen2.5:14b",
+      "events_seen": [],
+      "event_sequences": [],
+      "duplicate_ui_events": 0,
+      "artifacts": [],
+      "run_output_present": false,
+      "resume_calls": 0,
+      "cancel_calls": 0,
+      "runtime_invariants": {},
+      "notes": [
+        "cancel E2E error=unknown"
+      ],
+      "result": "PROVIDER_ERROR",
+      "runtime_correctness": "DEFERRED",
+      "capability_outcome": "DEFERRED"
+    },
+    {
+      "case_id": "DT07",
+      "mode": "local",
+      "provider": "configured-primary-with-ollama-fallback:qwen2.5:14b",
+      "events_seen": [],
+      "event_sequences": [],
+      "duplicate_ui_events": 0,
+      "artifacts": [],
+      "run_output_present": false,
+      "resume_calls": 0,
+      "cancel_calls": 0,
+      "runtime_invariants": {},
+      "notes": [
+        "no durable completed Run was available for restart rehydration"
+      ],
+      "result": "DEFERRED",
+      "runtime_correctness": "DEFERRED",
+      "capability_outcome": "DEFERRED"
+    },
+    {
+      "case_id": "DT08",
+      "mode": "local",
+      "provider": "configured-primary-with-ollama-fallback:qwen2.5:14b",
+      "events_seen": [
+        "run_created",
+        "run_started"
+      ],
+      "event_sequences": [
+        1,
+        2
+      ],
+      "duplicate_ui_events": 0,
+      "artifacts": [],
+      "run_output_present": false,
+      "resume_calls": 0,
+      "cancel_calls": 0,
+      "runtime_invariants": {
+        "run_timeout_terminal": null,
+        "run_timeout_reported_completed_zero": null,
+        "run_timeout_reported_cancelled_zero": null,
+        "terminal_snapshot_event_match": null
+      },
+      "notes": [
+        "Provider did not reach the real watchdog boundary; timeout capability deferred"
+      ],
+      "result": "PROVIDER_ERROR",
+      "runtime_correctness": "DEFERRED",
+      "capability_outcome": "DEFERRED",
+      "run_id": "run-cfd90091489047d1b987adc6865ed8b4",
+      "terminal_status": "active"
+    },
+    {
+      "case_id": "DT09",
+      "mode": "local",
+      "provider": "configured-primary-with-ollama-fallback:qwen2.5:14b",
+      "events_seen": [],
+      "event_sequences": [],
+      "duplicate_ui_events": 0,
+      "artifacts": [],
+      "run_output_present": false,
+      "resume_calls": 0,
+      "cancel_calls": 0,
+      "runtime_invariants": {
+        "mock_fallback_not_used": true,
+        "unavailable_backend_visible": true
+      },
+      "notes": [
+        "local bootstrap result=PROVIDER_UNAVAILABLE"
+      ],
+      "result": "PASS",
+      "runtime_correctness": "PASS",
+      "capability_outcome": "N/A"
+    }
+  ],
+  "hard_invariant_violations": 0,
+  "manual_tauri_smoke": "DEFERRED: repository has no Tauri/Rust host",
+  "status": "PARTIALLY_VERIFIED"
+}

@@ -64,6 +64,15 @@ Desktop-4b2 继续通过同一 Controller 委派 Resume/Cancel，并刷新真实
 UI 不选择 Resume action、不生成取消策略、不访问 artifact path；五类终态
 `COMPLETED / BLOCKED / FAILED / CANCELLED / TIMED_OUT` 分别消费 Service 的公开投影。
 
+## Desktop-4c MVP-2 real local-chain harness
+
+`npm run test:desktop4c` 使用测试专用注入 bridge 启动真实 Python JSONL
+sidecar，并通过 `LocalAgentServiceClient` 验证 health、Run、事件 cursor、Artifact
+投影、进程重建、取消和 watchdog 边界。它不会让桌面进程直接读取 SQLite 或 workspace。
+真实 Provider 不可用时，DT02/DT06/DT08 记录为 `PROVIDER_ERROR`/`DEFERRED`，不会被
+标成 capability PASS；仓库没有 Tauri/Rust host 时，手动 Tauri smoke 也保持
+`DEFERRED`。证据归档到 `realtest_reports/desktop/desktop_mvp2_e2e.json` 和 `.md`。
+
 `src/service/localTransport.ts` 定义 JSONL protocol seam，
 `src/service/tauriSidecarTransport.ts` 定义 request correlation、超时、进程退出和关闭
 语义，`src/service/localAgentServiceClient.ts` 负责 public DTO 到 wire DTO 的映射。

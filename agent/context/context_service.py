@@ -194,17 +194,11 @@ class ContextService:
         facts = task.get("facts", {})
         lines = ["## 可用资源"]
         
-        # Show current working directory + common dirs
-        try:
-            from tools.filesystem import get_working_directory
-            cwd = get_working_directory()
-            lines.append(f"  📂 当前目录: {cwd if cwd != '.' else '项目根目录 (.)'}")
-            lines.append(f"  📁 常见子目录: input/, output/, src/, tests/, tools/")
-            lines.append(f"  💡 使用带路径的方法: read_file(\"output/solution.py\")")
-            lines.append(f"  💡 或先用 find_file(\"solution.py\") 搜索文件位置")
-            lines.append(f"  💡 set_working_directory(\"output\") 切换工作目录")
-        except Exception:
-            pass
+        # The physical cwd is not a Runtime fact and must not leak into the
+        # planner prompt.  Filesystem tools resolve relative paths through the
+        # current RunContext.workspace instead.
+        lines.append("  📂 当前 Run workspace 由运行时作用域管理（不暴露物理路径）")
+        lines.append("  📁 可用相对路径范围由用户授权和 RunContext.workspace 决定")
         
         if facts.get("question_loaded"):
             lines.append("  ✓ 题目文本（已加载，无需重新读取）")
@@ -245,8 +239,10 @@ class ContextService:
         if artifact_store is None:
             artifact_store = task.get("_artifact_store")
         if artifact_store is None:
-            from agent.compat.artifact import get_legacy_artifact_service
-            artifact_store = get_legacy_artifact_service()
+            # Artifact visibility is a Run-owned dependency.  A prompt
+            # renderer without that scope has no artifacts to project; it
+            # must not consult the process-global ArtifactService.
+            return ""
 
         task_id = task.get("id", "")
         artifacts = artifact_store.get_by_task(task_id)

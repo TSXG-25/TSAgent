@@ -1,5 +1,4 @@
-import numpy as np
-from typing import List, Optional
+from typing import Any, List, Optional
 
 _embedding = None
 
@@ -13,8 +12,10 @@ def _get_embedding():
     return _embedding
 
 
-def _embed_query(text: str) -> Optional[np.ndarray]:
+def _embed_query(text: str) -> Optional[Any]:
     try:
+        import numpy as np
+
         return np.array(_get_embedding().embed_query(text))
     except Exception:
         return None
@@ -30,7 +31,7 @@ class Skill:
         self.name = name
         self.description = description
         self.planner_hint = planner_hint
-        self._embedding = None
+        self._embedding: Optional[Any] = None
 
     @property
     def embedding(self):
@@ -39,13 +40,15 @@ class Skill:
             self._embedding = _embed_query(self.description)
         return self._embedding
 
-    def match(self, query: str, query_embedding: Optional[np.ndarray]) -> float:
+    def match(self, query: str, query_embedding: Optional[Any]) -> float:
         if self.embedding is None or query_embedding is None:
             text = f"{self.name} {self.description}".lower()
             query_terms = set(query.lower().split())
             if not query_terms:
                 return 0.0
             return len(query_terms.intersection(text.split())) / len(query_terms)
+        import numpy as np
+
         return np.dot(query_embedding, self.embedding) / (
             np.linalg.norm(query_embedding) * np.linalg.norm(self.embedding)
         )
@@ -70,8 +73,9 @@ class SkillRegistry:
             return None
 
         query_emb = _embed_query(user_input)
-        best = max(self.skills, key=lambda s: s.match(user_input, query_emb))
-        return best if best.match(user_input, query_emb) > 0.3 else None
+        scored = [(skill.match(user_input, query_emb), skill) for skill in self.skills]
+        score, best = max(scored, key=lambda item: item[0])
+        return best if score > 0.3 else None
 
 
 skill_registry = SkillRegistry()

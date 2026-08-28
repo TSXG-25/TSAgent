@@ -58,7 +58,7 @@ def record_resolution(
     utterance: str,
     resolved_target: str,
     kind: str,
-    metadata: dict = None,
+    metadata: dict | None = None,
 ) -> None:
     """记录一条跨会话解析事实（Runtime 在每次解析后调用）。"""
     entries = _load(user_id)

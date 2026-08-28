@@ -35,7 +35,8 @@ C3  Behavior 定义明确：对“继续/上下文恢复”等行为，必须声
     ADR-0013 的 continuation_contract，不得在本 ADR 复制或重新定义运行时语义。
 C4  可验证：每个 case 的校验器必须通过“正例通过 / 反例拒绝”的
     Benchmark Validation，否则该 case 不得进入 Agent 评测。
-C5  来源可追溯：报告必须记录 benchmark_version 与 dataset_hash；
+C5  来源可追溯：报告必须记录 benchmark_version、dataset_hash；若 case 依赖
+    外部 fixture，还必须记录 fixture_manifest_hash；
     数据、期望或 canonicalization 规则变化后，不得把新旧分数直接并入同一 Trend。
 ```
 
@@ -61,7 +62,8 @@ C5  来源可追溯：报告必须记录 benchmark_version 与 dataset_hash；
 - 匹配前必须执行 Unicode NFKC、大小写/大小写折叠和空白规范化。
 - 正例、反例由 case 自己声明；正确的 abstention case 可以把“我不知道”
   声明为正例，不能使用全局反例列表强行判定。
-- 报告必须输出 `benchmark_version`、`dataset_hash` 和 validator 版本。
+- 报告必须输出 `benchmark_version`、`dataset_hash`、fixture case 使用的
+  `fixture_manifest_hash` 和 validator 版本。
 
 ## 后果
 
@@ -87,6 +89,21 @@ ADR-0014 只规定评测绑定：
   非异常通过率；不得把 plan/chat/reference 或超时异常混成一个 Recall 分数；
 - Benchmark 不得为了修复 `unfinished_task = 0%` 而反向修改 Agent 行为，
   应先按 ADR-0013 重新标注 case。
+
+### Fixture-backed Continuation Cases
+
+`CONTINUE_REFERENCE` 等依赖工作区文件的 case 必须声明确定性的静态 fixture：
+
+- `fixture_source` 必须位于 benchmark 自己的 fixture 目录；
+- `fixture_target` 必须位于 case workspace 的 `output/` 下；
+- materialize 前必须检查 source 存在，函数类引用还必须检查目标 symbol 存在；
+- 每个 case 必须在 output 清理之后 materialize，在真实 API 调用之前完成 target
+  preflight；
+- case 结束后必须 teardown，已存在的用户文件恢复原始字节，不得被 benchmark 删除；
+- fixture 缺失、路径越界、语法错误或 symbol 缺失必须标记为
+  `INVALID_BENCHMARK`，不得计入 Provider Error 或 Agent Capability Rate；
+- fixture 内容通过 `fixture_manifest_hash` 纳入报告 provenance，fixture 修改后
+  不得与旧报告直接合并 Trend。
 
 ## Cross-module Contract Integration（C5 冻结）
 

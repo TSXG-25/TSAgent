@@ -14,7 +14,6 @@ from datetime import datetime, timezone
 from typing import Any, Deque, List, Optional
 
 from agent.event_bus import EventBus
-from agent.compat.event_bus import get_legacy_event_bus
 
 logger = logging.getLogger(__name__)
 
@@ -67,9 +66,8 @@ def record_contract_violation(
     diagnostics: Optional[list[Any]] = None,
 ):
     """Create and publish a structured FailureEvent for a contract failure."""
-    # Import lazily so the normal runtime path does not import evaluation
-    # modules until a diagnostic is actually needed.
-    from evaluation.benchmark.failboard_v2 import Evidence, FailureEvent
+    # Import lazily so diagnostics remain outside the normal execution path.
+    from agent.failure import Evidence, FailureEvent
 
     actual = f"{type(error).__name__}: {error}"
     event = FailureEvent(
@@ -91,11 +89,11 @@ def record_contract_violation(
         diagnostics.append(event)
     else:
         _EVENTS.append(event)
-    target_bus = event_bus_instance or get_legacy_event_bus()
-    try:
-        target_bus.emit("failure_event", event)
-    except Exception:  # diagnostics must not hide the original contract issue
-        logger.exception("FailureEvent subscriber failed for %s", event.id)
+    if event_bus_instance is not None:
+        try:
+            event_bus_instance.emit("failure_event", event)
+        except Exception:  # diagnostics must not hide the original contract issue
+            logger.exception("FailureEvent subscriber failed for %s", event.id)
     logger.error(
         "Contract violation at %s.%s: %s",
         boundary,

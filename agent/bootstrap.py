@@ -14,9 +14,10 @@
 """
 import pkgutil
 import importlib
+import asyncio
+import inspect
 import sys
 import time
-import asyncio
 from pathlib import Path
 
 
@@ -83,7 +84,9 @@ async def init_repository_async() -> None:
     from agent.workspace.manager import WorkspaceManager
     ws = WorkspaceManager.current_workspace()
     if ws:
-        await ws.build_symbols_async()
+        symbol_build = ws.build_symbols_async()
+        if inspect.isawaitable(symbol_build):
+            await symbol_build
 
     # Also init the existing RepositoryIndexer if available
     try:
@@ -92,7 +95,7 @@ async def init_repository_async() -> None:
         ws = WorkspaceManager.current_workspace()
         if ws and not get_repository_indexer():
             indexer = RepositoryIndexer(ws.root)
-            indexer.ensure_built()
+            await asyncio.to_thread(indexer.ensure_built)
             set_repository_indexer(indexer)
     except ImportError:
         pass
@@ -102,10 +105,28 @@ async def init_repository_async() -> None:
 
 
 def load_all_tools():
+    load_tool_modules()
+
+
+def load_tool_modules(module_names: tuple[str, ...] | None = None):
+    """Import the requested tool registration modules.
+
+    The application registry is populated lazily so a sidecar can accept a
+    durable Run before optional web/office modules pay their import cost.  A
+    normal full bootstrap still calls this without arguments and preserves the
+    complete tool surface.
+    """
     _ensure_project_root()
     import tools as tools_pkg
 
-    for _, module_name, _ in pkgutil.iter_modules(tools_pkg.__path__):
+    available = {
+        module_name
+        for _, module_name, _ in pkgutil.iter_modules(tools_pkg.__path__)
+    }
+    names = module_names or tuple(sorted(available))
+    for module_name in names:
+        if module_name not in available:
+            raise ImportError(f"unknown tool module: {module_name}")
         importlib.import_module(f"tools.{module_name}")
 
 
@@ -126,13 +147,26 @@ def load_all_workflows():
         importlib.import_module(f"workflows.{module_name}")
 
 
-def load_all():
-    """Full boot sequence (synchronous part)."""
-    _timed("workspace_init", init_workspace)
+def load_all(
+    *,
+    include_workspace: bool = True,
+    include_workflows: bool = True,
+    include_knowledge: bool = True,
+):
+    """Load the synchronous application registries.
+
+    Tests and callers that need the complete registry keep the historical
+    default.  Interactive clients can defer the optional Workflow graph until
+    a request actually routes to a specialized Workflow.
+    """
+    if include_workspace:
+        _timed("workspace_init", init_workspace)
     _timed("tools_import", load_all_tools)
     _timed("skills_import", load_all_skills)
-    _timed("workflows_import", load_all_workflows)
-    _timed("knowledge_build", build_knowledge)
+    if include_workflows:
+        _timed("workflows_import", load_all_workflows)
+    if include_knowledge:
+        _timed("knowledge_build", build_knowledge)
 
 
     # 注册默认 Capability

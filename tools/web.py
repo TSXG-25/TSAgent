@@ -12,22 +12,35 @@ import asyncio
 from datetime import datetime, timedelta
 from agent.registry.tool_registry import registry
 
-# ddgs is the new package name for duckduckgo_search (v9+)
-try:
-    from ddgs import DDGS
-    DUCKDUCKGO_AVAILABLE = True
-except ImportError:
-    try:
-        from duckduckgo_search import DDGS
-        DUCKDUCKGO_AVAILABLE = True
-    except ImportError:
-        DUCKDUCKGO_AVAILABLE = False
+# Optional web dependencies are loaded on first use.  Importing ``httpx`` and
+# the DDGS client during application bootstrap needlessly delays every local
+# file/chat request.
+DDGS = None
+DUCKDUCKGO_AVAILABLE: bool | None = None
+HTTPX_AVAILABLE: bool | None = None
 
-try:
-    import httpx
-    HTTPX_AVAILABLE = True
-except ImportError:
-    HTTPX_AVAILABLE = False
+
+def _load_web_dependencies() -> tuple[bool, bool]:
+    global DDGS, DUCKDUCKGO_AVAILABLE, HTTPX_AVAILABLE
+    if DUCKDUCKGO_AVAILABLE is None:
+        try:
+            from ddgs import DDGS as _DDGS
+            DDGS = _DDGS
+            DUCKDUCKGO_AVAILABLE = True
+        except ImportError:
+            try:
+                from duckduckgo_search import DDGS as _DDGS
+                DDGS = _DDGS
+                DUCKDUCKGO_AVAILABLE = True
+            except ImportError:
+                DUCKDUCKGO_AVAILABLE = False
+    if HTTPX_AVAILABLE is None:
+        try:
+            import httpx  # noqa: F401
+            HTTPX_AVAILABLE = True
+        except ImportError:
+            HTTPX_AVAILABLE = False
+    return bool(DUCKDUCKGO_AVAILABLE), bool(HTTPX_AVAILABLE)
 
 # Trusted domains for deep search — expanded to 40+
 TRUSTED_DOMAINS = [
@@ -150,6 +163,9 @@ async def _fetch_page_text(url: str) -> tuple[str, str]:
     Returns:
         (clean_text, publish_date) tuple. publish_date may be empty.
     """
+    _load_web_dependencies()
+    import httpx
+
     async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
@@ -189,6 +205,9 @@ def _is_blocked_domain(url: str) -> bool:
 
 async def _ddgs_search(query: str, max_results: int) -> list[dict]:
     """Async DuckDuckGo search returning raw results."""
+    available, _ = _load_web_dependencies()
+    if not available or DDGS is None:
+        return []
     results = []
     try:
         async with DDGS() as ddgs:
@@ -273,7 +292,8 @@ async def web_search(query: str = "", q: str = "", url: str = "", keyword: str =
     query = query or q or keyword or search or url or ""
     if not query:
         return "错误：web_search 缺少 query 参数"
-    if not DUCKDUCKGO_AVAILABLE:
+    duck_available, _ = _load_web_dependencies()
+    if not duck_available:
         return (
             f"网络搜索功能不可用。请运行: pip install ddgs\n"
             f"无法搜索 '{query}' 的信息。"
@@ -307,7 +327,8 @@ async def web_news_search(query: str, max_results: int = 5, days: int = 7) -> st
     Returns:
         按时间排序的新闻结果列表，包含标题、时间、来源、摘要和链接
     """
-    if not DUCKDUCKGO_AVAILABLE or not HTTPX_AVAILABLE:
+    duck_available, httpx_available = _load_web_dependencies()
+    if not duck_available or not httpx_available:
         # Fallback to regular search
         return await web_search(query, max_results=max_results)
 
@@ -380,7 +401,8 @@ async def web_deep_search(query: str, fetch_top_n: int = 2, timeliness: str = "a
     Returns:
         搜索结果摘要 + 多个页面的完整文本内容（含发布时间）
     """
-    if not DUCKDUCKGO_AVAILABLE or not HTTPX_AVAILABLE:
+    duck_available, httpx_available = _load_web_dependencies()
+    if not duck_available or not httpx_available:
         return await web_search(query, max_results=5, timeliness=timeliness)
 
     fetch_top_n = min(fetch_top_n, 5)  # cap at 5
@@ -453,7 +475,8 @@ async def web_fetch(url: str) -> str:
     Returns:
         网页的纯文本内容（含发布时间，前 8000 字符）
     """
-    if not HTTPX_AVAILABLE:
+    _, httpx_available = _load_web_dependencies()
+    if not httpx_available:
         return f"错误：httpx 未安装，无法获取网页。请运行: pip install httpx"
 
     try:

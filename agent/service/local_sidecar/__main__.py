@@ -20,7 +20,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         # Every ordinary print/progress bar in the Runtime is redirected to
         # stderr.  Only server.py receives the saved protocol stdout handle.
         with redirect_stdout(sys.stderr):
-            service = create_service(config)
+            # Tool registrations are loaded at the first plan boundary.  The
+            # sidecar must acknowledge durable start requests without paying
+            # cold imports for tools that the Run may never use.
+            service = create_service(
+                config,
+                bootstrap_tools=False,
+                defer_context_creation=True,
+            )
             dispatcher = SidecarDispatcher(service, diagnostics=sys.stderr)
             return asyncio.run(
                 serve(

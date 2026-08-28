@@ -67,15 +67,18 @@ def test_intent_provider_failure_short_circuits_generic_planner(monkeypatch) -> 
     from agent.cognition.intent_schema import IntentResult
     from agent.orchestrator import planner as orchestrator_planner_module
 
-    monkeypatch.setattr(
-        orchestrator_planner_module.intent_engine,
-        "analyze",
-        lambda _context: IntentResult(
+    async def unavailable_intent(_context: Any) -> IntentResult:
+        return IntentResult(
             domain="unknown",
             requires_execution=True,
             failure_code="PROVIDER_UNAVAILABLE",
             failure_message="当前 LLM 服务暂时不可用，本次未生成或执行任务。",
-        ),
+        )
+
+    monkeypatch.setattr(
+        orchestrator_planner_module.intent_engine,
+        "analyze_async",
+        unavailable_intent,
     )
 
     async def forbidden_plan(*_args: Any, **_kwargs: Any) -> Any:

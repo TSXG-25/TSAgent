@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from typing import TextIO
 
 from ..local_protocol import (
@@ -14,7 +13,6 @@ from ..local_protocol import (
     encode_response,
 )
 from .dispatcher import SidecarDispatcher
-from .serializer import internal_error_response, protocol_error_response
 
 
 def _request_id_hint(line: str | bytes) -> str:
@@ -39,6 +37,8 @@ async def serve(
 ) -> int:
     """Serve one request and one response per JSONL line."""
 
+    import asyncio
+
     try:
         while True:
             line = await asyncio.to_thread(stdin.readline)
@@ -48,9 +48,12 @@ async def serve(
                 request = LocalRpcRequest.from_json_line(line)
                 response = await dispatcher.dispatch(request)
             except LocalProtocolError as error:
+                from .serializer import protocol_error_response
+
                 response = protocol_error_response(_request_id_hint(line), error)
             except Exception:
                 import traceback
+                from .serializer import internal_error_response
 
                 traceback.print_exc(file=diagnostics)
                 response = internal_error_response(_request_id_hint(line))

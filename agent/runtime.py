@@ -12,6 +12,7 @@ import logging
 import time
 import asyncio
 import os
+import re
 from enum import Enum
 from pathlib import Path
 from typing import Any, Optional
@@ -21,6 +22,9 @@ from agent.event_bus import Subscription
 from agent.registry.skill_registry import skill_registry
 from agent.state import AgentState
 from agent.effect_truth import enforce_completion_gate, execution_truth
+from agent.goal import GoalState, GoalStatus, GoalVerifier
+from agent.inbox import AgentInbox
+from agent.context_policy import ContextPolicy
 from agent.runtime_gates import (
     freshness_required_for,
     has_fresh_evidence,
@@ -35,6 +39,7 @@ from agent.runtime_context import (
     RunContext,
     SessionContext,
 )
+from agent.runtime_budget import RunBudget
 from agent.interruption import (
     CancellationSafetyClass,
     InterruptionReason,
@@ -42,13 +47,43 @@ from agent.interruption import (
     SafeCancellationBoundary,
     cancellation_scope,
 )
+from agent.failure import (
+    ClassificationSource,
+    FailureFact,
+    FailureKind,
+    FailurePolicy,
+    failure_fact,
+)
 
 logger = logging.getLogger(__name__)
 
-MAX_RUNTIME_SECONDS = float(os.getenv("TSAGENT_MAX_RUNTIME_SECONDS", "120"))
-MAX_STATE_TRANSITIONS = int(os.getenv("TSAGENT_MAX_STATE_TRANSITIONS", "24"))
 FACT_EXTRACTION_TIMEOUT = float(os.getenv("TSAGENT_FACT_TIMEOUT", "15"))
 DEFAULT_WORKSPACE_ROOT = Path(__file__).resolve().parent.parent
+
+_FACT_CAPTURE_DENIAL_RE = re.compile(
+    r"(?:无法|不能|未能|没法|没有办法).{0,12}"
+    r"(?:确认|记住|保存|记录)|"
+    r"(?:无法|不能|未能|没法|没有办法).{0,12}(?:事实|信息|偏好)",
+    re.IGNORECASE,
+)
+
+
+def _normalize_fact_capture_answer(answer: str, facts: object) -> str:
+    """Keep the user-visible claim aligned with the persisted fact result.
+
+    Fact extraction runs after the main answer so it cannot delay the turn.
+    If the extractor nevertheless persisted facts while the model claimed it
+    could not remember/save them, replace only that contradictory claim.  The
+    function deliberately does not infer success from prose: a non-empty
+    structured extraction result is the required evidence.
+    """
+
+    if not isinstance(facts, dict) or not facts:
+        return answer
+    text = str(answer or "")
+    if not _FACT_CAPTURE_DENIAL_RE.search(text):
+        return text
+    return "已记录你刚才提供的信息，之后可以继续询问我。"
 
 
 def _runtime_has_unfinished_work(state: AgentState) -> bool:
@@ -150,16 +185,38 @@ def _build_run_evidence(
     fresh_evidence = has_fresh_evidence(state)
     answer_required = output_required(state)
     user_visible_output_verified = bool(str(final_answer or "").strip())
-    outputs_verified = (
-        not failed_tasks
-        and not pending_tasks
-        and not budget_exhausted
-        and truth.can_complete
-        and (not answer_required or user_visible_output_verified)
-        and (not (freshness_required or source_grounding_required) or fresh_evidence)
+    goal_decision = GoalVerifier.verify(state, final_answer)
+    goal_state = GoalState.from_dict(state.get("goal_state")).with_decision(
+        goal_decision
     )
+    state["goal_state"] = goal_state.to_dict()
+    state["goal_evidence"] = [item.to_dict() for item in goal_decision.evidence]
+    state["goal_missing"] = list(goal_decision.missing)
+    outputs_verified = goal_decision.can_complete
+    # Preserve the stable boundary error even when GoalVerifier has already
+    # converted a stale COMPLETED status into BLOCKED/FAILED.  The generic
+    # runtime fallback below must not hide a more actionable contract reason.
+    if not failure_code:
+        if "fresh external evidence" in goal_decision.missing:
+            failure_code = "RESEARCH_TOOL_UNAVAILABLE"
+        elif "user-visible output" in goal_decision.missing:
+            failure_code = "MISSING_USER_OUTPUT"
+        elif goal_decision.blocker:
+            failure_code = goal_decision.blocker
     if not terminal_status:
-        terminal_status = "COMPLETED" if outputs_verified else "FAILED_TERMINAL"
+        terminal_status = (
+            "COMPLETED"
+            if outputs_verified
+            else "BLOCKED"
+            if goal_decision.status is GoalStatus.BLOCKED
+            else "FAILED_TERMINAL"
+        )
+    elif terminal_status == "COMPLETED" and not outputs_verified:
+        terminal_status = (
+            "BLOCKED"
+            if goal_decision.status is GoalStatus.BLOCKED
+            else "FAILED_TERMINAL"
+        )
     elif truth.unresolved_required_effects and terminal_status == "COMPLETED":
         # A stale caller-provided status cannot override missing effect
         # evidence.  The Service launcher consumes this projection to choose
@@ -167,6 +224,8 @@ def _build_run_evidence(
         terminal_status = (
             "BLOCKED" if truth.unsupported_effects else "FAILED_TERMINAL"
         )
+    elif truth.unresolved_requested_outcomes and terminal_status == "COMPLETED":
+        terminal_status = "FAILED_TERMINAL"
     if (
         (freshness_required or source_grounding_required)
         and not fresh_evidence
@@ -185,6 +244,8 @@ def _build_run_evidence(
         failure_code = "UNSUPPORTED_CAPABILITY"
     if not failure_code and truth.unresolved_required_effects:
         failure_code = "UNVERIFIED_EFFECT"
+    if not failure_code and truth.unresolved_requested_outcomes:
+        failure_code = "EXECUTION_EVIDENCE_MISSING"
     if not failure_code and failed_tasks:
         failure_code = next(
             (
@@ -215,8 +276,8 @@ def _build_run_evidence(
     return {
         "conversation_intent": state.get("conversation_intent", ""),
         "requires_execution": any(
-            str(task.get("status", "")) not in {"succeeded", "skipped"}
-            for task in tasks
+            outcome != "USER_VISIBLE_OUTPUT"
+            for outcome in truth.requested_outcomes
         ) or bool(state.get("conversation_intent") == "continue_plan"),
         "execution_progress": len(observations),
         "verified_success": any(
@@ -238,6 +299,11 @@ def _build_run_evidence(
         "terminal_status": terminal_status,
         "terminal_outputs_verified": outputs_verified,
         "effect_truth_ok": truth.can_complete,
+        "requested_outcomes": list(truth.requested_outcomes),
+        "execution_evidence": [dict(item) for item in truth.execution_evidence],
+        "unresolved_requested_outcomes": list(
+            truth.unresolved_requested_outcomes
+        ),
         "required_effects": [dict(item) for item in truth.required_effects],
         "verified_effects": [dict(item) for item in truth.verified_effects],
         "unsupported_effects": [dict(item) for item in truth.unsupported_effects],
@@ -259,14 +325,40 @@ def _build_run_evidence(
         "failed_component": failed_component,
         "retryable": retryable,
         "budget_exhausted": budget_exhausted,
+        "goal_status": goal_decision.status.value,
+        "goal_round": goal_state.round,
+        "goal_max_rounds": goal_state.max_rounds,
+        "goal_missing": list(goal_decision.missing),
+        "goal_evidence": [item.to_dict() for item in goal_decision.evidence],
     }
+
+
+def _advance_goal_round(state: AgentState, reason: str) -> bool:
+    """Admit one bounded reasoning round before planning or replanning."""
+    goal = GoalState.from_dict(state.get("goal_state"))
+    next_goal = goal.next_round()
+    if next_goal.status is GoalStatus.FAILED and next_goal.blocker:
+        state["goal_state"] = next_goal.to_dict()
+        state["runtime_terminal_status"] = "FAILED_TERMINAL"
+        state["runtime_failure_code"] = next_goal.blocker
+        state["budget_exhausted"] = True
+        return False
+    state["goal_state"] = next_goal.to_dict()
+    inbox = AgentInbox.from_dict(state.get("inbox"))
+    inbox.add_turn(
+        f"Goal round {next_goal.round}/{next_goal.max_rounds}: {reason}"
+    )
+    state["inbox"] = inbox.to_dict()
+    return True
 
 
 class RuntimeState(str, Enum):
     INIT = "INIT"
     PLAN = "PLAN"
     EXECUTE = "EXECUTE"
+    NEXT_ACTION = "NEXT_ACTION"
     NEXT_TASK = "NEXT_TASK"
+    OBSERVE = "OBSERVE"
     RECOVER = "RECOVER"
     REPLAN = "REPLAN"
     FINISH = "FINISH"
@@ -305,6 +397,7 @@ class UniversalAgent:
         session_context: Optional[SessionContext] = None,
         run_context: Optional[RunContext] = None,
         workspace: Optional[Any] = None,
+        failure_policy: Optional[FailurePolicy] = None,
     ):
         self.user_id = user_id
         if session_context is None:
@@ -341,6 +434,7 @@ class UniversalAgent:
         self._pending_execution_target = ""
         self._run_context: Optional[RunContext] = None
         self._task_subscription: Optional[Subscription] = None
+        self._failure_policy = failure_policy or FailurePolicy()
         if run_context is not None:
             self.attach_run(run_context)
 
@@ -457,10 +551,20 @@ class UniversalAgent:
         返回最终答案；Traceback 永不暴露到 CLI。
         """
         layer, code, friendly = self._classify(e)
+        failure = failure_fact(
+            code,
+            message=str(e) or type(e).__name__,
+            component=layer,
+            classification_source=ClassificationSource.LEGACY_FALLBACK,
+        )
+        directive = self._failure_policy.resolve(failure, {})
         logger.error("Runtime recovered: layer=%s code=%s error=%s", layer, code, e)
         # 结构化记录（供 Recovery Dataset / Metrics）
         self._emit("runtime_recovered", {
-            "layer": layer, "error_code": code, "error": str(e)[:300],
+            "layer": layer,
+            "error_code": code,
+            "error": str(e)[:300],
+            "recovery_directive": directive.to_dict(),
         })
         answer = f"抱歉，刚才在处理「{user_input[:30]}」时遇到了一点问题（{friendly}），请换一种说法再试试。"
         try:
@@ -468,6 +572,22 @@ class UniversalAgent:
         except Exception:
             pass
         return answer
+
+    def _resolve_recovery(self, state: AgentState):
+        """Resolve one structural failure through the single policy seam."""
+        payload = state.get("runtime_failure")
+        if isinstance(payload, dict):
+            failure = FailureFact.from_dict(payload)
+        else:
+            failure = failure_fact(
+                str(state.get("runtime_failure_code", "UNKNOWN")),
+                message=str(state.get("runtime_failure_message", "")),
+                component="runtime",
+            )
+        directive = self._failure_policy.resolve(failure, state)
+        state["recovery_directive"] = directive.to_dict()
+        self._emit("recovery_decided", directive.to_dict())
+        return directive
 
     @staticmethod
     def _classify(e: Exception) -> tuple:
@@ -658,26 +778,50 @@ class UniversalAgent:
         self._timings = {}
         self.orchestrator.reset_timings()
         self.orchestrator.replan_count = 0
+        budget = RunBudget.from_env()
+        budget.start()
+        bind_budget = getattr(self.orchestrator, "bind_run_budget", None)
+        if callable(bind_budget):
+            bind_budget(budget)
         t0 = time.perf_counter()
 
-        try:
-            await asyncio.wait_for(
-                self._memory_view.extract_and_save_facts(user_input),
-                timeout=FACT_EXTRACTION_TIMEOUT,
-            )
-        except asyncio.TimeoutError:
-            logger.warning("事实抽取超时，继续执行主任务")
-        except Exception as exc:
-            # Do not emit a traceback from an optional memory enhancement.
-            logger.warning("事实抽取失败，继续执行主任务: %s", str(exc)[:200])
+        context_policy = ContextPolicy.for_request(user_input)
+        if context_policy.pre_answer_fact_extraction:
+            try:
+                await asyncio.wait_for(
+                    self._memory_view.extract_and_save_facts(user_input),
+                    timeout=FACT_EXTRACTION_TIMEOUT,
+                )
+            except asyncio.TimeoutError:
+                logger.warning("事实抽取超时，继续执行主任务")
+            except Exception as exc:
+                # Do not emit a traceback from an optional memory enhancement.
+                logger.warning("事实抽取失败，继续执行主任务: %s", str(exc)[:200])
         self._memory_view.record_user_message(user_input)
 
         from agent.query_normalizer import QueryNormalizer
         normalized_input = QueryNormalizer.process(user_input, self._memory_namespace)
-        context = self._memory_view.get_context(normalized_input)
+        if context_policy.memory_retrieval:
+            # Chroma/SQLite-backed retrieval is synchronous.  Keep it off the
+            # event loop so event delivery, cancellation and watchdogs remain
+            # responsive during a cold embedding load.
+            context = await asyncio.to_thread(
+                self._memory_view.get_context,
+                normalized_input,
+            )
+        else:
+            context = {"session": "", "short_term": "", "long_term": "", "facts": ""}
         context["runtime_pending_target"] = self._pending_execution_target
-        repo_context = _build_repo_context(normalized_input)
-        skill = skill_registry.select(normalized_input)
+        repo_context = (
+            await asyncio.to_thread(_build_repo_context, normalized_input)
+            if context_policy.repository_retrieval
+            else ""
+        )
+        skill = (
+            await asyncio.to_thread(skill_registry.select, normalized_input)
+            if context_policy.semantic_skill_selection
+            else None
+        )
         skill_hint = skill.planner_hint if skill else ""
 
         self._timings["init"] = round(time.perf_counter() - t0, 3)
@@ -695,11 +839,20 @@ class UniversalAgent:
             ),
             "repo_context": repo_context,
             "skill_hint": skill_hint,
+            "context_policy": context_policy.mode.value,
             "retries": 0,
             "workflow": None,
             "answer_required": True,
             "fresh_evidence": False,
             "request_output": False,
+            "goal_state": GoalState(
+                objective=user_input,
+                max_rounds=budget.max_goal_rounds,
+            ).to_dict(),
+            "goal_evidence": [],
+            "goal_missing": [],
+            "inbox": AgentInbox(next_turn=[user_input]).to_dict(),
+            "execution_mode": "result_driven",
         }
         best_answer = None
         loop_started = time.perf_counter()
@@ -712,18 +865,17 @@ class UniversalAgent:
         try:
             while rt_state not in (RuntimeState.FINISH, RuntimeState.FAIL):
                 transitions += 1
-                if (
-                    transitions > MAX_STATE_TRANSITIONS
-                    or time.perf_counter() - loop_started > MAX_RUNTIME_SECONDS
-                ):
+                if not budget.consume_transition():
+                    budget_code = budget.exhausted_code()
                     logger.warning(
-                        "Runtime execution budget exhausted: transitions=%s elapsed=%.1fs",
+                        "Runtime execution budget exhausted: code=%s transitions=%s elapsed=%.1fs",
+                        budget_code,
                         transitions,
                         time.perf_counter() - loop_started,
                     )
                     best_answer = best_answer or "任务执行达到时间或步骤上限，已停止继续重试。"
                     runtime_terminal_status = "FAILED_TERMINAL"
-                    runtime_failure_code = "RUNTIME_BUDGET_EXHAUSTED"
+                    runtime_failure_code = budget_code or "RUNTIME_BUDGET_EXHAUSTED"
                     budget_exhausted = True
                     state["runtime_terminal_status"] = runtime_terminal_status
                     state["runtime_failure_code"] = runtime_failure_code
@@ -735,6 +887,9 @@ class UniversalAgent:
                     rt_state = RuntimeState.PLAN
 
                 elif rt_state == RuntimeState.PLAN:
+                    if not _advance_goal_round(state, "plan/reason"):
+                        rt_state = RuntimeState.FINISH
+                        continue
                     # 委托 Orchestrator
                     self._interruption_boundary(
                         SafeCancellationBoundary.BEFORE_PLANNER
@@ -745,6 +900,8 @@ class UniversalAgent:
                         context=context,
                         repo_context=repo_context,
                         skill_hint=skill_hint,
+                        context_policy=context_policy,
+                        runtime_state=state,
                     )
                     if answer:
                         best_answer = answer
@@ -763,12 +920,54 @@ class UniversalAgent:
                     )
                     rt_state = RuntimeState[next_state] if isinstance(next_state, str) else next_state
 
-                elif rt_state == RuntimeState.RECOVER:
+                elif rt_state == RuntimeState.NEXT_ACTION:
+                    # The previous ActionResult is already in Inbox.next_step;
+                    # continue with the next pending task without another
+                    # planning call.
+                    rt_state = RuntimeState.EXECUTE
+
+                elif rt_state == RuntimeState.OBSERVE:
+                    # Ordinary action failures are observations.  Give the
+                    # next bounded goal round the facts before selecting the
+                    # next action. Structural failures are handled by the
+                    # FailurePolicy branch below.
+                    if not _advance_goal_round(state, "action observation"):
+                        rt_state = RuntimeState.FINISH
+                        continue
                     self._interruption_boundary(
                         SafeCancellationBoundary.BEFORE_PLANNER
                     )
-                    state, next_state = await self.orchestrator.replan(
+                    state, next_state = await self.orchestrator.observe_failure(
                         state, normalized_input, self._memory_namespace,
+                    )
+                    self._interruption_boundary(
+                        SafeCancellationBoundary.AFTER_PLANNER
+                    )
+                    rt_state = RuntimeState[next_state] if isinstance(next_state, str) else next_state
+
+                elif rt_state == RuntimeState.RECOVER:
+                    directive = self._resolve_recovery(state)
+                    if directive.action == "observe":
+                        # Preserve the existing bounded observation adapter;
+                        # ordinary action failures never enter Reflection.
+                        rt_state = RuntimeState.OBSERVE
+                        continue
+                    if directive.action in {"ask", "finish"}:
+                        state["runtime_terminal_status"] = (
+                            "BLOCKED" if directive.action == "ask" else "FAILED_TERMINAL"
+                        )
+                        state["runtime_failure_class"] = "structural"
+                        rt_state = RuntimeState.FINISH
+                        continue
+                    if not _advance_goal_round(state, "structural recovery"):
+                        rt_state = RuntimeState.FINISH
+                        continue
+                    self._interruption_boundary(
+                        SafeCancellationBoundary.BEFORE_PLANNER
+                    )
+                    state, next_state = await self.orchestrator.recover_structural_failure(
+                        state, normalized_input, self._memory_namespace,
+                        directive,
                     )
                     self._interruption_boundary(
                         SafeCancellationBoundary.AFTER_PLANNER
@@ -839,6 +1038,37 @@ class UniversalAgent:
             user_id=self._memory_namespace,
             best_answer=best_answer,
         )
+        # Fact extraction is an optional post-turn projection. It is selected
+        # only for explicit personal-fact statements, so it cannot delay chat,
+        # research, repository, or ordinary execution requests.
+        if (
+            context_policy.post_answer_fact_extraction
+            and str(state.get("runtime_terminal_status", ""))
+            not in {"CANCELLED", "TIMED_OUT"}
+        ):
+            fact_started = time.perf_counter()
+            captured_facts: object = {}
+            try:
+                captured_facts = await asyncio.wait_for(
+                    self._memory_view.extract_and_save_facts(user_input),
+                    timeout=FACT_EXTRACTION_TIMEOUT,
+                )
+            except asyncio.TimeoutError:
+                logger.warning("回答后的事实抽取超时，不影响当前回答")
+            except Exception as exc:
+                logger.warning("回答后的事实抽取失败，不影响当前回答: %s", str(exc)[:200])
+            self._timings["fact_extraction_post"] = round(
+                time.perf_counter() - fact_started, 3
+            )
+            normalized_answer = _normalize_fact_capture_answer(
+                final_answer, captured_facts,
+            )
+            if normalized_answer != final_answer:
+                final_answer = normalized_answer
+                # Finalizer has already recorded the first answer.  Record the
+                # corrected projection as the latest exchange so Conversation
+                # and the next turn observe the same truth as the fact store.
+                self._memory_view.record_full_exchange(user_input, final_answer)
         # ── v2.1B-1：会话状态更新（ADR-0013；每轮 answer 后）──
         conversation_diagnostic = None
         try:

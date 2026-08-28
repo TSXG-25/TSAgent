@@ -18,6 +18,7 @@ from typing import Any, Dict, Optional
 
 from agent.task import ExecutionPlan, ExecutionStep
 from agent.security import redact_sensitive_text
+from agent.execution_errors import classify_execution_error, stable_error_message
 from agent.registry.tool_registry import registry as tool_registry
 from agent.services.workspace_service import WorkspaceService
 from agent.interruption import (
@@ -182,11 +183,16 @@ class PlanExecutor:
             except RunInterruptionRequested:
                 raise
             except Exception as e:
-                error_msg = f"PlanExecutor: step {step_idx} ({tool_name}) 失败: {e}"
+                error_msg = (
+                    f"PlanExecutor: step {step_idx} ({tool_name}) 失败: "
+                    f"{stable_error_message(e, fallback='tool step failed')}"
+                )
                 logger.error(error_msg)
+                error_code = classify_execution_error(e)
                 return {
                     "_last_output": last_output,
                     "_error": error_msg,
+                    "_error_code": error_code or "TOOL_EXECUTION_FAILED",
                     "_failed_step": step_idx,
                     "_failed_tool": tool_name,
                     "_files_written": files_written,
@@ -300,6 +306,9 @@ class PlanExecutor:
             "repository",
             "knowledge",
             "llm",
+            "shell",
+            "run_python",
+            "run_python_file",
             "text.merge_unique",
             "text.materialize_research",
             "text.transform_upper",
@@ -312,8 +321,34 @@ class PlanExecutor:
             "filesystem.move": "move_file",
             "filesystem.copy": "copy_file",
         }
+        lazy_modules = {
+            "web_search": "web",
+            "web_fetch": "web",
+            "web_deep_search": "web",
+            "web_news_search": "web",
+            "query_memory": "memory",
+            "get_user_preference": "memory",
+            "save_fact": "memory",
+            "get_session_info": "memory",
+            "propose_patch": "patch",
+            "apply_patch": "patch",
+            "list_all_tools": "meta",
+            "get_tool_info": "meta",
+            "create_pptx": "office",
+            "create_docx": "office",
+            "list_workflows": "workflow",
+            "get_workflow": "workflow",
+            "run_workflow": "workflow",
+        }
+        modules_to_load = tuple(
+            sorted({lazy_modules[step.tool] for step in plan.steps if step.tool in lazy_modules})
+        )
+        if modules_to_load:
+            from agent.bootstrap import load_tool_modules
+
+            load_tool_modules(modules_to_load)
         for step in plan.steps:
-            if step.tool in builtin:
+            if step.tool in builtin or step.tool in filesystem:
                 continue
             actual = filesystem.get(step.tool, step.tool)
             if step.tool.startswith("knowledge."):
@@ -350,7 +385,7 @@ class PlanExecutor:
             except Exception:
                 pass
 
-        matches = workspace.resolve(spec)
+        matches = await asyncio.to_thread(workspace.resolve, spec)
         if matches:
             best = matches[0]
             resolved_path = best.path if hasattr(best, 'path') else str(best)
@@ -379,6 +414,13 @@ class PlanExecutor:
         # unscoped legacy callers.
         if workspace is not None and tool_name.startswith("filesystem."):
             return await self._exec_scoped_filesystem(tool_name, args, workspace)
+
+        if workspace is not None and tool_name in {
+            "shell",
+            "run_python",
+            "run_python_file",
+        }:
+            return await self._exec_scoped_runtime_tool(tool_name, args, workspace)
 
         # ── 特殊处理：llm 未注册为工具 ──
         if tool_name == "llm":
@@ -416,7 +458,10 @@ class PlanExecutor:
                 view=cancellation_view,
             )
             content = response.content if hasattr(response, 'content') else str(response)
-            if args.get("verb") in {"write", "generate", "create", "edit"}:
+            if (
+                args.get("verb") in {"write", "generate", "create", "edit"}
+                or args.get("output_format") == "python_source"
+            ):
                 content = re.sub(r"^```[^\n]*\n", "", content.strip())
                 content = re.sub(r"\n?```\s*$", "", content)
             return {"content": content, "text": content}
@@ -472,7 +517,11 @@ class PlanExecutor:
 
             query = str(args.get("query", args.get("spec", "")))
             k = int(args.get("k", 5))
-            hits = RepositoryService.search_similar(query, k=k)
+            hits = await asyncio.to_thread(
+                RepositoryService.search_similar,
+                query,
+                k,
+            )
             if hits:
                 content = "\n\n".join(
                     f"[{h['path']}]\n{h['content'][:300]}" for h in hits
@@ -584,6 +633,41 @@ class PlanExecutor:
 
         content = await asyncio.to_thread(invoke)
         return {"content": content, "text": content}
+
+    @staticmethod
+    async def _exec_scoped_runtime_tool(
+        tool_name: str,
+        args: Dict[str, Any],
+        workspace: WorkspaceService,
+    ) -> Dict[str, Any]:
+        """Execute process/Python tools against the current Run workspace."""
+
+        if tool_name == "shell":
+            from tools.shell import shell_in_workspace
+
+            content = await asyncio.to_thread(
+                shell_in_workspace,
+                str(args.get("cmd", "")),
+                str(workspace.root),
+                int(args.get("timeout", 30)),
+            )
+        else:
+            from tools.python import run_python_in_workspace
+
+            if tool_name == "run_python_file":
+                code = workspace.read_text(str(args.get("path", "")))
+            else:
+                code = str(args.get("code", ""))
+            content = await asyncio.to_thread(
+                run_python_in_workspace,
+                code,
+                workspace.root,
+                int(args.get("timeout", 10)),
+            )
+
+        if str(content).lstrip().startswith(("错误:", "错误：", "Error:", "ERROR:")):
+            raise RuntimeError(str(content))
+        return {"content": str(content), "text": str(content)}
 
 
 # 全局单例

@@ -16,13 +16,21 @@ from .contract import (
     executor_factory,
     ExecutionTarget,
 )
-from .llm_executor import LLMExecutor
 from .executors.tool import ToolExecutor as PlanToolExecutor
 from .executors.workflow import WorkflowExecutor as V2WorkflowExecutor
 
+
+class _LazyLLMExecutor:
+    """Keep Provider imports off the application bootstrap path."""
+
+    def __new__(cls, *args, **kwargs):
+        from .llm_executor import LLMExecutor
+
+        return LLMExecutor(*args, **kwargs)
+
 # 注册统一契约执行器
 executor_factory.register("tool", PlanToolExecutor)
-executor_factory.register("llm", LLMExecutor)
+executor_factory.register("llm", _LazyLLMExecutor)
 executor_factory.register("workflow", V2WorkflowExecutor)
 
 __all__ = [
@@ -34,3 +42,11 @@ __all__ = [
     "executor_factory",
     "ExecutionTarget",
 ]
+
+
+def __getattr__(name: str):
+    if name == "LLMExecutor":
+        from .llm_executor import LLMExecutor
+
+        return LLMExecutor
+    raise AttributeError(name)

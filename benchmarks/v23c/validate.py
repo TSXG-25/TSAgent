@@ -12,7 +12,20 @@ from .oracle import evaluate
 
 
 REQUIRED_GROUPS = frozenset(
-    {"identity", "dto", "idempotency", "event_ordering", "event_replay", "terminal_state"}
+    {
+        "identity",
+        "dto",
+        "idempotency",
+        "start_lifecycle",
+        "snapshot",
+        "event_ordering",
+        "event_replay",
+        "terminal_state",
+        "artifact_scope",
+        "resume",
+        "lifecycle",
+        "errors",
+    }
 )
 
 
@@ -22,8 +35,8 @@ def validate(cases: tuple[ServiceContractCase, ...]) -> list[str]:
     duplicates = sorted(case_id for case_id, count in Counter(ids).items() if count > 1)
     if duplicates:
         problems.append(f"duplicate case ids: {', '.join(duplicates)}")
-    if len(cases) != 16:
-        problems.append(f"expected 16 cases, got {len(cases)}")
+    if len(cases) != 32:
+        problems.append(f"expected 32 cases, got {len(cases)}")
     missing_groups = sorted(REQUIRED_GROUPS - {case.group for case in cases})
     if missing_groups:
         problems.append(f"missing required groups: {', '.join(missing_groups)}")

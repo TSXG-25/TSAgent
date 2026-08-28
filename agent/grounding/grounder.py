@@ -100,16 +100,9 @@ class Grounder:
 
     def _ground_files(self, input: GroundingInput, keys: List[str],
                       stats: GroundingStats, trace: GroundingTrace) -> List[Candidate]:
-        from agent.compat.workspace import get_legacy_workspace_service
-
         results: List[Candidate] = []
-        try:
-            ws = (
-                input.workspace
-                if input.workspace is not None
-                else get_legacy_workspace_service()
-            )
-        except Exception:
+        ws = input.workspace
+        if ws is None:
             return results
 
         budget = self._budget
@@ -182,17 +175,13 @@ class Grounder:
                 break
             if not key or not key[0].isupper():
                 continue  # 符号名通常驼峰开头
-            try:
-                from agent.compat.workspace import get_legacy_workspace_service
-                ws = get_legacy_workspace_service().current_workspace()
-                if ws is None:
-                    continue
-                find_symbol = getattr(ws, "find_symbol", None)
-                if not callable(find_symbol):
-                    continue
-                paths = find_symbol(key)
-            except Exception:
-                paths = []
+            ws = input.workspace
+            if ws is None:
+                continue
+            find_symbol = getattr(ws, "find_symbol", None)
+            if not callable(find_symbol):
+                continue
+            paths = find_symbol(key)
             stats.symbols_checked += len(paths)
             trace.searched_hits.setdefault("symbol", trace.searched_hits.get("symbol", 0) + len(paths))
             for p in paths[:2]:
@@ -214,16 +203,10 @@ class Grounder:
             stem = key.rsplit("/", 1)[-1].rsplit(".", 1)[0] if key else ""
             if not stem:
                 continue
-            try:
-                from agent.compat.workspace import get_legacy_workspace_service
-                ws = (
-                    input.workspace
-                    if input.workspace is not None
-                    else get_legacy_workspace_service()
-                )
-                matches = ws.find(stem)
-            except Exception:
-                matches = []
+            ws = input.workspace
+            if ws is None:
+                continue
+            matches = ws.find(stem)
             for m in matches[:3]:
                 name = str(m.path)
                 if "/tests/" in name or name.startswith("tests/"):

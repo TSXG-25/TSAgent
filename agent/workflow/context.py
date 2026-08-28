@@ -13,11 +13,13 @@ Executor、WorkflowExecutor 都共享同一个 Context。
 - variables: 运行时变量（workspace, env 等）
 """
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
-from langchain_core.messages import BaseMessage
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from .artifact import Artifact
 from .budget import BudgetManager, BudgetSpec
 from agent.task import Task
+
+if TYPE_CHECKING:
+    from langchain_core.messages import BaseMessage
 
 
 @dataclass
@@ -42,7 +44,10 @@ class ExecutionContext:
         variables: 运行环境变量（workspace, working_directory, env）
     """
     artifacts: Dict[str, Artifact] = field(default_factory=dict)
-    messages: List[BaseMessage] = field(default_factory=list)
+    # Message objects are opaque to the workflow data container.  Keeping the
+    # LangChain type import for type-checking only avoids importing the
+    # transformers/torch dependency chain while bootstrapping registries.
+    messages: List[Any] = field(default_factory=list)
     workflow_id: str = ""
     stage_id: str = ""
     facts: Dict[str, Any] = field(default_factory=dict)

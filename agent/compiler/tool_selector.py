@@ -29,6 +29,7 @@ from typing import Any, Optional
 
 from agent.task import Task, Verb, ExecutionPlan, ExecutionStep
 from agent.compiler.context import CompilerContext
+from agent.registry.tool_registry import registry as _application_registry
 
 
 class CompileError(Exception):
@@ -104,10 +105,22 @@ class Compiler:
             CompileError: task violates contract or plan fails static check.
         """
         if context is None:
-            context = CompilerContext()
+            context = CompilerContext(registry=_application_registry)
+        elif context.registry is None:
+            # There is one application registry.  A missing registry is not a
+            # reason to skip the static check; compilation must still fail
+            # fast for an unknown tool.
+            context = CompilerContext(
+                workspace=context.workspace,
+                registry=_application_registry,
+                repository=context.repository,
+                extra=dict(context.extra),
+            )
 
         # Task policy may force an executor (Stage 投影时已声明)
-        if task.policy.executor == "llm":
+        # Planner policy cannot downgrade an explicit execution verb to an
+        # LLM-only plan.  The requested outcome contract owns this boundary.
+        if task.policy.executor == "llm" and task.verb != Verb.EXECUTE:
             plan = ExecutionPlan(task=task, steps=[], executor="llm")
             self._static_check(plan, context)
             return plan
@@ -162,26 +175,31 @@ class Compiler:
         if bound_plan is not None:
             return bound_plan
 
-        # 契约内开放任务：text/none → LLM 推理
-        if task.target_type in ("text", "none"):
-            return ExecutionPlan(task=task, steps=[], executor="llm")
-
         services = {}
         if context.workspace is not None:
             services["workspace"] = context.workspace
         if context.repository is not None:
             services["repository"] = context.repository
 
+        if task.verb == Verb.EXECUTE:
+            for rule in self._rules:
+                if rule.matches(task):
+                    return rule.build(task, **services)
+
+        # Only tasks without a deterministic lowering rule become open-ended
+        # reasoning.  In particular, verb=EXECUTE must reach ExecuteRule even
+        # when its natural-language target has target_type=text/none.
+        if task.target_type in ("text", "none"):
+            return ExecutionPlan(task=task, steps=[], executor="llm")
+
         for rule in self._rules:
             if rule.matches(task):
                 return rule.build(task, **services)
 
-        # 无匹配规则 → 基础 resolve + read（仍走 static check）
-        fallback = self._fallback(task, **services)
-        if fallback.steps:
-            return fallback
-
-        return ExecutionPlan(task=task, steps=[], executor="llm")
+        raise CompileError(
+            f"task={task.id}: 没有匹配的 lowering rule（verb={task.verb.value}, "
+            f"target_type={task.target_type}）"
+        )
 
     @staticmethod
     def _lower_bound_tool(task: Task) -> Optional[ExecutionPlan]:
@@ -290,27 +308,6 @@ class Compiler:
             )
         return None
 
-    def _fallback(self, task: Task, **services) -> ExecutionPlan:
-        """Fallback plan: resolve target, then try to read it."""
-        steps = [
-            ExecutionStep(
-                tool="workspace",
-                args={"spec": task.target},
-                outputs=["path"],
-            ),
-        ]
-        if task.verb in (Verb.READ, Verb.EXPLAIN, Verb.MODIFY):
-            steps.append(
-                ExecutionStep(
-                    tool="filesystem.read",
-                    args={"path": "$path"},
-                    outputs=["content"],
-                )
-            )
-        if not task.target:
-            return ExecutionPlan(task=task, steps=[], executor="llm")
-        return ExecutionPlan(task=task, steps=steps)
-
     # ── Stage 4: Static Check（ExecutionPlan 契约，编译期报错）──
 
     # 内置特殊工具（plan_executor 处理，不在 ToolRegistry）
@@ -319,10 +316,33 @@ class Compiler:
         "repository",
         "knowledge",
         "llm",
+        # Standard execution tools are loaded by the application bootstrap,
+        # but Workflow/Coordinator callers are allowed to compile plans
+        # before that optional registry import has run.  Runtime execution
+        # still resolves the concrete implementation from ToolRegistry.
+        "shell",
+        "run_python",
+        "run_python_file",
         # Deterministic transformations performed inside PlanExecutor. They
         # are execution primitives, not ToolRegistry providers.
         "text.merge_unique",
         "text.materialize_research",
+        # Scoped filesystem primitives are implemented by PlanExecutor and
+        # therefore do not depend on the process-global ToolRegistry.
+        "filesystem.read",
+        "filesystem.write",
+        "filesystem.list",
+        "filesystem.delete",
+        "filesystem.move",
+        "filesystem.copy",
+        # Raw names remain accepted only for hand-built contract tests and
+        # the registry adapter; production lowering emits filesystem.*.
+        "read_file",
+        "write_file",
+        "list_directory",
+        "delete_file",
+        "move_file",
+        "copy_file",
     }
     # filesystem.* 前缀映射到实际工具名
     _FS_PREFIX_MAP = {
@@ -341,11 +361,15 @@ class Compiler:
         if not plan.steps:
             raise CompileError(f"task={plan.task.id}: executor=tool 但 steps 为空")
 
-        registry = context.registry if context is not None else None
+        registry = (
+            context.registry
+            if context is not None and context.registry is not None
+            else _application_registry
+        )
         defined: set[str] = set()
         for step in plan.steps:
             # tool 必须存在（内置特殊工具或 ToolRegistry）
-            if registry is not None and not self._tool_exists(step.tool, registry):
+            if not self._tool_exists(step.tool, registry):
                 raise CompileError(
                     f"task={plan.task.id} step={step.tool}: 工具不存在于 ToolRegistry（编译期错误）"
                 )
@@ -382,5 +406,7 @@ class Compiler:
             actual = tool
         try:
             return registry.get(actual) is not None
-        except Exception:
-            return True  # registry 不可用时跳过（防御）
+        except Exception as exc:
+            raise CompileError(
+                f"ToolRegistry unavailable while checking {tool!r}: {exc}"
+            ) from exc

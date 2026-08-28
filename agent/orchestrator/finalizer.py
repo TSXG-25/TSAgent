@@ -17,8 +17,10 @@ from agent.task import Verb
 from agent.effect_truth import (
     effect_label,
     enforce_completion_gate,
+    execution_truth,
     initialize_effect_contract,
 )
+from agent.goal import GoalState, GoalStatus, GoalVerifier
 from agent.runtime_gates import has_fresh_evidence
 from agent.registry.capability_registry import registry as _capability_registry
 
@@ -35,6 +37,35 @@ class Finalizer:
     def _memory(self):
         session_context = getattr(self._orch, "session_context", None)
         return getattr(session_context, "memory_view", None) or MemoryService
+
+    @staticmethod
+    def _project_goal_answer(state: AgentState, answer: str) -> str:
+        """Allow final prose only after the whole-goal verifier accepts it."""
+        decision = GoalVerifier.verify(state, answer)
+        goal_state = GoalState.from_dict(state.get("goal_state")).with_decision(
+            decision
+        )
+        state["goal_state"] = goal_state.to_dict()
+        state["goal_evidence"] = [item.to_dict() for item in decision.evidence]
+        state["goal_missing"] = list(decision.missing)
+        if decision.can_complete:
+            return answer
+        if decision.status is GoalStatus.BLOCKED:
+            state["runtime_terminal_status"] = "BLOCKED"
+        elif state.get("runtime_terminal_status") in {"", "COMPLETED"}:
+            state["runtime_terminal_status"] = "FAILED_TERMINAL"
+        if not state.get("runtime_failure_code"):
+            state["runtime_failure_code"] = decision.blocker or "GOAL_INCOMPLETE"
+        if decision.blocker == "UNSUPPORTED_CAPABILITY" or state.get(
+            "runtime_failure_code"
+        ) == "UNSUPPORTED_CAPABILITY":
+            effect_answer = Finalizer._effect_truth_failure_answer(
+                state, execution_truth(state)
+            )
+            if effect_answer:
+                return effect_answer
+        missing = "、".join(decision.missing) or "完成证据"
+        return f"目标尚未完成，缺少可验证证据：{missing}。本次不会报告为成功。"
 
     async def run(
         self,
@@ -55,6 +86,7 @@ class Finalizer:
         effect_truth = enforce_completion_gate(state)
         effect_failure = self._effect_truth_failure_answer(state, effect_truth)
         if effect_failure:
+            effect_failure = self._project_goal_answer(state, effect_failure)
             self._memory().record_full_exchange(user_input, effect_failure)
             return effect_failure
 
@@ -71,11 +103,13 @@ class Finalizer:
                 "当前没有可核验的外部最新来源，因此不能可靠回答这项时效性问题；"
                 "本次未生成无来源的当前信息。"
             )
+            answer = self._project_goal_answer(state, answer)
             self._memory().record_full_exchange(user_input, answer)
             return answer
 
         failure_answer = self._failure_answer(state)
         if failure_answer and not best_answer:
+            failure_answer = self._project_goal_answer(state, failure_answer)
             self._memory().record_full_exchange(user_input, failure_answer)
             return failure_answer
         run_context = getattr(self._orch, "run_context", None)
@@ -87,13 +121,18 @@ class Finalizer:
                 workspace=workspace,
             )
             if checked is not None:
+                checked = self._project_goal_answer(state, checked)
                 self._memory().record_full_exchange(user_input, checked)
                 return checked
+            best_answer = self._project_goal_answer(state, best_answer)
             self._memory().record_full_exchange(user_input, best_answer)
             return best_answer
 
         deterministic_answer = self._deterministic_completion_answer(state)
         if deterministic_answer:
+            deterministic_answer = self._project_goal_answer(
+                state, deterministic_answer
+            )
             self._memory().record_full_exchange(user_input, deterministic_answer)
             return deterministic_answer
 
@@ -106,6 +145,7 @@ class Finalizer:
         )
         if checked is not None:
             final_answer = checked
+        final_answer = self._project_goal_answer(state, final_answer)
         self._memory().record_full_exchange(user_input, final_answer)
         self._orch._timings["answer_gen"] = round(time.perf_counter() - t_answer, 3)
         return final_answer
@@ -114,8 +154,6 @@ class Finalizer:
     def _effect_truth_failure_answer(state: AgentState, truth) -> Optional[str]:
         """Explain an unresolved effect without making a success claim."""
 
-        if not truth.unresolved_required_effects:
-            return None
         if truth.unsupported_effects:
             requirement = truth.unsupported_effects[0]
             label = effect_label(requirement)
@@ -123,6 +161,23 @@ class Finalizer:
                 f"当前没有可用的{label}能力，因此本次未执行该外部操作。"
                 "没有可验证的执行证据，不能报告为已完成。"
             )
+        if truth.unresolved_requested_outcomes:
+            labels = {
+                "FILE_READ": "文件读取",
+                "FILE_MUTATION": "文件变更",
+                "CODE_EXECUTION": "代码执行",
+                "COMMAND_EXECUTION": "命令执行",
+            }
+            missing = "、".join(
+                labels.get(item, item)
+                for item in truth.unresolved_requested_outcomes
+            )
+            return (
+                f"未获得{missing}的可验证执行证据，因此不能声称已经完成；"
+                "本次不会将任务报告为成功。"
+            )
+        if not truth.unresolved_required_effects:
+            return None
         return (
             "外部操作尚未获得可验证的执行证据，因此不能确认已经完成；"
             "本次不会将任务报告为成功。"
@@ -151,7 +206,9 @@ class Finalizer:
             task = executed[-1]
             output = str((task.get("facts") or {}).get("output", "")).strip()
             suffix = f"，运行输出：{output[:240]}" if output else ""
-            return f"已创建并运行 {task.get('target', '')}{suffix}。"
+            target = str(task.get("target", ""))
+            verb = "已生成并运行" if target.lower().endswith(".py") else "已执行"
+            return f"{verb} {target}{suffix}。"
         written = [
             str(task.get("target", ""))
             for task in tasks

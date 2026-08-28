@@ -18,7 +18,6 @@ from agent.workspace.index import ProjectIndex
 from agent.workspace.resolver import PathResolver
 from agent.workspace.cache import FileCache
 from agent.event_bus import EventBus
-from agent.compat.event_bus import get_legacy_event_bus
 
 
 class Workspace:
@@ -27,9 +26,9 @@ class Workspace:
     Never performs file I/O. Delegates to ProjectIndex and PathResolver.
     """
 
-    def __init__(self, root: Path, *, event_bus: Optional[EventBus] = None):
+    def __init__(self, root: Path, *, event_bus: EventBus):
         self._root = root.resolve()
-        self._event_bus = event_bus or get_legacy_event_bus()
+        self._event_bus = event_bus
         self._closed = False
 
         # Internal components
@@ -127,10 +126,12 @@ class Workspace:
         Call this after build_index() in an async task.
         Does not block startup — symbols are a slow enrichment.
         """
+        import asyncio
+
         self._ensure_open()
         if self._symbols_built:
             return
-        self._index.build_symbols()
+        await asyncio.to_thread(self._index.build_symbols)
         self._symbols_built = True
         self._event_bus.emit(WorkspaceEvent.SYMBOL_UPDATED, {"root": str(self._root)})
 

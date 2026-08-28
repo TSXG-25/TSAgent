@@ -26,17 +26,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Dict, List, Optional
 
-# ── Root Cause Taxonomy（Symptom → Root Cause → Correction 统一映射） ──
-SYMPTOM_MAP: Dict[str, dict] = {
-    "timeout":            {"root_cause": "tool",       "correction": "switch_tool"},
-    "wrong_answer":       {"root_cause": "decision",   "correction": "re_decide"},
-    "missing_constraint": {"root_cause": "planning",   "correction": "replanning"},
-    "hallucination":      {"root_cause": "grounding",  "correction": "re_ground"},
-    "context_drift":      {"root_cause": "planning",   "correction": "replanning"},
-    "contract_violation": {"root_cause": "integration", "correction": "repair_contract"},
-    "unknown":            {"root_cause": "unknown",    "correction": "ask_user"},
-}
-VALID_SYMPTOMS = set(SYMPTOM_MAP.keys())
+from agent.failure import Evidence, FailureEvent, SYMPTOM_MAP, VALID_SYMPTOMS
 
 # ── 生命周期状态机 ──
 STATUS_FLOW = {
@@ -47,37 +37,6 @@ STATUS_FLOW = {
     "CLOSED":     {"REGRESSION"},
 }
 VALID_STATUSES = set(STATUS_FLOW.keys())
-
-
-@dataclass(frozen=True)
-class Evidence:
-    """结构化证据 —— Reflection 直接消费 expected/actual，无需 NLP。"""
-    source: str        # planner / plan_validator / semantic_validator / verify / trace
-    location: str      # task[2] / parser.py:17 / verify.py:31
-    expected: str      # 期望值（约束/目标/行为）
-    actual: str        # 实际值（违反/缺失/错误）
-
-
-@dataclass(frozen=True)
-class FailureEvent:
-    """不可变失败事件。生成后永不修改（Event Sourcing）。"""
-    benchmark: str
-    scenario: str
-    layer: str
-    dimension: str
-    failure: str
-    evidence: List[Evidence] = field(default_factory=list)
-    symptom: str = "unknown"
-    detected_at: str = ""
-
-    def __post_init__(self):
-        if self.symptom not in VALID_SYMPTOMS:
-            raise ValueError(f"非法 symptom: {self.symptom!r}（合法: {sorted(VALID_SYMPTOMS)}）")
-
-    @property
-    def id(self) -> str:
-        # 同一 benchmark+scenario+dimension = 同一 Bug 生命周期
-        return f"{self.benchmark}:{self.scenario}:{self.dimension}"
 
 
 class FailBoard:

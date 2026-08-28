@@ -13,6 +13,11 @@ from enum import Enum
 import re
 from typing import Any, Callable, Mapping
 
+from agent.cognition.execution_need import (
+    RequestedOutcome,
+    analyze_requested_outcomes,
+)
+
 
 class EffectClass(str, Enum):
     """Risk class of the world state requested by the user."""
@@ -69,10 +74,16 @@ class ExecutionTruth:
     unsupported_effects: tuple[dict[str, Any], ...]
     failed_effects: tuple[dict[str, Any], ...]
     unresolved_required_effects: tuple[dict[str, Any], ...]
+    requested_outcomes: tuple[str, ...]
+    execution_evidence: tuple[dict[str, Any], ...]
+    unresolved_requested_outcomes: tuple[str, ...]
 
     @property
     def can_complete(self) -> bool:
-        return not self.unresolved_required_effects
+        return not (
+            self.unresolved_required_effects
+            or self.unresolved_requested_outcomes
+        )
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -83,6 +94,13 @@ class ExecutionTruth:
             "unresolved_required_effects": [
                 dict(item) for item in self.unresolved_required_effects
             ],
+            "requested_outcomes": list(self.requested_outcomes),
+            "execution_evidence": [
+                dict(item) for item in self.execution_evidence
+            ],
+            "unresolved_requested_outcomes": list(
+                self.unresolved_requested_outcomes
+            ),
             "can_complete": self.can_complete,
         }
 
@@ -213,6 +231,25 @@ def _copy_records(value: Any) -> list[dict[str, Any]]:
     return records
 
 
+_EVIDENCE_REQUIRED_OUTCOMES = frozenset({
+    RequestedOutcome.FILE_READ.value,
+    RequestedOutcome.FILE_MUTATION.value,
+    RequestedOutcome.CODE_EXECUTION.value,
+    RequestedOutcome.COMMAND_EXECUTION.value,
+})
+
+
+def _copy_outcomes(value: Any) -> tuple[str, ...]:
+    if not isinstance(value, (list, tuple)):
+        return ()
+    outcomes: list[str] = []
+    for item in value:
+        normalized = str(getattr(item, "value", item) or "").strip()
+        if normalized and normalized not in outcomes:
+            outcomes.append(normalized)
+    return tuple(outcomes)
+
+
 def execution_truth(state: Mapping[str, Any]) -> ExecutionTruth:
     """Build the deterministic truth projection from Runtime evidence."""
 
@@ -220,6 +257,8 @@ def execution_truth(state: Mapping[str, Any]) -> ExecutionTruth:
     verified = tuple(_copy_records(state.get("verified_effects")))
     unsupported = tuple(_copy_records(state.get("unsupported_effects")))
     failed = tuple(_copy_records(state.get("failed_effects")))
+    requested_outcomes = _copy_outcomes(state.get("requested_outcomes"))
+    execution_evidence = tuple(_copy_records(state.get("execution_evidence")))
     verified_ids = {
         str(item.get("effect_id", ""))
         for item in verified
@@ -229,12 +268,26 @@ def execution_truth(state: Mapping[str, Any]) -> ExecutionTruth:
         item for item in required
         if str(item.get("effect_id", "")) not in verified_ids
     )
+    verified_outcomes = {
+        str(item.get("outcome", ""))
+        for item in execution_evidence
+        if str(item.get("status", "VERIFIED")).upper() == "VERIFIED"
+    }
+    unresolved_outcomes = tuple(
+        outcome
+        for outcome in requested_outcomes
+        if outcome in _EVIDENCE_REQUIRED_OUTCOMES
+        and outcome not in verified_outcomes
+    )
     return ExecutionTruth(
         required_effects=required,
         verified_effects=verified,
         unsupported_effects=unsupported,
         failed_effects=failed,
         unresolved_required_effects=unresolved,
+        requested_outcomes=requested_outcomes,
+        execution_evidence=execution_evidence,
+        unresolved_requested_outcomes=unresolved_outcomes,
     )
 
 
@@ -246,6 +299,9 @@ def initialize_effect_contract(
 ) -> ExecutionTruth:
     """Register requested effects and mark missing capabilities deterministically."""
 
+    state["requested_outcomes"] = [
+        outcome.value for outcome in analyze_requested_outcomes(user_input)
+    ]
     state["effect_class"] = infer_effect_class(user_input).value
     detected = detect_requested_effects(user_input)
     existing = _copy_records(state.get("required_effects"))
@@ -298,11 +354,17 @@ def enforce_completion_gate(state: Any) -> ExecutionTruth:
     state["unresolved_required_effects"] = [
         dict(item) for item in truth.unresolved_required_effects
     ]
+    state["unresolved_requested_outcomes"] = list(
+        truth.unresolved_requested_outcomes
+    )
     state["effect_truth_ok"] = truth.can_complete
-    if truth.unresolved_required_effects:
+    if truth.unresolved_required_effects or truth.unresolved_requested_outcomes:
         if truth.unsupported_effects:
             state["runtime_failure_code"] = "UNSUPPORTED_CAPABILITY"
             state["runtime_terminal_status"] = "BLOCKED"
+        elif truth.unresolved_requested_outcomes:
+            state["runtime_failure_code"] = "EXECUTION_EVIDENCE_MISSING"
+            state["runtime_terminal_status"] = "FAILED_TERMINAL"
         else:
             state["runtime_failure_code"] = "UNVERIFIED_EFFECT"
             state["runtime_terminal_status"] = "FAILED_TERMINAL"
@@ -348,6 +410,60 @@ def record_effect_result(
         state["failed_effects"] = values
 
 
+_STEP_OUTCOME = {
+    "filesystem.read": RequestedOutcome.FILE_READ.value,
+    "filesystem.write": RequestedOutcome.FILE_MUTATION.value,
+    "filesystem.copy": RequestedOutcome.FILE_MUTATION.value,
+    "filesystem.move": RequestedOutcome.FILE_MUTATION.value,
+    "filesystem.delete": RequestedOutcome.FILE_MUTATION.value,
+    "run_python": RequestedOutcome.CODE_EXECUTION.value,
+    "run_python_file": RequestedOutcome.CODE_EXECUTION.value,
+    "shell": RequestedOutcome.COMMAND_EXECUTION.value,
+    "process.execute": RequestedOutcome.COMMAND_EXECUTION.value,
+}
+
+
+def record_execution_evidence(state: Any, plan: Any, result: Any) -> None:
+    """Record verified execution facts, never LLM output prose."""
+
+    if not bool(getattr(result, "success", False)):
+        return
+    if str(getattr(plan, "executor", "") or "") != "tool":
+        return
+    steps = getattr(plan, "steps", ()) or ()
+    evidence = _copy_records(state.get("execution_evidence"))
+    existing = {
+        (str(item.get("outcome", "")), str(item.get("target", "")))
+        for item in evidence
+    }
+    metadata = getattr(result, "metadata", None) or {}
+    verifier = str(metadata.get("verifier", "") or "")
+    for step in steps:
+        tool = str(getattr(step, "tool", "") or "")
+        outcome = _STEP_OUTCOME.get(tool)
+        if outcome is None:
+            continue
+        args = getattr(step, "args", {}) or {}
+        target = str(
+            args.get("path")
+            or args.get("destination")
+            or args.get("cmd")
+            or args.get("code")
+            or ""
+        )[:240]
+        identity = (outcome, target)
+        if identity in existing:
+            continue
+        evidence.append({
+            "outcome": outcome,
+            "status": "VERIFIED",
+            "source": f"ExecutionVerifier:{verifier}" if verifier else "ToolExecutor",
+            "target": target,
+        })
+        existing.add(identity)
+    state["execution_evidence"] = evidence
+
+
 def effect_label(requirement: Mapping[str, Any]) -> str:
     labels = {
         "reservation": "预订",
@@ -383,4 +499,5 @@ __all__ = [
     "infer_effect_class",
     "initialize_effect_contract",
     "record_effect_result",
+    "record_execution_evidence",
 ]

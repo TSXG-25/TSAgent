@@ -173,22 +173,29 @@ class EventType(str, Enum):
 
 @dataclass(frozen=True)
 class StartRunRequest:
-    """Request to create or idempotently address one logical Run."""
+    """Request to start or idempotently address one logical Run.
+
+    ``run_id`` is optional because the Service normally allocates it.  It is
+    retained as an optional replay/fixture hint, but is excluded from the
+    request digest so it cannot weaken ``tenant_id + request_id`` idempotency.
+    """
 
     tenant_id: str
     user_id: str
     session_id: str
-    run_id: str
     request_id: str
     request_text: str
+    run_id: str | None = None
     metadata: Mapping[str, JSONValue] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        if self.run_id is not None:
+            _required_identifier(self.run_id, "run_id")
         _validate_identity(
             tenant_id=self.tenant_id,
             user_id=self.user_id,
             session_id=self.session_id,
-            run_id=self.run_id,
+            run_id=self.run_id or "run-pending",
             request_id=self.request_id,
         )
         if not isinstance(self.request_text, str) or not self.request_text.strip():
@@ -196,15 +203,17 @@ class StartRunRequest:
         object.__setattr__(self, "metadata", _freeze_object(self.metadata or {}, "metadata"))
 
     def to_dict(self) -> dict[str, JSONValue]:
-        return {
+        value: dict[str, JSONValue] = {
             "tenant_id": self.tenant_id,
             "user_id": self.user_id,
             "session_id": self.session_id,
-            "run_id": self.run_id,
             "request_id": self.request_id,
             "request_text": self.request_text,
             "metadata": _thaw_json(self.metadata),
         }
+        if self.run_id is not None:
+            value["run_id"] = self.run_id
+        return value
 
     @classmethod
     def from_dict(cls, value: Mapping[str, Any]) -> "StartRunRequest":
@@ -212,20 +221,26 @@ class StartRunRequest:
             tenant_id=str(value.get("tenant_id", "")),
             user_id=str(value.get("user_id", "")),
             session_id=str(value.get("session_id", "")),
-            run_id=str(value.get("run_id", "")),
             request_id=str(value.get("request_id", "")),
             request_text=str(value.get("request_text", "")),
+            run_id=(None if value.get("run_id") is None else str(value.get("run_id"))),
             metadata=cast(Mapping[str, JSONValue], value.get("metadata", {}) or {}),
         )
 
     @property
     def request_digest(self) -> str:
-        return _canonical_digest(self.to_dict())
+        payload = self.to_dict()
+        payload.pop("run_id", None)
+        return _canonical_digest(payload)
 
 
 @dataclass(frozen=True)
 class ResumeRunRequest:
-    """Request to resume an existing logical Run."""
+    """Request to resume an existing logical Run.
+
+    ``request_id`` is the durable resume request identity (also exposed as
+    ``resume_request_id``) and must be persisted by the eventual Service Core.
+    """
 
     tenant_id: str
     user_id: str
@@ -233,6 +248,8 @@ class ResumeRunRequest:
     run_id: str
     request_id: str
     request_text: str = ""
+    checkpoint_id: str | None = None
+    action: ResumeAction | None = None
 
     def __post_init__(self) -> None:
         _validate_identity(
@@ -244,6 +261,13 @@ class ResumeRunRequest:
         )
         if not isinstance(self.request_text, str):
             raise ValueError("request_text must be a string")
+        _optional_identifier(self.checkpoint_id, "checkpoint_id")
+        if self.action is not None:
+            object.__setattr__(self, "action", ResumeAction(self.action))
+
+    @property
+    def resume_request_id(self) -> str:
+        return self.request_id
 
     def to_dict(self) -> dict[str, JSONValue]:
         return {
@@ -253,6 +277,8 @@ class ResumeRunRequest:
             "run_id": self.run_id,
             "request_id": self.request_id,
             "request_text": self.request_text,
+            "checkpoint_id": self.checkpoint_id,
+            "action": self.action.value if self.action else None,
         }
 
     @classmethod
@@ -264,6 +290,14 @@ class ResumeRunRequest:
             run_id=str(value.get("run_id", "")),
             request_id=str(value.get("request_id", "")),
             request_text=str(value.get("request_text", "")),
+            checkpoint_id=(
+                None if value.get("checkpoint_id") is None else str(value.get("checkpoint_id"))
+            ),
+            action=(
+                None
+                if value.get("action") is None
+                else ResumeAction(str(value.get("action")))
+            ),
         )
 
     @property
@@ -356,14 +390,26 @@ class ArtifactSummary:
     reference: str
     exists: bool
     verified: bool
+    run_id: str | None = None
+    display_name: str | None = None
+    size: int | None = None
     producer_workflow_id: str | None = None
+    producer_stage_id: str | None = None
+    created_revision: int = 0
+    created_at: str = ""
 
     def __post_init__(self) -> None:
         _required_identifier(self.artifact_id, "artifact_id")
         _required_identifier(self.artifact_type, "artifact_type")
         if not isinstance(self.digest, str) or not isinstance(self.reference, str):
             raise ValueError("artifact digest/reference must be strings")
+        _optional_identifier(self.run_id, "run_id")
+        _optional_identifier(self.display_name, "display_name")
+        if self.size is not None:
+            _nonnegative_integer(self.size, "artifact size")
         _optional_identifier(self.producer_workflow_id, "producer_workflow_id")
+        _optional_identifier(self.producer_stage_id, "producer_stage_id")
+        _nonnegative_integer(self.created_revision, "created_revision")
 
     def to_dict(self) -> dict[str, JSONValue]:
         return {
@@ -373,7 +419,13 @@ class ArtifactSummary:
             "reference": self.reference,
             "exists": self.exists,
             "verified": self.verified,
+            "run_id": self.run_id,
+            "display_name": self.display_name,
+            "size": self.size,
             "producer_workflow_id": self.producer_workflow_id,
+            "producer_stage_id": self.producer_stage_id,
+            "created_revision": self.created_revision,
+            "created_at": self.created_at,
         }
 
     @classmethod
@@ -385,11 +437,27 @@ class ArtifactSummary:
             reference=str(value.get("reference", "")),
             exists=bool(value.get("exists", False)),
             verified=bool(value.get("verified", False)),
+            run_id=(None if value.get("run_id") is None else str(value.get("run_id"))),
+            display_name=(
+                None if value.get("display_name") is None else str(value.get("display_name"))
+            ),
+            size=(
+                None
+                if value.get("size") is None
+                else int(cast(str | int, value.get("size")))
+            ),
             producer_workflow_id=(
                 None
                 if value.get("producer_workflow_id") is None
                 else str(value.get("producer_workflow_id"))
             ),
+            producer_stage_id=(
+                None
+                if value.get("producer_stage_id") is None
+                else str(value.get("producer_stage_id"))
+            ),
+            created_revision=int(value.get("created_revision", 0)),
+            created_at=str(value.get("created_at", "")),
         )
 
 
@@ -539,6 +607,8 @@ class RunHandle:
     request_id: str
     status: RunStatus = RunStatus.CREATED
     revision: int = 0
+    created_at: str = ""
+    updated_at: str = ""
 
     def __post_init__(self) -> None:
         _required_identifier(self.tenant_id, "tenant_id")
@@ -547,6 +617,10 @@ class RunHandle:
         _required_identifier(self.request_id, "request_id")
         object.__setattr__(self, "status", RunStatus(self.status))
         _nonnegative_integer(self.revision, "revision")
+        if not isinstance(self.created_at, str) or not self.created_at.strip():
+            raise ValueError("created_at must be a non-empty string")
+        if not isinstance(self.updated_at, str) or not self.updated_at.strip():
+            object.__setattr__(self, "updated_at", self.created_at)
 
     def to_dict(self) -> dict[str, JSONValue]:
         return {
@@ -556,6 +630,8 @@ class RunHandle:
             "request_id": self.request_id,
             "status": self.status.value,
             "revision": self.revision,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
         }
 
     @classmethod
@@ -567,6 +643,8 @@ class RunHandle:
             request_id=str(value.get("request_id", "")),
             status=RunStatus(str(value.get("status", ""))),
             revision=int(value.get("revision", 0)),
+            created_at=str(value.get("created_at", "")),
+            updated_at=str(value.get("updated_at", "")),
         )
 
 
@@ -580,12 +658,15 @@ class RunSnapshot:
     status: RunStatus
     request_text: str
     active_workflow_id: str | None
+    request_id: str
+    created_at: str
+    updated_at: str
     completed_workflow_ids: tuple[str, ...] = ()
     pending_workflow_ids: tuple[str, ...] = ()
     artifacts: tuple[ArtifactSummary, ...] = ()
-    verifier_status: str | None = None
+    verifier_summary: Mapping[str, JSONValue] | None = None
     resume_summary: ResumeSummary | None = None
-    failure: FailureSummary | None = None
+    failure_summary: FailureSummary | None = None
     output: RunOutput | None = None
     revision: int = 0
 
@@ -593,9 +674,14 @@ class RunSnapshot:
         _required_identifier(self.tenant_id, "tenant_id")
         _required_identifier(self.run_id, "run_id")
         _required_identifier(self.session_id, "session_id")
+        _required_identifier(self.request_id, "request_id")
         object.__setattr__(self, "status", RunStatus(self.status))
         if not isinstance(self.request_text, str):
             raise ValueError("request_text must be a string")
+        if not isinstance(self.created_at, str) or not self.created_at.strip():
+            raise ValueError("created_at must be a non-empty string")
+        if not isinstance(self.updated_at, str) or not self.updated_at.strip():
+            raise ValueError("updated_at must be a non-empty string")
         _optional_identifier(self.active_workflow_id, "active_workflow_id")
         completed = tuple(_required_identifier(item, "completed_workflow_id") for item in self.completed_workflow_ids)
         pending = tuple(_required_identifier(item, "pending_workflow_id") for item in self.pending_workflow_ids)
@@ -611,19 +697,17 @@ class RunSnapshot:
         object.__setattr__(self, "artifacts", artifacts)
         if self.resume_summary is not None and not isinstance(self.resume_summary, ResumeSummary):
             raise TypeError("resume_summary must be a ResumeSummary or None")
-        if self.failure is not None and not isinstance(self.failure, FailureSummary):
-            raise TypeError("failure must be a FailureSummary or None")
+        if self.failure_summary is not None and not isinstance(self.failure_summary, FailureSummary):
+            raise TypeError("failure_summary must be a FailureSummary or None")
         if self.output is not None and not isinstance(self.output, RunOutput):
             raise TypeError("output must be a RunOutput or None")
-        if self.verifier_status is not None and not isinstance(self.verifier_status, str):
-            raise ValueError("verifier_status must be a string or None")
+        if self.verifier_summary is not None:
+            object.__setattr__(
+                self,
+                "verifier_summary",
+                _freeze_object(self.verifier_summary, "verifier_summary"),
+            )
         _nonnegative_integer(self.revision, "revision")
-
-    @property
-    def failure_summary(self) -> FailureSummary | None:
-        """Compatibility alias for the stable failure projection."""
-
-        return self.failure
 
     def to_dict(self) -> dict[str, JSONValue]:
         return {
@@ -633,14 +717,21 @@ class RunSnapshot:
             "status": self.status.value,
             "request_text": self.request_text,
             "active_workflow_id": self.active_workflow_id,
+            "request_id": self.request_id,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
             "completed_workflow_ids": list(self.completed_workflow_ids),
             "pending_workflow_ids": list(self.pending_workflow_ids),
             "artifacts": [artifact.to_dict() for artifact in self.artifacts],
-            "verifier_status": self.verifier_status,
+            "verifier_summary": (
+                None if self.verifier_summary is None else _thaw_json(self.verifier_summary)
+            ),
             "resume_summary": (
                 self.resume_summary.to_dict() if self.resume_summary else None
             ),
-            "failure": self.failure.to_dict() if self.failure else None,
+            "failure_summary": (
+                self.failure_summary.to_dict() if self.failure_summary else None
+            ),
             "output": self.output.to_dict() if self.output else None,
             "revision": self.revision,
         }
@@ -658,6 +749,9 @@ class RunSnapshot:
                 if value.get("active_workflow_id") is None
                 else str(value.get("active_workflow_id"))
             ),
+            request_id=str(value.get("request_id", "")),
+            created_at=str(value.get("created_at", "")),
+            updated_at=str(value.get("updated_at", "")),
             completed_workflow_ids=tuple(
                 str(item)
                 for item in cast(Sequence[Any], value.get("completed_workflow_ids", []) or [])
@@ -670,10 +764,10 @@ class RunSnapshot:
                 ArtifactSummary.from_dict(cast(Mapping[str, Any], item))
                 for item in cast(Sequence[Any], value.get("artifacts", []) or [])
             ),
-            verifier_status=(
+            verifier_summary=(
                 None
-                if value.get("verifier_status") is None
-                else str(value.get("verifier_status"))
+                if value.get("verifier_summary") is None
+                else cast(Mapping[str, JSONValue], value.get("verifier_summary"))
             ),
             resume_summary=(
                 None
@@ -682,10 +776,12 @@ class RunSnapshot:
                     cast(Mapping[str, Any], value["resume_summary"])
                 )
             ),
-            failure=(
+            failure_summary=(
                 None
-                if value.get("failure") is None
-                else FailureSummary.from_dict(cast(Mapping[str, Any], value["failure"]))
+                if value.get("failure_summary") is None
+                else FailureSummary.from_dict(
+                    cast(Mapping[str, Any], value["failure_summary"])
+                )
             ),
             output=(
                 None

@@ -1,62 +1,50 @@
-"""Durable SQLite primitives for the v2.3B/v2.3C Runtime Store.
+"""Durable Runtime Store public exports.
 
-This package owns the durable Runtime Store boundary for v2.3B and v2.3C.  It
-provides schema bootstrap, writer fencing, revision CAS, idempotency,
-preparation intents, atomic Checkpoint/Artifact/RunIndex finalization,
-durable Run events, and the scoped view used by production Runtime contexts.
+The package exposes one public namespace, but importing a small contract or
+error must not eagerly import the SQLite implementation and its adapters.
+Symbols retain their existing import paths and are loaded on first use.
 """
 
-from .contracts import (
-    ArtifactCommitFact,
-    DurableEventHead,
-    DurableEventRecord,
-    FenceGrant,
-    FinalizationBundle,
-    FinalizationFailurePoint,
-    FinalizationResult,
-    PreparedOperation,
-    RevisionRecord,
-    RunReadSnapshot,
-    RunOutputRecord,
-    RunHead,
-    ServiceStartReservation,
-)
-from .buffer import CheckpointStagingBuffer
-from .errors import DurableStoreError, StoreErrorCode
-from .sqlite import (
-    DEFAULT_BUSY_TIMEOUT_MS,
-    DEFAULT_WAL_AUTOCHECKPOINT,
-    SCHEMA_VERSION,
-    SqliteRuntimeStore,
-)
-from .view import (
-    DurableRuntimeStoreView,
-    SqliteCheckpointStoreAdapter,
-    SqliteRunResumeStoreAdapter,
-)
+from __future__ import annotations
 
-__all__ = [
-    "DEFAULT_BUSY_TIMEOUT_MS",
-    "DEFAULT_WAL_AUTOCHECKPOINT",
-    "DurableStoreError",
-    "ArtifactCommitFact",
-    "DurableEventHead",
-    "DurableEventRecord",
-    "CheckpointStagingBuffer",
-    "FenceGrant",
-    "FinalizationBundle",
-    "FinalizationFailurePoint",
-    "FinalizationResult",
-    "PreparedOperation",
-    "RevisionRecord",
-    "RunReadSnapshot",
-    "RunOutputRecord",
-    "RunHead",
-    "ServiceStartReservation",
-    "SCHEMA_VERSION",
-    "SqliteRuntimeStore",
-    "DurableRuntimeStoreView",
-    "SqliteCheckpointStoreAdapter",
-    "SqliteRunResumeStoreAdapter",
-    "StoreErrorCode",
-]
+import importlib
+from typing import Any
+
+
+_EXPORTS: dict[str, tuple[str, str]] = {
+    "ArtifactCommitFact": ("contracts", "ArtifactCommitFact"),
+    "DurableEventHead": ("contracts", "DurableEventHead"),
+    "DurableEventRecord": ("contracts", "DurableEventRecord"),
+    "FenceGrant": ("contracts", "FenceGrant"),
+    "FinalizationBundle": ("contracts", "FinalizationBundle"),
+    "FinalizationFailurePoint": ("contracts", "FinalizationFailurePoint"),
+    "FinalizationResult": ("contracts", "FinalizationResult"),
+    "PreparedOperation": ("contracts", "PreparedOperation"),
+    "RevisionRecord": ("contracts", "RevisionRecord"),
+    "RunReadSnapshot": ("contracts", "RunReadSnapshot"),
+    "RunOutputRecord": ("contracts", "RunOutputRecord"),
+    "RunHead": ("contracts", "RunHead"),
+    "ServiceStartReservation": ("contracts", "ServiceStartReservation"),
+    "CheckpointStagingBuffer": ("buffer", "CheckpointStagingBuffer"),
+    "DurableStoreError": ("errors", "DurableStoreError"),
+    "StoreErrorCode": ("errors", "StoreErrorCode"),
+    "DEFAULT_BUSY_TIMEOUT_MS": ("sqlite", "DEFAULT_BUSY_TIMEOUT_MS"),
+    "DEFAULT_WAL_AUTOCHECKPOINT": ("sqlite", "DEFAULT_WAL_AUTOCHECKPOINT"),
+    "SCHEMA_VERSION": ("sqlite", "SCHEMA_VERSION"),
+    "SqliteRuntimeStore": ("sqlite", "SqliteRuntimeStore"),
+    "DurableRuntimeStoreView": ("view", "DurableRuntimeStoreView"),
+    "SqliteCheckpointStoreAdapter": ("view", "SqliteCheckpointStoreAdapter"),
+    "SqliteRunResumeStoreAdapter": ("view", "SqliteRunResumeStoreAdapter"),
+}
+
+__all__ = list(_EXPORTS)
+
+
+def __getattr__(name: str) -> Any:
+    target = _EXPORTS.get(name)
+    if target is None:
+        raise AttributeError(name)
+    module_name, attribute = target
+    value = getattr(importlib.import_module(f".{module_name}", __name__), attribute)
+    globals()[name] = value
+    return value

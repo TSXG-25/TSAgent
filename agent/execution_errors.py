@@ -70,4 +70,17 @@ def is_non_retriable(code: str) -> bool:
     return str(code or "") in NON_RETRIABLE_CODES
 
 
-__all__ = ["NON_RETRIABLE_CODES", "classify_execution_error", "is_non_retriable"]
+def stable_error_message(error: object, *, fallback: str = "operation failed") -> str:
+    """Return a non-empty, sanitized diagnostic for exceptions with empty str()."""
+    message = str(error or "").strip()
+    if message:
+        return message
+    return f"{type(error).__name__}: {fallback}"
+
+
+__all__ = [
+    "NON_RETRIABLE_CODES",
+    "classify_execution_error",
+    "is_non_retriable",
+    "stable_error_message",
+]

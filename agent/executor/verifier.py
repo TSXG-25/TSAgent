@@ -14,6 +14,7 @@ Pipeline:
 """
 import os
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 
@@ -120,16 +121,18 @@ class WriteVerification(BaseVerification):
 
 
 def _resolve_evidence_path(value: str, workspace: Optional[Any]) -> Optional[Any]:
-    """Resolve evidence through the current Run or a compat-only fallback."""
+    """Resolve evidence through the current Run workspace.
+
+    An unscoped absolute path remains available for the small standalone
+    verifier helpers used by migration tests.  Relative paths without a
+    RunContext are rejected rather than resolved against cwd/ROOT.
+    """
     if not value:
         return None
     if workspace is not None:
         return workspace.resolve_path(value)
-    # Direct unscoped callers are legacy/test-only.  Production Runtime paths
-    # always pass RunContext.workspace and never consult process cwd/ROOT.
-    from agent.compat.workspace import resolve_legacy_path
-
-    return resolve_legacy_path(value)
+    candidate = Path(value)
+    return candidate if candidate.is_absolute() else None
 
 
 def _workspace_path(value: str, workspace: Optional[Any] = None):

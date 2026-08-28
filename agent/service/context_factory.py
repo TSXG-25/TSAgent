@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+import uuid
 
-from agent.runtime_context import ApplicationContext, RunContext, SessionContext
-from agent.runtime_store import SqliteRuntimeStore
+if TYPE_CHECKING:
+    from agent.runtime_context import ApplicationContext, RunContext, SessionContext
+    from agent.runtime_store import SqliteRuntimeStore
 
 from .contracts import ResumeRunRequest, StartRunRequest
 
@@ -25,17 +27,27 @@ class ServiceContextFactory:
     ) -> None:
         self.workspace_root = workspace_root.resolve() if workspace_root else None
         self.workspace_for_run = workspace_for_run
-        self.application = ApplicationContext(
-            workspace_root=self.workspace_root,
-            runtime_store=store,
-            runtime_writer_id=writer_id,
-        )
+        self._store = store
+        self._writer_id = str(writer_id or f"writer-{uuid.uuid4().hex}")
+        self._application: Any | None = None
         self._sessions: dict[tuple[str, str], SessionContext] = {}
         self._closed = False
 
     @property
+    def application(self):
+        if self._application is None:
+            from agent.runtime_context import ApplicationContext
+
+            self._application = ApplicationContext(
+                workspace_root=self.workspace_root,
+                runtime_store=self._store,
+                runtime_writer_id=self._writer_id,
+            )
+        return self._application
+
+    @property
     def writer_id(self) -> str:
-        return self.application.runtime_writer_id
+        return self._writer_id
 
     @property
     def closed(self) -> bool:
@@ -53,6 +65,8 @@ class ServiceContextFactory:
         key = (request.tenant_id, request.session_id)
         session = self._sessions.get(key)
         if session is None or session.closed:
+            from agent.runtime_context import SessionContext
+
             session = SessionContext(
                 self.application,
                 session_id=request.session_id,
@@ -82,6 +96,8 @@ class ServiceContextFactory:
         )
         if workspace is not None:
             workspace = workspace.resolve()
+        from agent.runtime_context import RunContext
+
         return session.create_run(
             run_id,
             # The Service boundary owns an explicit workspace root.  Passing
@@ -100,7 +116,8 @@ class ServiceContextFactory:
     def close(self) -> None:
         if self._closed:
             return
-        self.application.close()
+        if self._application is not None:
+            self._application.close()
         self._sessions.clear()
         self._closed = True
 

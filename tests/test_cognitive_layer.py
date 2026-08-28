@@ -114,6 +114,44 @@ class TestReferenceResolver:
         result = self.resolver.resolve("这个函数", ctx)
         assert result.symbol == "IntentEngine"
 
+    def test_continuation_reference_is_not_short_circuited_as_ordinal(self):
+        """显式“继续 + 之前对象”必须走 symbol/reference 分支。"""
+        ctx = CognitiveContext(
+            query="继续刚才那个函数",
+            conversation_state=_state_with(
+                ResolutionResult(kind="file", target="output/ref0.py"),
+                ResolutionResult(kind="symbol", target="calculate", symbol="calculate"),
+            ),
+        )
+
+        result = self.resolver.resolve("继续刚才那个函数", ctx)
+
+        assert result.kind == "symbol"
+        assert result.target == "output/ref0.py"
+        assert result.symbol == "calculate"
+        assert result.confidence >= 0.8
+
+    def test_explicit_file_reference_preserves_named_symbol(self):
+        """首轮文件分析中的显式 symbol 必须进入后续引用上下文。"""
+        state = ConversationState()
+        first_query = "请分析 output/ref0.py 中的 calculate 函数。"
+        result = self.resolver.resolve(
+            first_query,
+            CognitiveContext(query=first_query, conversation_state=state),
+        )
+
+        assert result.kind == "file"
+        assert result.target == "output/ref0.py"
+        assert result.symbol == "calculate"
+
+        state.record(result)
+        continued = self.resolver.resolve(
+            "继续刚才那个函数",
+            CognitiveContext(query="继续刚才那个函数", conversation_state=state),
+        )
+        assert continued.target == "output/ref0.py"
+        assert continued.symbol == "calculate"
+
     def test_no_disambiguation_needed(self):
         """无需消歧的输入 → 直接返回。"""
         ctx = CognitiveContext(

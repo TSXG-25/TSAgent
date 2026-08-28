@@ -11,6 +11,8 @@ from agent.cognition.cognitive_context import CognitiveContext
 from agent.cognition.intent_engine import IntentEngine
 from agent.executor.plan_executor import PlanExecutor
 from agent.executor.verifier import ExecutionArtifacts, ExecutionVerifier
+from agent.event_bus import EventBus
+from agent.services.workspace_service import WorkspaceService
 from agent.orchestrator.planner import (
     _build_file_operation_task,
     _extract_literal_file_append,
@@ -55,19 +57,21 @@ def test_copy_move_delete_have_ground_truth_verification(monkeypatch, tmp_path) 
     source.write_text("stable content\n", encoding="utf-8")
     compiler = _compiler()
     executor = PlanExecutor()
+    workspace = WorkspaceService.scoped(tmp_path, event_bus=EventBus(), build_index=True)
 
     copy_task = _build_file_operation_task(
         "把 output/source.txt 复制到 output/copied.txt"
     )
     assert copy_task is not None
     copy_plan = compiler.compile(copy_task, context=CompilerContext())
-    copy_result = asyncio.run(executor.execute(copy_plan))
+    copy_result = asyncio.run(executor.execute(copy_plan, workspace=workspace))
     assert copy_result["_error"] == ""
     assert (tmp_path / "output/copied.txt").read_text() == source.read_text()
     copy_verification = ExecutionVerifier().verify(
         copy_plan,
         ExecutionArtifacts(file_operations=copy_result["_file_operations"]),
         task=copy_task,
+        workspace=workspace,
     )
     assert copy_verification.success is True
 
@@ -76,7 +80,8 @@ def test_copy_move_delete_have_ground_truth_verification(monkeypatch, tmp_path) 
     )
     assert move_task is not None
     move_result = asyncio.run(executor.execute(
-        compiler.compile(move_task, context=CompilerContext())
+        compiler.compile(move_task, context=CompilerContext()),
+        workspace=workspace,
     ))
     assert move_result["_error"] == ""
     assert not (tmp_path / "output/copied.txt").exists()
@@ -85,15 +90,17 @@ def test_copy_move_delete_have_ground_truth_verification(monkeypatch, tmp_path) 
     delete_task = _build_file_operation_task("删除 output/moved.txt")
     assert delete_task is not None
     delete_plan = compiler.compile(delete_task, context=CompilerContext())
-    delete_result = asyncio.run(executor.execute(delete_plan))
+    delete_result = asyncio.run(executor.execute(delete_plan, workspace=workspace))
     assert delete_result["_error"] == ""
     assert not (tmp_path / "output/moved.txt").exists()
     delete_verification = ExecutionVerifier().verify(
         delete_plan,
         ExecutionArtifacts(file_operations=delete_result["_file_operations"]),
         task=delete_task,
+        workspace=workspace,
     )
     assert delete_verification.success is True
+    workspace.close()
 
 
 def test_read_transform_write_is_deterministic_and_no_llm() -> None:

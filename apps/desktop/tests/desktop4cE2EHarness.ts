@@ -57,7 +57,15 @@ type CaseResult = {
   resume_calls: number;
   cancel_calls: number;
   runtime_invariants: Record<string, boolean | null>;
+  diagnostics?: SidecarDiagnostics;
   notes: string[];
+};
+
+type SidecarDiagnostics = {
+  pid?: number;
+  exit_code: number | null;
+  exit_signal: string | null;
+  stderr_tail?: string;
 };
 
 type RunCapture = {
@@ -66,8 +74,25 @@ type RunCapture = {
   events: RunEvent[];
   artifacts: CaseResult["artifacts"];
   providerError: boolean;
+  diagnostics: SidecarDiagnostics;
   errorCode?: string;
 };
+
+const DIAGNOSTICS_TAIL_LIMIT = 8_000;
+
+function appendDiagnosticsTail(current: string, chunk: string): string {
+  const combined = current + chunk;
+  return combined.length > DIAGNOSTICS_TAIL_LIMIT
+    ? combined.slice(-DIAGNOSTICS_TAIL_LIMIT)
+    : combined;
+}
+
+function redactDiagnostics(value: string): string {
+  return value
+    .replace(/Bearer\s+[^\s"'`]+/gi, "Bearer <redacted>")
+    .replace(/(api[_ -]?key\s*[:=]\s*)[^\s"'`]+/gi, "$1<redacted>")
+    .replace(/(OPENAI_API_KEY|DEEPSEEK_API_KEY)\s*=\s*[^\s"'`]+/gi, "$1=<redacted>");
+}
 
 function sleep(milliseconds: number): Promise<void> {
   return new Promise((resolveSleep) => globalThis.setTimeout(resolveSleep, milliseconds));
@@ -81,6 +106,10 @@ function providerLabel(): string {
   const model = process.env.OLLAMA_MODEL ?? "qwen2.5:14b";
   if (process.env.DESKTOP4C_FORCE_OLLAMA === "1") {
     return `ollama:${model} (test-forced-no-fallback)`;
+  }
+  const configuredMode = process.env.TSAGENT_LLM_PROVIDER?.trim().toLowerCase();
+  if (configuredMode === "deepseek" || configuredMode === "ollama") {
+    return `${configuredMode}:${model} (strict-no-fallback)`;
   }
   return `configured-primary-with-ollama-fallback:${model}`;
 }
@@ -184,6 +213,9 @@ class ChildProcessSidecar implements TauriSidecarProcess {
   private readonly child: any;
   private readonly lineListeners = new Set<(line: string) => void>();
   private buffer = "";
+  private stderrTail = "";
+  private exitCode: number | null = null;
+  private exitSignal: string | null = null;
   private readonly keepAliveOnClose: boolean;
 
   constructor(
@@ -194,22 +226,14 @@ class ChildProcessSidecar implements TauriSidecarProcess {
     this.keepAliveOnClose = options.keepAliveOnClose ?? false;
     const root = repositoryRoot();
     const forceOllama = process.env.DESKTOP4C_FORCE_OLLAMA === "1";
-    const sidecarArguments = forceOllama
-      ? [
-          "-c",
-          "from agent.llm import llm; llm._deepseek_available = False; llm._ollama_available = True; import runpy; runpy.run_module('agent.service.local_sidecar', run_name='__main__')",
-        ]
-      : [
-          "-m",
-          "agent.service.local_sidecar",
-          "--database",
-          database,
-          "--workspace-root",
-          workspace,
-        ];
-    if (forceOllama) {
-      sidecarArguments.push("--database", database, "--workspace-root", workspace);
-    }
+    const sidecarArguments = [
+      "-m",
+      "agent.service.local_sidecar",
+      "--database",
+      database,
+      "--workspace-root",
+      workspace,
+    ];
     this.child = spawn(
       process.env.TSAGENT_PYTHON ?? "python3",
       sidecarArguments,
@@ -218,7 +242,15 @@ class ChildProcessSidecar implements TauriSidecarProcess {
         env: {
           ...process.env,
           PYTHONPATH: [root, process.env.PYTHONPATH].filter(Boolean).join(":"),
+          TSAGENT_LLM_PROVIDER: forceOllama
+            ? "ollama"
+            : process.env.TSAGENT_LLM_PROVIDER ?? "auto",
           OLLAMA_MODEL: process.env.OLLAMA_MODEL ?? "qwen2.5:14b",
+          // Repository/skill embeddings are optional for this transport
+          // acceptance. Keep a missing local model from turning a provider
+          // smoke into an unrelated Hugging Face network wait.
+          HF_HUB_OFFLINE: process.env.HF_HUB_OFFLINE ?? "1",
+          TSAGENT_ALLOW_MODEL_DOWNLOAD: process.env.TSAGENT_ALLOW_MODEL_DOWNLOAD ?? "0",
           // Keep provider-outage discovery bounded.  A real acceptance run
           // can opt into a larger value with DESKTOP4C_LLM_TIMEOUT.
           TSAGENT_LLM_TIMEOUT: process.env.DESKTOP4C_LLM_TIMEOUT ?? "5",
@@ -240,7 +272,14 @@ class ChildProcessSidecar implements TauriSidecarProcess {
         newline = this.buffer.indexOf("\n");
       }
     });
-    this.child.stderr?.on("data", () => undefined);
+    this.child.stderr?.setEncoding("utf8");
+    this.child.stderr?.on("data", (chunk: string) => {
+      this.stderrTail = appendDiagnosticsTail(this.stderrTail, chunk);
+    });
+    this.child.once("exit", (code: number | null, signal: string | null) => {
+      this.exitCode = code;
+      this.exitSignal = signal;
+    });
   }
 
   writeLine(line: string): Promise<void> {
@@ -267,6 +306,18 @@ class ChildProcessSidecar implements TauriSidecarProcess {
     };
     this.child.once("exit", handler);
     return () => this.child.removeListener("exit", handler);
+  }
+
+  diagnostics(): SidecarDiagnostics {
+    const diagnostics: SidecarDiagnostics = {
+      ...(typeof this.child.pid === "number" ? { pid: this.child.pid } : {}),
+      exit_code: this.exitCode,
+      exit_signal: this.exitSignal,
+    };
+    if (this.stderrTail.trim()) {
+      diagnostics.stderr_tail = redactDiagnostics(this.stderrTail);
+    }
+    return diagnostics;
   }
 
   async close(): Promise<void> {
@@ -297,6 +348,10 @@ class ChildProcessBridge implements TauriSidecarBridge {
   killHard(): void {
     this.process?.killHard();
   }
+
+  diagnostics(): SidecarDiagnostics {
+    return this.process?.diagnostics() ?? { exit_code: null, exit_signal: null };
+  }
 }
 
 type CaseEnvironment = {
@@ -306,6 +361,7 @@ type CaseEnvironment = {
   bridge: ChildProcessBridge;
   client: LocalAgentServiceClient;
   currentIdentity: DesktopIdentity;
+  sidecarDiagnostics: () => SidecarDiagnostics;
 };
 
 async function createEnvironment(
@@ -319,7 +375,15 @@ async function createEnvironment(
   const currentIdentity = identity(caseId);
   const transport = new TauriSidecarTransport(bridge, { requestTimeoutMs: 120_000 });
   const client = new LocalAgentServiceClient(transport, { identity: currentIdentity });
-  return { directory, database, workspace, bridge, client, currentIdentity };
+  return {
+    directory,
+    database,
+    workspace,
+    bridge,
+    client,
+    currentIdentity,
+    sidecarDiagnostics: () => bridge.diagnostics(),
+  };
 }
 
 async function disposeEnvironment(environment: CaseEnvironment): Promise<void> {
@@ -380,6 +444,7 @@ async function captureRun(
       events,
       artifacts: artifactViews(snapshot),
       providerError: providerFailure(snapshot, undefined),
+      diagnostics: environment.sidecarDiagnostics(),
     };
   } catch (error) {
     const snapshot = runId
@@ -396,6 +461,7 @@ async function captureRun(
       // not converted into a false Runtime FAIL when the configured endpoint
       // is unavailable or never reaches a provider response.
       providerError: providerFailure(snapshot, error) || snapshot?.status === "pending" || snapshot?.status === "active",
+      diagnostics: environment.sidecarDiagnostics(),
       errorCode: serviceErrorCode(error) ?? (snapshot?.status === "pending" || snapshot?.status === "active" ? "PROVIDER_WAIT_UNAVAILABLE" : undefined),
     };
   }
@@ -429,6 +495,7 @@ function evaluateCompletedCase(caseId: CaseId, capture: RunCapture, notes: strin
       false_completed_zero: snapshot?.status !== "completed" || Boolean(snapshot.output),
       duplicate_ui_events_zero: duplicateCount(capture.events) === 0,
     },
+    diagnostics: capture.diagnostics,
     notes: [...notes, ...(capture.errorCode ? [`service_error=${capture.errorCode}`] : [])],
   });
 }
@@ -482,12 +549,13 @@ async function runDt02Dt03Dt07(): Promise<[CaseResult, CaseResult, CaseResult]> 
         artifact_verified: capture.artifacts.length > 0 ? artifactVerified : null,
         frontend_direct_workspace_access_zero: true,
       },
+      diagnostics: capture.diagnostics,
       notes: prerequisiteUnavailable
         ? ["capability deferred because DT02 did not provide a completed Run with verified artifacts"]
         : [],
     });
     if (!capture.runId || capture.providerError) {
-      return [dt02, dt03, safeCaseResult("DT07", { result: "DEFERRED", runtime_correctness: "DEFERRED", capability_outcome: "DEFERRED", notes: ["no durable completed Run was available for restart rehydration"] })];
+      return [dt02, dt03, safeCaseResult("DT07", { result: "DEFERRED", runtime_correctness: "DEFERRED", capability_outcome: "DEFERRED", diagnostics: capture.diagnostics, notes: ["no durable completed Run was available for restart rehydration"] })];
     }
 
     await environment.client.close();
@@ -519,9 +587,9 @@ async function runDt02Dt03Dt07(): Promise<[CaseResult, CaseResult, CaseResult]> 
     }
   } catch (error) {
     return [
-      safeCaseResult("DT02", { result: "PROVIDER_ERROR", runtime_correctness: "DEFERRED", capability_outcome: "DEFERRED", notes: [`DT02 chain error=${serviceErrorCode(error) ?? "unknown"}`] }),
-      safeCaseResult("DT03", { result: "DEFERRED", runtime_correctness: "DEFERRED", capability_outcome: "DEFERRED", notes: ["DT02 prerequisite unavailable"] }),
-      safeCaseResult("DT07", { result: "DEFERRED", runtime_correctness: "DEFERRED", capability_outcome: "DEFERRED", notes: ["DT02 prerequisite unavailable"] }),
+      safeCaseResult("DT02", { result: "PROVIDER_ERROR", runtime_correctness: "DEFERRED", capability_outcome: "DEFERRED", diagnostics: environment.sidecarDiagnostics(), notes: [`DT02 chain error=${serviceErrorCode(error) ?? "unknown"}`] }),
+      safeCaseResult("DT03", { result: "DEFERRED", runtime_correctness: "DEFERRED", capability_outcome: "DEFERRED", diagnostics: environment.sidecarDiagnostics(), notes: ["DT02 prerequisite unavailable"] }),
+      safeCaseResult("DT07", { result: "DEFERRED", runtime_correctness: "DEFERRED", capability_outcome: "DEFERRED", diagnostics: environment.sidecarDiagnostics(), notes: ["DT02 prerequisite unavailable"] }),
     ];
   } finally {
     await disposeEnvironment(environment);
@@ -531,7 +599,7 @@ async function runDt02Dt03Dt07(): Promise<[CaseResult, CaseResult, CaseResult]> 
 async function runDt04(): Promise<CaseResult> {
   const environment = await createEnvironment("DT04", { keepAliveOnClose: true });
   try {
-    const request = requestFor("DT04", environment.currentIdentity, "生成一份简短的结果，并返回可持久化的 RunOutput。 ");
+    const request = requestFor("DT04", environment.currentIdentity, "创建 output/desktop4c-reconnect.txt，内容为 desktop reconnect smoke，并给出简短完成说明。");
     const handle = await environment.client.startRun(request);
     const firstEvents = await readAllEvents(environment.client, environment.currentIdentity, handle.runId);
     const cursor = firstEvents.at(-1)?.sequenceNumber ?? 0;
@@ -558,13 +626,14 @@ async function runDt04(): Promise<CaseResult> {
         artifacts: artifactViews(snapshot),
         run_output_present: Boolean(snapshot.output?.text?.trim()),
         runtime_invariants: { event_replay_gap_zero: noGap, duplicate_ui_events_zero: noDuplicate, client_disconnect_does_not_stop_runtime: true, terminal_snapshot_event_match: terminalEventMatches(snapshot, combined) },
+        diagnostics: environment.sidecarDiagnostics(),
         notes: ["transport disconnected while the sidecar stayed alive; reconnect used after_sequence"],
       });
     } finally {
       await reconnected.close();
     }
   } catch (error) {
-    return safeCaseResult("DT04", { result: "PROVIDER_ERROR", runtime_correctness: "DEFERRED", capability_outcome: "DEFERRED", notes: [`disconnect/reconnect error=${serviceErrorCode(error) ?? "unknown"}`] });
+    return safeCaseResult("DT04", { result: "PROVIDER_ERROR", runtime_correctness: "DEFERRED", capability_outcome: "DEFERRED", diagnostics: environment.sidecarDiagnostics(), notes: [`disconnect/reconnect error=${serviceErrorCode(error) ?? "unknown"}`] });
   } finally {
     await disposeEnvironment(environment);
   }
@@ -588,15 +657,15 @@ async function runDt06(): Promise<CaseResult> {
     if (snapshot.status !== "active") {
       const events = await readAllEvents(environment.client, environment.currentIdentity, handle.runId).catch(() => []);
       const providerError = providerFailure(snapshot, undefined);
-      return safeCaseResult("DT06", { result: providerError ? "PROVIDER_ERROR" : "DEFERRED", runtime_correctness: providerError ? "PASS" : "DEFERRED", capability_outcome: "DEFERRED", run_id: handle.runId, terminal_status: snapshot.status, events_seen: eventTypes(events), event_sequences: events.map((event) => event.sequenceNumber), artifacts: artifactViews(snapshot), run_output_present: Boolean(snapshot.output?.text?.trim()), runtime_invariants: { cancel_not_sent_before_active: true }, notes: ["Provider did not reach an active wait boundary"] });
+      return safeCaseResult("DT06", { result: providerError ? "PROVIDER_ERROR" : "DEFERRED", runtime_correctness: providerError ? "PASS" : "DEFERRED", capability_outcome: "DEFERRED", run_id: handle.runId, terminal_status: snapshot.status, events_seen: eventTypes(events), event_sequences: events.map((event) => event.sequenceNumber), artifacts: artifactViews(snapshot), run_output_present: Boolean(snapshot.output?.text?.trim()), runtime_invariants: { cancel_not_sent_before_active: true }, diagnostics: environment.sidecarDiagnostics(), notes: ["Provider did not reach an active wait boundary"] });
     }
     const cancelling = await environment.client.cancelRun({ tenantId: environment.currentIdentity.tenantId, sessionId: environment.currentIdentity.sessionId, runId: handle.runId, requestId: `desktop4c-dt06-cancel-${handle.runId}`, requestedBy: environment.currentIdentity.userId });
     const finalSnapshot = await waitForTerminal(environment.client, environment.currentIdentity, handle.runId);
     const events = await readAllEvents(environment.client, environment.currentIdentity, handle.runId);
     const runtime = cancelling.status === "cancelling" && finalSnapshot.status === "cancelled" && terminalEventMatches(finalSnapshot, events) && !events.some((event) => event.eventType === "run_completed");
-    return safeCaseResult("DT06", { result: runtime ? "PASS" : "FAIL", runtime_correctness: runtime ? "PASS" : "FAIL", capability_outcome: "PARTIAL", run_id: handle.runId, terminal_status: finalSnapshot.status, events_seen: eventTypes(events), event_sequences: events.map((event) => event.sequenceNumber), duplicate_ui_events: duplicateCount(events), artifacts: artifactViews(finalSnapshot), run_output_present: Boolean(finalSnapshot.output?.text?.trim()), cancel_calls: 1, runtime_invariants: { cancelling_acknowledged: cancelling.status === "cancelling", terminal_cancelled: finalSnapshot.status === "cancelled", false_completed_after_cancel_zero: !events.some((event) => event.eventType === "run_completed"), terminal_snapshot_event_match: terminalEventMatches(finalSnapshot, events) }, notes: ["cancel issued through LocalAgentServiceClient after ACTIVE was observed"] });
+    return safeCaseResult("DT06", { result: runtime ? "PASS" : "FAIL", runtime_correctness: runtime ? "PASS" : "FAIL", capability_outcome: "PARTIAL", run_id: handle.runId, terminal_status: finalSnapshot.status, events_seen: eventTypes(events), event_sequences: events.map((event) => event.sequenceNumber), duplicate_ui_events: duplicateCount(events), artifacts: artifactViews(finalSnapshot), run_output_present: Boolean(finalSnapshot.output?.text?.trim()), cancel_calls: 1, runtime_invariants: { cancelling_acknowledged: cancelling.status === "cancelling", terminal_cancelled: finalSnapshot.status === "cancelled", false_completed_after_cancel_zero: !events.some((event) => event.eventType === "run_completed"), terminal_snapshot_event_match: terminalEventMatches(finalSnapshot, events) }, diagnostics: environment.sidecarDiagnostics(), notes: ["cancel issued through LocalAgentServiceClient after ACTIVE was observed"] });
   } catch (error) {
-    return safeCaseResult("DT06", { result: "PROVIDER_ERROR", runtime_correctness: "DEFERRED", capability_outcome: "DEFERRED", notes: [`cancel E2E error=${serviceErrorCode(error) ?? "unknown"}`] });
+    return safeCaseResult("DT06", { result: "PROVIDER_ERROR", runtime_correctness: "DEFERRED", capability_outcome: "DEFERRED", diagnostics: environment.sidecarDiagnostics(), notes: [`cancel E2E error=${serviceErrorCode(error) ?? "unknown"}`] });
   } finally {
     await disposeEnvironment(environment);
   }
@@ -609,7 +678,7 @@ async function runDt08(): Promise<CaseResult> {
     const snapshot = capture.snapshot;
     const runtime = Boolean(snapshot && snapshot.status === "timed_out" && terminalEventMatches(snapshot, capture.events) && !capture.events.some((event) => event.eventType === "run_completed" || event.eventType === "run_cancelled"));
     const providerError = capture.providerError && snapshot?.status !== "timed_out";
-    return safeCaseResult("DT08", { result: providerError ? "PROVIDER_ERROR" : runtime ? "PASS" : "FAIL", runtime_correctness: providerError ? "DEFERRED" : runtime ? "PASS" : "FAIL", capability_outcome: providerError ? "DEFERRED" : runtime ? "PASS" : "FAIL", ...(capture.runId ? { run_id: capture.runId } : {}), ...(snapshot ? { terminal_status: snapshot.status } : {}), events_seen: eventTypes(capture.events), event_sequences: capture.events.map((event) => event.sequenceNumber), artifacts: capture.artifacts, run_output_present: Boolean(snapshot?.output?.text?.trim()), runtime_invariants: { run_timeout_terminal: providerError ? null : snapshot ? snapshot.status === "timed_out" : null, run_timeout_reported_completed_zero: providerError ? null : snapshot?.status !== "completed", run_timeout_reported_cancelled_zero: providerError ? null : snapshot?.status !== "cancelled", terminal_snapshot_event_match: providerError ? null : snapshot ? terminalEventMatches(snapshot, capture.events) : null }, notes: providerError ? ["Provider did not reach the real watchdog boundary; timeout capability deferred"] : ["TSAGENT_RUN_TIMEOUT_SECONDS=1 was supplied to the sidecar process"] });
+    return safeCaseResult("DT08", { result: providerError ? "PROVIDER_ERROR" : runtime ? "PASS" : "FAIL", runtime_correctness: providerError ? "DEFERRED" : runtime ? "PASS" : "FAIL", capability_outcome: providerError ? "DEFERRED" : runtime ? "PASS" : "FAIL", ...(capture.runId ? { run_id: capture.runId } : {}), ...(snapshot ? { terminal_status: snapshot.status } : {}), events_seen: eventTypes(capture.events), event_sequences: capture.events.map((event) => event.sequenceNumber), artifacts: capture.artifacts, run_output_present: Boolean(snapshot?.output?.text?.trim()), runtime_invariants: { run_timeout_terminal: providerError ? null : snapshot ? snapshot.status === "timed_out" : null, run_timeout_reported_completed_zero: providerError ? null : snapshot?.status !== "completed", run_timeout_reported_cancelled_zero: providerError ? null : snapshot?.status !== "cancelled", terminal_snapshot_event_match: providerError ? null : snapshot ? terminalEventMatches(snapshot, capture.events) : null }, diagnostics: capture.diagnostics, notes: providerError ? ["Provider did not reach the real watchdog boundary; timeout capability deferred"] : ["TSAGENT_RUN_TIMEOUT_SECONDS=1 was supplied to the sidecar process"] });
   } finally {
     await disposeEnvironment(environment);
   }

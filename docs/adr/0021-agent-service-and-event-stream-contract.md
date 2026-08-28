@@ -1,6 +1,6 @@
 # ADR-0021: AgentService and Event Stream Contract
 
-状态: Accepted — v2.3C-1 Contract / Dataset / Oracle
+状态: Accepted — v2.3C-1 Contract / Dataset / Oracle Frozen
 
 日期: 2026-08-06
 
@@ -58,28 +58,44 @@ DTO 投影和事件流访问。它不得重新实现 Planner、Executor、Resume
 
 ### 2.2 身份与幂等
 
-`StartRunRequest`、`ResumeRunRequest`、`RunLookupRequest` 和
-`EventStreamRequest` 均必须携带：
+`StartRunRequest` 必须携带 `tenant_id / user_id / session_id / request_id`；
+Service 为新 Run 分配 `run_id`。`ResumeRunRequest`、`RunLookupRequest` 和
+`EventStreamRequest` 还必须携带已存在的 `run_id`。所有请求都必须携带：
 
 ```text
 tenant_id
 user_id
 session_id
-run_id
 request_id
 ```
 
+其中 `run_id` 对 Start request 是返回的 RunHandle 字段，对其他 request 是必需的
+lookup identity；客户端提交的可选 replay hint 不参与 start request digest。
+
 其中：
 
-- `tenant_id + run_id` 是 durable lookup 的边界；
+- `tenant_id + session_id + run_id` 是 durable lookup 的边界；
 - `session_id` 是 Conversation 边界；
-- `run_id` 是逻辑 Run 身份，不因一次消息或一次进程内函数调用改变；
-- `request_id` 是服务调用幂等键，重复请求不得创建第二个 Run 或第二次外部
-  副作用。
+- `run_id` 是服务返回的逻辑 Run 身份，不因一次消息或一次进程内函数调用改变；
+- `request_id` 是 durable 的 start/resume 幂等身份，不能只存在于进程内 map；
+- `request_id` 的幂等判定必须包含 `tenant_id` 和 canonical request digest。
 
-同一 `request_id` 搭配相同 request digest 必须返回同一逻辑结果；同一
-`request_id` 搭配不同 digest 必须返回稳定的 `REQUEST_ID_CONFLICT`。服务不得
-隐式回退到 default user、global session、current run 或 last workspace。
+`start_run()` 的合同固定为：
+
+```text
+相同 tenant_id + request_id + 相同请求 digest
+    → 返回同一个 run_id / RunHandle，不创建第二个 Run
+
+相同 tenant_id + request_id + 不同请求 digest
+    → IDEMPOTENCY_CONFLICT
+
+不同 tenant_id + 相同 request_id
+    → 彼此独立
+```
+
+`start_run()` 返回的是已持久化、可通过 `get_run()` 立即查询的 RunHandle，不是
+Provider 已开始或 Runtime 已完成执行的承诺。服务不得隐式回退到 default user、
+global session、current run 或 last workspace。
 
 ### 2.3 公开 DTO 与内部模型隔离
 
@@ -92,8 +108,31 @@ request_id
   `FailureSummary`；
 - Event：`RunEvent`。
 
-`RunSnapshot` 只暴露 Run 状态、Workflow 进度、artifact 摘要、验证状态、
-恢复摘要、失败摘要和 revision。不得暴露：
+`RunSnapshot` 是稳定的公开投影，至少固定暴露：
+
+```text
+tenant_id
+session_id
+run_id
+request_id
+status
+revision
+created_at
+updated_at
+active_workflow
+completed_workflows
+pending_workflows
+verifier_summary
+resume_summary
+failure_summary
+```
+
+同一个 Run 的 `revision` 只能单调递增，terminal 状态不能静默回到 active；一次
+`get_run()` 返回的全部字段必须来自同一个 durable snapshot。未找到和跨 tenant 的
+身份不匹配对外都可以稳定返回 `RUN_NOT_FOUND`，避免泄漏该 Run 属于另一个 tenant；
+只有请求已绑定到当前 scope 但显式身份字段互相矛盾时才返回 `IDENTITY_MISMATCH`。
+
+`RunSnapshot` 不得暴露：
 
 ```text
 ExecutionPlan
@@ -118,6 +157,54 @@ REJECT                → action 必须为空
 ```
 
 公开层只展示摘要，不重新计算 `ResumeAction`。
+
+Service 的 `resume_run` 只负责身份、生命周期和委派：
+
+```text
+ResumeRunRequest
+    → 验证 scope
+    → 调用 RunResumeCoordinator
+    → 返回 RunHandle / RunSnapshot / ResumeSummary
+```
+
+Service 不自行判断 `RESUME_EXACT`、`REPLAY_FROM_STAGE`、Artifact 是否安全或副作用
+是否可以重放。状态矩阵固定为：
+
+```text
+BLOCKED / INTERRUPTED / FAILED_RECOVERABLE
+    → 委派 Coordinator
+COMPLETED
+    → ALREADY_COMPLETED，不创建执行者
+RUNNING
+    → RUN_ALREADY_ACTIVE，不创建第二个执行者
+FAILED_TERMINAL / REJECTED / 不可恢复
+    → RESUME_NOT_ALLOWED 或 REQUIRE_CLARIFICATION
+```
+
+相同 `resume_request_id`（当前 DTO 中对应 resume request 的 `request_id`）重试必须
+返回同一 resume fact，不得启动两个 Worker。
+
+### 2.3.1 Artifact 公开安全边界
+
+`ArtifactSummary` 只允许公开以下 metadata：
+
+```text
+artifact_id
+run_id
+artifact_type
+display_name
+reference
+digest
+size
+verified
+producer
+created_revision
+```
+
+`reference` 是 Service 内部可解析的不透明标识，不等于可信文件系统路径；前端不能
+提交任意本地 path 让 Service 读取。内容访问只能按 `artifact_id` 进行，不能提供
+`GET /files?path=...` 语义。跨 Run、跨 tenant 的 reference 默认拒绝，未验证 Artifact
+必须明确 `verified=false`。
 
 ### 2.4 事件流语义
 
@@ -146,11 +233,17 @@ run_revision
 4. tenant/session/run identity 必须与读取请求一致；
 5. `run_completed`、`run_failed` 或 `run_blocked` 是明确终态事件；
 6. 终态事件之后不得追加事件；
-7. 客户端通过 `after_sequence` 重连时只读取后续事件，不重新执行 Workflow。
+7. `after_sequence = N` 只返回 `sequence_number > N` 的事件；
+8. `event_id` 是稳定身份，客户端按 `event_id` 去重；
+9. 读取语义是 at-least-once readable，不承诺 exactly-once delivery；
+10. terminal event 在保留窗口内可 replay；
+11. cursor 超出保留范围返回稳定的 `EVENT_CURSOR_EXPIRED`，不能静默从最新事件开始；
+12. 客户端断开、停止读取或重连不会取消、暂停或重启 Run；
+13. 客户端通过 `after_sequence` 重连时只读取后续事件，不重新执行 Workflow。
 
 v2.3C-1 的 `EventOrderingOracle` 是纯验证器，不订阅 EventBus、不调用
-Provider、不启动 Runtime。持久化事件表、慢消费者隔离和实际重连由
-v2.3C-3 实现；内存流断开不能影响 Run 执行。
+Provider、不启动 Runtime。持久化事件表、cursor retention、慢消费者隔离和实际
+重连由 v2.3C-3 实现；本阶段只冻结 replay 语义，内存流断开不能影响 Run 执行。
 
 ### 2.5 稳定错误分类
 
@@ -159,21 +252,23 @@ exception 或 Python traceback 直接暴露给适配器。当前合同至少冻�
 
 ```text
 INVALID_REQUEST
-IDENTITY_REQUIRED
 IDENTITY_MISMATCH
-TENANT_SCOPE_VIOLATION
-SESSION_SCOPE_VIOLATION
 RUN_NOT_FOUND
-REQUEST_ID_CONFLICT
-DUPLICATE_REQUEST
-EVENT_SEQUENCE_INVALID
-EVENT_REPLAY_UNAVAILABLE
-SERVICE_CLOSED
-UNSUPPORTED_OPERATION
-INTERNAL_MODEL_LEAK
+RUN_ALREADY_ACTIVE
+ALREADY_COMPLETED
+RESUME_NOT_ALLOWED
+IDEMPOTENCY_CONFLICT
+EVENT_CURSOR_EXPIRED
+CURSOR_INVALID
+STORE_BUSY
+PROVIDER_UNAVAILABLE
+INTERNAL_ERROR
 ```
 
-错误只保存稳定 code、用户可理解的 message 和 JSON details；原始异常属于
+所有公开错误 DTO 至少包含 `code / message / retryable / run_id? / request_id /
+details`。`STORE_BUSY`、`PROVIDER_UNAVAILABLE` 可以标记 `retryable=true`；身份错误、
+幂等冲突、非法状态和 cursor 过期通常不可自动重试。details 不得泄漏数据库路径、
+SQL、Provider secret、Python traceback 或其他 tenant/session/run 身份。原始异常属于
 内部 Diagnostics/FailureEvent，不属于公开 Service DTO。
 
 ## 三、实现阶段边界
@@ -185,7 +280,7 @@ INTERNAL_MODEL_LEAK
 - public request/response/event DTO；
 - stable service error taxonomy；
 - event ordering/replay oracle；
-- 16 个确定性 Dataset case 与 canonical dataset hash；
+- 32 个确定性 Dataset case 与 canonical dataset hash；
 - DTO round-trip、identity rejection、request digest 和 internal-model
   leakage 规则。
 
@@ -211,15 +306,21 @@ FastAPI 适配器属于后续阶段，不提前塞入 C-1/C-2。
 
 ## 四、C-1 Dataset / Oracle 验收
 
-Dataset 位于 `benchmarks/v23c/`，共 16 例，覆盖：
+Dataset 位于 `benchmarks/v23c/`，共 32 例，覆盖：
 
 ```text
-identity                  001–006
-idempotency               007–008
+identity                  001–006, 027
+idempotency               007–008, 017, 028
 dto                       009–010
+start_lifecycle           018
+snapshot                  019–021
 event_ordering            011–013
-event_replay              014
+event_replay              014, 022–023
 terminal_state            015–016
+artifact_scope            024
+resume                    025–027, 029–030
+lifecycle                 031
+errors                    032
 ```
 
 执行：
@@ -239,6 +340,11 @@ Public projection leakage             0
 Event ordering oracle                 100%
 Event replay oracle                   100%
 Terminal event oracle                 100%
+StartHandle persistence contract      100%
+Snapshot revision / terminal guard   100%
+Artifact scope isolation              100%
+Resume state matrix                   100%
+Error sanitization                    100%
 Oracle determinism                    PASS
 ```
 
@@ -258,8 +364,8 @@ Process restart Service rehydration             PASS
 ## 六、C-1 证据
 
 ```text
-Dataset cases: 16
-Dataset hash: 2bfad6b6be7649c8228a657f4ec3a6bd859d80559f16ee9bb69906ab6521be64
+Dataset cases: 32
+Dataset hash: 7cf52067c7af4a9217aceb70ef600fb5e79638c4ed77a63dce08f6438c416e6a
 Oracle determinism: PASS
 Contract validation: PASS
 Concrete AgentService: deferred to v2.3C-2

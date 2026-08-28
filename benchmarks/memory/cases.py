@@ -29,6 +29,9 @@ class MemoryCase:
     expected: "str | List[str]"  # text case 期望；runtime_contract 可为空
     note: str = ""
     continuation_contract: str = ""  # CONTINUE_PLAN / CONTINUE_CHAT / CONTINUE_REFERENCE
+    fixture_source: Optional[str] = None  # deterministic benchmark fixture
+    fixture_target: Optional[str] = None  # materialized workspace target
+    fixture_symbol: Optional[str] = None  # optional symbol required by preflight
     expected_any_of: Optional[List[List[str]]] = None
     forbidden_any_of: Optional[List[List[str]]] = None
     positive_examples: Optional[List[str]] = None
@@ -45,11 +48,12 @@ class MemoryCase:
         """
         if self.positive_examples is None:
             if self.expected_any_of is not None:
-                terms = [
-                    term
-                    for group in self.expected_any_of
-                    for term in ([group] if isinstance(group, str) else group)
-                ]
+                terms: List[str] = []
+                for group in self.expected_any_of:
+                    if isinstance(group, str):
+                        terms.append(group)
+                    else:
+                        terms.extend(group)
             elif isinstance(self.expected, str):
                 terms = [self.expected]
             else:
@@ -166,16 +170,76 @@ _CHAT_RESUME_TOPICS = [
 
 
 _REFERENCE_RESUME_TARGETS = [
-    ("请分析 output/ref0.py 中的 calculate 函数。", "继续刚才那个函数", "calculate"),
-    ("请分析 output/ref1.py 中的 parse 函数。", "继续刚才那个函数", "parse"),
-    ("请读取 output/ref2.py。", "继续刚才那个文件", "output/ref2.py"),
-    ("请读取 output/ref3.py。", "继续刚才那个文件", "output/ref3.py"),
-    ("请分析 output/ref4.py 中的 build 函数。", "继续刚才那个函数", "build"),
-    ("请分析 output/ref5.py 中的 run 函数。", "继续刚才那个函数", "run"),
-    ("请读取 output/ref6.py。", "继续刚才那个文件", "output/ref6.py"),
-    ("请分析 output/ref7.py 中的 main 函数。", "继续刚才那个函数", "main"),
-    ("请读取 output/ref8.py。", "继续刚才那个文件", "output/ref8.py"),
-    ("请分析 output/ref9.py 中的 save 函数。", "继续刚才那个函数", "save"),
+    (
+        "请分析 output/ref0.py 中的 calculate 函数。",
+        "继续刚才那个函数",
+        "calculate",
+        "benchmarks/memory/fixtures/reference/ref0.py",
+        "calculate",
+    ),
+    (
+        "请分析 output/ref1.py 中的 parse 函数。",
+        "继续刚才那个函数",
+        "parse",
+        "benchmarks/memory/fixtures/reference/ref1.py",
+        "parse",
+    ),
+    (
+        "请读取 output/ref2.py。",
+        "继续刚才那个文件",
+        "output/ref2.py",
+        "benchmarks/memory/fixtures/reference/ref2.py",
+        "",
+    ),
+    (
+        "请读取 output/ref3.py。",
+        "继续刚才那个文件",
+        "output/ref3.py",
+        "benchmarks/memory/fixtures/reference/ref3.py",
+        "",
+    ),
+    (
+        "请分析 output/ref4.py 中的 build 函数。",
+        "继续刚才那个函数",
+        "build",
+        "benchmarks/memory/fixtures/reference/ref4.py",
+        "build",
+    ),
+    (
+        "请分析 output/ref5.py 中的 run 函数。",
+        "继续刚才那个函数",
+        "run",
+        "benchmarks/memory/fixtures/reference/ref5.py",
+        "run",
+    ),
+    (
+        "请读取 output/ref6.py。",
+        "继续刚才那个文件",
+        "output/ref6.py",
+        "benchmarks/memory/fixtures/reference/ref6.py",
+        "",
+    ),
+    (
+        "请分析 output/ref7.py 中的 main 函数。",
+        "继续刚才那个函数",
+        "main",
+        "benchmarks/memory/fixtures/reference/ref7.py",
+        "main",
+    ),
+    (
+        "请读取 output/ref8.py。",
+        "继续刚才那个文件",
+        "output/ref8.py",
+        "benchmarks/memory/fixtures/reference/ref8.py",
+        "",
+    ),
+    (
+        "请分析 output/ref9.py 中的 save 函数。",
+        "继续刚才那个函数",
+        "save",
+        "benchmarks/memory/fixtures/reference/ref9.py",
+        "save",
+    ),
 ]
 
 
@@ -200,13 +264,18 @@ def build_continuation_cases(n_per_sub: int = 10) -> List[MemoryCase]:
             negative_examples=[],
             metric_scope="continuation",
         ))
-    for i, (prompt, follow_up, target) in enumerate(_REFERENCE_RESUME_TARGETS[:n_per_sub]):
+    for i, (prompt, follow_up, target, fixture_source, fixture_symbol) in enumerate(
+        _REFERENCE_RESUME_TARGETS[:n_per_sub]
+    ):
         cases.append(MemoryCase(
             id=f"cont-ref-{i:02d}", group="continuation", sub="reference_resume",
             turns=[prompt, follow_up],
             expected="",
             note="CONTINUE_REFERENCE：验证 Resolver 目标映射/澄清",
             continuation_contract="CONTINUE_REFERENCE",
+            fixture_source=fixture_source,
+            fixture_target=f"output/ref{i}.py",
+            fixture_symbol=fixture_symbol,
             validation_mode="runtime_contract",
             contract_expectations={
                 "intent": "continue_reference",

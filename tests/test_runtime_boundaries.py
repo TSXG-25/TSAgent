@@ -13,7 +13,7 @@ from agent.cognition import CognitiveContext
 from agent.decision import DecisionInput
 from agent.executor.contract import executor_factory
 from agent.orchestrator.executor import ExecutionStage
-from agent.task import ExecutionPlan, Task
+from agent.task import ExecutionPlan, ExecutionStep, Task
 from agent.workflow import ExecutionContext, ExecutionResult
 from evaluation.metrics import MetricCollector, MetricDefinition, TrendGate
 from evaluation.metrics_v1 import MetricsV1
@@ -24,7 +24,10 @@ from evaluation.benchmark.failboard_v2 import Evidence
 
 class _Selector:
     def compile(self, task, context=None):
-        return ExecutionPlan(task=task, steps=[], executor="fake")
+        steps = []
+        if task.verb.value == "write":
+            steps.append(ExecutionStep(tool="filesystem.write"))
+        return ExecutionPlan(task=task, steps=steps, executor="fake")
 
 
 class _Orchestrator:
@@ -70,7 +73,11 @@ def test_execution_stage_compiles_state_and_uses_factory(monkeypatch):
 def test_execution_stage_rejects_unverified_file_write(monkeypatch):
     monkeypatch.setitem(executor_factory._registry, "fake", lambda: _FakeExecutor())
     state = {
-        "messages": [HumanMessage(content="write task")],
+        "messages": [
+            HumanMessage(
+                content="创建 output/definitely_missing_from_test.py"
+            )
+        ],
         "plan": [{
             "id": "task-write",
             "verb": "write",
@@ -87,7 +94,7 @@ def test_execution_stage_rejects_unverified_file_write(monkeypatch):
 
     assert next_state == "RECOVER"
     assert updated["plan"][0]["status"] == "failed"
-    assert "文件写入未验证" in updated["plan"][0]["error"]
+    assert "UNVERIFIED" in updated["plan"][0]["error"]
 
 
 def test_context_views_are_frozen_snapshots():

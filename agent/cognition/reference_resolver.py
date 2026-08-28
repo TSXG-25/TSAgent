@@ -40,6 +40,14 @@ _SYMBOL_REFERENCE_PATTERNS = [
     re.compile(r'^(这个|那个|上面的|下面的|这个)\s*(函数|方法|类|变量|常量|接口|模块|文件)?$'),
     re.compile(r'^(解释|说明|分析|看看|查看)\s*(这个|那个|上面的|下面的)\s*(函数|方法|类|变量|常量|接口|模块|文件)?$'),
     re.compile(r'^(函数|方法|类|变量|常量|接口|模块|文件)\s*(的|中|里)\s*(这个|那个|这个)'),
+    # "继续刚才那个函数/文件" is an explicit reference, not an ordinal.
+    # Keep it ahead of _ORDINAL_PATTERNS so an empty ordinal result cannot
+    # short-circuit the symbol/reference resolution path.
+    re.compile(
+        r'^(继续|接着)\s*(刚才\s*)?'
+        r'(那个|这个|上面的|下面的)?\s*'
+        r'(函数|方法|类|变量|常量|接口|模块|文件)\s*(呢|呢？)?$'
+    ),
 ]
 
 # 省略目标操作中的动词（用于区分主题延续，如"上海呢" vs "改呢"）
@@ -103,6 +111,12 @@ def _is_continuation(text: str) -> bool:
 
 # 显式文件引用模式：动词 + 路径/扩展名（"读取 output/solution.py"、"打开 solution.py"）
 _FILE_REFERENCE_PATTERNS = [
+    # Analysis requests may continue with an explicit symbol description:
+    # "请分析 output/ref0.py 中的 calculate 函数。"
+    re.compile(
+        r'^(?:请\s*)?(分析|检查|审查|阅读|研究|查看|读取|打开)\s+'
+        r'(\S+\.[A-Za-z0-9_]+)(?:[。！？；;，,]|\s+.*)?$'
+    ),
     re.compile(r'^(读取|读|打开|查看|修改|改|写入|写|删除|复制|移动|优化|撤销)\s*(\S*[./\\]\S*)$'),
 ]
 
@@ -436,16 +450,29 @@ class ReferenceResolver:
         """序数子 Resolver：kind=ordinal / symbol / file。"""
         # 去掉动词前缀（"修改第一个文件" → "第一个文件"）
         body = re.sub(r'^(修改|改|优化|重构|调整|更新|删除|移除|打开|读取|读|查看|处理|解决|继续|执行)\s*', '', text)
-        # 模式 1: 刚才那个文件 → timeline 最近 file
-        if body.startswith("刚才") and "文件" in body:
-            f = self._timeline_latest_file(context)
-            return ResolutionCandidate(
-                kind="file",
-                target=f or None,
-                confidence=0.9 if f else 0.0,
-                reason=f"序数引用: 刚才那个文件 → {f}" if f else "序数引用: 无最近文件",
-                source="ordinal",
-            )
+        # 模式 1: 刚才那个<类型> → timeline 最近 file / symbol
+        if body.startswith("刚才"):
+            if "文件" in body:
+                f = self._timeline_latest_file(context)
+                return ResolutionCandidate(
+                    kind="file",
+                    target=f or None,
+                    confidence=0.9 if f else 0.0,
+                    reason=f"序数引用: 刚才那个文件 → {f}" if f else "序数引用: 无最近文件",
+                    source="ordinal",
+                )
+            # 符号类型词（函数/方法/类/变量…）→ 最近 symbol（CONTINUE_REFERENCE）
+            if any(w in body for w in ("函数", "方法", "类", "变量", "接口")):
+                sym = self._timeline_latest_symbol(context)
+                return ResolutionCandidate(
+                    kind="symbol",
+                    target=sym or None,
+                    symbol=sym,
+                    confidence=0.9 if sym else 0.0,
+                    reason=f"序数引用: 刚才那个{('函数' if '函数' in body else '符号')} → {sym}"
+                           if sym else "序数引用: 无最近符号",
+                    source="ordinal",
+                )
         # 模式 2: 第 N 个（函数/方法/类/变量/文件，无类型词时按上下文兜底）
         m = re.match(r'^第([一二三四五六七八九十\d]+)(个|条)(函数|方法|类|变量|文件)?', body)
         if m:
@@ -628,11 +655,27 @@ class ReferenceResolver:
             if m:
                 break
         target = m.group(2) if m else ""
+        # Preserve an explicitly named symbol so a later
+        # "继续刚才那个函数" can resolve against the same turn.
+        symbol_match = re.search(
+            r'(?:中|里|的)\s*(?:的\s*)?'
+            r'([A-Za-z_][A-Za-z0-9_]*)\s*'
+            r'(?:函数|方法|类|变量|常量|接口)\b',
+            text,
+        )
+        symbol = symbol_match.group(1) if symbol_match else ""
         return ResolutionCandidate(
             kind="file",
             target=target or None,
+            symbol=symbol,
             confidence=0.95 if target else 0.0,
-            reason=f"文件引用: {target}" if target else "文件引用: 未提取到路径",
+            reason=(
+                f"文件引用: {target}, symbol={symbol}"
+                if target and symbol
+                else f"文件引用: {target}"
+                if target
+                else "文件引用: 未提取到路径"
+            ),
             source="file",
         )
 

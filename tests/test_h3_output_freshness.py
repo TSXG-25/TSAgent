@@ -182,21 +182,11 @@ def test_direct_chat_provider_failure_cannot_emit_completed(monkeypatch) -> None
             raise ConnectionError("provider unavailable")
 
     async def scenario() -> None:
-        from agent.cognition.intent_schema import IntentResult
+        from agent.context_policy import ContextPolicy
         from agent.conversation import ConversationSnapshot
         from agent.orchestrator import planner as planner_module
 
         monkeypatch.setattr("agent.llm.llm", FailingLLM())
-        monkeypatch.setattr(
-            planner_module.intent_engine,
-            "analyze",
-            lambda _context: IntentResult(
-                domain="chat",
-                action="greeting",
-                requires_execution=False,
-                reference_kind="",
-            ),
-        )
         memory = SimpleNamespace(record_full_exchange=lambda *_args: None)
         retriever = SimpleNamespace(
             runtime_pending=lambda _user_id: False,
@@ -226,7 +216,14 @@ def test_direct_chat_provider_failure_cannot_emit_completed(monkeypatch) -> None
         )
         state, next_state, answer = await planner_module.PlannerStage(
             orchestrator
-        ).run("你好", "user-a", {}, "", "")
+        ).run(
+            "你好",
+            "user-a",
+            {},
+            "",
+            "",
+            context_policy=ContextPolicy.for_request("你好"),
+        )
         assert next_state == "FINISH"
         assert answer == "抱歉，我暂时无法回答。"
         assert state["runtime_terminal_status"] == "FAILED_TERMINAL"

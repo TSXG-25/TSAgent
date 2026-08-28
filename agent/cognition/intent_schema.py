@@ -5,6 +5,8 @@ User Input 经过 ReferenceResolver + IntentEngine 处理后，得到结构化�
 from dataclasses import dataclass, field
 from typing import Optional
 
+from .execution_need import RequestedOutcome
+
 
 # ── 稳定的 Domain 层（不会频繁变化） ──
 DOMAIN_CHAT = "chat"             # 闲聊、打招呼、无意义
@@ -58,6 +60,7 @@ class IntentResult:
         current_file: 当前 Workspace 打开的文件（注入用）
         confidence: 置信度 (0-1)
         requires_execution: 是否需要 Agent 执行（False = 直接 LLM 回答）
+        requested_outcomes: 用户明确要求的结果集合（不信任 LLM 覆盖）
         summary: 简短的意图说明
         raw_input: 原始用户输入
     """
@@ -73,6 +76,7 @@ class IntentResult:
     reference_kind: str = ""   # 引用类意图的目标字段提示（answer/instruction/runtime/goal）；Intent Engine 判定
     freshness_required: bool = False
     source_grounding_required: bool = False
+    requested_outcomes: tuple[RequestedOutcome, ...] = ()
     # Stable cognition-boundary failure.  A provider outage must not be
     # downgraded to DOMAIN_UNKNOWN and sent through a second Planner call.
     failure_code: str = ""

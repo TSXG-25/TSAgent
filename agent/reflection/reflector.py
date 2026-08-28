@@ -19,8 +19,8 @@ Reflection 只提出修正方案（v2.0-C 约束 2），不执行：
 from dataclasses import dataclass, field
 from typing import List
 
-from evaluation.benchmark.failboard_v2 import FailureEvent, Evidence, SYMPTOM_MAP
 from agent.context.contracts import ReflectionContext
+from agent.failure import Evidence, FailureEvent, SYMPTOM_MAP
 
 
 @dataclass(frozen=True)

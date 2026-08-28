@@ -4,9 +4,9 @@ Path resolution is delegated to Workspace (Discovery Layer).
 Filesystem only does the actual read/write operations.
 
 Changes:
-- _resolve_path now delegates to Workspace first
+- _resolve_path preserves exact filesystem identity before Workspace discovery
 - read_file/write_file/list_directory record context via WorkspaceService
-- Fully backward compatible (fallback to existing logic)
+- unresolved read paths may still use Workspace discovery
 """
 from pathlib import Path
 import shutil
@@ -89,24 +89,14 @@ def set_working_directory(path: str) -> str:
 # ── Path Resolution ──
 
 
-def _resolve_path(path: str) -> Path:
+def _resolve_path(path: str, *, expected_kind: str | None = None) -> Path:
     """Resolve a path spec to an actual filesystem path.
 
-    Resolution order:
-    1. Try Workspace.exact() resolution (uses indexed file tree)
-    2. Relative to current working directory
-    3. Relative to project root
-    4. Common prefixes (input/, src/, output/, docs/)
-    5. Fuzzy match via Workspace (best match if unique)
-    6. Recursive search fallback
+    Exact filesystem identity is resolved before indexed/fuzzy discovery.  A
+    directory operation must never be redirected to a file with a similar
+    name after Workspace indexing has completed.
     """
     path = str(path).strip()
-
-    # Check cache first
-    if path in _path_cache:
-        cached = _path_cache[path]
-        if cached.exists():
-            return cached
 
     # Pathological inputs: root references must map to the project root.
     # Workspace fuzzy matcher treats "." as a filename prefix (e.g. ".gitignore"),
@@ -119,9 +109,39 @@ def _resolve_path(path: str) -> Path:
     # ``/project/tests`` may be mistaken for ``tests/__init__.py``.
     absolute = Path(path)
     if absolute.is_absolute():
-        return absolute.resolve()
+        return _ensure_workspace_path(absolute, path)
 
-    # Strategy 1: Workspace resolution (exact + fuzzy)
+    # Reject traversal before consulting the indexed Workspace.  A path that
+    # canonicalizes outside the Run/project root is a boundary violation, not
+    # an unresolved fuzzy lookup.  This keeps security checks deterministic and
+    # prevents a rejected request from paying for a full repository scan.
+    _ensure_workspace_path(ROOT / path, path)
+
+    # Exact filesystem paths are the source of truth for file operations.
+    # Check the active working directory first, then the workspace root.
+    exact_candidates = []
+    if _working_directory != ".":
+        exact_candidates.append(ROOT / _working_directory / path)
+    exact_candidates.append(ROOT / path)
+    for candidate in exact_candidates:
+        resolved = candidate.resolve()
+        if resolved.exists():
+            _path_cache[path] = resolved
+            return resolved
+
+    # Reuse only a cache entry whose kind is compatible with the caller.
+    if path in _path_cache:
+        cached = _path_cache[path]
+        if cached.exists() and (
+            expected_kind is None
+            or expected_kind == "directory" and cached.is_dir()
+            or expected_kind == "file" and cached.is_file()
+        ):
+            return cached
+
+    # Workspace discovery is for unresolved/fuzzy names only.  For a typed
+    # directory request, an indexed file candidate is never an acceptable
+    # substitute; the original exact path is returned below for a stable error.
     ws = _get_workspace_service()
     if ws is not None:
         try:
@@ -131,10 +151,21 @@ def _resolve_path(path: str) -> Path:
             matches = []
         if matches:
             # Use highest-scored match
-            best = matches[0]
-            if best.path.exists():
-                _path_cache[path] = best.path
-                return best.path
+            for match in matches:
+                candidate = match.path
+                if not candidate.exists():
+                    continue
+                if expected_kind == "directory" and not candidate.is_dir():
+                    continue
+                if expected_kind == "file" and not candidate.is_file():
+                    continue
+                _path_cache[path] = candidate
+                return candidate
+
+    # Typed operations are exact-only.  Do not silently search common
+    # prefixes or recursively redirect a missing directory to another file.
+    if expected_kind is not None:
+        return (ROOT / path).resolve()
 
     # Strategy 2: Relative to working directory
     if _working_directory != ".":
@@ -500,14 +531,17 @@ def list_directory(path: str = ".") -> str:
     Returns:
         Directory listing
     """
-    if _working_directory != "." and not path.startswith("/"):
-        cwd_full = (ROOT / _working_directory / path).resolve()
-        if cwd_full.is_dir():
-            full = cwd_full
+    try:
+        if _working_directory != "." and not path.startswith("/"):
+            cwd_full = (ROOT / _working_directory / path).resolve()
+            if cwd_full.is_dir():
+                full = cwd_full
+            else:
+                full = _resolve_path(path, expected_kind="directory")
         else:
-            full = _resolve_path(path)
-    else:
-        full = _resolve_path(path)
+            full = _resolve_path(path, expected_kind="directory")
+    except PermissionError as e:
+        return f"错误：{e}"
 
     try:
         full = _ensure_workspace_path(full, str(path))

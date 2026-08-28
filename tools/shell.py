@@ -5,7 +5,7 @@ Executes shell commands in an isolated environment. Uses Docker sandbox
 when available, with automatic fallback to local subprocess execution.
 """
 from agent.registry.tool_registry import registry
-from agent.sandbox import run_in_sandbox
+from agent.sandbox import run_in_sandbox, run_in_workspace
 
 
 def shell(cmd: str, timeout: int = 30) -> str:
@@ -22,6 +22,16 @@ def shell(cmd: str, timeout: int = 30) -> str:
         命令的标准输出（stdout）。如果命令失败或超时，返回错误描述。
     """
     return run_in_sandbox(cmd, timeout=timeout)
+
+
+def shell_in_workspace(
+    cmd: str,
+    workspace_root: str,
+    timeout: int = 30,
+) -> str:
+    """Execute a shell command with an explicit Run workspace as cwd."""
+
+    return run_in_workspace(cmd, workspace_root, timeout=timeout)
 
 
 registry.register(shell, category="shell", tags=["shell", "execution"])

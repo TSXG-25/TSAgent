@@ -92,11 +92,7 @@ class ProjectIndex:
         self._symbol_to_paths = {}
         start = time.perf_counter()
 
-        for file_path in self.root.rglob("*"):
-            if not file_path.is_file():
-                continue
-            if self._should_ignore(file_path):
-                continue
+        for file_path in self._iter_files():
 
             try:
                 stat = file_path.stat()
@@ -173,11 +169,7 @@ class ProjectIndex:
     def refresh(self) -> None:
         """Incremental refresh: only re-index changed files."""
         changed = False
-        for file_path in self.root.rglob("*"):
-            if not file_path.is_file():
-                continue
-            if self._should_ignore(file_path):
-                continue
+        for file_path in self._iter_files():
 
             try:
                 stat = file_path.stat()
@@ -207,6 +199,25 @@ class ProjectIndex:
 
     # ── Helpers ──
 
+    def _iter_files(self):
+        """Yield indexable files while pruning ignored directories early.
+
+        Filtering after ``Path.rglob`` still walks every dependency tree. A
+        workspace may contain a JavaScript checkout or a Python environment,
+        so the indexer must prune those directories during traversal rather
+        than merely discard their files after enumeration.
+        """
+        for directory, dirnames, filenames in os.walk(self.root, topdown=True):
+            dirnames[:] = [
+                name
+                for name in dirnames
+                if not self._should_prune_directory(Path(directory) / name)
+            ]
+            for name in filenames:
+                file_path = Path(directory) / name
+                if not self._should_ignore(file_path):
+                    yield file_path
+
     def _should_ignore(self, path: Path) -> bool:
         if any(part in IGNORE_DIRS for part in path.parts):
             return True
@@ -220,6 +231,18 @@ class ProjectIndex:
         except OSError:
             return True
         return False
+
+    def _should_prune_directory(self, path: Path) -> bool:
+        """Return whether traversal should stop before entering ``path``.
+
+        A nested Git checkout is a separate repository, not part of the
+        current project's source graph. Pruning it avoids walking vendored
+        harnesses and their dependency trees while preserving normal files in
+        the current workspace.
+        """
+        if self._should_ignore(path):
+            return True
+        return (path / ".git").exists()
 
     def _detect_language(self, path: Path) -> str:
         return LANGUAGE_MAP.get(path.suffix.lower(), "text")

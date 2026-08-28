@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from pathlib import Path
-
-from agent.runtime_store import SqliteRuntimeStore
+from typing import TYPE_CHECKING
 
 from .context_factory import ServiceContextFactory
-from .runtime_launcher import RuntimeExecutionLauncher
-from .service import AgentService
+
+if TYPE_CHECKING:
+    from .service import AgentService
 
 
 def create_default_agent_service(
@@ -16,12 +16,17 @@ def create_default_agent_service(
     *,
     workspace_root: Path | None = None,
     writer_id: str | None = None,
+    defer_context_creation: bool = False,
 ) -> AgentService:
     """Create the standard local Service without exposing Runtime internals.
 
     The returned Service owns the SQLite Store through its ContextFactory;
     callers should close the Service rather than closing the Store directly.
     """
+
+    from agent.runtime_store import SqliteRuntimeStore
+    from .runtime_launcher import RuntimeExecutionLauncher
+    from .service import AgentService
 
     store = SqliteRuntimeStore.open(database_path)
     try:
@@ -34,6 +39,7 @@ def create_default_agent_service(
             runtime_store=store,
             launcher=RuntimeExecutionLauncher(),
             context_factory=contexts,
+            defer_context_creation=defer_context_creation,
         )
     except BaseException:
         store.close()

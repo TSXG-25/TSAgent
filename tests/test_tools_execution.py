@@ -180,6 +180,16 @@ def test_web_fetch():
     import asyncio
 
     result = asyncio.run(web_fetch("https://example.com"))
+    if result.startswith("获取网页失败:") and any(
+        marker in result.lower()
+        for marker in (
+            "nodename nor servname",
+            "name or service not known",
+            "temporary failure in name resolution",
+            "timed out",
+        )
+    ):
+        pytest.skip("external DNS/network unavailable in this test environment")
     assert len(result) > 50, f"Fetch result too short: {result[:100] if result else 'empty'}"
     assert "Example" in result or "example" in result, f"Expected Example.com content, got: {result[:200]}"
     print(f"[PASS] test_web_fetch (len={len(result)} chars)")

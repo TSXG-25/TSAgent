@@ -1,0 +1,692 @@
+{
+  "version": "v2.4A-planner-v1",
+  "cases": [
+    {
+      "id": "PA001",
+      "family": "P1",
+      "name": "simple_qa_lists_tuples",
+      "input": "解释 Python 中列表和元组的区别，不要创建文件。",
+      "expected_mode": "chat",
+      "goal_units": [],
+      "min_tasks": 0,
+      "max_tasks": 0,
+      "constraints": {"forbidden_verbs": ["write", "modify", "execute", "delete", "copy", "move"]}
+    },
+    {
+      "id": "PA002",
+      "family": "P1",
+      "name": "simple_qa_http",
+      "input": "什么是 HTTP 里的幂等请求？",
+      "expected_mode": "chat",
+      "goal_units": [],
+      "min_tasks": 0,
+      "max_tasks": 0,
+      "constraints": {"forbidden_verbs": ["write", "modify", "execute", "delete", "copy", "move"]}
+    },
+    {
+      "id": "PA003",
+      "family": "P1",
+      "name": "simple_translation",
+      "input": "把“state ownership”翻译成中文并解释语境。",
+      "expected_mode": "chat",
+      "goal_units": [],
+      "min_tasks": 0,
+      "max_tasks": 0,
+      "constraints": {"forbidden_verbs": ["write", "modify", "execute", "delete", "copy", "move"]}
+    },
+    {
+      "id": "PA004",
+      "family": "P1",
+      "name": "simple_math",
+      "input": "计算 37 乘以 24，并说明计算过程。",
+      "expected_mode": "chat",
+      "goal_units": [],
+      "min_tasks": 0,
+      "max_tasks": 0,
+      "constraints": {"forbidden_verbs": ["write", "modify", "execute", "delete", "copy", "move"]}
+    },
+    {
+      "id": "PA005",
+      "family": "P2",
+      "name": "single_file_bug_fix",
+      "input": "修复 config.py 里的空值处理 bug。",
+      "expected_mode": "plan",
+      "goal_units": [{"id": "g1", "verbs": ["modify"], "target": "config.py", "target_type": "file", "critical": true, "depends_on": []}],
+      "min_tasks": 1,
+      "max_tasks": 1,
+      "constraints": {"forbidden_verbs": []}
+    },
+    {
+      "id": "PA006",
+      "family": "P2",
+      "name": "single_file_function_change",
+      "input": "修改 parser.py 的 parse 函数，使它能处理空输入。",
+      "expected_mode": "plan",
+      "goal_units": [{"id": "g1", "verbs": ["modify"], "target": "parser.py", "target_type": "file", "critical": true, "depends_on": []}],
+      "min_tasks": 1,
+      "max_tasks": 1,
+      "constraints": {"forbidden_verbs": []}
+    },
+    {
+      "id": "PA007",
+      "family": "P2",
+      "name": "single_output_file",
+      "input": "把下面的接口说明保存到 output/api_notes.md。",
+      "expected_mode": "plan",
+      "goal_units": [{"id": "g1", "verbs": ["write"], "target": "output/api_notes.md", "target_type": "file", "critical": true, "depends_on": []}],
+      "min_tasks": 1,
+      "max_tasks": 1,
+      "constraints": {"forbidden_verbs": []}
+    },
+    {
+      "id": "PA008",
+      "family": "P2",
+      "name": "single_test_edit",
+      "input": "给 tests/test_auth.py 增加 token 过期的回归用例。",
+      "expected_mode": "plan",
+      "goal_units": [{"id": "g1", "verbs": ["modify"], "target": "tests/test_auth.py", "target_type": "file", "critical": true, "depends_on": []}],
+      "min_tasks": 1,
+      "max_tasks": 1,
+      "constraints": {"forbidden_verbs": []}
+    },
+    {
+      "id": "PA009",
+      "family": "P3",
+      "name": "bug_fix_with_regression_test",
+      "input": "修复 api.py 的分页 bug，给 tests/test_api.py 加回归测试，最后运行 pytest。",
+      "expected_mode": "plan",
+      "goal_units": [
+        {"id": "g1", "verbs": ["modify"], "target": "api.py", "target_type": "file", "critical": true, "depends_on": []},
+        {"id": "g2", "verbs": ["modify"], "target": "tests/test_api.py", "target_type": "file", "critical": true, "depends_on": ["g1"]},
+        {"id": "g3", "verbs": ["execute"], "target": "pytest", "target_type": "text", "critical": true, "depends_on": ["g2"]}
+      ],
+      "min_tasks": 3,
+      "max_tasks": 3,
+      "constraints": {"forbidden_verbs": []}
+    },
+    {
+      "id": "PA010",
+      "family": "P3",
+      "name": "parser_regression_chain",
+      "input": "定位 parser.py 的边界错误，修改实现，补 tests/test_parser.py，并运行相关测试。",
+      "expected_mode": "plan",
+      "goal_units": [
+        {"id": "g1", "verbs": ["read", "search"], "target": "parser.py", "target_type": "file", "critical": true, "depends_on": []},
+        {"id": "g2", "verbs": ["modify"], "target": "parser.py", "target_type": "file", "critical": true, "depends_on": ["g1"]},
+        {"id": "g3", "verbs": ["modify"], "target": "tests/test_parser.py", "target_type": "file", "critical": true, "depends_on": ["g2"]},
+        {"id": "g4", "verbs": ["execute"], "target": "pytest", "target_type": "text", "critical": true, "depends_on": ["g3"]}
+      ],
+      "min_tasks": 4,
+      "max_tasks": 4,
+      "constraints": {"forbidden_verbs": []}
+    },
+    {
+      "id": "PA011",
+      "family": "P3",
+      "name": "database_error_chain",
+      "input": "修复 repository.py 的查询错误，同时更新 migration.sql 和 tests/test_repository.py，最后验证测试。",
+      "expected_mode": "plan",
+      "goal_units": [
+        {"id": "g1", "verbs": ["modify"], "target": "repository.py", "target_type": "file", "critical": true, "depends_on": []},
+        {"id": "g2", "verbs": ["modify"], "target": "migration.sql", "target_type": "file", "critical": true, "depends_on": ["g1"]},
+        {"id": "g3", "verbs": ["modify"], "target": "tests/test_repository.py", "target_type": "file", "critical": true, "depends_on": ["g1"]},
+        {"id": "g4", "verbs": ["execute"], "target": "pytest", "target_type": "text", "critical": true, "depends_on": ["g2", "g3"]}
+      ],
+      "min_tasks": 4,
+      "max_tasks": 4,
+      "constraints": {"forbidden_verbs": []}
+    },
+    {
+      "id": "PA012",
+      "family": "P3",
+      "name": "frontend_backend_bug",
+      "input": "修复 frontend/api.ts 与 backend/routes.py 的字段不一致问题，补集成测试并执行测试。",
+      "expected_mode": "plan",
+      "goal_units": [
+        {"id": "g1", "verbs": ["read"], "target": "frontend/api.ts", "target_type": "file", "critical": true, "depends_on": []},
+        {"id": "g2", "verbs": ["read"], "target": "backend/routes.py", "target_type": "file", "critical": true, "depends_on": []},
+        {"id": "g3", "verbs": ["modify"], "target": "frontend/api.ts", "target_type": "file", "critical": true, "depends_on": ["g1", "g2"]},
+        {"id": "g4", "verbs": ["modify"], "target": "tests/test_integration.py", "target_type": "file", "critical": true, "depends_on": ["g3"]},
+        {"id": "g5", "verbs": ["execute"], "target": "pytest", "target_type": "text", "critical": true, "depends_on": ["g4"]}
+      ],
+      "min_tasks": 5,
+      "max_tasks": 5,
+      "constraints": {"forbidden_verbs": []}
+    },
+    {
+      "id": "PA013",
+      "family": "P4",
+      "name": "parser_feature",
+      "input": "给 parser.py 增加日期字面量支持，补测试并更新 README.md。",
+      "expected_mode": "plan",
+      "goal_units": [
+        {"id": "g1", "verbs": ["modify"], "target": "parser.py", "target_type": "file", "critical": true, "depends_on": []},
+        {"id": "g2", "verbs": ["modify"], "target": "tests/test_parser.py", "target_type": "file", "critical": true, "depends_on": ["g1"]},
+        {"id": "g3", "verbs": ["modify"], "target": "README.md", "target_type": "file", "critical": false, "depends_on": ["g2"]}
+      ],
+      "min_tasks": 2,
+      "max_tasks": 3,
+      "constraints": {"forbidden_verbs": []}
+    },
+    {
+      "id": "PA014",
+      "family": "P4",
+      "name": "api_endpoint_feature",
+      "input": "在 routes.py 增加 /health 端点，并为它补测试。",
+      "expected_mode": "plan",
+      "goal_units": [
+        {"id": "g1", "verbs": ["modify"], "target": "routes.py", "target_type": "file", "critical": true, "depends_on": []},
+        {"id": "g2", "verbs": ["modify"], "target": "tests/test_routes.py", "target_type": "file", "critical": true, "depends_on": ["g1"]}
+      ],
+      "min_tasks": 2,
+      "max_tasks": 2,
+      "constraints": {"forbidden_verbs": []}
+    },
+    {
+      "id": "PA015",
+      "family": "P4",
+      "name": "cli_option_feature",
+      "input": "给 cli.py 增加 --json 输出选项，并更新对应测试。",
+      "expected_mode": "plan",
+      "goal_units": [
+        {"id": "g1", "verbs": ["modify"], "target": "cli.py", "target_type": "file", "critical": true, "depends_on": []},
+        {"id": "g2", "verbs": ["modify"], "target": "tests/test_cli.py", "target_type": "file", "critical": true, "depends_on": ["g1"]}
+      ],
+      "min_tasks": 2,
+      "max_tasks": 2,
+      "constraints": {"forbidden_verbs": []}
+    },
+    {
+      "id": "PA016",
+      "family": "P4",
+      "name": "cache_feature",
+      "input": "为 service.py 增加带过期时间的缓存，添加测试并说明配置方式。",
+      "expected_mode": "plan",
+      "goal_units": [
+        {"id": "g1", "verbs": ["modify"], "target": "service.py", "target_type": "file", "critical": true, "depends_on": []},
+        {"id": "g2", "verbs": ["modify"], "target": "tests/test_service.py", "target_type": "file", "critical": true, "depends_on": ["g1"]},
+        {"id": "g3", "verbs": ["modify"], "target": "README.md", "target_type": "file", "critical": false, "depends_on": ["g2"]}
+      ],
+      "min_tasks": 2,
+      "max_tasks": 3,
+      "constraints": {"forbidden_verbs": []}
+    },
+    {
+      "id": "PA017",
+      "family": "P5",
+      "name": "repository_function_analysis",
+      "input": "分析 agent/runtime.py 中 run 方法的职责，给出调用流程。",
+      "expected_mode": "plan",
+      "goal_units": [
+        {"id": "g1", "verbs": ["read"], "target": "agent/runtime.py", "target_type": "file", "critical": true, "depends_on": []},
+        {"id": "g2", "verbs": ["explain"], "target": "run", "target_type": "symbol", "critical": true, "depends_on": ["g1"]}
+      ],
+      "min_tasks": 2,
+      "max_tasks": 2,
+      "constraints": {"forbidden_verbs": ["write", "modify", "delete", "execute"]}
+    },
+    {
+      "id": "PA018",
+      "family": "P5",
+      "name": "repository_call_chain",
+      "input": "找出 Planner 到 PlanExecutor 的调用链并解释每层职责。",
+      "expected_mode": "plan",
+      "goal_units": [
+        {"id": "g1", "verbs": ["search"], "target": "Planner 到 PlanExecutor", "target_type": "text", "critical": true, "depends_on": []},
+        {"id": "g2", "verbs": ["explain"], "target": "Planner 到 PlanExecutor 的调用链", "target_type": "text", "critical": true, "depends_on": ["g1"]}
+      ],
+      "min_tasks": 2,
+      "max_tasks": 2,
+      "constraints": {"forbidden_verbs": ["write", "modify", "delete", "execute"]}
+    },
+    {
+      "id": "PA019",
+      "family": "P5",
+      "name": "repository_module_comparison",
+      "input": "比较 agent/runtime.py 和 agent/orchestrator/main.py 的职责边界，不修改文件。",
+      "expected_mode": "plan",
+      "goal_units": [
+        {"id": "g1", "verbs": ["read"], "target": "agent/runtime.py", "target_type": "file", "critical": true, "depends_on": []},
+        {"id": "g2", "verbs": ["read"], "target": "agent/orchestrator/main.py", "target_type": "file", "critical": true, "depends_on": []},
+        {"id": "g3", "verbs": ["explain"], "target": "职责边界", "target_type": "text", "critical": true, "depends_on": ["g1", "g2"]}
+      ],
+      "min_tasks": 3,
+      "max_tasks": 3,
+      "constraints": {"forbidden_verbs": ["write", "modify", "delete", "execute"]}
+    },
+    {
+      "id": "PA020",
+      "family": "P5",
+      "name": "repository_architecture_review",
+      "input": "检查 agent/service.py、agent/runtime_store/sqlite.py，概括持久化和服务边界。",
+      "expected_mode": "plan",
+      "goal_units": [
+        {"id": "g1", "verbs": ["read"], "target": "agent/service.py", "target_type": "file", "critical": true, "depends_on": []},
+        {"id": "g2", "verbs": ["read"], "target": "agent/runtime_store/sqlite.py", "target_type": "file", "critical": true, "depends_on": []},
+        {"id": "g3", "verbs": ["explain"], "target": "持久化和服务边界", "target_type": "text", "critical": true, "depends_on": ["g1", "g2"]}
+      ],
+      "min_tasks": 3,
+      "max_tasks": 3,
+      "constraints": {"forbidden_verbs": ["write", "modify", "delete", "execute"]}
+    },
+    {
+      "id": "PA021",
+      "family": "P6",
+      "name": "fresh_python_release_summary",
+      "input": "搜索 Python 最新版本的变化并给出带来源的摘要。",
+      "expected_mode": "plan",
+      "goal_units": [
+        {"id": "g1", "verbs": ["search"], "target": "Python 最新版本的变化", "target_type": "text", "critical": true, "depends_on": []},
+        {"id": "g2", "verbs": ["explain"], "target": "Python 最新版本摘要", "target_type": "text", "critical": true, "depends_on": ["g1"]}
+      ],
+      "min_tasks": 2,
+      "max_tasks": 2,
+      "constraints": {"required_verbs": ["search"], "forbidden_verbs": []}
+    },
+    {
+      "id": "PA022",
+      "family": "P6",
+      "name": "sqlite_wal_research",
+      "input": "查阅 SQLite WAL 的官方资料，整理它的优缺点并附链接。",
+      "expected_mode": "plan",
+      "goal_units": [
+        {"id": "g1", "verbs": ["search"], "target": "SQLite WAL 官方资料", "target_type": "text", "critical": true, "depends_on": []},
+        {"id": "g2", "verbs": ["explain"], "target": "SQLite WAL 优缺点", "target_type": "text", "critical": true, "depends_on": ["g1"]}
+      ],
+      "min_tasks": 2,
+      "max_tasks": 2,
+      "constraints": {"required_verbs": ["search"], "forbidden_verbs": []}
+    },
+    {
+      "id": "PA023",
+      "family": "P6",
+      "name": "security_news_summary",
+      "input": "搜索最近的 Python 安全公告，按影响和修复方式总结。",
+      "expected_mode": "plan",
+      "goal_units": [
+        {"id": "g1", "verbs": ["search"], "target": "最近的 Python 安全公告", "target_type": "text", "critical": true, "depends_on": []},
+        {"id": "g2", "verbs": ["explain"], "target": "Python 安全公告总结", "target_type": "text", "critical": true, "depends_on": ["g1"]}
+      ],
+      "min_tasks": 2,
+      "max_tasks": 2,
+      "constraints": {"required_verbs": ["search"], "forbidden_verbs": []}
+    },
+    {
+      "id": "PA024",
+      "family": "P6",
+      "name": "technology_comparison_research",
+      "input": "搜索 PostgreSQL 和 SQLite 的最新官方文档，比较适用场景。",
+      "expected_mode": "plan",
+      "goal_units": [
+        {"id": "g1", "verbs": ["search"], "target": "PostgreSQL 和 SQLite 最新官方文档", "target_type": "text", "critical": true, "depends_on": []},
+        {"id": "g2", "verbs": ["explain"], "target": "PostgreSQL 和 SQLite 适用场景", "target_type": "text", "critical": true, "depends_on": ["g1"]}
+      ],
+      "min_tasks": 2,
+      "max_tasks": 2,
+      "constraints": {"required_verbs": ["search"], "forbidden_verbs": []}
+    },
+    {
+      "id": "PA025",
+      "family": "P7",
+      "name": "research_to_markdown",
+      "input": "搜索向量数据库的最新对比，并把带来源的报告写入 output/vector_db.md。",
+      "expected_mode": "plan",
+      "goal_units": [
+        {"id": "g1", "verbs": ["search"], "target": "向量数据库的最新对比", "target_type": "text", "critical": true, "depends_on": []},
+        {"id": "g2", "verbs": ["write"], "target": "output/vector_db.md", "target_type": "file", "critical": true, "depends_on": ["g1"]}
+      ],
+      "min_tasks": 2,
+      "max_tasks": 2,
+      "constraints": {"required_verbs": ["search", "write"], "forbidden_verbs": []}
+    },
+    {
+      "id": "PA026",
+      "family": "P7",
+      "name": "research_to_report",
+      "input": "查找 Ollama 官方 API 用法，整理成 output/ollama_api.md。",
+      "expected_mode": "plan",
+      "goal_units": [
+        {"id": "g1", "verbs": ["search"], "target": "Ollama 官方 API 用法", "target_type": "text", "critical": true, "depends_on": []},
+        {"id": "g2", "verbs": ["write"], "target": "output/ollama_api.md", "target_type": "file", "critical": true, "depends_on": ["g1"]}
+      ],
+      "min_tasks": 2,
+      "max_tasks": 2,
+      "constraints": {"required_verbs": ["search", "write"], "forbidden_verbs": []}
+    },
+    {
+      "id": "PA027",
+      "family": "P7",
+      "name": "research_to_json",
+      "input": "搜索三个可靠的天气 API，并把名称、链接和限制保存到 output/weather_apis.json。",
+      "expected_mode": "plan",
+      "goal_units": [
+        {"id": "g1", "verbs": ["search"], "target": "三个可靠的天气 API", "target_type": "text", "critical": true, "depends_on": []},
+        {"id": "g2", "verbs": ["write"], "target": "output/weather_apis.json", "target_type": "file", "critical": true, "depends_on": ["g1"]}
+      ],
+      "min_tasks": 2,
+      "max_tasks": 2,
+      "constraints": {"required_verbs": ["search", "write"], "forbidden_verbs": []}
+    },
+    {
+      "id": "PA028",
+      "family": "P7",
+      "name": "news_to_sources_file",
+      "input": "搜索今天的 AI 新闻，把标题和来源写入 output/ai_news.md。",
+      "expected_mode": "plan",
+      "goal_units": [
+        {"id": "g1", "verbs": ["search"], "target": "今天的 AI 新闻", "target_type": "text", "critical": true, "depends_on": []},
+        {"id": "g2", "verbs": ["write"], "target": "output/ai_news.md", "target_type": "file", "critical": true, "depends_on": ["g1"]}
+      ],
+      "min_tasks": 2,
+      "max_tasks": 2,
+      "constraints": {"required_verbs": ["search", "write"], "forbidden_verbs": []}
+    },
+    {
+      "id": "PA029",
+      "family": "P8",
+      "name": "research_then_code_fix",
+      "input": "搜索 Python asyncio 超时处理的官方建议，结合结果修改 client.py 并补测试。",
+      "expected_mode": "plan",
+      "goal_units": [
+        {"id": "g1", "verbs": ["search"], "target": "Python asyncio 超时处理官方建议", "target_type": "text", "critical": true, "depends_on": []},
+        {"id": "g2", "verbs": ["modify"], "target": "client.py", "target_type": "file", "critical": true, "depends_on": ["g1"]},
+        {"id": "g3", "verbs": ["modify"], "target": "tests/test_client.py", "target_type": "file", "critical": true, "depends_on": ["g2"]}
+      ],
+      "min_tasks": 3,
+      "max_tasks": 3,
+      "constraints": {"required_verbs": ["search", "modify"], "forbidden_verbs": []}
+    },
+    {
+      "id": "PA030",
+      "family": "P8",
+      "name": "code_and_docs_implementation",
+      "input": "阅读 serializer.py，搜索 JSON Schema 的兼容建议，修改 serializer.py 并运行测试。",
+      "expected_mode": "plan",
+      "goal_units": [
+        {"id": "g1", "verbs": ["read"], "target": "serializer.py", "target_type": "file", "critical": true, "depends_on": []},
+        {"id": "g2", "verbs": ["search"], "target": "JSON Schema 兼容建议", "target_type": "text", "critical": true, "depends_on": []},
+        {"id": "g3", "verbs": ["modify"], "target": "serializer.py", "target_type": "file", "critical": true, "depends_on": ["g1", "g2"]},
+        {"id": "g4", "verbs": ["execute"], "target": "pytest", "target_type": "text", "critical": true, "depends_on": ["g3"]}
+      ],
+      "min_tasks": 4,
+      "max_tasks": 4,
+      "constraints": {"required_verbs": ["read", "search", "modify", "execute"], "forbidden_verbs": []}
+    },
+    {
+      "id": "PA031",
+      "family": "P8",
+      "name": "research_generate_run",
+      "input": "查找一个稳定的 CSV 解析库，写出 output/csv_probe.py，运行它并贴出结果。",
+      "expected_mode": "plan",
+      "goal_units": [
+        {"id": "g1", "verbs": ["search"], "target": "稳定的 CSV 解析库", "target_type": "text", "critical": true, "depends_on": []},
+        {"id": "g2", "verbs": ["write"], "target": "output/csv_probe.py", "target_type": "file", "critical": true, "depends_on": ["g1"]},
+        {"id": "g3", "verbs": ["execute"], "target": "output/csv_probe.py", "target_type": "file", "critical": true, "depends_on": ["g2"]}
+      ],
+      "min_tasks": 3,
+      "max_tasks": 3,
+      "constraints": {"required_verbs": ["search", "write", "execute"], "forbidden_verbs": []}
+    },
+    {
+      "id": "PA032",
+      "family": "P8",
+      "name": "library_comparison_adapter",
+      "input": "搜索 requests 和 httpx 的异步用法，给 downloader.py 增加 httpx 适配并补测试。",
+      "expected_mode": "plan",
+      "goal_units": [
+        {"id": "g1", "verbs": ["search"], "target": "requests 和 httpx 的异步用法", "target_type": "text", "critical": true, "depends_on": []},
+        {"id": "g2", "verbs": ["modify"], "target": "downloader.py", "target_type": "file", "critical": true, "depends_on": ["g1"]},
+        {"id": "g3", "verbs": ["modify"], "target": "tests/test_downloader.py", "target_type": "file", "critical": true, "depends_on": ["g2"]}
+      ],
+      "min_tasks": 3,
+      "max_tasks": 3,
+      "constraints": {"required_verbs": ["search", "modify"], "forbidden_verbs": []}
+    },
+    {
+      "id": "PA033",
+      "family": "P9",
+      "name": "missing_module_target",
+      "input": "修改一下那个模块。",
+      "expected_mode": "abstain",
+      "goal_units": [],
+      "min_tasks": 0,
+      "max_tasks": 0,
+      "constraints": {"forbidden_verbs": []}
+    },
+    {
+      "id": "PA034",
+      "family": "P9",
+      "name": "missing_feature_details",
+      "input": "帮我加个功能。",
+      "expected_mode": "abstain",
+      "goal_units": [],
+      "min_tasks": 0,
+      "max_tasks": 0,
+      "constraints": {"forbidden_verbs": []}
+    },
+    {
+      "id": "PA035",
+      "family": "P9",
+      "name": "missing_error_target",
+      "input": "把它修好。",
+      "expected_mode": "abstain",
+      "goal_units": [],
+      "min_tasks": 0,
+      "max_tasks": 0,
+      "constraints": {"forbidden_verbs": []}
+    },
+    {
+      "id": "PA036",
+      "family": "P9",
+      "name": "missing_deployment_target",
+      "input": "部署到那里。",
+      "expected_mode": "abstain",
+      "goal_units": [],
+      "min_tasks": 0,
+      "max_tasks": 0,
+      "constraints": {"forbidden_verbs": []}
+    },
+    {
+      "id": "PA037",
+      "family": "P10",
+      "name": "ambiguous_continuation",
+      "input": "继续处理那个问题。",
+      "expected_mode": "abstain",
+      "goal_units": [],
+      "min_tasks": 0,
+      "max_tasks": 0,
+      "constraints": {"requires_clarification": true}
+    },
+    {
+      "id": "PA038",
+      "family": "P10",
+      "name": "ambiguous_output_target",
+      "input": "把结果保存一下。",
+      "expected_mode": "abstain",
+      "goal_units": [],
+      "min_tasks": 0,
+      "max_tasks": 0,
+      "constraints": {"requires_clarification": true}
+    },
+    {
+      "id": "PA039",
+      "family": "P10",
+      "name": "ambiguous_previous_plan",
+      "input": "按之前的方案改。",
+      "expected_mode": "abstain",
+      "goal_units": [],
+      "min_tasks": 0,
+      "max_tasks": 0,
+      "constraints": {"requires_clarification": true}
+    },
+    {
+      "id": "PA040",
+      "family": "P10",
+      "name": "ambiguous_execution_target",
+      "input": "帮我运行它。",
+      "expected_mode": "abstain",
+      "goal_units": [],
+      "min_tasks": 0,
+      "max_tasks": 0,
+      "constraints": {"requires_clarification": true}
+    },
+    {
+      "id": "PA041",
+      "family": "P11",
+      "name": "parallel_module_read",
+      "input": "分别阅读 auth.py 和 billing.py，然后比较它们的错误处理方式。",
+      "expected_mode": "plan",
+      "goal_units": [
+        {"id": "g1", "verbs": ["read"], "target": "auth.py", "target_type": "file", "critical": true, "depends_on": []},
+        {"id": "g2", "verbs": ["read"], "target": "billing.py", "target_type": "file", "critical": true, "depends_on": []},
+        {"id": "g3", "verbs": ["explain"], "target": "错误处理方式", "target_type": "text", "critical": true, "depends_on": ["g1", "g2"]}
+      ],
+      "min_tasks": 3,
+      "max_tasks": 3,
+      "constraints": {"parallel_groups": [["g1", "g2"]], "forbidden_verbs": ["write", "modify", "delete", "execute"]}
+    },
+    {
+      "id": "PA042",
+      "family": "P11",
+      "name": "parallel_research_branches",
+      "input": "同时搜索 SQLite WAL 和 PostgreSQL MVCC 的官方资料，最后比较两者。",
+      "expected_mode": "plan",
+      "goal_units": [
+        {"id": "g1", "verbs": ["search"], "target": "SQLite WAL 官方资料", "target_type": "text", "critical": true, "depends_on": []},
+        {"id": "g2", "verbs": ["search"], "target": "PostgreSQL MVCC 官方资料", "target_type": "text", "critical": true, "depends_on": []},
+        {"id": "g3", "verbs": ["explain"], "target": "SQLite WAL 和 PostgreSQL MVCC 比较", "target_type": "text", "critical": true, "depends_on": ["g1", "g2"]}
+      ],
+      "min_tasks": 3,
+      "max_tasks": 3,
+      "constraints": {"parallel_groups": [["g1", "g2"]], "required_verbs": ["search"], "forbidden_verbs": []}
+    },
+    {
+      "id": "PA043",
+      "family": "P11",
+      "name": "parallel_source_and_test_inspection",
+      "input": "独立检查 config.py 和 tests/test_config.py，再给出修改建议。",
+      "expected_mode": "plan",
+      "goal_units": [
+        {"id": "g1", "verbs": ["read"], "target": "config.py", "target_type": "file", "critical": true, "depends_on": []},
+        {"id": "g2", "verbs": ["read"], "target": "tests/test_config.py", "target_type": "file", "critical": true, "depends_on": []},
+        {"id": "g3", "verbs": ["explain"], "target": "修改建议", "target_type": "text", "critical": true, "depends_on": ["g1", "g2"]}
+      ],
+      "min_tasks": 3,
+      "max_tasks": 3,
+      "constraints": {"parallel_groups": [["g1", "g2"]], "forbidden_verbs": ["write", "modify", "delete", "execute"]}
+    },
+    {
+      "id": "PA044",
+      "family": "P11",
+      "name": "parallel_report_outputs",
+      "input": "分别生成 output/summary.md 和 output/data.json，两个文件互不依赖。",
+      "expected_mode": "plan",
+      "goal_units": [
+        {"id": "g1", "verbs": ["write"], "target": "output/summary.md", "target_type": "file", "critical": true, "depends_on": []},
+        {"id": "g2", "verbs": ["write"], "target": "output/data.json", "target_type": "file", "critical": true, "depends_on": []}
+      ],
+      "min_tasks": 2,
+      "max_tasks": 2,
+      "constraints": {"parallel_groups": [["g1", "g2"]], "required_verbs": ["write"], "forbidden_verbs": []}
+    },
+    {
+      "id": "PA045",
+      "family": "P11",
+      "name": "parallel_frontend_backend_review",
+      "input": "并行阅读 frontend/App.tsx 和 backend/service.py，最后总结接口契约差异。",
+      "expected_mode": "plan",
+      "goal_units": [
+        {"id": "g1", "verbs": ["read"], "target": "frontend/App.tsx", "target_type": "file", "critical": true, "depends_on": []},
+        {"id": "g2", "verbs": ["read"], "target": "backend/service.py", "target_type": "file", "critical": true, "depends_on": []},
+        {"id": "g3", "verbs": ["explain"], "target": "接口契约差异", "target_type": "text", "critical": true, "depends_on": ["g1", "g2"]}
+      ],
+      "min_tasks": 3,
+      "max_tasks": 3,
+      "constraints": {"parallel_groups": [["g1", "g2"]], "forbidden_verbs": ["write", "modify", "delete", "execute"]}
+    },
+    {
+      "id": "PA046",
+      "family": "P12",
+      "name": "resume_after_read",
+      "input": "继续完成摘要并保存到 output/summary.md。",
+      "expected_mode": "plan",
+      "completed_units": ["g1"],
+      "resume_policy": "skip_completed",
+      "goal_units": [
+        {"id": "g1", "verbs": ["read"], "target": "input/source.txt", "target_type": "file", "critical": true, "depends_on": []},
+        {"id": "g2", "verbs": ["write"], "target": "output/summary.md", "target_type": "file", "critical": true, "depends_on": ["g1"]}
+      ],
+      "min_tasks": 1,
+      "max_tasks": 1,
+      "constraints": {"forbidden_verbs": []}
+    },
+    {
+      "id": "PA047",
+      "family": "P12",
+      "name": "resume_before_test",
+      "input": "代码和测试都已修改，请继续运行 pytest 验证。",
+      "expected_mode": "plan",
+      "completed_units": ["g1", "g2"],
+      "resume_policy": "skip_completed",
+      "goal_units": [
+        {"id": "g1", "verbs": ["modify"], "target": "service.py", "target_type": "file", "critical": true, "depends_on": []},
+        {"id": "g2", "verbs": ["modify"], "target": "tests/test_service.py", "target_type": "file", "critical": true, "depends_on": ["g1"]},
+        {"id": "g3", "verbs": ["execute"], "target": "pytest", "target_type": "text", "critical": true, "depends_on": ["g2"]}
+      ],
+      "min_tasks": 1,
+      "max_tasks": 1,
+      "constraints": {"forbidden_verbs": []}
+    },
+    {
+      "id": "PA048",
+      "family": "P12",
+      "name": "resume_after_research",
+      "input": "资料已经查完了，请把结论写入 output/research.md。",
+      "expected_mode": "plan",
+      "completed_units": ["g1"],
+      "resume_policy": "skip_completed",
+      "goal_units": [
+        {"id": "g1", "verbs": ["search"], "target": "相关主题资料", "target_type": "text", "critical": true, "depends_on": []},
+        {"id": "g2", "verbs": ["write"], "target": "output/research.md", "target_type": "file", "critical": true, "depends_on": ["g1"]}
+      ],
+      "min_tasks": 1,
+      "max_tasks": 1,
+      "constraints": {"forbidden_verbs": []}
+    },
+    {
+      "id": "PA049",
+      "family": "P12",
+      "name": "resume_partial_multi_file",
+      "input": "A 已经完成，继续完成 B 的实现、测试和验证。",
+      "expected_mode": "plan",
+      "completed_units": ["g1"],
+      "resume_policy": "skip_completed",
+      "goal_units": [
+        {"id": "g1", "verbs": ["modify"], "target": "module_a.py", "target_type": "file", "critical": true, "depends_on": []},
+        {"id": "g2", "verbs": ["modify"], "target": "module_b.py", "target_type": "file", "critical": true, "depends_on": ["g1"]},
+        {"id": "g3", "verbs": ["modify"], "target": "tests/test_modules.py", "target_type": "file", "critical": true, "depends_on": ["g2"]},
+        {"id": "g4", "verbs": ["execute"], "target": "pytest", "target_type": "text", "critical": true, "depends_on": ["g3"]}
+      ],
+      "min_tasks": 3,
+      "max_tasks": 3,
+      "constraints": {"forbidden_verbs": []}
+    },
+    {
+      "id": "PA050",
+      "family": "P12",
+      "name": "resume_before_report_verification",
+      "input": "前面的读取和写入已经完成，请验证 output/final.md。",
+      "expected_mode": "plan",
+      "completed_units": ["g1", "g2"],
+      "resume_policy": "skip_completed",
+      "goal_units": [
+        {"id": "g1", "verbs": ["read"], "target": "input/final_source.txt", "target_type": "file", "critical": true, "depends_on": []},
+        {"id": "g2", "verbs": ["write"], "target": "output/final.md", "target_type": "file", "critical": true, "depends_on": ["g1"]},
+        {"id": "g3", "verbs": ["read", "explain"], "target": "output/final.md", "target_type": "file", "critical": true, "depends_on": ["g2"]}
+      ],
+      "min_tasks": 1,
+      "max_tasks": 1,
+      "constraints": {"forbidden_verbs": []}
+    }
+  ]
+}

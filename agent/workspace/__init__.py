@@ -78,8 +78,12 @@ class WorkspaceContext:
 
     def record_open(self, path: str) -> None:
         self.current_file = path
-        if path not in self.opened_files:
-            self.opened_files.append(path)
+        # Re-opening a file makes it the current recent target.  Keeping the
+        # original position lets an older same-stem file win fuzzy ranking
+        # over the file the user just opened.
+        if path in self.opened_files:
+            self.opened_files.remove(path)
+        self.opened_files.append(path)
         if len(self.opened_files) > 20:
             self.opened_files = self.opened_files[-20:]
 

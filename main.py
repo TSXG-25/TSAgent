@@ -8,7 +8,8 @@ import os
 import uuid
 from pathlib import Path
 
-from agent.bootstrap import load_all, load_all_async
+from agent.bootstrap import init_workspace, load_all, load_all_async
+from agent.context_policy import ContextPolicy
 from agent.interruption import CancelRunRequest
 from agent.service import (
     AgentService,
@@ -76,25 +77,36 @@ class ServiceCLI:
         if snapshot.output is not None and snapshot.output.text.strip():
             print("\n📝 输出:")
             print(snapshot.output.text)
-        elif snapshot.failure_summary is not None:
+
+        verified_artifacts = tuple(
+            artifact
+            for artifact in snapshot.artifacts
+            if artifact.exists and artifact.verified
+        )
+        if verified_artifacts:
+            names = tuple(
+                artifact.display_name or artifact.artifact_id
+                for artifact in verified_artifacts
+            )
+            if snapshot.status is RunStatus.CANCELLED:
+                print("\n✅ 已保留完成的产物: " + "、".join(names))
+            else:
+                print("\n✅ 已验证产物:")
+                for name in names:
+                    print(f"  • {name}")
+
+        if snapshot.failure_summary is not None:
             print(
-                f"⚠️ {snapshot.failure_summary.code}: "
+                f"\n⚠️ {snapshot.failure_summary.code}: "
                 f"{snapshot.failure_summary.message}"
             )
         elif snapshot.status is RunStatus.CANCELLED:
-            if snapshot.artifacts:
-                names = tuple(
-                    artifact.display_name or artifact.artifact_id
-                    for artifact in snapshot.artifacts
-                    if artifact.exists and artifact.verified
-                )
-                if names:
-                    print("已保留完成的产物: " + ", ".join(names))
             print("后续任务未执行。")
         elif snapshot.status is RunStatus.COMPLETED:
             # A completed Run without a public output is a projection/runtime
             # regression; make it visible instead of presenting a blank success.
-            print("⚠️ Run 已完成，但没有可展示的用户输出。")
+            if snapshot.output is None or not snapshot.output.text.strip():
+                print("⚠️ Run 已完成，但没有可展示的用户输出。")
 
     @staticmethod
     def _print_event(event) -> None:
@@ -200,10 +212,33 @@ async def main() -> None:
     args = _parser().parse_args()
     # Bootstrap remains an application concern.  The CLI itself only talks to
     # the stable Service DTOs and never imports Runtime/Orchestrator/EventBus.
-    load_all()
-    await load_all_async()
+    load_all(
+        include_workspace=False,
+        include_workflows=False,
+        include_knowledge=False,
+    )
+    # Repository symbols/vector data are optional enrichment.  Do not delay
+    # the first prompt or block event delivery while building them.
+    async def _background_bootstrap() -> None:
+        await asyncio.to_thread(init_workspace)
+        await load_all_async()
 
-    service = create_default_agent_service(args.db)
+    repository_task: asyncio.Task[None] | None = None
+
+    async def _ensure_repository_ready() -> None:
+        nonlocal repository_task
+        if repository_task is None:
+            print("📚 首次仓库请求，正在准备代码索引...")
+            repository_task = asyncio.create_task(
+                _background_bootstrap(),
+                name="tsagent-repository-enrichment",
+            )
+        await repository_task
+
+    service = create_default_agent_service(
+        args.db,
+        workspace_root=Path(__file__).resolve().parent,
+    )
     cli = ServiceCLI(
         service,
         tenant_id=args.tenant_id,
@@ -244,6 +279,8 @@ async def main() -> None:
             if active_task is not None and not active_task.done():
                 print("已有 Run 正在执行；请先等待完成或输入 /cancel。")
                 continue
+            if ContextPolicy.for_request(user_input).repository_retrieval:
+                await _ensure_repository_ready()
             active_task = asyncio.create_task(
                 cli.run_request(user_input),
                 name="tsagent-cli-run",
@@ -251,6 +288,10 @@ async def main() -> None:
     finally:
         if active_task is not None:
             await active_task
+        if repository_task is not None:
+            if not repository_task.done():
+                repository_task.cancel()
+            await asyncio.gather(repository_task, return_exceptions=True)
         await service.close()
 
 

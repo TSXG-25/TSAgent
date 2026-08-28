@@ -159,15 +159,22 @@ class PathResolver:
         spec_stem = Path(spec).stem.lower()
         results: list[PathMatch] = []
 
-        for rel_path in self._get_recent_files():
+        recent_files = self._get_recent_files()
+        for recent_index, rel_path in enumerate(reversed(recent_files)):
             stem = Path(rel_path).stem.lower()
             name = Path(rel_path).name.lower()
+            explicit_path = "/" in spec or "\\" in spec
+            if explicit_path and Path(rel_path).as_posix().lower() != spec_lower:
+                continue
             if stem == spec_lower or stem == spec_stem or name == spec_lower:
                 full_path = (self.root / rel_path).resolve()
                 node = self._get_index_files() and None  # will be populated if available
                 results.append(PathMatch(
                     path=full_path,
-                    score=0.95,
+                    # A recently opened bare name is stronger than an
+                    # ambiguous same-stem fuzzy match, while an explicit
+                    # filesystem path still uses the exact-path strategy.
+                    score=1.01 - min(recent_index, 20) * 0.001,
                     source=MatchSource.RECENT,
                     reason=f"Recently opened: {rel_path}",
                 ))

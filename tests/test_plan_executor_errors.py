@@ -26,6 +26,24 @@ def test_tool_error_string_becomes_plan_failure(monkeypatch):
     assert "不是有效目录" in result["_error"]
 
 
+def test_empty_timeout_exception_gets_non_empty_diagnostic(monkeypatch):
+    executor = PlanExecutor()
+
+    async def fail(_tool_name, _args, **_kwargs):
+        raise TimeoutError()
+
+    monkeypatch.setattr(executor, "_exec_tool", fail)
+    plan = ExecutionPlan(
+        task=Task(id="task-timeout"),
+        steps=[ExecutionStep(tool="shell", args={"cmd": "date"}, outputs=["output"])],
+    )
+
+    result = asyncio.run(executor.execute(plan))
+
+    assert "TimeoutError: tool step failed" in result["_error"]
+    assert result["_error_code"] == "PROVIDER_TIMEOUT"
+
+
 def test_workspace_output_never_becomes_file_content(monkeypatch):
     from agent.executor import plan_executor as module
 

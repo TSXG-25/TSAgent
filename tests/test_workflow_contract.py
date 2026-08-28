@@ -82,6 +82,9 @@ class TestToolExecutor:
         assert result.success, result.error
         assert "echo: hello" in result.text
         assert "out" in result.metadata["variables"]
+        assert result.tool_result is not None
+        assert result.tool_result.value == {"out": "echo: hello"}
+        assert result.tool_result.content == "echo: hello"
 
     def test_tool_executor_missing_plan(self):
         import asyncio
@@ -98,6 +101,9 @@ class TestToolExecutor:
 
         assert not result.success
         assert "execution_plan" in result.error
+        assert result.tool_result is not None
+        assert result.tool_result.value is None
+        assert result.tool_result.error == result.error
 
 
 class TestStageToTask:

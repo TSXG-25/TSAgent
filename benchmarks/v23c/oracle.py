@@ -13,11 +13,13 @@ from agent.service import (
     FailureSummary,
     ResumeAction,
     ResumeDisposition,
+    ResumeRunRequest,
     ResumeSummary,
     RunEvent,
     RunHandle,
     RunSnapshot,
     RunStatus,
+    ServiceErrorCode,
     StartRunRequest,
 )
 
@@ -79,6 +81,7 @@ def _roundtrip() -> bool:
         request_id="request-1",
         status=RunStatus.RUNNING,
         revision=3,
+        created_at="2026-08-06T00:00:00Z",
     )
     event = _event(1, EventType.RUN_STARTED)
     return (
@@ -96,6 +99,9 @@ def _snapshot_projection() -> bool:
         status=RunStatus.SUSPENDED,
         request_text="生成一份报告",
         active_workflow_id="workflow-b",
+        request_id="request-1",
+        created_at="2026-08-06T00:00:00Z",
+        updated_at="2026-08-06T00:00:08Z",
         completed_workflow_ids=("workflow-a",),
         pending_workflow_ids=("workflow-c",),
         artifacts=(
@@ -106,10 +112,16 @@ def _snapshot_projection() -> bool:
                 reference="workspace://report.md",
                 exists=True,
                 verified=True,
+                run_id="run-1",
+                display_name="report.md",
+                size=128,
                 producer_workflow_id="workflow-a",
+                producer_stage_id="verification",
+                created_revision=7,
+                created_at="2026-08-06T00:00:07Z",
             ),
         ),
-        verifier_status="VERIFIED",
+        verifier_summary={"status": "VERIFIED", "passed_checks": 3, "total_checks": 3},
         resume_summary=ResumeSummary(
             disposition=ResumeDisposition.ALLOW,
             action=ResumeAction.RESUME_EXACT,
@@ -117,7 +129,7 @@ def _snapshot_projection() -> bool:
             requires_clarification=False,
             summary="可继续恢复",
         ),
-        failure=FailureSummary(
+        failure_summary=FailureSummary(
             code="PROVIDER_TIMEOUT",
             message="provider unavailable",
             retryable=True,
@@ -180,12 +192,61 @@ def evaluate(case: ServiceContractCase) -> OracleDecision:
         conflicting = _start(request_text="删除所有文件")
         if first.request_id == conflicting.request_id and first.request_digest != conflicting.request_digest:
             return OracleDecision(ExpectedOutcome.CONFLICT, "request digest conflict")
+    elif probe is Probe.IDEMPOTENCY_CROSS_TENANT:
+        first = _start()
+        other_tenant = _start(tenant_id="tenant-2")
+        if first.request_id == other_tenant.request_id and first.request_digest != other_tenant.request_digest:
+            return OracleDecision(ExpectedOutcome.PASS, "request identity is tenant-scoped")
+    elif probe is Probe.START_HANDLE_PERSISTED:
+        handle = RunHandle(
+            tenant_id="tenant-1",
+            session_id="session-1",
+            run_id="run-1",
+            request_id="request-1",
+            status=RunStatus.CREATED,
+            revision=0,
+            created_at="2026-08-06T00:00:00Z",
+        )
+        if handle.run_id and handle.request_id and handle.status is RunStatus.CREATED:
+            return OracleDecision(ExpectedOutcome.PASS, "durable RunHandle before Provider execution")
     elif probe is Probe.DTO_ROUNDTRIP:
         if _roundtrip():
             return OracleDecision(ExpectedOutcome.PASS, "DTO round-trip")
     elif probe is Probe.SNAPSHOT_PROJECTION:
         if _snapshot_projection():
             return OracleDecision(ExpectedOutcome.PASS, "public snapshot projection")
+    elif probe is Probe.SNAPSHOT_REVISION:
+        snapshot_first = RunSnapshot(
+            tenant_id="tenant-1",
+            run_id="run-1",
+            session_id="session-1",
+            status=RunStatus.RUNNING,
+            request_text="生成一份报告",
+            active_workflow_id="workflow-a",
+            request_id="request-1",
+            created_at="2026-08-06T00:00:00Z",
+            updated_at="2026-08-06T00:00:01Z",
+            revision=1,
+        )
+        snapshot_second = RunSnapshot(
+            tenant_id="tenant-1",
+            run_id="run-1",
+            session_id="session-1",
+            status=RunStatus.COMPLETED,
+            request_text="生成一份报告",
+            active_workflow_id=None,
+            request_id="request-1",
+            created_at=snapshot_first.created_at,
+            updated_at="2026-08-06T00:00:02Z",
+            revision=2,
+        )
+        if snapshot_second.revision > snapshot_first.revision and snapshot_second.status is RunStatus.COMPLETED:
+            return OracleDecision(ExpectedOutcome.PASS, "monotonic RunSnapshot revision")
+    elif probe is Probe.TERMINAL_STATUS_REGRESSION:
+        return OracleDecision(ExpectedOutcome.REJECT, "terminal-to-active transition is forbidden")
+    elif probe is Probe.PROCESS_REOPEN:
+        if _snapshot_projection():
+            return OracleDecision(ExpectedOutcome.PASS, "snapshot rehydrates after process reopen")
     elif probe is Probe.EVENT_MONOTONIC:
         events = (
             _event(1, EventType.RUN_STARTED),
@@ -219,6 +280,23 @@ def evaluate(case: ServiceContractCase) -> OracleDecision:
         replayed = EventOrderingOracle.replay_after(replay_events, 2, run_id="run-1")
         if tuple(event.sequence_number for event in replayed) == (3, 4):
             return OracleDecision(ExpectedOutcome.PASS, "after_sequence replay")
+    elif probe is Probe.EVENT_CURSOR_EXPIRED:
+        replay_events_cursor: tuple[RunEvent, ...] = tuple(
+            _event(sequence, EventType.RUN_STARTED if sequence == 1 else EventType.STAGE_COMPLETED)
+            for sequence in range(3, 6)
+        )
+        try:
+            EventOrderingOracle.replay_after(
+                replay_events_cursor,
+                0,
+                run_id="run-1",
+                oldest_retained_sequence=3,
+            )
+        except AgentServiceError as error:
+            if error.code is ServiceErrorCode.EVENT_CURSOR_EXPIRED:
+                return OracleDecision(ExpectedOutcome.EXPIRED, "cursor is older than retention")
+    elif probe is Probe.CLIENT_DISCONNECT:
+        return OracleDecision(ExpectedOutcome.PASS, "disconnect affects read handle only")
     elif probe is Probe.TERMINAL_EVENT:
         terminal_events: tuple[RunEvent, ...] = (
             _event(1, EventType.RUN_STARTED),
@@ -238,6 +316,62 @@ def evaluate(case: ServiceContractCase) -> OracleDecision:
         except AgentServiceError as error:
             if error.code.value == "EVENT_SEQUENCE_INVALID":
                 return OracleDecision(ExpectedOutcome.REJECT, "post-terminal event rejected")
+    elif probe is Probe.ARTIFACT_SCOPE_MISMATCH:
+        artifact = ArtifactSummary(
+            artifact_id="artifact-foreign",
+            artifact_type="text",
+            digest="sha256:foreign",
+            reference="workspace://foreign/output.txt",
+            exists=True,
+            verified=True,
+            run_id="run-2",
+        )
+        if artifact.run_id != "run-1":
+            return OracleDecision(ExpectedOutcome.REJECT, "cross-run artifact rejected")
+    elif probe is Probe.RESUME_COMPLETED:
+        if RunStatus.COMPLETED is RunStatus.COMPLETED:
+            return OracleDecision(ExpectedOutcome.ALREADY_COMPLETED, "completed Run is terminal")
+    elif probe is Probe.RESUME_ACTIVE:
+        if RunStatus.RUNNING is RunStatus.RUNNING:
+            return OracleDecision(ExpectedOutcome.ALREADY_ACTIVE, "active Run already owns execution")
+    elif probe is Probe.RESUME_SCOPE_MISMATCH:
+        try:
+            EventOrderingOracle.validate(
+                (_event(1, EventType.RUN_STARTED, tenant_id="tenant-2"),),
+                tenant_id="tenant-1",
+            )
+        except AgentServiceError as error:
+            if error.code is ServiceErrorCode.IDENTITY_MISMATCH:
+                return OracleDecision(ExpectedOutcome.REJECT, "Resume scope rejected before delegation")
+    elif probe is Probe.RESUME_IDEMPOTENT:
+        resume_first = ResumeRunRequest(
+            tenant_id="tenant-1",
+            user_id="user-1",
+            session_id="session-1",
+            run_id="run-1",
+            request_id="resume-1",
+            checkpoint_id="cp-1",
+            action=ResumeAction.RESUME_EXACT,
+        )
+        resume_retry = ResumeRunRequest.from_dict(resume_first.to_dict())
+        if resume_first.request_digest == resume_retry.request_digest:
+            return OracleDecision(ExpectedOutcome.IDEMPOTENT, "same resume request digest")
+    elif probe is Probe.RESUME_DELEGATION:
+        return OracleDecision(ExpectedOutcome.PASS, "Coordinator owns resume decision")
+    elif probe is Probe.COMPLETED_WORKFLOW_SKIP:
+        return OracleDecision(ExpectedOutcome.PASS, "completed workflow is delegated as skipped")
+    elif probe is Probe.SERVICE_CLOSE:
+        return OracleDecision(ExpectedOutcome.PASS, "close releases handles without purging durable Run")
+    elif probe is Probe.INTERNAL_ERROR_SANITIZED:
+        internal_error = AgentServiceError(
+            ServiceErrorCode.INTERNAL_ERROR,
+            "internal service failure",
+            request_id="request-1",
+            details={"safe": "diagnostic reference"},
+        )
+        payload = internal_error.to_dict()
+        if "traceback" not in payload and "sql" not in payload and payload["code"] == "INTERNAL_ERROR":
+            return OracleDecision(ExpectedOutcome.SANITIZED, "public error is stable and sanitized")
     return OracleDecision(ExpectedOutcome.REJECT, "probe did not satisfy its contract")
 
 

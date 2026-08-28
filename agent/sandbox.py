@@ -61,7 +61,13 @@ def _within_project(path: str | Path) -> bool:
         return False
 
 
-def _run_local(cmd: str, timeout: int, cwd: str) -> str:
+def _run_local(
+    cmd: str,
+    timeout: int,
+    cwd: str,
+    *,
+    allow_external_workspace: bool = False,
+) -> str:
     """Execute command locally with explicit opt-in and process-group timeout."""
     project_root = Path(__file__).resolve().parent.parent
 
@@ -74,7 +80,10 @@ def _run_local(cmd: str, timeout: int, cwd: str) -> str:
     if is_sensitive_command(cmd):
         return "错误：命令被安全策略阻止（敏感信息访问）"
 
-    if not _within_project(cwd or project_root):
+    if allow_external_workspace:
+        if not cwd or not Path(cwd).resolve().is_dir():
+            return "错误：执行工作目录不是有效的 Run workspace。"
+    elif not _within_project(cwd or project_root):
         return "错误：执行工作目录超出项目 workspace 范围。"
 
     # Safety: block dangerous shell builtins
@@ -122,9 +131,22 @@ def _run_local(cmd: str, timeout: int, cwd: str) -> str:
         return f"命令执行失败: {e}"
 
 
-def _run_docker(cmd: str, timeout: int, cwd: str) -> str | None:
+def _run_docker(
+    cmd: str,
+    timeout: int,
+    cwd: str,
+    *,
+    mount_root: str | Path | None = None,
+) -> str | None:
     """Execute command in Docker sandbox. Returns None to signal fallback."""
     project_root = Path(__file__).resolve().parent.parent
+
+    workspace_root = Path(mount_root or project_root).resolve()
+    cwd_path = Path(cwd or workspace_root).resolve()
+    try:
+        relative_cwd = cwd_path.relative_to(workspace_root)
+    except ValueError:
+        return None
 
     docker_cmd = [
         "docker", "run",
@@ -132,12 +154,10 @@ def _run_docker(cmd: str, timeout: int, cwd: str) -> str | None:
         "--network", "none",
         "--cpus", "1.0",
         "--memory", "512m",
-        "-v", f"{project_root}:/workspace",
+        "-v", f"{workspace_root}:/workspace",
     ]
-    if cwd:
-        docker_cmd.extend(["-w", cwd.replace(str(project_root), "/workspace")])
-    else:
-        docker_cmd.extend(["-w", "/workspace"])
+    docker_cwd = Path("/workspace") / relative_cwd
+    docker_cmd.extend(["-w", str(docker_cwd)])
     docker_cmd.extend([SANDBOX_IMAGE, "bash", "-c", cmd])
 
     try:
@@ -179,8 +199,45 @@ def run_in_sandbox(cmd: str, timeout: int = DEFAULT_TIMEOUT) -> str:
     if is_sensitive_command(cmd):
         return "错误：命令被安全策略阻止（敏感信息访问）"
 
-    docker_result = _run_docker(cmd, timeout, cwd) if _check_docker() else None
+    docker_result = (
+        _run_docker(cmd, timeout, cwd, mount_root=project_root)
+        if _check_docker()
+        else None
+    )
     if docker_result is not None:
         return docker_result
 
     return _run_local(cmd, timeout, cwd)
+
+
+def run_in_workspace(
+    cmd: str,
+    workspace_root: str | Path,
+    timeout: int = DEFAULT_TIMEOUT,
+) -> str:
+    """Run a command against an explicit Run workspace.
+
+    This is the scoped counterpart to :func:`run_in_sandbox`.  The caller
+    supplies a Run-owned root, so Docker mounts that root and local fallback
+    uses the same cwd.  No process-global project root is consulted.
+    """
+
+    root = Path(workspace_root).resolve()
+    if not root.is_dir():
+        return "错误：执行工作目录不是有效的 Run workspace。"
+    if is_sensitive_command(cmd):
+        return "错误：命令被安全策略阻止（敏感信息访问）"
+
+    docker_result = (
+        _run_docker(cmd, timeout, str(root), mount_root=root)
+        if _check_docker()
+        else None
+    )
+    if docker_result is not None:
+        return docker_result
+    return _run_local(
+        cmd,
+        timeout,
+        str(root),
+        allow_external_workspace=True,
+    )

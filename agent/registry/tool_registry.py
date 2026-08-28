@@ -6,13 +6,61 @@
 - LLM 不直接知道工具名，通过 capability 发现
 """
 import inspect
-from typing import Dict, Callable, List, Optional, Set
-from langchain_core.tools import StructuredTool
+from typing import Any, Dict, Callable, List, Optional
+
+
+class _LazyStructuredTool:
+    """Defer LangChain tool construction until a tool is actually consumed."""
+
+    def __init__(
+        self,
+        func: Callable,
+        *,
+        name: str,
+        description: str,
+        is_async: bool,
+    ) -> None:
+        self._func = func
+        self.name = name
+        self.description = description
+        self._is_async = is_async
+        self._tool: Any = None
+
+    def _build(self):
+        if self._tool is None:
+            from langchain_core.tools import StructuredTool
+
+            if self._is_async:
+                self._tool = StructuredTool.from_function(
+                    coroutine=self._func,
+                    name=self.name,
+                    description=self.description,
+                )
+            else:
+                self._tool = StructuredTool.from_function(
+                    func=self._func,
+                    name=self.name,
+                    description=self.description,
+                )
+        return self._tool
+
+    @property
+    def args_schema(self):
+        return self._build().args_schema
+
+    def invoke(self, *args, **kwargs):
+        return self._build().invoke(*args, **kwargs)
+
+    async def ainvoke(self, *args, **kwargs):
+        return await self._build().ainvoke(*args, **kwargs)
+
+    def __getattr__(self, name: str):
+        return getattr(self._build(), name)
 
 
 class ToolRegistry:
     def __init__(self):
-        self._tools: Dict[str, StructuredTool] = {}
+        self._tools: Dict[str, _LazyStructuredTool] = {}
         self._categories: Dict[str, List[str]] = {}
         self._tags: Dict[str, List[str]] = {}  # capability → [tool_name]
 
@@ -21,18 +69,12 @@ class ToolRegistry:
         tool_name = name or func.__name__
         description = func.__doc__ or tool_name
 
-        if inspect.iscoroutinefunction(func):
-            tool_obj = StructuredTool.from_function(
-                coroutine=func,
-                name=tool_name,
-                description=description,
-            )
-        else:
-            tool_obj = StructuredTool.from_function(
-                func=func,
-                name=tool_name,
-                description=description,
-            )
+        tool_obj = _LazyStructuredTool(
+            func,
+            name=tool_name,
+            description=description,
+            is_async=inspect.iscoroutinefunction(func),
+        )
 
         self._tools[tool_name] = tool_obj
         self._categories.setdefault(category, []).append(tool_name)
@@ -46,20 +88,20 @@ class ToolRegistry:
         if not tags:
             self._tags.setdefault("general", []).append(tool_name)
 
-    def get(self, name: str) -> StructuredTool:
+    def get(self, name: str) -> _LazyStructuredTool | None:
         return self._tools.get(name)
 
-    def get_all(self) -> Dict[str, StructuredTool]:
+    def get_all(self) -> Dict[str, _LazyStructuredTool]:
         return self._tools
 
-    def get_all_tools(self) -> List[StructuredTool]:
+    def get_all_tools(self) -> List[_LazyStructuredTool]:
         return list(self._tools.values())
 
-    def get_by_tag(self, tag: str) -> List[StructuredTool]:
+    def get_by_tag(self, tag: str) -> List[_LazyStructuredTool]:
         """按 capability tag 查找工具。"""
         return [self._tools[name] for name in self._tags.get(tag, [])]
 
-    def resolve_by_capability(self, capabilities: List[str]) -> List[StructuredTool]:
+    def resolve_by_capability(self, capabilities: List[str]) -> List[_LazyStructuredTool]:
         """按能力标签搜索工具。
         
         Args:
@@ -69,7 +111,7 @@ class ToolRegistry:
             匹配至少一个 capability 的工具列表，按匹配数量排序
         """
         cap_set = set(capabilities)
-        scored: List[tuple[int, StructuredTool]] = []
+        scored: List[tuple[int, _LazyStructuredTool]] = []
 
         for name, tool in self._tools.items():
             # Find which capabilities this tool's tags match

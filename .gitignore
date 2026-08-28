@@ -24,3 +24,7 @@ htmlcov/
 *.egg-info/
 build/
 dist/
+
+# External reference repository; kept local and uploaded separately if needed.
+deepseek-harness/
+node_modules/

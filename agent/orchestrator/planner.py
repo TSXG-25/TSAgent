@@ -24,25 +24,105 @@ Phase C.1：从 orchestrator.py 的 plan() / replan() / _print_plan() 迁移。
 """
 import re
 import time
+import json
 from datetime import datetime
 from typing import Any, Dict, Mapping, Optional, Tuple
 from langchain_core.messages import SystemMessage, HumanMessage
 
 from agent.state import AgentState
-from agent.executor.executors.workflow import WorkflowExecutor
 from agent.planner.planner import plan_with_metadata
-from agent.services import MemoryService
-from agent.registry.skill_registry import skill_registry
-from agent.router.workflow_router import router as workflow_router
-from agent.cognition.intent_engine import engine as intent_engine
-from agent.workflow import ExecutionContext, Artifact, Workflow
 from agent.task import ExecutionPlan, ExecutionStep, Task, Verb
 from agent.compiler.context import CompilerContext
 from agent.registry.tool_registry import registry as _tool_registry
 from agent.registry.capability_registry import registry as _capability_registry
-from agent.cognition.intent_schema import DOMAIN_CHAT, DOMAIN_DEVELOPMENT, DOMAIN_MEMORY
-from agent.execution_errors import classify_execution_error, is_non_retriable
+from agent.cognition.intent_schema import (
+    DOMAIN_CHAT,
+    DOMAIN_DEVELOPMENT,
+    DOMAIN_MEMORY,
+    IntentResult,
+)
+from agent.execution_errors import (
+    classify_execution_error,
+    is_non_retriable,
+    stable_error_message,
+)
 from agent.cognition.research_policy import research_query, research_timeliness
+from agent.cognition.execution_need import (
+    RequestedOutcome,
+    analyze_requested_outcomes,
+    extract_explicit_command,
+)
+from agent.cognition.resource_binding import (
+    extract_bound_targets,
+    extract_explicit_paths,
+)
+from agent.context_policy import ContextMode, ContextPolicy
+from agent.inbox import AgentInbox
+
+
+def _get_memory_service():
+    from agent.services import MemoryService
+
+    return MemoryService
+
+
+def _get_skill_registry():
+    from agent.registry.skill_registry import skill_registry
+
+    return skill_registry
+
+
+def _get_workflow_router():
+    from agent.router.workflow_router import router
+
+    return router
+
+
+def _workflow_route_requested(intent: Any) -> bool:
+    """Keep the optional Workflow stack off ordinary Planner requests."""
+    raw = str(getattr(intent, "raw_input", "") or "").lower()
+    return bool(
+        getattr(intent, "domain", "") == DOMAIN_DEVELOPMENT
+        and getattr(intent, "action", "") == "code"
+        and any(
+            token in raw
+            for token in (
+                "题目",
+                "解题",
+                "算法题",
+                "编程题",
+                "question.docx",
+                "question file",
+            )
+        )
+    )
+
+
+def _get_intent_engine():
+    from agent.cognition.intent_engine import engine
+
+    return engine
+
+
+class _LazyIntentEngine:
+    """Patchable compatibility handle without importing the Provider stack."""
+
+    def analyze(self, *args, **kwargs):
+        return _get_intent_engine().analyze(*args, **kwargs)
+
+    async def analyze_async(self, *args, **kwargs):
+        return await _get_intent_engine().analyze_async(*args, **kwargs)
+
+
+class _LazySkillRegistry:
+    """Patchable registry handle with lazy embedding/skill imports."""
+
+    def select(self, *args, **kwargs):
+        return _get_skill_registry().select(*args, **kwargs)
+
+
+intent_engine = _LazyIntentEngine()
+skill_registry = _LazySkillRegistry()
 
 
 _REPLAN_EFFECT_VERBS = frozenset(
@@ -271,9 +351,10 @@ def _apply_conversation_contract(
         ConversationIntent,
         classify_conversation_intent,
     )
-    from agent.compat.conversation import get_legacy_conversation_retriever
-
-    retriever = conversation_retriever or get_legacy_conversation_retriever()
+    retriever = conversation_retriever
+    if retriever is None:
+        from agent.conversation import ConversationRetriever, ConversationTracker
+        retriever = ConversationRetriever(ConversationTracker())
 
     kind = classify_conversation_intent(
         intent,
@@ -323,18 +404,12 @@ def _extract_explicit_output_path(user_input: str) -> Optional[str]:
 
 def _extract_explicit_output_paths(user_input: str) -> list[str]:
     """Extract all explicit output paths in their input order."""
-    candidates = re.findall(
-        r"(?<![\w/])(?:[\w.-]+/)*[\w.-]+\.(?:py|txt|md|csv|json|yaml|yml|xlsx|xls|docx|pptx)",
-        user_input or "",
-        flags=re.IGNORECASE,
-    )
     paths: list[str] = []
-    for candidate in reversed(candidates):
-        normalized = candidate.replace("\\", "/")
+    for normalized in extract_explicit_paths(user_input):
         if normalized.lower().startswith("input/") or normalized.lower().endswith("question.docx"):
             continue
         if normalized.casefold() not in {item.casefold() for item in paths}:
-            paths.insert(0, normalized)
+            paths.append(normalized)
     return paths
 
 
@@ -470,7 +545,11 @@ def _ensure_explicit_output_write_task(
     return plan
 
 
-def _extract_literal_file_write(user_input: str) -> Optional[tuple[str, str]]:
+def _extract_literal_file_write(
+    user_input: str,
+    *,
+    allow_execution: bool = False,
+) -> Optional[tuple[str, str]]:
     """Extract a complete one-file write request without invoking an LLM.
 
     This fast path is deliberately narrow: it only accepts one explicit text
@@ -481,11 +560,19 @@ def _extract_literal_file_write(user_input: str) -> Optional[tuple[str, str]]:
     value = str(user_input or "").strip()
     if not value or len(_extract_explicit_output_paths(value)) != 1:
         return None
-    if re.search(r"搜索|检索|查找|读取|分析|合并|运行|执行|根据|然后", value):
+    if re.search(r"搜索|检索|查找|读取|分析|合并|根据|然后", value):
+        return None
+    if not allow_execution and re.search(r"运行|执行", value):
         return None
     if not re.search(r"创建|新建|写入|写到|保存到|输出到|生成", value):
         return None
     match = re.search(r"内容(?:为|是|：|:)?\s*(.+?)\s*$", value, re.DOTALL)
+    if match is None and allow_execution:
+        match = re.search(
+            r"(?:把|将)\s*(.+?)\s*(?:写入|写到|保存到|输出到)\s*",
+            value,
+            re.DOTALL,
+        )
     if match is None:
         return None
     target = _extract_explicit_output_paths(value)[0]
@@ -608,6 +695,12 @@ def _build_code_run_tasks(user_input: str) -> Optional[list[Task]]:
     if not re.search(r"运行|执行", value):
         return None
     target = paths[0]
+    literal_write = _extract_literal_file_write(value, allow_execution=True)
+    literal_content = (
+        literal_write[1]
+        if literal_write is not None and literal_write[0].casefold() == target.casefold()
+        else None
+    )
     write_task = Task.from_dict({
         "id": "task-1",
         "verb": Verb.WRITE.value,
@@ -618,6 +711,7 @@ def _build_code_run_tasks(user_input: str) -> Optional[list[Task]]:
         "success_condition": f"文件 {target} 存在且非空",
         "dependencies": [],
         "children": [],
+        **({"inputs": {"content": literal_content}} if literal_content else {}),
     })
     execute_task = Task.from_dict({
         "id": "task-2",
@@ -631,6 +725,55 @@ def _build_code_run_tasks(user_input: str) -> Optional[list[Task]]:
         "children": [],
     })
     return [write_task, execute_task]
+
+
+def _build_source_code_execution_task(user_input: str) -> Optional[Task]:
+    """Build source-direct Python execution when no persistent target is named."""
+
+    value = str(user_input or "").strip()
+    if RequestedOutcome.CODE_EXECUTION not in analyze_requested_outcomes(value):
+        return None
+    if extract_bound_targets(value):
+        return None
+    if any(path.casefold().endswith(".py") for path in extract_explicit_paths(value)):
+        return None
+    return Task.from_dict({
+        "id": "task-1",
+        "verb": Verb.EXECUTE.value,
+        "target": "python-source",
+        "target_type": "text",
+        "goal": "生成并执行满足用户要求的 Python 源码",
+        "description": value,
+        "success_condition": "Python 程序成功执行并返回输出",
+        "inputs": {
+            "generate_code": True,
+            "code_request": value,
+        },
+        "policy": {
+            "executor": "tool",
+            "tool_policy": {"allow": ["run_python"]},
+        },
+    })
+
+
+def _build_explicit_command_execution_task(user_input: str) -> Optional[Task]:
+    """Build a shell task only from a command explicitly supplied by the user."""
+
+    command = extract_explicit_command(user_input)
+    if command is None:
+        return None
+
+    return Task.from_dict({
+        "id": "task-1",
+        "verb": Verb.EXECUTE.value,
+        "target": command,
+        "target_type": "text",
+        "goal": f"执行用户指定命令：{command}",
+        "description": "命令由用户明确提供，直接进入 shell 执行并记录真实输出。",
+        "success_condition": "命令执行成功并产生可核验的执行证据",
+        "inputs": {},
+        "policy": {"executor": "tool"},
+    })
 
 
 def _build_file_operation_task(user_input: str) -> Optional[Task]:
@@ -828,7 +971,7 @@ class PlannerStage:
         if memory_view is not None:
             memory_view.record_full_exchange(user_input, answer)
         else:
-            MemoryService.record_full_exchange(user_id, user_input, answer)
+            _get_memory_service().record_full_exchange(user_id, user_input, answer)
 
     def _record_resolution(
         self,
@@ -841,13 +984,13 @@ class PlannerStage:
         if memory_view is not None:
             memory_view.record_resolution(utterance, resolved_target, kind)
         else:
-            MemoryService.record_resolution(user_id, utterance, resolved_target, kind)
+            _get_memory_service().record_resolution(user_id, utterance, resolved_target, kind)
 
     def _get_user_facts(self, user_id: str) -> str:
         memory_view = self._memory_view()
         if memory_view is not None:
             return memory_view.get_user_facts()
-        return MemoryService.get_user_facts(user_id)
+        return _get_memory_service().get_user_facts(user_id)
 
     async def run(
         self,
@@ -856,6 +999,8 @@ class PlannerStage:
         context: Dict,
         repo_context: str,
         skill_hint: str,
+        context_policy: Optional[ContextPolicy] = None,
+        runtime_state: Optional[AgentState] = None,
     ) -> Tuple[AgentState, str, Optional[str]]:
         """PLAN 阶段：Build CognitiveContext → ReferenceResolver → IntentEngine → WorkflowRouter → Planner。
 
@@ -870,7 +1015,11 @@ class PlannerStage:
         system_content = self._orch._context_builder.render_context(context, now)
         if repo_context:
             system_content += f"\n\n相关代码片段:\n{repo_context}"
-        skill = skill_registry.select(user_input)
+        skill = (
+            skill_registry.select(user_input)
+            if context_policy is None or context_policy.semantic_skill_selection
+            else None
+        )
         if skill:
             skill_prompt = skill.get_system_prompt()
             if skill_prompt:
@@ -892,10 +1041,27 @@ class PlannerStage:
             "memory_context": planning_memory,
             "repo_context": repo_context,
             "skill_hint": skill_hint,
+            "context_policy": (
+                context_policy.mode.value if context_policy is not None else "full"
+            ),
             "retries": 0,
             "workflow": None,
             "execution_plans": [],
+            "execution_mode": "result_driven",
         }
+        if runtime_state is not None:
+            # Runtime-owned goal/inbox projections must survive the Planner's
+            # context rebuild.  The Planner may replace its task projection,
+            # but it is not the owner of goal rounds or action observations.
+            for key in (
+                "goal_state",
+                "goal_evidence",
+                "goal_missing",
+                "inbox",
+                "execution_mode",
+            ):
+                if key in runtime_state:
+                    state[key] = runtime_state[key]
 
         # v2.3H2: external effects are a deterministic capability boundary.
         # Register them before any open-ended Planner call so a missing
@@ -937,6 +1103,7 @@ class PlannerStage:
             context=context,
             repo_context=repo_context,
             state=state,
+            context_policy=context_policy,
         )
         print(f"  🧠 规划上下文: {planner_context.short_summary()}")
 
@@ -944,12 +1111,43 @@ class PlannerStage:
         resolved = self._orch._reference_resolver.resolve(user_input, planner_context)
         planner_context.resolved_query = resolved.to_resolved_query()
         state["resolved_target"] = resolved.target or ""
+        state["resolved_symbol"] = resolved.symbol or ""
         if resolved.resolution_trace:
             print(f"  🔍 引用消歧: {resolved.resolution_trace}")
 
         # ── Stage 1: IntentEngine 意图理解（消费 CognitiveContext）──
-        intent = intent_engine.analyze(planner_context)
+        # ContextPolicy has already proved that SIMPLE_CHAT needs no Memory,
+        # Repository, Skill or execution context.  Preserve that deterministic
+        # result here so an LLM domain classifier cannot turn a greeting into
+        # an execution plan before the one answer-generation call.
+        intent_started = time.perf_counter()
+        if context_policy is not None and context_policy.mode is ContextMode.SIMPLE_CHAT:
+            intent = IntentResult(
+                domain=DOMAIN_CHAT,
+                action="chat",
+                confidence=0.99,
+                requires_execution=False,
+                summary="deterministic simple chat",
+                raw_input=user_input,
+                requested_outcomes=analyze_requested_outcomes(user_input),
+            )
+        else:
+            intent = await intent_engine.analyze_async(planner_context)
+        self._orch._timings["intent_route"] = round(
+            time.perf_counter() - intent_started,
+            3,
+        )
         print(f"  🧠 意图: {intent}")
+
+        # H4: preserve explicit requested outcomes and write authorization
+        # before any open-ended Planner output can alter the execution scope.
+        from agent.cognition.effect_authorization import EffectAuthorization
+
+        authorization = EffectAuthorization.from_request(user_input)
+        state["requested_outcomes"] = [
+            outcome.value for outcome in authorization.requested_outcomes
+        ]
+        state["authorized_write_scopes"] = list(authorization.write_scopes)
 
         intent_failure_code = str(getattr(intent, "failure_code", "") or "")
         if intent_failure_code:
@@ -1003,8 +1201,8 @@ class PlannerStage:
             state["conversation_intent"] = conversation_kind.value
             retriever = session_retriever
             if retriever is None:
-                from agent.compat.conversation import get_legacy_conversation_retriever
-                retriever = get_legacy_conversation_retriever()
+                from agent.conversation import ConversationRetriever, ConversationTracker
+                retriever = ConversationRetriever(ConversationTracker())
             state["conversation_snapshot"] = retriever.snapshot(user_id)
             state["conversation_reference_type"] = resolve_reference_type(intent).value
             state["conversation_runtime_continuation"] = _render_runtime_continuation(state)
@@ -1078,13 +1276,15 @@ class PlannerStage:
                     resolve_reference_type,
                     ReferenceType, render_reference,
                 )
-                from agent.compat.conversation import get_legacy_conversation_retriever
                 session_context = getattr(self._orch, "session_context", None)
                 conversation_retriever = (
                     session_context.conversation_retriever
                     if session_context is not None
-                    else get_legacy_conversation_retriever()
+                    else None
                 )
+                if conversation_retriever is None:
+                    from agent.conversation import ConversationRetriever, ConversationTracker
+                    conversation_retriever = ConversationRetriever(ConversationTracker())
                 _ref_type = resolve_reference_type(intent)
                 if _ref_type is ReferenceType.LAST_RUNTIME:
                     _cont = state.get("conversation_runtime_continuation", "") or ""
@@ -1102,6 +1302,7 @@ class PlannerStage:
                     exc,
                     run_context=getattr(self._orch, "run_context", None),
                 )
+            answer_started = time.perf_counter()
             try:
                 response = await llm.ainvoke([
                     SystemMessage(content=system_content),
@@ -1121,6 +1322,10 @@ class PlannerStage:
                 )
                 state["runtime_failure_class"] = "provider"
                 state["runtime_failure_retryable"] = True
+            self._orch._timings["answer_llm"] = round(
+                time.perf_counter() - answer_started,
+                3,
+            )
             self._record_exchange(user_id, user_input, answer)
             return state, "FINISH", answer
 
@@ -1240,6 +1445,19 @@ class PlannerStage:
             self._print_plan(list(state.get("plan") or []))
             return state, "EXECUTE", None
 
+        source_code_task = _build_source_code_execution_task(user_input)
+        if source_code_task and getattr(intent, "requires_execution", False):
+            state["plan"] = [source_code_task.to_dict()]
+            state["execution_plans"] = [
+                self._orch._selector.compile(
+                    source_code_task,
+                    context=CompilerContext(registry=_tool_registry),
+                )
+            ]
+            state["current_task_index"] = 0
+            self._print_plan(list(state.get("plan") or []))
+            return state, "EXECUTE", None
+
         code_run_tasks = _build_code_run_tasks(user_input)
         if code_run_tasks and getattr(intent, "requires_execution", False):
             state["plan"] = [task.to_dict() for task in code_run_tasks]
@@ -1249,6 +1467,19 @@ class PlannerStage:
                     context=CompilerContext(registry=_tool_registry),
                 )
                 for task in code_run_tasks
+            ]
+            state["current_task_index"] = 0
+            self._print_plan(list(state.get("plan") or []))
+            return state, "EXECUTE", None
+
+        command_execution_task = _build_explicit_command_execution_task(user_input)
+        if command_execution_task and getattr(intent, "requires_execution", False):
+            state["plan"] = [command_execution_task.to_dict()]
+            state["execution_plans"] = [
+                self._orch._selector.compile(
+                    command_execution_task,
+                    context=CompilerContext(registry=_tool_registry),
+                )
             ]
             state["current_task_index"] = 0
             self._print_plan(list(state.get("plan") or []))
@@ -1297,8 +1528,17 @@ class PlannerStage:
             self._print_plan(list(state.get("plan") or []))
             return state, "EXECUTE", None
 
-        # ── Stage 2: WorkflowRouter 执行路由（接收完整 IntentResult）──
-        wf_obj, wf_reason = workflow_router.route(intent)
+        # ── Stage 2: optional Workflow route ──
+        # Generic requests stay on the single Planner/Action path.  The
+        # specialized Workflow registry is loaded only for the one currently
+        # supported workflow family (question code generation).
+        if _workflow_route_requested(intent):
+            from agent.bootstrap import load_all_workflows
+
+            load_all_workflows()
+            wf_obj, wf_reason = _get_workflow_router().route(intent)
+        else:
+            wf_obj, wf_reason = None, "无专用 Workflow，使用通用 Planner"
 
         if wf_obj:
             wf_name = wf_obj.id if hasattr(wf_obj, 'id') else str(wf_obj)
@@ -1306,6 +1546,9 @@ class PlannerStage:
 
             # 更新 ConversationState
             self._orch._conversation_state.last_workflow = wf_name
+
+            from agent.executor.executors.workflow import WorkflowExecutor
+            from agent.workflow import Artifact, ExecutionContext, Workflow
 
             if isinstance(wf_obj, Workflow):
                 # Canonical Workflow → WorkflowExecutor
@@ -1426,7 +1669,7 @@ class PlannerStage:
                         execution_plans.append(ep)
                     break
                 except Exception as e:
-                    last_error = str(e)
+                    last_error = stable_error_message(e, fallback="plan validation failed")
                     print(f"  ⚠️ Planner 输出不合法（{attempt+1}/3）: {last_error}")
                     planner_input = (
                         f"你上一次输出的计划不合法，需要修正后重新输出。\n"
@@ -1483,7 +1726,10 @@ class PlannerStage:
                 ),
             )).context
         except Exception as exc:
-            print(f"  ⚠️ 通用 Planner Grounding 失败（忽略）: {str(exc)[:120]}")
+            print(
+                "  ⚠️ 通用 Planner Grounding 失败（忽略）: "
+                f"{stable_error_message(exc, fallback='grounding failed')[:120]}"
+            )
 
         fallback_input = (
             "专用工作流未完成。请改用通用任务计划，直接围绕用户原始需求规划，"
@@ -1526,7 +1772,10 @@ class PlannerStage:
                 ]
                 break
             except Exception as exc:
-                print(f"  ⚠️ 通用 Planner 输出不合法（{attempt + 1}/2）: {str(exc)[:160]}")
+                print(
+                    f"  ⚠️ 通用 Planner 输出不合法（{attempt + 1}/2）: "
+                    f"{stable_error_message(exc, fallback='planner output invalid')[:160]}"
+                )
                 plan = None
 
         if not plan:
@@ -1577,13 +1826,23 @@ class PlannerStage:
             )
             return state, "FAIL"
 
-        if self._orch.replan_count >= 2:
+        budget = getattr(self._orch, "run_budget", None)
+        if budget is not None:
+            if not budget.consume_recovery():
+                state["runtime_failure_code"] = "RUNTIME_RECOVERY_BUDGET_EXHAUSTED"
+                state["runtime_terminal_status"] = "FAILED_TERMINAL"
+                print("❌ 达到 Runtime recovery budget")
+                return state, "FAIL"
+        elif self._orch.replan_count >= 2:
+            # Test-only legacy container without a bound RunBudget. Production
+            # orchestrators always bind the shared budget before execution.
             print("❌ 达到最大重试次数")
             return state, "FAIL"
 
         self._orch.replan_count += 1
         state["retries"] = self._orch.replan_count
-        print(f"\n⚠️ 任务失败，重规划 ({self._orch.replan_count}/2)...")
+        limit = budget.max_recoveries if budget is not None else 2
+        print(f"\n⚠️ 任务失败，重规划 ({self._orch.replan_count}/{limit})...")
 
         t_replan = time.perf_counter()
         failed_info = [
@@ -1610,6 +1869,16 @@ class PlannerStage:
                 else ""
             )
         )
+        inbox = AgentInbox.from_dict(state.get("inbox"))
+        if inbox.next_step:
+            replan_input += (
+                "\n\n最近动作观察（这是当前事实，不要假设原计划仍然正确）：\n"
+                + json.dumps(
+                    inbox.next_step[-8:],
+                    ensure_ascii=False,
+                    default=str,
+                )
+            )
         plan_output = await plan_with_metadata(replan_input, "", "", "", None)
         planner_failure = _apply_planner_failure(state, plan_output)
         if planner_failure is not None:

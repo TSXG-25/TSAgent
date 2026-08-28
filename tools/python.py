@@ -8,7 +8,7 @@ import ast
 import shlex
 from pathlib import Path
 from agent.registry.tool_registry import registry
-from agent.sandbox import run_in_sandbox
+from agent.sandbox import run_in_sandbox, run_in_workspace
 from agent.security import is_sensitive_command, is_sensitive_path
 
 ROOT = Path(__file__).parent.parent.resolve()
@@ -23,20 +23,7 @@ _FORBIDDEN_CALLS = {
 }
 
 
-def run_python(code: str, timeout: int = 10) -> str:
-    """执行 Python 代码并返回 stdout/stderr 输出。
-
-    在隔离环境中安全执行 Python 代码。支持打印语句和标准输出捕获。
-    代码中定义的变量会在同一次调用中共存，但不同调用之间不共享状态。
-
-    Args:
-        code: 要执行的 Python 代码字符串
-        timeout: 超时秒数（默认 10 秒）
-
-    Returns:
-        代码执行的 stdout 输出。如果发生异常，返回错误信息。
-    """
-    # 先做语法级拒绝，真正执行交给 sandbox，从而获得进程级 timeout。
+def _validate_python_source(code: str) -> str | None:
     if is_sensitive_command(code):
         return "错误：代码被安全策略阻止（敏感信息访问）"
     try:
@@ -55,12 +42,57 @@ def run_python(code: str, timeout: int = 10) -> str:
                     return f"错误：禁止调用 {fn.id}（安全限制）"
     except SyntaxError as e:
         return f"语法错误: {e}"
+    return None
+
+
+def _run_python_source(
+    code: str,
+    *,
+    timeout: int,
+    workspace_root: str | Path | None = None,
+) -> str:
+    validation_error = _validate_python_source(code)
+    if validation_error:
+        return validation_error
 
     command = f"python3 -c {shlex.quote(code)}"
-    result = run_in_sandbox(command, timeout=timeout)
+    if workspace_root is None:
+        result = run_in_sandbox(command, timeout=timeout)
+    else:
+        result = run_in_workspace(command, workspace_root, timeout=timeout)
     if not result:
         return "代码执行成功（无输出）"
     return result
+
+
+def run_python(code: str, timeout: int = 10) -> str:
+    """执行 Python 代码并返回 stdout/stderr 输出。
+
+    在隔离环境中安全执行 Python 代码。支持打印语句和标准输出捕获。
+    代码中定义的变量会在同一次调用中共存，但不同调用之间不共享状态。
+
+    Args:
+        code: 要执行的 Python 代码字符串
+        timeout: 超时秒数（默认 10 秒）
+
+    Returns:
+        代码执行的 stdout 输出。如果发生异常，返回错误信息。
+    """
+    return _run_python_source(code, timeout=timeout)
+
+
+def run_python_in_workspace(
+    code: str,
+    workspace_root: str | Path,
+    timeout: int = 10,
+) -> str:
+    """Execute Python source with an explicit Run workspace as cwd."""
+
+    return _run_python_source(
+        code,
+        timeout=timeout,
+        workspace_root=workspace_root,
+    )
 
 
 def run_python_file(path: str, timeout: int = 10) -> str:

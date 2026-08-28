@@ -64,8 +64,12 @@ class MemoryRuntime:
             from agent.memory.resolution import clear_resolutions
             tracker = conversation_tracker
             if tracker is None:
-                from agent.compat.conversation import get_legacy_conversation_tracker
-                tracker = get_legacy_conversation_tracker()
+                # The public legacy reset API predates SessionContext. Keep
+                # its observable reset semantics for unscoped callers, while
+                # the production SessionRuntime path always passes its owned
+                # tracker explicitly (see session_runtime.py).
+                from agent.conversation import conversation_tracker
+                tracker = conversation_tracker
 
             clear_session(namespace)
             clear_history(namespace)

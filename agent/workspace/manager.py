@@ -27,7 +27,8 @@ class WorkspaceManager:
     ):
         self._workspaces: dict[str, Workspace] = {}
         self._current: Optional[Workspace] = None
-        self._event_bus = event_bus
+        self._event_bus = event_bus or EventBus(scope_id="workspace-manager")
+        self._owns_event_bus = event_bus is None
         self._closed = False
 
         if default_root:
@@ -80,6 +81,8 @@ class WorkspaceManager:
             workspace.close()
         self._workspaces.clear()
         self._current = None
+        if self._owns_event_bus:
+            self._event_bus.close()
         self._closed = True
 
     # ── Global accessors ──

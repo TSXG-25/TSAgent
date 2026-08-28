@@ -8,17 +8,15 @@ the SQLite transaction owned by ``DurableRuntimeStoreView``.
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import os
 from datetime import datetime, timezone
-from typing import Any, Callable
-
-from agent.runtime import UniversalAgent
-from agent.interruption import CancellationCoordinator
-from agent.runtime_store import ArtifactCommitFact
+from typing import TYPE_CHECKING, Any, Callable
 
 from .contracts import ResumeRunRequest, StartRunRequest
+
+if TYPE_CHECKING:
+    from agent.runtime_store import ArtifactCommitFact
 
 
 def _timestamp() -> str:
@@ -31,7 +29,7 @@ class RuntimeExecutionLauncher:
     def __init__(
         self,
         *,
-        runtime_factory: Callable[..., Any] = UniversalAgent,
+        runtime_factory: Callable[..., Any] | None = None,
     ) -> None:
         self._runtime_factory = runtime_factory
 
@@ -70,6 +68,8 @@ class RuntimeExecutionLauncher:
         request: StartRunRequest | ResumeRunRequest,
         resumed: bool,
     ) -> None:
+        import asyncio
+
         durable_view = run_context.durable_store_view
         if durable_view is None:
             raise RuntimeError("RuntimeExecutionLauncher requires a durable Run view")
@@ -84,11 +84,17 @@ class RuntimeExecutionLauncher:
             expected_status="CREATED" if not resumed else None,
         )
 
-        runtime = self._runtime_factory(
-            request.user_id,
-            tenant_id=request.tenant_id,
-            session_context=session_context,
-            run_context=run_context,
+        # UniversalAgent construction imports the cognition/orchestrator
+        # graph and may take several seconds on a cold process.  It is a
+        # synchronous constructor, so running it on the event-loop thread
+        # delays the JSONL response even though the Service already accepted
+        # the durable Run.  Keep the actual Runtime coroutine on the event
+        # loop, but move only this blocking construction boundary to a worker.
+        runtime = await asyncio.to_thread(
+            self._build_runtime,
+            request,
+            session_context,
+            run_context,
         )
         watchdog = self._start_timeout_watchdog(run_context, request)
         try:
@@ -154,6 +160,24 @@ class RuntimeExecutionLauncher:
         finally:
             await self._stop_timeout_watchdog(watchdog)
 
+    def _build_runtime(
+        self,
+        request: StartRunRequest | ResumeRunRequest,
+        session_context: Any,
+        run_context: Any,
+    ) -> Any:
+        runtime_factory = self._runtime_factory
+        if runtime_factory is None:
+            from agent.runtime import UniversalAgent
+
+            runtime_factory = UniversalAgent
+        return runtime_factory(
+            request.user_id,
+            tenant_id=request.tenant_id,
+            session_context=session_context,
+            run_context=run_context,
+        )
+
     @staticmethod
     def _run_timeout_seconds(request: StartRunRequest | ResumeRunRequest) -> float:
         metadata = getattr(request, "metadata", {}) or {}
@@ -173,6 +197,8 @@ class RuntimeExecutionLauncher:
         run_context: Any,
         request: StartRunRequest | ResumeRunRequest,
     ) -> asyncio.Task[None] | None:
+        import asyncio
+
         seconds = self._run_timeout_seconds(request)
         if seconds == 0:
             return None
@@ -187,10 +213,14 @@ class RuntimeExecutionLauncher:
         request: StartRunRequest | ResumeRunRequest,
         seconds: float,
     ) -> None:
+        import asyncio
+
         await asyncio.sleep(seconds)
         durable_view = run_context.durable_store_view
         if durable_view is None:
             return
+        from agent.interruption import CancellationCoordinator
+
         CancellationCoordinator(durable_view.store).request_run_timeout(
             tenant_id=run_context.tenant_id,
             user_id=run_context.user_id,
@@ -204,6 +234,8 @@ class RuntimeExecutionLauncher:
     async def _stop_timeout_watchdog(
         watchdog: asyncio.Task[None] | None,
     ) -> None:
+        import asyncio
+
         if watchdog is None:
             return
         if not watchdog.done():
@@ -227,6 +259,8 @@ class RuntimeExecutionLauncher:
             # Service terminal transition.  A durable intent always wins over
             # a stale successful coroutine return.
             evidence["interruption_requested"] = True
+        from agent.interruption import CancellationCoordinator
+
         CancellationCoordinator(durable_view.store).mark_safe_to_interrupt(
             tenant_id=run_context.tenant_id,
             session_id=run_context.session_id,
@@ -332,6 +366,8 @@ class RuntimeExecutionLauncher:
 
     @staticmethod
     def _artifact_commit_facts(runtime: Any) -> tuple[ArtifactCommitFact, ...]:
+        from agent.runtime_store import ArtifactCommitFact
+
         """Turn scoped, verifier-approved files into durable artifact facts."""
 
         evidence = getattr(runtime, "last_run_evidence", None)

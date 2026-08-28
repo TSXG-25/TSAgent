@@ -1,7 +1,18 @@
 import json
 import re
 from langchain_core.messages import SystemMessage, HumanMessage
-from agent.llm import llm
+
+llm = None
+
+
+def _get_llm():
+    """Load the Provider client only when a final answer needs generation."""
+    global llm
+    if llm is None:
+        from agent.llm import llm as provider
+
+        llm = provider
+    return llm
 
 
 async def _naturalize(text: str, user_input: str) -> str:
@@ -20,7 +31,7 @@ async def _naturalize(text: str, user_input: str) -> str:
     if not looks_structured or len(stripped) < 20:
         return stripped
     try:
-        response = await llm.ainvoke([
+        response = await _get_llm().ainvoke([
             SystemMessage(content=(
                 "你是回答生成器。用户的查询被工具执行，下面是工具的原始输出（可能是 JSON/结构化数据）。"
                 "请用自然流畅的中文，把结果转述成用户能直接读懂的答案。不要输出 JSON，不要输出代码块。"
@@ -42,7 +53,7 @@ async def generate_final_answer(state, user_input: str) -> str:
     if search_results and "未找到" not in search_results and len(search_results) > 50:
         from datetime import datetime
         now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        response = await llm.ainvoke(
+        response = await _get_llm().ainvoke(
             [
                 SystemMessage(content=f"""
 你是一个专业的问答助手。你需要根据网络搜索结果，生成一份**详细、完整、有条理**的回答。
@@ -71,7 +82,7 @@ async def generate_final_answer(state, user_input: str) -> str:
     # Fallback: use last_output from artifacts (e.g. shell command output)
     last_output = artifacts.get("last_output", "")
     if last_output and len(last_output) > 3:
-        response = await llm.ainvoke(
+        response = await _get_llm().ainvoke(
             [
                 SystemMessage(content="你是一个问答助手。根据可用的信息直接回答用户问题，不要说你找不到。"),
                 HumanMessage(content=f"用户问题：{user_input}\n\n可用的信息：\n{last_output[:2000]}"),

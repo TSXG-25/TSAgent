@@ -43,7 +43,12 @@ def parse_args(argv: Sequence[str] | None = None) -> SidecarConfig:
     )
 
 
-def create_service(config: SidecarConfig) -> object:
+def create_service(
+    config: SidecarConfig,
+    *,
+    bootstrap_tools: bool = True,
+    defer_context_creation: bool = False,
+) -> object:
     """Construct the local Service with the application registries ready.
 
     The sidecar is an application entry point, just like the CLI.  The
@@ -59,10 +64,14 @@ def create_service(config: SidecarConfig) -> object:
     execution remains bound to the RunContext by PlanExecutor.
     """
 
-    from agent.bootstrap import load_all_tools, load_all_workflows
+    if bootstrap_tools:
+        from agent.bootstrap import load_tool_modules
 
-    load_all_tools()
-    load_all_workflows()
+        # Core deterministic tools are enough for direct callers that compile
+        # a plan immediately.  Optional modules are loaded by PlanExecutor
+        # when a plan actually references one; importing them here makes
+        # health/start_run pay for unused dependencies.
+        load_tool_modules(("filesystem",))
 
     # Capability resolution is an application-level registry lookup used by
     # the effect-truth gate.  Registering it here keeps the sidecar and CLI
@@ -78,6 +87,7 @@ def create_service(config: SidecarConfig) -> object:
         config.database_path,
         workspace_root=config.workspace_root,
         writer_id=config.writer_id,
+        defer_context_creation=defer_context_creation,
     )
 
 

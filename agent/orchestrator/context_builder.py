@@ -12,10 +12,10 @@ from typing import Dict, Optional
 
 from agent.state import AgentState
 from agent.services import MemoryService
-from agent.compat.workspace import get_legacy_workspace_service
 from agent.cognition.cognitive_context import ConversationState
 from agent.context.contracts import PlannerContext
 from agent.cognition.intent_schema import IntentResult
+from agent.context_policy import ContextPolicy
 
 
 class ContextBuilder:
@@ -34,6 +34,7 @@ class ContextBuilder:
         context: dict,
         repo_context: str,
         state: AgentState,
+        context_policy: Optional[ContextPolicy] = None,
     ) -> PlannerContext:
         """构建 PlannerContext（认知层统一入口）。
 
@@ -51,32 +52,37 @@ class ContextBuilder:
                 if run_context.workspace is not None:
                     ws_context = run_context.workspace.current_context()
             else:
-                ws = get_legacy_workspace_service()
-                ws_context = ws.current_context()
+                # A planner without a RunContext has no workspace facts.  It
+                # must not consult a process-global workspace as an implicit
+                # source of truth.
+                ws_context = None
         except Exception:
             pass
 
+        use_memory = context_policy is None or context_policy.memory_retrieval
+
         # 从 MemoryService 获取最近对话
         conversation = []
-        try:
-            session_text = (
-                memory_view.get_session_context(n=8)
-                if memory_view is not None
-                else MemoryService.get_session_context(user_id, n=8)
-            )
-            if session_text:
-                lines = session_text.strip().split("\n")
-                for line in lines[-10:]:
-                    line = line.strip()
-                    if line.startswith("用户:"):
-                        conversation.append({"role": "user", "content": line[3:].strip()})
-                    elif line.startswith("助手:") or line.startswith("AI:"):
-                        conversation.append({"role": "assistant", "content": line[3:].strip()})
-                    elif ":" in line:
-                        parts = line.split(":", 1)
-                        conversation.append({"role": parts[0].strip(), "content": parts[1].strip()})
-        except Exception:
-            pass
+        if use_memory:
+            try:
+                session_text = (
+                    memory_view.get_session_context(n=8)
+                    if memory_view is not None
+                    else MemoryService.get_session_context(user_id, n=8)
+                )
+                if session_text:
+                    lines = session_text.strip().split("\n")
+                    for line in lines[-10:]:
+                        line = line.strip()
+                        if line.startswith("用户:"):
+                            conversation.append({"role": "user", "content": line[3:].strip()})
+                        elif line.startswith("助手:") or line.startswith("AI:"):
+                            conversation.append({"role": "assistant", "content": line[3:].strip()})
+                        elif ":" in line:
+                            parts = line.split(":", 1)
+                            conversation.append({"role": parts[0].strip(), "content": parts[1].strip()})
+            except Exception:
+                pass
 
         # 当前 plan / task
         plan = state.get("plan", [])
@@ -95,25 +101,27 @@ class ContextBuilder:
 
         # 跨会话解析事实（Memory Facts，v1.2C；Resolver 纯函数）
         memory_resolutions = []
-        try:
-            memory_resolutions = (
-                memory_view.get_resolutions(n=20)
-                if memory_view is not None
-                else MemoryService.get_resolutions(user_id, n=20)
-            )
-        except Exception:
-            pass
+        if use_memory:
+            try:
+                memory_resolutions = (
+                    memory_view.get_resolutions(n=20)
+                    if memory_view is not None
+                    else MemoryService.get_resolutions(user_id, n=20)
+                )
+            except Exception:
+                pass
 
         # Repository 符号列表（file → [symbols]，Ordinal 解析用；v1.2B B5）
         repository_symbols = {}
-        try:
-            from agent.repository.indexer import get_repository_indexer
+        if context_policy is None or context_policy.repository_retrieval:
+            try:
+                from agent.repository.indexer import get_repository_indexer
 
-            idx = get_repository_indexer()
-            if idx is not None and idx.file_symbols:
-                repository_symbols = idx.file_symbols
-        except Exception:
-            pass
+                idx = get_repository_indexer()
+                if idx is not None and idx.file_symbols:
+                    repository_symbols = idx.file_symbols
+            except Exception:
+                pass
 
         return PlannerContext(
             query=user_input,

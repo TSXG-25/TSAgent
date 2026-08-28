@@ -107,12 +107,25 @@ class EventOrderingOracle:
         tenant_id: str | None = None,
         session_id: str | None = None,
         run_id: str | None = None,
+        oldest_retained_sequence: int | None = None,
     ) -> tuple[RunEvent, ...]:
         if isinstance(after_sequence, bool) or after_sequence < 0:
             raise AgentServiceError(
-                ServiceErrorCode.EVENT_REPLAY_UNAVAILABLE,
+                ServiceErrorCode.CURSOR_INVALID,
                 "after_sequence must be a non-negative integer",
             )
+        if oldest_retained_sequence is not None:
+            if isinstance(oldest_retained_sequence, bool) or oldest_retained_sequence < 1:
+                raise AgentServiceError(
+                    ServiceErrorCode.CURSOR_INVALID,
+                    "oldest_retained_sequence must be a positive integer",
+                )
+            if after_sequence < oldest_retained_sequence - 1:
+                raise AgentServiceError(
+                    ServiceErrorCode.EVENT_CURSOR_EXPIRED,
+                    "event cursor is older than the retained replay window",
+                    details={"oldest_retained_sequence": oldest_retained_sequence},
+                )
         ordered = cls.validate(
             events,
             tenant_id=tenant_id,

@@ -5,15 +5,21 @@ Provider，也不声称 concrete `AgentService` 已经接入 Runtime。
 
 ## 覆盖范围
 
-共 16 例，覆盖：
+共 32 例，覆盖：
 
 - 显式 tenant/user/session/run/request identity；
 - 空请求拒绝；
 - 相同 request digest 的幂等重试与不同 digest 冲突；
+- 不同 tenant 下相同 request_id 的隔离；
+- start_run 返回已持久化 RunHandle、进程重开后的 Snapshot 和 close 保留 durable Run；
 - 公开 DTO canonical round-trip；
-- `RunSnapshot` 内部模型隔离；
+- `RunSnapshot` revision、terminal monotonic 和内部模型隔离；
 - 事件连续序列、scope 校验、after-sequence replay；
-- 明确终态事件与终态后的追加阻断。
+- cursor 过期、terminal replay 和客户端断开不等于取消；
+- Artifact 跨 Run scope 拒绝；
+- completed/active/错 scope Resume、resume request 幂等和 Coordinator 委派；
+- 明确终态事件与终态后的追加阻断；
+- Service error 脱敏。
 
 ## 运行
 
@@ -26,7 +32,7 @@ mypy agent/service benchmarks/v23c tests/test_v23c_service_contract.py
 当前 Dataset hash：
 
 ```text
-2bfad6b6be7649c8228a657f4ec3a6bd859d80559f16ee9bb69906ab6521be64
+7cf52067c7af4a9217aceb70ef600fb5e79638c4ed77a63dce08f6438c416e6a
 ```
 
 ## 版本边界

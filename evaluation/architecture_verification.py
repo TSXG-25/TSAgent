@@ -104,6 +104,10 @@ RULES = (
 
 SCOPED_RUNTIME_EXCLUSIONS = {
     "agent/compat",
+    # Public lifecycle entrypoint retained for callers that predate
+    # SessionContext. Runtime/Session production paths pass their tracker
+    # explicitly; this file is the single documented legacy boundary.
+    "agent/memory/lifecycle.py",
     "agent/event_bus.py",
     "agent/services/artifact_service.py",
     "agent/services/workspace_service.py",
@@ -126,6 +130,8 @@ CLI_FORBIDDEN_IMPORT_PREFIXES = (
     "agent.runtime_store",
     "agent.service.runtime_launcher",
 )
+
+PRODUCTION_COMPAT_IMPORT_PREFIX = "agent.compat"
 
 
 def _imported_modules(tree: ast.AST):
@@ -170,13 +176,26 @@ def verify(root: Path = PROJECT_ROOT) -> list[str]:
             # The package-specific rules above already report syntax errors.
             continue
         for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                modules = [alias.name for alias in node.names]
+            elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+                modules = [node.module]
+            else:
+                continue
+            for module in modules:
+                if module == PRODUCTION_COMPAT_IMPORT_PREFIX or module.startswith(
+                    PRODUCTION_COMPAT_IMPORT_PREFIX + "."
+                ):
+                    violations.append(
+                        f"scoped-runtime: {relative} imports production compatibility module {module}"
+                    )
             if not isinstance(node, ast.ImportFrom) or node.level != 0 or not node.module:
                 continue
             for alias in node.names:
                 if (node.module, alias.name) in FORBIDDEN_LEGACY_IMPORTS:
                     violations.append(
                         f"scoped-runtime: {relative} imports legacy singleton "
-                        f"{node.module}.{alias.name}; use agent.compat explicitly"
+                        f"{node.module}.{alias.name}; use a scoped dependency"
                     )
     cli_path = root / "main.py"
     if cli_path.exists():

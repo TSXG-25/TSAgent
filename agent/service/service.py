@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from agent.interruption import CancelRunRequest, CancellationCoordinator
-from agent.runtime_store import DurableStoreError, SqliteRuntimeStore, StoreErrorCode
+from agent.runtime_store.errors import DurableStoreError, StoreErrorCode
 
 from .context_factory import ServiceContextFactory
 from .contracts import (
@@ -19,13 +17,12 @@ from .contracts import (
     StartRunRequest,
 )
 from .errors import AgentServiceError, ServiceErrorCode
-from .event_repository import EventRepository, SqliteEventRepository
-from .execution_launcher import ExecutionLauncher
-from .run_projector import (
-    RunProjector,
-    encode_request_reference,
-    handle_from_head,
-)
+
+if TYPE_CHECKING:
+    from agent.interruption import CancelRunRequest
+    from agent.runtime_store import SqliteRuntimeStore
+    from .event_repository import EventRepository
+    from .execution_launcher import ExecutionLauncher
 
 
 @dataclass
@@ -44,7 +41,10 @@ class AgentService:
         launcher: ExecutionLauncher,
         context_factory: ServiceContextFactory | None = None,
         event_repository: EventRepository | None = None,
+        defer_context_creation: bool = False,
     ) -> None:
+        import asyncio
+
         self._store = runtime_store
         self._launcher = launcher
         self._contexts = context_factory or ServiceContextFactory(runtime_store)
@@ -52,13 +52,35 @@ class AgentService:
         # caller may still inject an explicit repository for deterministic
         # tests or a future adapter, but the Service no longer silently falls
         # back to an in-memory/empty stream.
-        self._events = event_repository or SqliteEventRepository(runtime_store)
-        self._projector = RunProjector()
-        self._cancellation = CancellationCoordinator(runtime_store)
+        self._events: Any | None = event_repository
+        self._projector: Any | None = None
+        self._cancellation: Any | None = None
+        self._defer_context_creation = defer_context_creation
         self._runs: dict[str, _ManagedRun] = {}
         self._task_errors: dict[str, AgentServiceError] = {}
         self._operation_lock = asyncio.Lock()
         self._closed = False
+
+    def _event_repository(self) -> Any:
+        if self._events is None:
+            from .event_repository import SqliteEventRepository
+
+            self._events = SqliteEventRepository(self._store)
+        return self._events
+
+    def _run_projector(self) -> Any:
+        if self._projector is None:
+            from .run_projector import RunProjector
+
+            self._projector = RunProjector()
+        return self._projector
+
+    def _cancellation_coordinator(self) -> Any:
+        if self._cancellation is None:
+            from agent.interruption import CancellationCoordinator
+
+            self._cancellation = CancellationCoordinator(self._store)
+        return self._cancellation
 
     @property
     def closed(self) -> bool:
@@ -115,10 +137,16 @@ class AgentService:
         )
 
     def _handle(self, head: Any, request_id: str) -> RunHandle:
+        from .run_projector import handle_from_head
+
         return handle_from_head(head, request_id=request_id)
 
     async def start_run(self, request: StartRunRequest) -> RunHandle:
+        import asyncio
+
         self._ensure_open()
+        from .run_projector import encode_request_reference
+
         async with self._operation_lock:
             try:
                 reservation = self._store.reserve_service_start(
@@ -145,13 +173,24 @@ class AgentService:
 
             try:
                 # Persisted reservation precedes Context construction and any
-                # launcher/provider call.
-                context = self._contexts.create_run(request, run_id=run_id)
-                task = asyncio.create_task(
-                    self._run_start(request, context),
-                    name=f"tsagent-start:{run_id}",
-                )
-                self._runs[run_id] = _ManagedRun(context, task)
+                # launcher/provider call.  The local sidecar opts into the
+                # deferred branch so its transport can acknowledge an
+                # accepted Run before importing the cold Runtime graph.  The
+                # ordinary in-process Service keeps Context construction
+                # synchronous, preserving its established lifecycle timing.
+                if self._defer_context_creation:
+                    task = asyncio.create_task(
+                        self._run_start(request, run_id),
+                        name=f"tsagent-start:{run_id}",
+                    )
+                    self._runs[run_id] = _ManagedRun(None, task)
+                else:
+                    context = self._contexts.create_run(request, run_id=run_id)
+                    task = asyncio.create_task(
+                        self._run_start(request, run_id, context=context),
+                        name=f"tsagent-start:{run_id}",
+                    )
+                    self._runs[run_id] = _ManagedRun(context, task)
             except DurableStoreError as error:
                 raise self._store_error(
                     error,
@@ -162,9 +201,25 @@ class AgentService:
                 raise self._runtime_error(error, run_id=run_id) from error
             return self._handle(reservation.head, request.request_id)
 
-    async def _run_start(self, request: StartRunRequest, context: Any) -> None:
-        run_id = context.run_id
+    async def _run_start(
+        self,
+        request: StartRunRequest,
+        run_id: str,
+        *,
+        context: Any | None = None,
+    ) -> None:
+        import asyncio
+
         try:
+            if context is None:
+                context = await asyncio.to_thread(
+                    self._contexts.create_run,
+                    request,
+                    run_id=run_id,
+                )
+            managed = self._runs.get(run_id)
+            if managed is not None:
+                self._runs[run_id] = _ManagedRun(context, managed.task)
             await self._launcher.start(
                 session_context=context.session,
                 run_context=context,
@@ -178,7 +233,8 @@ class AgentService:
             managed = self._runs.get(run_id)
             if managed is not None and managed.run_context is context:
                 self._runs.pop(run_id, None)
-            self._contexts.release_run(context)
+            if context is not None:
+                self._contexts.release_run(context)
 
     async def get_run(self, request: RunLookupRequest) -> RunSnapshot:
         self._ensure_open()
@@ -188,7 +244,7 @@ class AgentService:
                 request.run_id,
                 session_id=request.session_id,
             )
-            return self._projector.project(read, request)
+            return self._run_projector().project(read, request)
         except AgentServiceError:
             raise
         except DurableStoreError as error:
@@ -202,6 +258,8 @@ class AgentService:
             raise self._runtime_error(error, run_id=request.run_id) from error
 
     async def resume_run(self, request: ResumeRunRequest) -> RunHandle:
+        import asyncio
+
         self._ensure_open()
         async with self._operation_lock:
             try:
@@ -270,6 +328,8 @@ class AgentService:
                 raise self._runtime_error(error, run_id=request.run_id) from error
 
     async def _run_resume(self, request: ResumeRunRequest, context: Any) -> None:
+        import asyncio
+
         run_id = context.run_id
         try:
             await self._launcher.resume(run_context=context, request=request)
@@ -298,6 +358,7 @@ class AgentService:
         # control-plane intent.  The transaction revalidates scope/lifecycle.
         await self.get_run(lookup)
         try:
+            self._cancellation = self._cancellation_coordinator()
             self._cancellation.request_cancel(request)
             return await self.get_run(lookup)
         except AgentServiceError:
@@ -321,9 +382,11 @@ class AgentService:
 
     def stream_events(self, request: EventStreamRequest):
         self._ensure_open()
-        return self._events.stream(request)
+        return self._event_repository().stream(request)
 
     async def close(self) -> None:
+        import asyncio
+
         if self._closed:
             return
         self._closed = True
@@ -331,7 +394,8 @@ class AgentService:
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
         self._runs.clear()
-        self._events.close()
+        if self._events is not None:
+            self._events.close()
         self._contexts.close()
 
 

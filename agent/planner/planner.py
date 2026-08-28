@@ -11,14 +11,25 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 from langchain_core.messages import SystemMessage, HumanMessage
-from agent.llm import llm
 from agent.planner.constraint_extractor import extract_constraints, detect_abstention
 from agent.planner.schemas import TaskList
 from agent.task import Task
 from agent.interruption import RunInterruptionRequested, await_interruptibly
-from agent.execution_errors import classify_execution_error
+from agent.execution_errors import classify_execution_error, stable_error_message
 
 logger = logging.getLogger(__name__)
+
+llm = None
+
+
+def _get_llm():
+    """Load the Provider client only when planning actually needs it."""
+    global llm
+    if llm is None:
+        from agent.llm import llm as provider
+
+        llm = provider
+    return llm
 
 
 @dataclass
@@ -202,9 +213,10 @@ async def plan_with_metadata(
         # Bug 1 fix: 先检查 structured output 是否可用
         tasks_out = None
         raw_out = None
-        if llm.supports_structured_output:
+        llm_engine = _get_llm()
+        if llm_engine.supports_structured_output:
             try:
-                provider, _ = llm._get_active_provider()
+                provider, _ = llm_engine._get_active_provider()
                 structured_llm = provider.with_structured_output(TaskList)
                 result: TaskList = await await_interruptibly(
                     structured_llm.ainvoke(messages)
@@ -222,8 +234,11 @@ async def plan_with_metadata(
             except RunInterruptionRequested:
                 raise
             except Exception as e:
-                logger.warning(f"Structured output 失败，永久关闭: {e}")
-                llm.disable_structured_output()
+                logger.warning(
+                    "Structured output 失败，永久关闭: %s",
+                    stable_error_message(e, fallback="structured output request failed"),
+                )
+                llm_engine.disable_structured_output()
                 # fall through to JSON mode
 
         # JSON 模式（无额外 API 调用）
@@ -232,7 +247,7 @@ async def plan_with_metadata(
         ]
         # v2.0-A 鲁棒性：JSON 失败重试一次（严格格式），避免约束段导致格式漂移
         for attempt in range(2):
-            response = await llm.ainvoke(json_messages)
+            response = await llm_engine.ainvoke(json_messages)
             result = _parse_json(response.content)
             if result and "tasks" in result:
                 # 非 abstain 场景空计划 = 过度 abstain → 重试强制非空
@@ -259,7 +274,10 @@ async def plan_with_metadata(
     except RunInterruptionRequested:
         raise
     except Exception as e:
-        logger.error(f"Planner 失败: {e}")
+        logger.error(
+            "Planner 失败: %s",
+            stable_error_message(e, fallback="planner request failed"),
+        )
         failure_code = classify_execution_error(e)
         if failure_code.startswith("PROVIDER_"):
             return PlanOutput(

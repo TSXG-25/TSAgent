@@ -18,29 +18,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator, Mapping, Sequence
 
-from agent.checkpoint.codec import (
-    CheckpointCodecError,
-    checkpoint_digest,
-    deserialize_checkpoint,
-    serialize_checkpoint,
-)
-from agent.run_resume.codec import (
-    RunResumeCodecError,
-    deserialize_run_index,
-    run_index_digest,
-    serialize_run_index,
-)
-from agent.interruption.contracts import (
-    CancellationIntent,
-    InterruptionPhase,
-    InterruptionReason,
-)
-from agent.interruption.lifecycle import validate_phase_transition
-from agent.interruption.store import (
-    DurableInterruptionRecord,
-    InterruptionFailurePoint,
-)
-
 from .contracts import (
     ArtifactCommitFact,
     DurableEventHead,
@@ -1080,6 +1057,13 @@ class SqliteRuntimeStore:
         *,
         idempotent: bool = False,
     ) -> DurableInterruptionRecord:
+        from agent.interruption.contracts import (
+            CancellationIntent,
+            InterruptionPhase,
+            InterruptionReason,
+        )
+        from agent.interruption.store import DurableInterruptionRecord
+
         try:
             details = json.loads(str(row["details_json"]))
         except (TypeError, ValueError, json.JSONDecodeError) as exc:
@@ -1177,6 +1161,12 @@ class SqliteRuntimeStore:
         fence.  Advancing or terminalizing the intent remains fence-owned by
         the worker that observes a safe boundary.
         """
+
+        from agent.interruption.contracts import InterruptionPhase, InterruptionReason
+        from agent.interruption.store import (
+            DurableInterruptionRecord,
+            InterruptionFailurePoint,
+        )
 
         request_digest = _require_text(request_digest, "request_digest")
         if intent.reason not in {
@@ -1415,6 +1405,13 @@ class SqliteRuntimeStore:
     ) -> DurableInterruptionRecord:
         """Advance an intent lifecycle under the current execution fence."""
 
+        from agent.interruption.contracts import InterruptionPhase
+        from agent.interruption.lifecycle import validate_phase_transition
+        from agent.interruption.store import (
+            DurableInterruptionRecord,
+            InterruptionFailurePoint,
+        )
+
         target_phase = InterruptionPhase(target_phase)
         with self._write_transaction() as connection:
             head = self._fetch_head_tx(
@@ -1576,6 +1573,12 @@ class SqliteRuntimeStore:
         failure_point: InterruptionFailurePoint | None = None,
     ) -> DurableInterruptionRecord:
         """Atomically finalize an observed cancellation or Run timeout."""
+
+        from agent.interruption.contracts import InterruptionPhase, InterruptionReason
+        from agent.interruption.store import (
+            DurableInterruptionRecord,
+            InterruptionFailurePoint,
+        )
 
         with self._write_transaction() as connection:
             head = self._fetch_head_tx(
@@ -2211,6 +2214,9 @@ class SqliteRuntimeStore:
     ) -> Any:
         """Atomically publish pending -> active and its initial Checkpoint."""
 
+        from agent.checkpoint.codec import checkpoint_digest, serialize_checkpoint
+        from agent.run_resume.codec import run_index_digest, serialize_run_index
+
         tenant_id = _require_text(tenant_id, "tenant_id")
         session_id = _require_text(session_id, "session_id")
         run_id = _require_text(run_id, "run_id")
@@ -2420,6 +2426,12 @@ class SqliteRuntimeStore:
     ) -> Any | None:
         """Load one durable Checkpoint without exposing SQLite rows."""
 
+        from agent.checkpoint.codec import (
+            CheckpointCodecError,
+            checkpoint_digest,
+            deserialize_checkpoint,
+        )
+
         tenant_id = _require_text(tenant_id, "tenant_id")
         run_id = _require_text(run_id, "run_id")
         checkpoint_id = _require_text(checkpoint_id, "checkpoint_id")
@@ -2465,6 +2477,12 @@ class SqliteRuntimeStore:
         activation_attempt_id: str | None = None,
     ) -> tuple[Any, ...]:
         """Return a decoded immutable Checkpoint lineage for a Run."""
+
+        from agent.checkpoint.codec import (
+            CheckpointCodecError,
+            checkpoint_digest,
+            deserialize_checkpoint,
+        )
 
         tenant_id = _require_text(tenant_id, "tenant_id")
         run_id = _require_text(run_id, "run_id")
@@ -2536,6 +2554,12 @@ class SqliteRuntimeStore:
         coordination projection until a Finalization Bundle publishes its
         successor.
         """
+
+        from agent.run_resume.codec import (
+            RunResumeCodecError,
+            deserialize_run_index,
+            run_index_digest,
+        )
 
         tenant_id = _require_text(tenant_id, "tenant_id")
         run_id = _require_text(run_id, "run_id")
@@ -2799,6 +2823,9 @@ class SqliteRuntimeStore:
         caller revision, which is what makes an after-commit response retry
         safe.
         """
+
+        from agent.checkpoint.codec import checkpoint_digest, serialize_checkpoint
+        from agent.run_resume.codec import run_index_digest, serialize_run_index
 
         point: FinalizationFailurePoint | None
         if failure_point is None or failure_point == "":

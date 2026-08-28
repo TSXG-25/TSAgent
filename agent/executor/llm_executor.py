@@ -17,10 +17,12 @@ from typing import Any, Dict, Optional
 
 from langchain_core.messages import SystemMessage, HumanMessage
 
+from agent.action_result import ActionResult
 from agent.llm import llm
 from agent.task import Task
 from agent.workflow import ExecutionContext, ExecutionResult
-from agent.execution_errors import classify_execution_error
+from agent.execution_errors import classify_execution_error, stable_error_message
+from agent.failure import ClassificationSource
 from agent.interruption import RunInterruptionRequested, await_interruptibly
 
 LLM_EXECUTION_TIMEOUT = float(os.getenv("TSAGENT_LLM_TIMEOUT", "45"))
@@ -113,6 +115,10 @@ class LLMExecutor:
             return ExecutionResult(
                 success=True,
                 outputs={"text": content},
+                action_result=ActionResult.success(
+                    value=content,
+                    content=content,
+                ),
                 metadata={"time_s": round(elapsed, 2), "task_id": task.id},
             )
         except RunInterruptionRequested:
@@ -121,16 +127,22 @@ class LLMExecutor:
             elapsed = time.time() - t0
             error_code = classify_execution_error(e)
 
+            error_message = stable_error_message(e, fallback="LLM execution failed")
             if context is not None:
                 context.record_failure({
                     "tool": "llm",
-                    "error": str(e)[:100],
+                    "error": error_message[:100],
                     "time": time.time(),
                 })
 
             return ExecutionResult(
                 success=False,
-                error=str(e),
+                error=error_message,
+                action_result=ActionResult.failure(
+                    error_code=error_code or "LLM_EXECUTION_FAILED",
+                    content=error_message,
+                    classification_source=ClassificationSource.LEGACY_FALLBACK.value,
+                ),
                 metadata={
                     "time_s": round(elapsed, 2),
                     "task_id": task.id,

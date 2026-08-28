@@ -17,6 +17,7 @@ from benchmarks.memory.metadata import benchmark_metadata
 from benchmarks.memory.runner import (
     canonicalize,
     validate,
+    validate_reference_fixture,
     _forbidden_groups,
     _expected_groups,
     _expected_set,
@@ -62,6 +63,12 @@ def _validate_continuation_definition(case, problems: list[str]) -> None:
     if contract == "CONTINUE_CHAT" and trigger not in CONTINUE_CHAT_MARKERS:
         problems.append(f"{case.id}: CONTINUE_CHAT 触发词未冻结: {case.turns[-1]!r}")
 
+    if contract == "CONTINUE_REFERENCE":
+        fixture_problems = validate_reference_fixture(case)
+        problems.extend(f"{case.id}: {problem}" for problem in fixture_problems)
+        if not case.fixture_target:
+            problems.append(f"{case.id}: CONTINUE_REFERENCE 缺少 fixture_target")
+
     derived = classify_conversation_intent(None, case.turns[-1]).name if case.turns else ""
     if derived != contract:
         problems.append(
@@ -79,8 +86,8 @@ def _validate_continuation_definition(case, problems: list[str]) -> None:
 
 
 def _validate_dataset(label: str, cases: list) -> tuple[list[str], dict]:
-    problems = []
-    expected_sets = Counter()
+    problems: list[str] = []
+    expected_sets: Counter[tuple] = Counter()
     metadata = benchmark_metadata(cases, benchmark_name=label)
 
     for case in cases:
@@ -155,8 +162,8 @@ def main() -> int:
         ("conversation-continuation", continuation_cases),
     ]
 
-    all_problems = []
-    metadata = []
+    all_problems: list[str] = []
+    metadata: list[dict] = []
     for label, cases in datasets:
         problems, info = _validate_dataset(label, cases)
         all_problems.extend(f"{label}: {problem}" for problem in problems)
@@ -173,7 +180,8 @@ def main() -> int:
             "Benchmark Validation: PASS "
             f"[{info['benchmark_name']}]（{info['case_count']} 个 case；"
             f"version={info['benchmark_version']}；"
-            f"dataset_hash={info['dataset_hash']}）"
+            f"dataset_hash={info['dataset_hash']}；"
+            f"fixture_manifest_hash={info['fixture_manifest_hash']}）"
         )
     return 0
 

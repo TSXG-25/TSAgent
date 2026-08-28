@@ -10,6 +10,13 @@ Phase C.1：从单文件 orchestrator.py 拆包。
 
 Runtime 只做状态机迁移，不直接接触各 Stage。
 """
-from .main import ExecutionOrchestrator
-
 __all__ = ["ExecutionOrchestrator"]
+
+
+def __getattr__(name: str):
+    if name != "ExecutionOrchestrator":
+        raise AttributeError(name)
+    from .main import ExecutionOrchestrator
+
+    globals()[name] = ExecutionOrchestrator
+    return ExecutionOrchestrator

@@ -60,6 +60,7 @@ def test_public_dtos_round_trip_and_digest_are_stable() -> None:
         request_id="request-1",
         status=RunStatus.RUNNING,
         revision=2,
+        created_at="2026-08-06T00:00:00Z",
     )
     event = _event(1, EventType.RUN_STARTED)
 
@@ -70,6 +71,31 @@ def test_public_dtos_round_trip_and_digest_are_stable() -> None:
     assert json.dumps(event.to_dict(), ensure_ascii=False, sort_keys=True) == json.dumps(
         RunEvent.from_dict(event.to_dict()).to_dict(), ensure_ascii=False, sort_keys=True
     )
+
+    generated_id = StartRunRequest(
+        tenant_id="tenant-1",
+        user_id="user-1",
+        session_id="session-1",
+        request_id="request-1",
+        request_text="生成报告",
+    )
+    assigned_id = StartRunRequest(
+        tenant_id="tenant-1",
+        user_id="user-1",
+        session_id="session-1",
+        run_id="run-allocated-later",
+        request_id="request-1",
+        request_text="生成报告",
+    )
+    other_tenant = StartRunRequest(
+        tenant_id="tenant-2",
+        user_id="user-1",
+        session_id="session-1",
+        request_id="request-1",
+        request_text="生成报告",
+    )
+    assert generated_id.request_digest == assigned_id.request_digest
+    assert generated_id.request_digest != other_tenant.request_digest
 
 
 def test_public_dto_rejects_live_payload_objects() -> None:
@@ -125,6 +151,9 @@ def test_snapshot_is_a_small_public_projection() -> None:
         status=RunStatus.COMPLETED,
         request_text="生成报告",
         active_workflow_id=None,
+        request_id="request-1",
+        created_at="2026-08-06T00:00:00Z",
+        updated_at="2026-08-06T00:00:04Z",
         completed_workflow_ids=("workflow-a",),
         artifacts=(
             ArtifactSummary(
@@ -134,6 +163,13 @@ def test_snapshot_is_a_small_public_projection() -> None:
                 reference="workspace://report.md",
                 exists=True,
                 verified=True,
+                run_id="run-1",
+                display_name="report.md",
+                size=128,
+                producer_workflow_id="workflow-a",
+                producer_stage_id="verification",
+                created_revision=3,
+                created_at="2026-08-06T00:00:03Z",
             ),
         ),
         revision=4,
@@ -143,6 +179,8 @@ def test_snapshot_is_a_small_public_projection() -> None:
     assert "execution_plan" not in payload
     assert "checkpoint_payload" not in payload
     assert "run_resume_index" not in payload
+    assert payload["request_id"] == "request-1"
+    assert payload["revision"] == 4
 
 
 def test_event_ordering_and_replay_oracle() -> None:
@@ -184,16 +222,31 @@ def test_event_stream_request_rejects_invalid_cursor() -> None:
             after_sequence=-1,
         )
 
+    with pytest.raises(AgentServiceError) as expired:
+        EventOrderingOracle.replay_after(
+            (_event(1, EventType.RUN_STARTED), _event(2, EventType.RUN_COMPLETED)),
+            0,
+            run_id="run-1",
+            oldest_retained_sequence=2,
+        )
+    assert expired.value.code is ServiceErrorCode.EVENT_CURSOR_EXPIRED
+
 
 def test_service_error_is_stable_and_does_not_expose_cause() -> None:
     error = AgentServiceError(
-        ServiceErrorCode.REQUEST_ID_CONFLICT,
+        ServiceErrorCode.IDEMPOTENCY_CONFLICT,
         "request already represents another operation",
+        retryable=False,
+        run_id="run-1",
+        request_id="request-1",
         details={"request_id": "request-1"},
     )
     assert error.to_dict() == {
-        "code": "REQUEST_ID_CONFLICT",
+        "code": "IDEMPOTENCY_CONFLICT",
         "message": "request already represents another operation",
+        "retryable": False,
+        "run_id": "run-1",
+        "request_id": "request-1",
         "details": {"request_id": "request-1"},
     }
     assert "Traceback" not in str(error)
@@ -202,7 +255,7 @@ def test_service_error_is_stable_and_does_not_expose_cause() -> None:
 def test_v23c_dataset_and_oracle_are_deterministic() -> None:
     cases = build_cases()
     assert validate(cases) == []
-    assert benchmark_metadata(cases)["case_count"] == 16
+    assert benchmark_metadata(cases)["case_count"] == 32
     assert [evaluate(case).to_dict() for case in cases] == [
         evaluate(case).to_dict() for case in cases
     ]

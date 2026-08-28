@@ -70,6 +70,7 @@ class TaskPolicy(BaseModel):
         validators: Validator objects/callables for success checking.
         tool_policy: {"allow": [tool names]} — restricted tool access.
         required_outputs: Artifact types required before execution.
+        effect_scope: USER_EFFECT or INTERNAL_EXECUTION_EFFECT.
     """
     executor: str = "tool"                     # "tool" | "llm"
     max_retries: int = 0
@@ -79,6 +80,7 @@ class TaskPolicy(BaseModel):
     validators: List[Any] = Field(default_factory=list)
     tool_policy: Optional[Dict[str, Any]] = None
     required_outputs: List[str] = Field(default_factory=list)
+    effect_scope: str = "USER_EFFECT"
 
 
 class Task(BaseModel):

@@ -4,7 +4,8 @@ ADR-0002: compile(task, context) -> ExecutionPlan。
 Compiler 永远只有一个输入 (Task, CompilerContext)，
 不通过 **services 参数膨胀传入 workspace/memory/repository/...
 
-所有字段可选（None 表示该能力不可用）。
+workspace/repository 可以为空表示能力不可用；registry 为空时由 Compiler
+绑定应用级 ToolRegistry，不能静默跳过工具存在性检查。
 """
 from dataclasses import dataclass, field
 from typing import Any, Optional

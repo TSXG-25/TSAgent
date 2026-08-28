@@ -28,7 +28,12 @@ from agent.execution_errors import classify_execution_error
 from langchain_core.messages import SystemMessage, HumanMessage
 
 from .cognitive_context import CognitiveContext, ResolvedQuery
-from .execution_need import analyze_execution_need
+from .execution_need import (
+    RequestedOutcome,
+    analyze_execution_need,
+    analyze_requested_outcomes,
+    extract_explicit_command,
+)
 from .research_policy import (
     is_fresh_research_request,
     is_source_grounded_request,
@@ -370,15 +375,11 @@ class IntentEngine:
         self._llm_fallback_count = 0
         self._llm = default_llm
 
-    def analyze(self, context: CognitiveContext) -> IntentResult:
-        """分析用户输入，返回结构化意图。
-
-        Args:
-            context: 当前认知上下文（已包含 ReferenceResolver 消歧结果）
-
-        Returns:
-            结构化的 IntentResult
-        """
+    def _deterministic_analysis(
+        self,
+        context: CognitiveContext,
+    ) -> tuple[IntentResult | None, str, Optional[bool], tuple[RequestedOutcome, ...]]:
+        """Resolve intent facts that do not require a Provider call."""
         user_input = context.query
         text = user_input.strip().lower()
 
@@ -388,6 +389,46 @@ class IntentEngine:
         # 执行需求分析（World State Change → 确定性 requires_execution；v2.1A）。
         # LLM 不参与"是否执行"决策（ADR-0009），regex 规则也不堆在 Intent 里。
         need = analyze_execution_need(user_input)
+        requested_outcomes = analyze_requested_outcomes(user_input)
+
+        # An explicit user command is already a complete execution intent.
+        # Route it without an LLM classification round; the Planner will use
+        # the same parsed command to build the canonical shell task.
+        explicit_command = extract_explicit_command(user_input)
+        if explicit_command is not None:
+            return IntentResult(
+                domain=DOMAIN_OPERATION,
+                action="execute",
+                target=explicit_command,
+                entities=[],
+                current_file=context.current_file or "",
+                confidence=0.99,
+                requires_execution=True,
+                summary="explicit user command execution",
+                raw_input=user_input,
+                reference_kind=_detect_reference_kind(user_input),
+                requested_outcomes=requested_outcomes,
+            ), raw_target, need, requested_outcomes
+
+        # Code execution is also an explicit operational outcome.  Preserve
+        # that deterministic fact before the general LLM domain classifier;
+        # otherwise requests such as "write this Python file and run it" can
+        # spend the only routing round on cognition and never reach the
+        # canonical write -> execute plan.
+        if RequestedOutcome.CODE_EXECUTION in requested_outcomes:
+            return IntentResult(
+                domain=DOMAIN_OPERATION,
+                action="execute",
+                target=raw_target or "python-source",
+                entities=[],
+                current_file=context.current_file or "",
+                confidence=0.99,
+                requires_execution=True,
+                summary="explicit code execution outcome",
+                raw_input=user_input,
+                reference_kind=_detect_reference_kind(user_input),
+                requested_outcomes=requested_outcomes,
+            ), raw_target, need, requested_outcomes
 
         # External research is never delegated to an LLM-only task. The
         # Planner lowers this intent to a source-backed web tool, including
@@ -406,7 +447,8 @@ class IntentEngine:
                 reference_kind=_detect_reference_kind(user_input),
                 freshness_required=is_fresh_research_request(user_input),
                 source_grounding_required=True,
-            )
+                requested_outcomes=requested_outcomes,
+            ), raw_target, need, requested_outcomes
 
         # Stage 1: 关键词快速匹配
         for pattern, domain, action, requires_exec in _KEYWORD_MAP:
@@ -424,35 +466,84 @@ class IntentEngine:
                     summary=f"{domain}: {action}",
                     raw_input=user_input,
                     reference_kind=_detect_reference_kind(user_input),
-                )
+                    requested_outcomes=requested_outcomes,
+                ), raw_target, need, requested_outcomes
 
-        # Stage 2: LLM 1-shot 分析（domain/action 可 LLM 判定）
-        result = self._llm_analyze(user_input, context)
+        return None, raw_target, need, requested_outcomes
 
-        # target 只信确定性来源：显式提取 raw_target > Resolver 消歧 > current_file
-        # （LLM 不参与 target 决定 —— Determinism 要求，v1.2B raw>LLM 的延续）
+    @staticmethod
+    def _merge_llm_analysis(
+        result: IntentResult,
+        context: CognitiveContext,
+        raw_target: str,
+        need: Optional[bool],
+        requested_outcomes: tuple[RequestedOutcome, ...],
+    ) -> IntentResult:
+        """Apply deterministic facts to a Provider-classified intent."""
         final_target = raw_target or _merge_target("", context)
 
         result.target = final_target
         result.entities = _merge_entities(result.entities, context)
         result.current_file = context.current_file or ""
-        result.reference_kind = _detect_reference_kind(user_input)
+        result.reference_kind = _detect_reference_kind(context.query)
         result.domain = _upgrade_domain(result.domain, need)
+        result.requested_outcomes = requested_outcomes
 
-        # 确定性覆盖：World State Change / 明确信息类请求优先于 LLM 判定
         if need is not None:
             result.requires_execution = need
+        if any(
+            outcome in requested_outcomes
+            for outcome in (
+                RequestedOutcome.CODE_EXECUTION,
+                RequestedOutcome.COMMAND_EXECUTION,
+            )
+        ):
+            result.requires_execution = True
 
         return result
 
-    def _llm_analyze(self, user_input: str, context: CognitiveContext) -> IntentResult:
-        """LLM 1-shot 意图分析（带上下文）。"""
+    def analyze(self, context: CognitiveContext) -> IntentResult:
+        """Synchronous compatibility API for non-Runtime callers."""
+        deterministic, raw_target, need, requested_outcomes = (
+            self._deterministic_analysis(context)
+        )
+        if deterministic is not None:
+            return deterministic
+
+        # Stage 2: LLM 1-shot 分析（domain/action 可 LLM 判定）
+        result = self._llm_analyze(context.query, context)
+        return self._merge_llm_analysis(
+            result,
+            context,
+            raw_target,
+            need,
+            requested_outcomes,
+        )
+
+    async def analyze_async(self, context: CognitiveContext) -> IntentResult:
+        """Runtime API; Provider fallback remains cancellable and observable."""
+        deterministic, raw_target, need, requested_outcomes = (
+            self._deterministic_analysis(context)
+        )
+        if deterministic is not None:
+            return deterministic
+
+        result = await self._llm_analyze_async(context.query, context)
+        return self._merge_llm_analysis(
+            result,
+            context,
+            raw_target,
+            need,
+            requested_outcomes,
+        )
+
+    @staticmethod
+    def _llm_prompt(user_input: str, context: CognitiveContext) -> str:
         domain_descriptions = "\n".join(
             f"  {d}: {desc}" for d, desc in DOMAIN_DESCRIPTIONS.items()
         )
         context_summary = _build_context_summary(context)
-
-        prompt = LLM_INTENT_PROMPT.replace(
+        return LLM_INTENT_PROMPT.replace(
             "{context_summary}", context_summary
         ).replace(
             "{domain_descriptions}", domain_descriptions
@@ -460,80 +551,113 @@ class IntentEngine:
             "{input}", user_input
         )
 
-        try:
-            response = self._llm.invoke([SystemMessage(content=prompt)])
-            content = response.content.strip() if hasattr(response, 'content') else str(response).strip()
-            # Extract JSON
-            if content.startswith("```"):
-                content = content.split("```")[1]
-                if content.startswith("json"):
-                    content = content[4:]
-            content = content.strip()
-            obj = json.loads(content)
+    def _parse_llm_analysis(
+        self,
+        response: object,
+        user_input: str,
+        context: CognitiveContext,
+    ) -> IntentResult:
+        content = (
+            response.content.strip()
+            if hasattr(response, "content")
+            else str(response).strip()
+        )
+        if content.startswith("```"):
+            content = content.split("```")[1]
+            if content.startswith("json"):
+                content = content[4:]
+        obj = json.loads(content.strip())
 
-            domain_raw = obj.get("domain", "")
-            # Map Chinese domain names to constants
-            domain_map = {
-                "开发": DOMAIN_DEVELOPMENT,
-                "知识": DOMAIN_KNOWLEDGE,
-                "闲聊": DOMAIN_CHAT,
-                "创作": DOMAIN_CREATION,
-                "运维": DOMAIN_OPERATION,
-                "记忆": DOMAIN_MEMORY,
-                "文件": DOMAIN_FILE,
-                "办公": DOMAIN_OFFICE,
-                "数学": DOMAIN_MATH,
-                "翻译": DOMAIN_TRANSLATION,
-                "日程": DOMAIN_SCHEDULING,
-                "网络": DOMAIN_WEB,
-                "未知": DOMAIN_UNKNOWN,
-            }
-            domain = domain_map.get(domain_raw, DOMAIN_UNKNOWN)
-            confidence = obj.get("confidence", 0.5)
-            # v2.0-B：requires_execution 由 domain 确定性推导（ADR-0009），不信任 LLM 字段。
-            # LLM 只决定 domain/action；"是否执行"是行为决策，必须确定。
-            # 开发/文件/运维/办公/网络/未知 → 执行；闲聊/创作/知识/记忆/数学/翻译 → 回答
-            requires_exec = domain in {
-                DOMAIN_DEVELOPMENT, DOMAIN_FILE, DOMAIN_OPERATION,
-                DOMAIN_OFFICE, DOMAIN_WEB, DOMAIN_UNKNOWN,
-            }
+        domain_map = {
+            "开发": DOMAIN_DEVELOPMENT,
+            "知识": DOMAIN_KNOWLEDGE,
+            "闲聊": DOMAIN_CHAT,
+            "创作": DOMAIN_CREATION,
+            "运维": DOMAIN_OPERATION,
+            "记忆": DOMAIN_MEMORY,
+            "文件": DOMAIN_FILE,
+            "办公": DOMAIN_OFFICE,
+            "数学": DOMAIN_MATH,
+            "翻译": DOMAIN_TRANSLATION,
+            "日程": DOMAIN_SCHEDULING,
+            "网络": DOMAIN_WEB,
+            "未知": DOMAIN_UNKNOWN,
+        }
+        domain = domain_map.get(obj.get("domain", ""), DOMAIN_UNKNOWN)
+        requires_exec = domain in {
+            DOMAIN_DEVELOPMENT,
+            DOMAIN_FILE,
+            DOMAIN_OPERATION,
+            DOMAIN_OFFICE,
+            DOMAIN_WEB,
+            DOMAIN_UNKNOWN,
+        }
+        self._llm_fallback_count += 1
+        return IntentResult(
+            domain=domain,
+            action=obj.get("action", ""),
+            target=obj.get("target", ""),
+            entities=obj.get("entities", []),
+            current_file=context.current_file or "",
+            confidence=obj.get("confidence", 0.5),
+            requires_execution=requires_exec,
+            summary=obj.get("summary", ""),
+            raw_input=user_input,
+        )
 
-            self._llm_fallback_count += 1
-            return IntentResult(
-                domain=domain,
-                action=obj.get("action", ""),
-                target=obj.get("target", ""),
-                entities=obj.get("entities", []),
-                current_file=context.current_file or "",
-                confidence=confidence,
-                requires_execution=requires_exec,
-                summary=obj.get("summary", ""),
-                raw_input=user_input,
-            )
-
-        except Exception as e:
-            failure_code = classify_execution_error(e)
-            if failure_code.startswith("PROVIDER_"):
-                return IntentResult(
-                    domain=DOMAIN_UNKNOWN,
-                    confidence=0.0,
-                    requires_execution=True,
-                    summary="意图理解所需的 LLM 服务不可用",
-                    raw_input=user_input,
-                    failure_code=failure_code,
-                    failure_message=(
-                        "当前 LLM 服务暂时不可用，本次未生成或执行任务。"
-                    ),
-                )
-            # LLM 失败时保守处理：走 Planner（World State Change 仍优先于保守默认）
-            _need = analyze_execution_need(user_input)
+    @staticmethod
+    def _llm_analysis_failure(user_input: str, error: Exception) -> IntentResult:
+        failure_code = classify_execution_error(error)
+        if failure_code.startswith("PROVIDER_"):
             return IntentResult(
                 domain=DOMAIN_UNKNOWN,
-                confidence=0.3,
-                requires_execution=_need if _need is not None else True,
-                summary=f"意图理解失败 ({e})，默认走执行路径",
+                confidence=0.0,
+                requires_execution=True,
+                summary="意图理解所需的 LLM 服务不可用",
                 raw_input=user_input,
+                failure_code=failure_code,
+                failure_message="当前 LLM 服务暂时不可用，本次未生成或执行任务。",
             )
+        need = analyze_execution_need(user_input)
+        return IntentResult(
+            domain=DOMAIN_UNKNOWN,
+            confidence=0.3,
+            requires_execution=need if need is not None else True,
+            summary=f"意图理解失败 ({error})，默认走执行路径",
+            raw_input=user_input,
+        )
+
+    def _llm_analyze(self, user_input: str, context: CognitiveContext) -> IntentResult:
+        """Synchronous LLM analysis retained for non-Runtime callers."""
+        try:
+            response = self._llm.invoke([
+                SystemMessage(content=self._llm_prompt(user_input, context))
+            ])
+            return self._parse_llm_analysis(
+                response,
+                user_input,
+                context,
+            )
+        except Exception as error:
+            return self._llm_analysis_failure(user_input, error)
+
+    async def _llm_analyze_async(
+        self,
+        user_input: str,
+        context: CognitiveContext,
+    ) -> IntentResult:
+        """Asynchronous LLM analysis used by the production Runtime."""
+        try:
+            response = await self._llm.ainvoke([
+                SystemMessage(content=self._llm_prompt(user_input, context))
+            ])
+            return self._parse_llm_analysis(
+                response,
+                user_input,
+                context,
+            )
+        except Exception as error:
+            return self._llm_analysis_failure(user_input, error)
 
 
 # 全局单例

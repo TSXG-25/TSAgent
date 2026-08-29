@@ -1,0 +1,401 @@
+{
+  "harness_version": "v2.4B-2-real-tool-selection-preflight-v1",
+  "generated_at": "2026-08-29T16:26:57.106701+00:00",
+  "git_head": "f60b66331d42751f35d1246bba1fa343d1be829a",
+  "dataset": {
+    "path": "evals/tool_selection/dataset.json",
+    "version": "v2.4B-tool-selection-v1",
+    "case_count": 24,
+    "expected_hash": "bc0baa5afcf68ba68a787387edd7297a4c22bea6334e1e0afd06c61136952409",
+    "actual_hash": "bc0baa5afcf68ba68a787387edd7297a4c22bea6334e1e0afd06c61136952409",
+    "hash_match": true
+  },
+  "configuration": {
+    "automatic_retry": false,
+    "provider_fallback": false,
+    "golden_repair": false,
+    "tool_execution": false,
+    "production_imports": false
+  },
+  "production_selector_discovery": {
+    "selector_symbols": [],
+    "next_action_construction_sites": [
+      {
+        "file": "agent/orchestrator/executor.py",
+        "line": 273,
+        "kind": "recording_or_projection_only"
+      },
+      {
+        "file": "agent/orchestrator/main.py",
+        "line": 239,
+        "kind": "recording_or_projection_only"
+      },
+      {
+        "file": "agent/orchestrator/main.py",
+        "line": 147,
+        "kind": "recording_or_projection_only"
+      },
+      {
+        "file": "agent/orchestrator/main.py",
+        "line": 270,
+        "kind": "recording_or_projection_only"
+      }
+    ],
+    "entry_point_found": false,
+    "scan_mode": "AST; no production imports"
+  },
+  "status": "BLOCKED_PRECONDITION",
+  "blocker": {
+    "code": "PRODUCTION_NEXT_ACTION_SELECTOR_MISSING",
+    "category": "P-INT",
+    "message": "No production selector entry point accepts Task + projected State + Observation and returns one NextAction.",
+    "evidence": "Production source contains NextAction.tool_call construction sites, but no select_next_action, choose_next_action, or NextActionSelector symbol."
+  },
+  "provider": {
+    "calls": 0,
+    "status": "NOT_CALLED",
+    "fallback": false
+  },
+  "metrics": null,
+  "attribution": {
+    "P-INT": 24
+  },
+  "case_reports": [
+    {
+      "case_id": "B001",
+      "case_result": "NOT_EVALUABLE",
+      "evaluable": false,
+      "provider_status": "NOT_CALLED",
+      "raw_provider_output": null,
+      "normalized_next_action": null,
+      "oracle_result": null,
+      "failure_category": "P-INT",
+      "failure_subcategory": "PRODUCTION_SELECTOR_MISSING",
+      "evidence": [
+        "PRODUCTION_NEXT_ACTION_SELECTOR_MISSING"
+      ]
+    },
+    {
+      "case_id": "B002",
+      "case_result": "NOT_EVALUABLE",
+      "evaluable": false,
+      "provider_status": "NOT_CALLED",
+      "raw_provider_output": null,
+      "normalized_next_action": null,
+      "oracle_result": null,
+      "failure_category": "P-INT",
+      "failure_subcategory": "PRODUCTION_SELECTOR_MISSING",
+      "evidence": [
+        "PRODUCTION_NEXT_ACTION_SELECTOR_MISSING"
+      ]
+    },
+    {
+      "case_id": "B003",
+      "case_result": "NOT_EVALUABLE",
+      "evaluable": false,
+      "provider_status": "NOT_CALLED",
+      "raw_provider_output": null,
+      "normalized_next_action": null,
+      "oracle_result": null,
+      "failure_category": "P-INT",
+      "failure_subcategory": "PRODUCTION_SELECTOR_MISSING",
+      "evidence": [
+        "PRODUCTION_NEXT_ACTION_SELECTOR_MISSING"
+      ]
+    },
+    {
+      "case_id": "B004",
+      "case_result": "NOT_EVALUABLE",
+      "evaluable": false,
+      "provider_status": "NOT_CALLED",
+      "raw_provider_output": null,
+      "normalized_next_action": null,
+      "oracle_result": null,
+      "failure_category": "P-INT",
+      "failure_subcategory": "PRODUCTION_SELECTOR_MISSING",
+      "evidence": [
+        "PRODUCTION_NEXT_ACTION_SELECTOR_MISSING"
+      ]
+    },
+    {
+      "case_id": "B005",
+      "case_result": "NOT_EVALUABLE",
+      "evaluable": false,
+      "provider_status": "NOT_CALLED",
+      "raw_provider_output": null,
+      "normalized_next_action": null,
+      "oracle_result": null,
+      "failure_category": "P-INT",
+      "failure_subcategory": "PRODUCTION_SELECTOR_MISSING",
+      "evidence": [
+        "PRODUCTION_NEXT_ACTION_SELECTOR_MISSING"
+      ]
+    },
+    {
+      "case_id": "B006",
+      "case_result": "NOT_EVALUABLE",
+      "evaluable": false,
+      "provider_status": "NOT_CALLED",
+      "raw_provider_output": null,
+      "normalized_next_action": null,
+      "oracle_result": null,
+      "failure_category": "P-INT",
+      "failure_subcategory": "PRODUCTION_SELECTOR_MISSING",
+      "evidence": [
+        "PRODUCTION_NEXT_ACTION_SELECTOR_MISSING"
+      ]
+    },
+    {
+      "case_id": "B007",
+      "case_result": "NOT_EVALUABLE",
+      "evaluable": false,
+      "provider_status": "NOT_CALLED",
+      "raw_provider_output": null,
+      "normalized_next_action": null,
+      "oracle_result": null,
+      "failure_category": "P-INT",
+      "failure_subcategory": "PRODUCTION_SELECTOR_MISSING",
+      "evidence": [
+        "PRODUCTION_NEXT_ACTION_SELECTOR_MISSING"
+      ]
+    },
+    {
+      "case_id": "B008",
+      "case_result": "NOT_EVALUABLE",
+      "evaluable": false,
+      "provider_status": "NOT_CALLED",
+      "raw_provider_output": null,
+      "normalized_next_action": null,
+      "oracle_result": null,
+      "failure_category": "P-INT",
+      "failure_subcategory": "PRODUCTION_SELECTOR_MISSING",
+      "evidence": [
+        "PRODUCTION_NEXT_ACTION_SELECTOR_MISSING"
+      ]
+    },
+    {
+      "case_id": "B009",
+      "case_result": "NOT_EVALUABLE",
+      "evaluable": false,
+      "provider_status": "NOT_CALLED",
+      "raw_provider_output": null,
+      "normalized_next_action": null,
+      "oracle_result": null,
+      "failure_category": "P-INT",
+      "failure_subcategory": "PRODUCTION_SELECTOR_MISSING",
+      "evidence": [
+        "PRODUCTION_NEXT_ACTION_SELECTOR_MISSING"
+      ]
+    },
+    {
+      "case_id": "B010",
+      "case_result": "NOT_EVALUABLE",
+      "evaluable": false,
+      "provider_status": "NOT_CALLED",
+      "raw_provider_output": null,
+      "normalized_next_action": null,
+      "oracle_result": null,
+      "failure_category": "P-INT",
+      "failure_subcategory": "PRODUCTION_SELECTOR_MISSING",
+      "evidence": [
+        "PRODUCTION_NEXT_ACTION_SELECTOR_MISSING"
+      ]
+    },
+    {
+      "case_id": "B011",
+      "case_result": "NOT_EVALUABLE",
+      "evaluable": false,
+      "provider_status": "NOT_CALLED",
+      "raw_provider_output": null,
+      "normalized_next_action": null,
+      "oracle_result": null,
+      "failure_category": "P-INT",
+      "failure_subcategory": "PRODUCTION_SELECTOR_MISSING",
+      "evidence": [
+        "PRODUCTION_NEXT_ACTION_SELECTOR_MISSING"
+      ]
+    },
+    {
+      "case_id": "B012",
+      "case_result": "NOT_EVALUABLE",
+      "evaluable": false,
+      "provider_status": "NOT_CALLED",
+      "raw_provider_output": null,
+      "normalized_next_action": null,
+      "oracle_result": null,
+      "failure_category": "P-INT",
+      "failure_subcategory": "PRODUCTION_SELECTOR_MISSING",
+      "evidence": [
+        "PRODUCTION_NEXT_ACTION_SELECTOR_MISSING"
+      ]
+    },
+    {
+      "case_id": "B013",
+      "case_result": "NOT_EVALUABLE",
+      "evaluable": false,
+      "provider_status": "NOT_CALLED",
+      "raw_provider_output": null,
+      "normalized_next_action": null,
+      "oracle_result": null,
+      "failure_category": "P-INT",
+      "failure_subcategory": "PRODUCTION_SELECTOR_MISSING",
+      "evidence": [
+        "PRODUCTION_NEXT_ACTION_SELECTOR_MISSING"
+      ]
+    },
+    {
+      "case_id": "B014",
+      "case_result": "NOT_EVALUABLE",
+      "evaluable": false,
+      "provider_status": "NOT_CALLED",
+      "raw_provider_output": null,
+      "normalized_next_action": null,
+      "oracle_result": null,
+      "failure_category": "P-INT",
+      "failure_subcategory": "PRODUCTION_SELECTOR_MISSING",
+      "evidence": [
+        "PRODUCTION_NEXT_ACTION_SELECTOR_MISSING"
+      ]
+    },
+    {
+      "case_id": "B015",
+      "case_result": "NOT_EVALUABLE",
+      "evaluable": false,
+      "provider_status": "NOT_CALLED",
+      "raw_provider_output": null,
+      "normalized_next_action": null,
+      "oracle_result": null,
+      "failure_category": "P-INT",
+      "failure_subcategory": "PRODUCTION_SELECTOR_MISSING",
+      "evidence": [
+        "PRODUCTION_NEXT_ACTION_SELECTOR_MISSING"
+      ]
+    },
+    {
+      "case_id": "B016",
+      "case_result": "NOT_EVALUABLE",
+      "evaluable": false,
+      "provider_status": "NOT_CALLED",
+      "raw_provider_output": null,
+      "normalized_next_action": null,
+      "oracle_result": null,
+      "failure_category": "P-INT",
+      "failure_subcategory": "PRODUCTION_SELECTOR_MISSING",
+      "evidence": [
+        "PRODUCTION_NEXT_ACTION_SELECTOR_MISSING"
+      ]
+    },
+    {
+      "case_id": "B017",
+      "case_result": "NOT_EVALUABLE",
+      "evaluable": false,
+      "provider_status": "NOT_CALLED",
+      "raw_provider_output": null,
+      "normalized_next_action": null,
+      "oracle_result": null,
+      "failure_category": "P-INT",
+      "failure_subcategory": "PRODUCTION_SELECTOR_MISSING",
+      "evidence": [
+        "PRODUCTION_NEXT_ACTION_SELECTOR_MISSING"
+      ]
+    },
+    {
+      "case_id": "B018",
+      "case_result": "NOT_EVALUABLE",
+      "evaluable": false,
+      "provider_status": "NOT_CALLED",
+      "raw_provider_output": null,
+      "normalized_next_action": null,
+      "oracle_result": null,
+      "failure_category": "P-INT",
+      "failure_subcategory": "PRODUCTION_SELECTOR_MISSING",
+      "evidence": [
+        "PRODUCTION_NEXT_ACTION_SELECTOR_MISSING"
+      ]
+    },
+    {
+      "case_id": "B019",
+      "case_result": "NOT_EVALUABLE",
+      "evaluable": false,
+      "provider_status": "NOT_CALLED",
+      "raw_provider_output": null,
+      "normalized_next_action": null,
+      "oracle_result": null,
+      "failure_category": "P-INT",
+      "failure_subcategory": "PRODUCTION_SELECTOR_MISSING",
+      "evidence": [
+        "PRODUCTION_NEXT_ACTION_SELECTOR_MISSING"
+      ]
+    },
+    {
+      "case_id": "B020",
+      "case_result": "NOT_EVALUABLE",
+      "evaluable": false,
+      "provider_status": "NOT_CALLED",
+      "raw_provider_output": null,
+      "normalized_next_action": null,
+      "oracle_result": null,
+      "failure_category": "P-INT",
+      "failure_subcategory": "PRODUCTION_SELECTOR_MISSING",
+      "evidence": [
+        "PRODUCTION_NEXT_ACTION_SELECTOR_MISSING"
+      ]
+    },
+    {
+      "case_id": "B021",
+      "case_result": "NOT_EVALUABLE",
+      "evaluable": false,
+      "provider_status": "NOT_CALLED",
+      "raw_provider_output": null,
+      "normalized_next_action": null,
+      "oracle_result": null,
+      "failure_category": "P-INT",
+      "failure_subcategory": "PRODUCTION_SELECTOR_MISSING",
+      "evidence": [
+        "PRODUCTION_NEXT_ACTION_SELECTOR_MISSING"
+      ]
+    },
+    {
+      "case_id": "B022",
+      "case_result": "NOT_EVALUABLE",
+      "evaluable": false,
+      "provider_status": "NOT_CALLED",
+      "raw_provider_output": null,
+      "normalized_next_action": null,
+      "oracle_result": null,
+      "failure_category": "P-INT",
+      "failure_subcategory": "PRODUCTION_SELECTOR_MISSING",
+      "evidence": [
+        "PRODUCTION_NEXT_ACTION_SELECTOR_MISSING"
+      ]
+    },
+    {
+      "case_id": "B023",
+      "case_result": "NOT_EVALUABLE",
+      "evaluable": false,
+      "provider_status": "NOT_CALLED",
+      "raw_provider_output": null,
+      "normalized_next_action": null,
+      "oracle_result": null,
+      "failure_category": "P-INT",
+      "failure_subcategory": "PRODUCTION_SELECTOR_MISSING",
+      "evidence": [
+        "PRODUCTION_NEXT_ACTION_SELECTOR_MISSING"
+      ]
+    },
+    {
+      "case_id": "B024",
+      "case_result": "NOT_EVALUABLE",
+      "evaluable": false,
+      "provider_status": "NOT_CALLED",
+      "raw_provider_output": null,
+      "normalized_next_action": null,
+      "oracle_result": null,
+      "failure_category": "P-INT",
+      "failure_subcategory": "PRODUCTION_SELECTOR_MISSING",
+      "evidence": [
+        "PRODUCTION_NEXT_ACTION_SELECTOR_MISSING"
+      ]
+    }
+  ]
+}

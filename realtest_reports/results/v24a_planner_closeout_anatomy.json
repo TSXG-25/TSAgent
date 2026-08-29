@@ -1,0 +1,147 @@
+{
+  "version": "v2.4A-4-discovery",
+  "status": "DIAGNOSIS_COMPLETE_NO_PLANNER_CHANGE",
+  "source_report": "realtest_reports/results/v24a_planner_improvement_round3_calibrated.json",
+  "source_evaluation_git_head": "6cf9e0d0016b0f95d1717581b22784f2776be470",
+  "source_working_tree_dirty": true,
+  "scope": {
+    "dataset_version": "v2.4A-planner-v1.1",
+    "dataset_hash": "8c268b5855d109c7a2be940257ae0acf7edc877793dd5914cc020ae380aae023",
+    "provider": "deepseek",
+    "automatic_case_retry": false,
+    "golden_plan_fallback": false,
+    "planner_prompt_changed_after_source_run": false,
+    "dataset_oracle_changed": false
+  },
+  "mechanical_summary": {
+    "reported_p_cap": 8,
+    "reported_under_plan": 8,
+    "reported_overplanning_rate": 0.3555555556,
+    "reported_missing_task_rate": 0.1294117647,
+    "reported_schema_validity": 1.0,
+    "reported_dependency_validity": 1.0,
+    "reported_clarification_accuracy": 1.0
+  },
+  "semantic_anatomy": [
+    {
+      "case_id": "PA016",
+      "mechanical_failure": "UNDER_PLAN",
+      "oracle_missing_units": ["g2", "g3"],
+      "oracle_unexpected_task_ids": ["task-1", "task-3", "task-4"],
+      "observed_shape": "read service.py -> modify service.py -> write tests/test_service.py -> explain configuration",
+      "semantic_assessment": "MIXED_PLAN_SHAPE_AND_MEASUREMENT_BOUNDARY",
+      "missing_semantic_goal": "not clearly established",
+      "reason": "The test goal is represented but uses write where the Dataset requires modify; the requested configuration explanation is represented as explain, while the Oracle expects a README mutation that the input does not explicitly request. The initial read is a normal prerequisite for modifying service.py.",
+      "generalizable_gap": "test-action verb discipline may be real; README side effect and prerequisite accounting require contract review",
+      "recommended_action": "do not add a case-specific prompt rule; review task-verb semantics and prerequisite measurement separately"
+    },
+    {
+      "case_id": "PA018",
+      "mechanical_failure": "UNDER_PLAN",
+      "oracle_missing_units": ["g2"],
+      "oracle_unexpected_task_ids": ["task-2"],
+      "observed_shape": "search call chain -> explain responsibilities",
+      "semantic_assessment": "TARGET_MATCH_BOUNDARY",
+      "missing_semantic_goal": false,
+      "reason": "The requested search and explanation are both present with the correct two-task dependency shape. The explanation target wording is not accepted by the frozen canonical/alias matcher.",
+      "generalizable_gap": "none demonstrated in decomposition",
+      "recommended_action": "no Planner change; retain as measurement residual unless alias policy is explicitly amended"
+    },
+    {
+      "case_id": "PA021",
+      "mechanical_failure": "UNDER_PLAN",
+      "oracle_missing_units": ["g2"],
+      "oracle_unexpected_task_ids": ["task-2"],
+      "observed_shape": "search latest Python release changes -> explain sourced summary",
+      "semantic_assessment": "TARGET_MATCH_BOUNDARY",
+      "missing_semantic_goal": false,
+      "reason": "The two required actions and dependency are present. The explanation target adds the requested deliverable wording but is not in the registered alias set.",
+      "generalizable_gap": "none demonstrated in decomposition",
+      "recommended_action": "no Planner change"
+    },
+    {
+      "case_id": "PA023",
+      "mechanical_failure": "UNDER_PLAN",
+      "oracle_missing_units": ["g2"],
+      "oracle_unexpected_task_ids": ["task-2"],
+      "observed_shape": "search recent Python security advisories -> summarize by impact and remediation",
+      "semantic_assessment": "TARGET_MATCH_BOUNDARY",
+      "missing_semantic_goal": false,
+      "reason": "The requested search and summary are present. The explanation label is a reasonable paraphrase not accepted by the registered target aliases.",
+      "generalizable_gap": "none demonstrated in decomposition",
+      "recommended_action": "no Planner change"
+    },
+    {
+      "case_id": "PA029",
+      "mechanical_failure": "UNDER_PLAN",
+      "oracle_missing_units": ["g1"],
+      "oracle_unexpected_task_ids": ["task-1", "task-2"],
+      "observed_shape": "search official guidance -> read client.py -> modify client.py -> modify tests/test_client.py",
+      "semantic_assessment": "TARGET_MATCH_PLUS_PREREQUISITE_BOUNDARY",
+      "missing_semantic_goal": false,
+      "reason": "The search, client modification, and test modification requested by the input are all represented. The search target differs from the frozen target by one natural-language particle, and reading client.py is a normal prerequisite for a source modification but is counted as extra by the current Oracle.",
+      "generalizable_gap": "no clear completeness gap; prerequisite accounting is the dominant measurement effect",
+      "recommended_action": "do not remove the read merely to reduce overplanning"
+    },
+    {
+      "case_id": "PA042",
+      "mechanical_failure": "UNDER_PLAN",
+      "oracle_missing_units": ["g3"],
+      "oracle_unexpected_task_ids": ["task-3"],
+      "observed_shape": "search SQLite WAL -> search PostgreSQL MVCC -> compare both",
+      "semantic_assessment": "TARGET_MATCH_BOUNDARY",
+      "missing_semantic_goal": false,
+      "reason": "The exact three-task parallel-search-then-compare structure is present. The comparison target is a natural wording variant not accepted by the alias list.",
+      "generalizable_gap": "none demonstrated in decomposition",
+      "recommended_action": "no Planner change"
+    },
+    {
+      "case_id": "PA046",
+      "mechanical_failure": "UNDER_PLAN",
+      "oracle_missing_units": ["g2"],
+      "oracle_unexpected_task_ids": ["task-1", "task-2"],
+      "observed_shape": "read output/summary.md -> modify output/summary.md",
+      "semantic_assessment": "RESUME_CONTEXT_PROJECTION_GAP",
+      "missing_semantic_goal": "unassessable from direct Planner input",
+      "reason": "The case declares completed_units=[g1] where g1 is a read of input/source.txt, but the real harness calls the production Planner with only the natural-language input and does not pass completed_units or a resume context. The Planner therefore has no machine-readable fact that the read is already complete. It also sees an existing output path and reasonably chooses read/modify, while the Oracle expects one write task.",
+      "generalizable_gap": "Planner input contract lacks the resume projection required by P12 cases",
+      "recommended_action": "audit/define resume context injection before attributing this to Planner capability; no hidden mapping"
+    },
+    {
+      "case_id": "PA049",
+      "mechanical_failure": "UNDER_PLAN",
+      "oracle_missing_units": ["g2", "g3", "g4"],
+      "oracle_unexpected_task_ids": ["task-1"],
+      "observed_shape": "ask for clarification about unspecified B",
+      "semantic_assessment": "RESUME_CONTEXT_AND_DATASET_OBSERVABILITY_GAP",
+      "missing_semantic_goal": "unassessable from direct Planner input",
+      "reason": "The input names A and B but supplies no file, symbol, or command mapping. The Dataset privately defines module_b.py, tests/test_modules.py, and pytest, and declares g1 completed, but the direct Planner harness passes none of that state. Asking for clarification is epistemically correct for the visible input.",
+      "generalizable_gap": "P12 fixture state is not represented in the Planner request/context contract",
+      "recommended_action": "do not teach the Planner hidden module names; resolve the context contract or reclassify this case before capability scoring"
+    }
+  ],
+  "overplanning_audit": {
+    "official_metric_definition": "overplanned = task_count > max_tasks OR any task is unmatched by an active goal unit",
+    "finding": "For PA016, PA018, PA021, PA023, PA029 and PA042, the tasks mechanically marked unexpected are either explicit requested outputs, explicit explanation tasks, or necessary read prerequisites. They are not evidence that the Planner should delete those tasks. PA046 and PA049 depend on missing resume context and cannot be judged fairly from the direct-input run.",
+    "decision": "retain the frozen official metric; do not optimize the Planner by deleting semantically necessary tasks"
+  },
+  "provider_path_audit": {
+    "case_id": "PA005",
+    "recorded_provider_status": "SUCCESS_WITH_PROVIDER_FALLBACK",
+    "calls": [
+      {"sequence": 1, "provider": "deepseek", "call_kind": "structured_bind", "outcome": "SUCCESS"},
+      {"sequence": 2, "provider": "deepseek", "call_kind": "structured_ainvoke", "outcome": "ERROR", "error_code": "STRUCTURED_OUTPUT_REJECTED"},
+      {"sequence": 3, "provider": "deepseek", "call_kind": "router_ainvoke", "outcome": "SUCCESS"}
+    ],
+    "finding": "No cross-provider call occurred. The observed path is same-provider structured-output rejection followed by the production Planner's raw-text fallback. The harness status label conflates internal same-provider fallback with provider fallback.",
+    "freeze_impact": "Do not call the run pure no-fallback evidence until the evidence schema distinguishes cross-provider fallback from same-provider format fallback; the raw call list itself remains valid and is preserved.",
+    "runtime_change_required_now": false
+  },
+  "decision": {
+    "systemic_planner_gap_proven": false,
+    "last_generalizable_prompt_fix_justified": false,
+    "clean_checkout_freeze_ready": false,
+    "reason": "The remaining mechanical failures do not form a clean Planner decomposition cluster after semantic and context audit. The candidate still needs evidence-boundary clarification and a clean-checkout run before any v2.4A freeze decision.",
+    "next_step": "resolve evidence semantics/context contract, then decide whether one final generalizable candidate is warranted; do not case-patch"
+  }
+}

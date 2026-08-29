@@ -253,5 +253,24 @@ policy run 为 `26/27`，同样不进入 Planner capability 分数。候选真�
 `6cf9e0d0` 的 dirty working tree 上，后续如需冻结必须先基于提交后的 clean checkout
 复核；raw report 不覆盖。
 
+## 9. v2.4A-4 closeout discovery
+
+对 Round 3 的 8 个机械 `P-CAP:UNDER_PLAN` 进行了逐案 semantic anatomy。结果没有形成
+可直接支持下一轮泛化 Prompt 修补的共同 decomposition failure：PA018、PA021、PA023、
+PA042 主要是 text target/alias 边界；PA016、PA029 包含必要前置或已覆盖的显式动作；
+PA046、PA049 依赖 `completed_units` 和 resume 上下文，但 direct Planner harness 没有将这些
+状态注入生产 `plan_with_metadata`。完整审计见：
+
+```text
+realtest_reports/results/v24a_planner_closeout_anatomy.json
+realtest_reports/results/v24a_planner_closeout_anatomy.md
+```
+
+因此当前不删除合理 Task、不修改 Dataset/Oracle、不添加 case-specific 规则，也不宣布
+v2.4A 冻结。另发现 PA005 的 `SUCCESS_WITH_PROVIDER_FALLBACK` 实际三次调用均为 DeepSeek，
+其中一次是 structured-output rejection 后的同 Provider raw-text fallback，并非跨 Provider
+切换；后续 freeze evidence 必须区分这两种 fallback。v2.4A-4 当前结论为：先解决 evidence
+命名与 P12 context contract，再决定是否需要最后一轮泛化候选。
+
 v2.4B 再处理 Tool Selection / ReAct；v2.4C 处理 Workflow 编排；v2.4D 处理 Memory
 Learning。它们不应反向扩大本 ADR 的 Planner 结构合同。

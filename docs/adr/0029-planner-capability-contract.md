@@ -1,6 +1,6 @@
 # ADR-0029: Planner Capability Contract（v2.4A）
 
-- 状态: Accepted — v2.4A-4 Context / Evidence Calibration（待 clean freeze）
+- 状态: Accepted — v2.4A Implemented and Verified（Context / Evidence closeout；能力残差已记录）
 - 范围: Planner 的目标分解、任务结构和依赖质量评测
 - 前置基线: v2.3 Runtime / Service / Desktop 能力已冻结；本 ADR 不改变生产执行路径
 
@@ -168,6 +168,11 @@ overplanning_rate                  <= 10%
 这些是 Planner capability gate，不是 Provider availability、Runtime safety 或真实业务
 成功率。模型没有完成目标但 Runtime 正确 abstain/failed 的结果，必须在报告中分层记录。
 
+v2.4A-4 增加语义审计要求：目标别名或目标边界造成的 matcher 未命中不能直接归因于
+Planner。若 clean evidence 证明计划已覆盖用户要求，而失败只来自确定性 matcher 的表达
+边界，该 case 记录为 `P-MEASUREMENT`，不通过删除任务或修改旧 Oracle 来“修复”分数。
+该语义归因不会回写历史结果，也不改变 v1/v1.1 Dataset hash。
+
 ## 6. 证据与命令
 
 Golden self-check 只证明 Dataset 和 Oracle 一致：
@@ -266,11 +271,12 @@ realtest_reports/results/v24a_planner_closeout_anatomy.json
 realtest_reports/results/v24a_planner_closeout_anatomy.md
 ```
 
-因此当前不删除合理 Task、不修改 Dataset/Oracle、不添加 case-specific 规则，也不宣布
+因此当时不删除合理 Task、不修改 Dataset/Oracle、不添加 case-specific 规则，也不宣布
 v2.4A 冻结。另发现 PA005 的 `SUCCESS_WITH_PROVIDER_FALLBACK` 实际三次调用均为 DeepSeek，
 其中一次是 structured-output rejection 后的同 Provider raw-text fallback，并非跨 Provider
 切换；后续 freeze evidence 必须区分这两种 fallback。v2.4A-4 当前结论为：先解决 evidence
-命名与 P12 context contract，再决定是否需要最后一轮泛化候选。
+命名与 P12 context contract，再决定是否需要最后一轮泛化候选。该阶段性结论由下方
+clean freeze evidence 更新。
 
 v2.4B 再处理 Tool Selection / ReAct；v2.4C 处理 Workflow 编排；v2.4D 处理 Memory
 Learning。它们不应反向扩大本 ADR 的 Planner 结构合同。
@@ -333,3 +339,49 @@ format_path   = STRUCTURED_TO_RAW_FALLBACK
 clean checkout 运行，并同时保留历史 mechanical score 与 semantic attribution；本节
 只解决输入上下文和证据口径，不引入新的 Planner subsystem、Dataset case 或 case-specific
 规则。
+
+## 11. v2.4A clean freeze evidence
+
+`a15ab559e276db5bf1c6326179efa86e9d7768cb` 是本次 clean checkout 的精确提交，运行时
+工作树干净。使用 v1.1 calibrated Dataset（hash
+`8c268b5855d109c7a2be940257ae0acf7edc877793dd5914cc020ae380aae023`）一次提交 46 个
+Planner-owned case；没有自动 case retry、golden-plan 修复或跨 Provider fallback。
+
+原始证据：
+
+```text
+realtest_reports/results/v24a_planner_freeze_clean_a15ab559.json
+realtest_reports/results/v24a_planner_freeze_clean_a15ab559.md
+```
+
+结果摘要：
+
+```text
+submitted/evaluable                    46 / 45
+capability mechanical score             39 / 45 = 86.7%
+schema validity                         100%
+dependency validity                     100%
+clarification accuracy                  100%
+missing task rate                       8.2%
+overplanning rate                       35.6%（诊断指标，不作为语义归因结论）
+P-CAP after semantic audit              0
+P-MEASUREMENT                           PA021, PA022, PA023, PA029, PA030, PA042
+P-PROV                                  PA012（single-provider error）
+P-CON / P-INT                           0
+P12 continuation projection             5 / 5
+provider fallback                       0
+structured-to-raw format fallback       PA005（same DeepSeek provider）
+```
+
+PA021/PA022/PA023/PA029/PA030/PA042 的 raw plan 都包含用户要求的动作、合理依赖和可执行
+任务；它们未通过的是 v1.1 frozen target matcher 的具体文字表达，而不是缺少新的
+decomposition unit。因此报告同时保留机械结果和 `P-MEASUREMENT` 语义归因，不将这次
+clean run 重述为 45/45，也不覆盖 v2.4A-2d/v2.4A-3 历史分数。
+
+PA046–PA050 在新增的 Runtime `PlannerContext` continuation projection 下全部通过，证明
+Planner 只消费 `completed_tasks`、`established_facts`、opaque artifact references 和
+`continuation_scope` 的窄投影；它不直接读取 Checkpoint、完整 Runtime state 或 golden plan。
+
+因此 v2.4A 的 Context / Evidence 合同可以冻结并进入 v2.4B。剩余的 mechanical
+overplanning 与目标表达覆盖属于后续 measurement calibration/watchlist，不得在 v2.4A
+closeout 中通过 case-specific prompt 或 Oracle 修改处理。

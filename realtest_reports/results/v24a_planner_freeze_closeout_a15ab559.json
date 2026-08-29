@@ -1,0 +1,64 @@
+{
+  "version": "v2.4A",
+  "status": "FROZEN",
+  "freeze_scope": "context_and_evidence_contract",
+  "head": "a15ab559e276db5bf1c6326179efa86e9d7768cb",
+  "clean_checkout": true,
+  "dataset": {
+    "version": "v2.4A-planner-v1.1",
+    "hash": "8c268b5855d109c7a2be940257ae0acf7edc877793dd5914cc020ae380aae023",
+    "planner_owned_cases": 46
+  },
+  "provider": {
+    "name": "deepseek",
+    "model": "deepseek-v4-flash",
+    "automatic_case_retry": false,
+    "cross_provider_fallback": false,
+    "format_fallback_cases": ["PA005"],
+    "provider_fallback_cases": []
+  },
+  "clean_run": {
+    "raw_report": "realtest_reports/results/v24a_planner_freeze_clean_a15ab559.json",
+    "markdown_report": "realtest_reports/results/v24a_planner_freeze_clean_a15ab559.md",
+    "submitted": 46,
+    "evaluable": 45,
+    "mechanical_capability_pass": 39,
+    "mechanical_capability_rate": 0.8666666667,
+    "schema_validity": 1.0,
+    "dependency_validity": 1.0,
+    "clarification_accuracy": 1.0,
+    "missing_task_rate": 0.0823529412,
+    "overplanning_rate": 0.3555555556,
+    "provider_errors": ["PA012"],
+    "contract_oracle_failures": [],
+    "runtime_integration_failures": [],
+    "p12_projection_cases": ["PA046", "PA047", "PA048", "PA049", "PA050"],
+    "p12_projection_pass": "5/5"
+  },
+  "semantic_attribution": {
+    "P-CAP": [],
+    "P-MEASUREMENT": [
+      "PA021",
+      "PA022",
+      "PA023",
+      "PA029",
+      "PA030",
+      "PA042"
+    ],
+    "P-CONTEXT-CONTRACT": [],
+    "P-PROV": ["PA012"],
+    "P-INT": [],
+    "rationale": "The six mechanically attributed failures contain the requested actions and valid dependencies; the frozen target matcher missed semantically equivalent target wording. P12 continuation cases passed with the Runtime PlannerContext projection."
+  },
+  "evidence_semantics": {
+    "PA005": {
+      "provider_path": "SINGLE_PROVIDER",
+      "format_path": "STRUCTURED_TO_RAW_FALLBACK"
+    }
+  },
+  "historical_scores_unchanged": {
+    "v2.4A-2d": "20/44 evaluable",
+    "v2.4A-3": "37/45",
+    "note": "The clean run is a new evidence point and does not rewrite historical scores."
+  }
+}

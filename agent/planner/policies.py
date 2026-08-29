@@ -13,7 +13,9 @@ from dataclasses import dataclass
 class PlannerAcceptancePolicy:
     """Frozen thresholds for the first Planner capability gate."""
 
-    minimum_case_count: int = 50
+    # v1.1 moves the four historical chat cases to the routing benchmark;
+    # Planner acceptance therefore covers the remaining 46 cases.
+    minimum_case_count: int = 46
     minimum_schema_validity: float = 1.0
     minimum_dependency_validity: float = 1.0
     minimum_plan_validity: float = 1.0

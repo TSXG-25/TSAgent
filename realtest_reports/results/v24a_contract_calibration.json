@@ -1,0 +1,116 @@
+{
+  "harness_version": "v2.4A-2c-contract-calibration-v1",
+  "status": "CALIBRATED_BASELINE",
+  "generated_at": "2026-08-29T08:04:20.393618+00:00",
+  "git_head": "6c1743078d67cf1644c22779f40649fb4b9880d2",
+  "provider_calls": 0,
+  "controls": {
+    "planner_changes": false,
+    "runtime_changes": false,
+    "provider_calls": 0,
+    "v1_baseline_overwritten": false,
+    "v1_1_rescore_is_new_provider_evidence": false
+  },
+  "chat_ownership": {
+    "decision": "CHAT_OUTSIDE_PLANNER",
+    "planner_role": [
+      "PLAN",
+      "ABSTAIN"
+    ],
+    "routing_dataset": "evals/routing/dataset.json",
+    "routing_case_count": 4,
+    "planner_case_count": 46,
+    "routing_oracle_pass": true
+  },
+  "datasets": {
+    "planner_v1": {
+      "version": "v2.4A-planner-v1",
+      "hash": "7f5b28f608194a324f4244c860a8ed9101bcb7afa3b68e5129632ebfb0290291",
+      "expected_hash": "7f5b28f608194a324f4244c860a8ed9101bcb7afa3b68e5129632ebfb0290291",
+      "immutable_hash_unchanged": true,
+      "case_count": 50,
+      "golden_pass_count": 50,
+      "golden_metrics": {
+        "case_count": 50,
+        "schema_validity": 1.0,
+        "dependency_validity": 1.0,
+        "plan_validity": 1.0,
+        "dependency_accuracy": 1.0,
+        "task_granularity": 1.0,
+        "unnecessary_task_rate": 0.0,
+        "missing_task_rate": 0.0,
+        "executable_plan_rate": 1.0,
+        "overplanning_rate": 0.0,
+        "critical_missing_task_rate": 0.0
+      }
+    },
+    "planner_v1_1": {
+      "version": "v2.4A-planner-v1.1",
+      "hash": "8c268b5855d109c7a2be940257ae0acf7edc877793dd5914cc020ae380aae023",
+      "case_count": 50,
+      "planner_case_count": 46,
+      "routing_case_count": 4,
+      "alias_catalog": "evals/planner/target_aliases_v1_1.json",
+      "golden_pass_count": 50,
+      "golden_metrics": {
+        "case_count": 50,
+        "schema_validity": 1.0,
+        "dependency_validity": 1.0,
+        "plan_validity": 1.0,
+        "dependency_accuracy": 1.0,
+        "task_granularity": 1.0,
+        "unnecessary_task_rate": 0.0,
+        "missing_task_rate": 0.0,
+        "executable_plan_rate": 1.0,
+        "overplanning_rate": 0.0,
+        "critical_missing_task_rate": 0.0
+      },
+      "validation": {
+        "valid": true,
+        "errors": []
+      }
+    },
+    "routing_v1": {
+      "version": "v2.4A-routing-v1",
+      "hash": "f3aea7b4cecdcd1997a7716f9c3e7b2396efa2ff6fb3e6b1721784135d345458",
+      "case_count": 4,
+      "oracle_pass_count": 4
+    },
+    "uncertainty_v1": {
+      "version": "v2.4A-uncertainty-v1",
+      "hash": "8f1479bdded0f00e20fd4d283082869d078b4fa217719dc768ae8a6afaaf1cdb",
+      "case_count": 27,
+      "expected_abstain_count": 12,
+      "expected_proceed_count": 15
+    }
+  },
+  "checks": {
+    "planner_v1_immutable": true,
+    "planner_v1_1_valid": true,
+    "planner_v1_1_golden_self_check": true,
+    "routing_golden_self_check": true,
+    "uncertainty_dataset_valid": true
+  },
+  "uncertainty_policy": {
+    "status": "NEEDS_POLICY_WORK",
+    "summary": {
+      "case_count": 27,
+      "pass_count": 20,
+      "true_abstain": 6,
+      "false_abstain": 1,
+      "missed_abstention": 6,
+      "true_proceed": 14,
+      "abstain_precision": 0.8571428571428571,
+      "abstain_recall": 0.5,
+      "false_abstention_rate": 0.06666666666666667,
+      "missed_abstention_rate": 0.5,
+      "policy_status": "NEEDS_POLICY_WORK"
+    },
+    "baseline_report": "realtest_reports/results/v24a_uncertainty_baseline.json"
+  },
+  "planner_watchlist": [
+    "PA013",
+    "PA016"
+  ],
+  "next_step": "v2.4A-2d real-provider re-baseline after calibration"
+}

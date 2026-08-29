@@ -1,6 +1,6 @@
 # ADR-0029: Planner Capability Contract（v2.4A）
 
-- 状态: Accepted — v2.4A Contract / Dataset / Oracle Frozen
+- 状态: Accepted — v2.4A-2c Contract Calibrated
 - 范围: Planner 的目标分解、任务结构和依赖质量评测
 - 前置基线: v2.3 Runtime / Service / Desktop 能力已冻结；本 ADR 不改变生产执行路径
 
@@ -11,17 +11,35 @@ Planner 是否把用户目标转换成完整、可执行且不过度拆分的任
 替代 Runtime 正确性，也不能把 Provider 或模型质量问题伪装成 Runtime 失败。
 
 v2.4A 只建立一个 Provider-independent 的合同、确定性 Dataset 和 Oracle。它不接入新的
-Planner 控制循环，不修改 prompt、Tool 选择或执行器。
+Planner 控制循环，不修改 prompt、Tool 选择或执行器。v2.4A-2c 进一步校准了请求路由、
+目标别名和信息不足策略；这些校准仍然不改变生产 Planner 的实现。
 
 ## 2. 合同
 
-### 2.1 计划模式
+### 2.1 请求边界与计划模式
 
-每个请求必须被归入一个明确模式：
+当前生产职责边界是：
 
-- `chat`: 不需要执行计划，`tasks=[]` 且不 abstain；
+```text
+User Request
+    ↓
+Intent / Execution Need Boundary
+    ├── CHAT ─────────────→ Answer
+    ├── NEED_CLARIFICATION → Ask
+    └── PLANNING ──────────→ Planner
+                                  ├── PLAN
+                                  └── ABSTAIN
+```
+
+因此，Chat 不属于当前 Planner。Planner 只接收已经确定需要目标分解的请求，当前
+Planner 输出模式为：
+
 - `plan`: 至少有一个任务，且不 abstain；
 - `abstain`: 不猜测缺失目标，`tasks=[]` 且 `abstain=true`。
+
+原 v1 Dataset 中的 `chat` mode 仍作为不可变历史基线保留；在 v1.1 calibrated view
+中，PA001–PA004 标记为 `routing` ownership，由独立 Routing Dataset 验证，不计入
+Planner decomposition capability。
 
 ### 2.2 Goal unit 与 Task
 
@@ -52,13 +70,33 @@ Planner 输出仍使用项目唯一的 canonical `Task` 模型。Oracle 只检�
 
 ## 3. Dataset / Oracle
 
-唯一 Dataset 来源是：
+v2.4A-2c 之后，Dataset 来源按职责拆分为：
 
 ```text
 evals/planner/dataset.json
+evals/planner/dataset_v1_1.py
+evals/planner/target_aliases_v1_1.json
+evals/routing/dataset.json
+evals/uncertainty/dataset.json
 ```
 
-版本为 `v2.4A-planner-v1`，共 50 个 case，覆盖：
+`evals/planner/dataset.json` 是版本 `v2.4A-planner-v1` 的 50-case immutable baseline，
+hash 为：
+
+```text
+7f5b28f608194a324f4244c860a8ed9101bcb7afa3b68e5129632ebfb0290291
+```
+
+它的原始 case 和 hash 不被 v1.1 重写。v1.1 是由 v1 派生的校准视图，保留 50 个 case，
+其中 46 个为 `planner` ownership、4 个为 `routing` ownership；加入的 target alias
+必须属于标准缩写、全称、中英文标准名称或常见同义表达，不得根据 Provider 的某次
+实际输出逐条抄录。v1.1 hash 为：
+
+```text
+8c268b5855d109c7a2be940257ae0acf7edc877793dd5914cc020ae380aae023
+```
+
+Planner v1.1 仍覆盖原有以下 family：
 
 | Family | 场景 | 例数 |
 | --- | --- | ---: |
@@ -75,18 +113,30 @@ evals/planner/dataset.json
 | P11 | 并行分支 | 5 |
 | P12 | 部分完成 / Resume | 5 |
 
-总计 50 个 case。Oracle 提供 canonical golden plan、结构校验、目标匹配、依赖校验、
-约束校验和稳定 JSON 报告；同一输入不得依赖 LLM 解释来决定是否通过。
+总计 50 个 case。Planner Oracle 提供 canonical golden plan、结构校验、目标匹配、依赖
+校验、约束校验和稳定 JSON 报告；同一输入不得依赖 LLM 解释来决定是否通过。v1.1 的
+aliases 只改变明确登记的 text target 等价匹配，不改变 v1 的结构合同。
 
-当前冻结 Dataset hash：
+Chat ownership 由 Routing Dataset 独立验证：4 个 case，hash 为：
 
 ```text
-7f5b28f608194a324f4244c860a8ed9101bcb7afa3b68e5129632ebfb0290291
+f3aea7b4cecdcd1997a7716f9c3e7b2396efa2ff6fb3e6b1721784135d345458
 ```
+
+其硬约束是 `CHAT`、不调用 Planner、且不要求执行。
+
+信息不足由独立 Uncertainty Dataset 验证，共 27 个 case，hash 为：
+
+```text
+8f1479bdded0f00e20fd4d283082869d078b4fa217719dc768ae8a6afaaf1cdb
+```
+
+其中包含成对的可继续/应澄清边界；它测量 abstain policy，不把结果归因给 Planner。
 
 ## 4. 指标
 
-所有指标由 per-case Oracle record 聚合得到：
+Planner 指标只对 Planner-owned cases 聚合得到；Routing 与 Uncertainty 使用各自的
+deterministic Oracle。Planner 指标包括：
 
 - `schema_validity`: 计划任务是否符合 canonical Task 结构；
 - `dependency_validity`: 依赖是否存在、顺序合法且无环；
@@ -104,10 +154,10 @@ evals/planner/dataset.json
 
 ## 5. Acceptance gate
 
-后续真实 Planner 运行至少必须满足：
+后续真实 Planner 运行至少必须满足（只针对 Planner-owned cases）：
 
 ```text
-case_count                         >= 50
+planner_case_count                 >= 46
 schema_validity                    = 100%
 dependency_validity                = 100%
 plan_validity                      = 100%
@@ -142,11 +192,37 @@ overplanning_rate           0%
 这份结果不代表真实 Provider 或生产 Planner 已达到上述 gate。真实 Planner acceptance
 必须使用相同 Dataset、相同 Oracle 和独立的 Provider evidence。
 
+v2.4A-2c calibration evidence 使用以下确定性命令生成：
+
+```bash
+python3 realtest_reports/harness/v24a_contract_calibration.py
+python3 realtest_reports/harness/v24a_uncertainty.py
+```
+
+校准结果应明确区分：
+
+- v1 immutable baseline self-check；
+- v1.1 alias/ownership self-check；
+- Routing ownership self-check；
+- 当前生产 uncertainty detector baseline。
+
+Uncertainty detector 的 mismatch 记录为 `P-UNCERTAINTY`，不会被包装成 Planner failure，
+也不会因为该 baseline 而修改 Planner prompt。
+
+本次校准记录的当前 production-policy baseline 为 `20/27`：abstain precision `85.7%`、
+recall `50.0%`、false abstention rate `6.7%`、missed abstention rate `50.0%`。这组数值是
+后续 Uncertainty Policy 改进的起点，不是 v2.4A Planner capability acceptance 结果。
+
 ## 7. 后续边界
 
-v2.4A-2 才接入真实 Planner，采集每个 case 的 raw plan、Provider、模型、prompt/fixture
-hash 和 latency。不得在真实 acceptance 过程中修改 Dataset、Oracle 或 prompt 后覆盖原始
-结果。
+v2.4A-2d 才在校准后的 Planner-owned Dataset 上重新接入真实 Planner，采集每个 case 的
+raw plan、Provider、模型、prompt/fixture hash 和 latency。旧 v1 baseline 只可作为历史
+对照，不能用 v1.1 Oracle 的重评分结果冒充新的 capability evidence。真实 acceptance
+过程中不得修改 Dataset、Oracle 或 prompt 后覆盖原始结果。
+
+PA013 与 PA016 保留为 Planner Capability Watchlist。只有在 v1.1 contract、Oracle 和
+Uncertainty 校准后的新一轮 Provider evidence 中形成同一 failure family，才进入
+v2.4A-3 Planner Improvement。
 
 v2.4B 再处理 Tool Selection / ReAct；v2.4C 处理 Workflow 编排；v2.4D 处理 Memory
 Learning。它们不应反向扩大本 ADR 的 Planner 结构合同。

@@ -198,13 +198,18 @@ def _norm(value: object) -> str:
 
 
 def _target_matches(unit: Mapping[str, Any], task: Mapping[str, Any]) -> bool:
-    expected = _norm(unit.get("target", ""))
     actual = _norm(task.get("target", ""))
     if str(unit.get("target_type", "")) != str(task.get("target_type", "")):
         return False
     if str(unit.get("target_type", "")) == "text":
-        return bool(expected) and (expected in actual or actual in expected)
-    return expected == actual
+        targets = [unit.get("target", "")]
+        targets.extend(unit.get("target_aliases", []) or [])
+        return any(
+            bool(_norm(target))
+            and (_norm(target) in actual or actual in _norm(target))
+            for target in targets
+        )
+    return _norm(unit.get("target", "")) == actual
 
 
 def _structural(tasks: object) -> tuple[bool, bool, list[dict[str, Any]], list[str]]:

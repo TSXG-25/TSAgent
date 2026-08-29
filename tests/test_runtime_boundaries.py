@@ -1,5 +1,6 @@
 """Regression tests for the unified runtime and context/metric boundaries."""
 import asyncio
+from types import SimpleNamespace
 import pytest
 from langchain_core.messages import HumanMessage
 
@@ -9,7 +10,9 @@ from agent.context import (
     ReflectionContext,
     RuntimeContext,
 )
+from agent.orchestrator.context_builder import ContextBuilder
 from agent.cognition import CognitiveContext
+from agent.cognition.cognitive_context import ConversationState
 from agent.decision import DecisionInput
 from agent.executor.contract import executor_factory
 from agent.orchestrator.executor import ExecutionStage
@@ -125,6 +128,108 @@ def test_planner_context_is_the_named_compatible_planning_view():
     planner = PlannerContext(query="inspect")
     assert isinstance(planner, CognitiveContext)
     assert planner.short_summary() == "无上下文"
+
+
+def test_context_builder_projects_resume_state_without_runtime_payloads():
+    orchestrator = SimpleNamespace(
+        run_context=SimpleNamespace(workspace=None),
+        session_context=SimpleNamespace(memory_view=None),
+        _conversation_state=ConversationState(),
+    )
+    state = {
+        "plan": [
+            {
+                "id": "task-read",
+                "verb": "read",
+                "target": "input/source.txt",
+                "target_type": "file",
+                "status": "succeeded",
+                "dependencies": [],
+                "description": "must not cross the planning boundary",
+                "inputs": {"secret": "not a planner fact"},
+                "observations": [{"summary": "source loaded"}],
+            },
+            {
+                "id": "task-write",
+                "verb": "write",
+                "target": "output/summary.md",
+                "target_type": "file",
+                "status": "pending",
+                "dependencies": ["task-read"],
+            },
+            {
+                "id": "task-verify",
+                "verb": "execute",
+                "target": "pytest",
+                "target_type": "text",
+                "status": "pending",
+                "dependencies": ["task-write"],
+            },
+        ],
+        "current_task_index": 1,
+        "artifacts": {
+            "artifact-a": {
+                "artifact_id": "artifact-a",
+                "path": "/private/secret/source.txt",
+            },
+        },
+        "goal_evidence": [{"detail": "read verified", "source": "verifier"}],
+    }
+
+    context = ContextBuilder(orchestrator).build(
+        user_input="继续完成摘要",
+        user_id="user-a",
+        context={"facts": ""},
+        repo_context="",
+        state=state,
+    )
+
+    assert context.completed_tasks == ({
+        "id": "task-read",
+        "verb": "read",
+        "target": "input/source.txt",
+        "target_type": "file",
+        "status": "succeeded",
+        "dependencies": [],
+    },)
+    assert [item["id"] for item in context.continuation_scope] == [
+        "task-write", "task-verify",
+    ]
+    assert context.continuation_scope[0]["dependencies"] == []
+    assert context.continuation_scope[1]["dependencies"] == ["task-write"]
+    assert context.established_facts == ("task-read: source loaded", "read verified")
+    assert context.available_artifacts == ("artifact-a",)
+    assert all(
+        key not in context.completed_tasks[0]
+        for key in ("description", "inputs", "observations", "error")
+    )
+
+
+def test_planner_context_projection_renderer_excludes_executor_details():
+    from agent.planner.planner import PlannerPromptBuilder
+
+    context = PlannerContext(
+        query="继续",
+        completed_tasks=(
+            {"id": "g1", "verb": "read", "target": "input/source.txt",
+             "target_type": "file", "status": "succeeded", "dependencies": []},
+        ),
+        established_facts=("source loaded",),
+        available_artifacts=("artifact-a",),
+        continuation_scope=(
+            {"id": "g2", "verb": "write", "target": "output/summary.md",
+             "target_type": "file", "status": "pending", "dependencies": []},
+        ),
+    )
+
+    rendered = PlannerPromptBuilder.render_planning_context(context)
+
+    assert "g1" in rendered
+    assert "output/summary.md" in rendered
+    assert "source loaded" in rendered
+    assert "artifact-a" in rendered
+    assert "description" not in rendered
+    assert "secret" not in rendered
 
 
 def test_reflection_and_decision_consume_narrow_context_views():

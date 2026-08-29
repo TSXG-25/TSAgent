@@ -1097,12 +1097,16 @@ class PlannerStage:
             return state, "FINISH", message
 
         # ── Stage 0: 构建 CognitiveContext ──
+        # A resumed PLAN must consume the current Runtime projection.  The
+        # Planner receives only ContextBuilder's narrow fields; it never sees
+        # the raw checkpoint payload.
+        context_state = runtime_state if runtime_state is not None else state
         planner_context = self._orch._context_builder.build(
             user_input=user_input,
             user_id=user_id,
             context=context,
             repo_context=repo_context,
-            state=state,
+            state=context_state,
             context_policy=context_policy,
         )
         print(f"  🧠 规划上下文: {planner_context.short_summary()}")
@@ -1633,6 +1637,7 @@ class PlannerStage:
                         planner_input, planning_memory,
                         repo_context, skill_hint, None,
                         grounding=grounding_ctx,
+                        planning_context=planner_context,
                     )
                     planner_failure = _apply_planner_failure(state, plan_output)
                     if planner_failure is not None:
@@ -1747,6 +1752,7 @@ class PlannerStage:
                     skill_hint,
                     None,
                     grounding=grounding_ctx,
+                    planning_context=planner_context,
                 )
                 planner_failure = _apply_planner_failure(state, plan_output)
                 if planner_failure is not None:

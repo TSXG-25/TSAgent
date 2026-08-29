@@ -1,6 +1,6 @@
 # ADR-0029: Planner Capability Contract（v2.4A）
 
-- 状态: Accepted — v2.4A-3 Candidate Evaluated（未冻结）
+- 状态: Accepted — v2.4A-4 Context / Evidence Calibration（待 clean freeze）
 - 范围: Planner 的目标分解、任务结构和依赖质量评测
 - 前置基线: v2.3 Runtime / Service / Desktop 能力已冻结；本 ADR 不改变生产执行路径
 
@@ -274,3 +274,62 @@ v2.4A 冻结。另发现 PA005 的 `SUCCESS_WITH_PROVIDER_FALLBACK` 实际三次
 
 v2.4B 再处理 Tool Selection / ReAct；v2.4C 处理 Workflow 编排；v2.4D 处理 Memory
 Learning。它们不应反向扩大本 ADR 的 Planner 结构合同。
+
+## 10. v2.4A-4 合同校准：Continuation Projection 与 Evidence Semantics
+
+### 10.1 P12 continuation planning context
+
+Planner 可以负责 continuation/resume 的剩余目标分解，但只能消费 Runtime 投影后的
+`PlannerContext`。生产 `ContextBuilder` 从当前 Runtime plan 派生以下只读字段：
+
+```text
+completed_tasks       = 已达到 succeeded/skipped 的任务描述
+established_facts     = 已记录的紧凑观察事实
+available_artifacts   = opaque Artifact identity
+continuation_scope    = 未完成任务及 active task 之间的依赖
+```
+
+任务描述最多包含 `id`、`verb`、`target`、`target_type`、`status` 和
+`dependencies`。Planner 不接收原始 Checkpoint、完整 Runtime state、Executor inputs、
+错误详情或文件绝对路径。`plan_with_metadata(..., planning_context=...)` 只渲染这组
+投影；未续接的普通 Planner 请求保持原有输入边界。
+
+P12 的 `completed_units` 是 durable-state fixture 的来源，不是额外的 Planner golden
+answer。真实 Runtime 必须通过同一 projection 提供已完成任务和剩余 scope；direct
+Planner harness 未提供该 projection 的旧结果只能作为历史对照，不能证明 continuation
+contract 已被验证。
+
+### 10.2 Provider 与格式路径分离
+
+Real-provider evidence 使用两个正交字段，不再将同 Provider 的格式降级称为 Provider
+fallback：
+
+```text
+provider_path:
+  SINGLE_PROVIDER
+  CROSS_PROVIDER_FALLBACK
+  NOT_CALLED
+  UNRESOLVED
+
+format_path:
+  STRUCTURED_ONLY
+  STRUCTURED_TO_RAW_FALLBACK
+  RAW_ONLY
+  NOT_CALLED
+  UNRESOLVED
+```
+
+因此 structured bind/invoke 失败后仍由同一 DeepSeek raw-text 调用成功，记录为：
+
+```text
+provider_path = SINGLE_PROVIDER
+format_path   = STRUCTURED_TO_RAW_FALLBACK
+```
+
+只有观察到两个确定的 Provider 身份时，才记录 `CROSS_PROVIDER_FALLBACK`。auto router
+无法从透明 harness wrapper 解析真实 Provider 顺序时必须记录 `UNRESOLVED`，不能猜测。
+
+旧 v2.4A-2d/3 raw evidence 保持原样，不重新命名或重算。最终 freeze 必须在提交后的
+clean checkout 运行，并同时保留历史 mechanical score 与 semantic attribution；本节
+只解决输入上下文和证据口径，不引入新的 Planner subsystem、Dataset case 或 case-specific
+规则。

@@ -10,7 +10,7 @@ CognitiveContext 是纯数据容器，零方法、零 import 外部服务。
 3. 下游模块只读，不修改
 """
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Any, Optional
 from collections import deque
 
 
@@ -301,4 +301,16 @@ class PlannerContext(CognitiveContext):
     This compatibility subtype keeps the frozen CognitiveContext contract
     valid for existing Resolver/Intent callers while making the Runtime's
     phase boundary explicit.
+
+    The continuation fields below are a narrow Runtime projection.  They are
+    intentionally separate from ``plan``/``task`` so a Planner can learn what
+    has already been established without receiving a raw checkpoint or the
+    mutable Runtime state dump.
     """
+
+    # Runtime-projected task facts used by continuation/resume planning.  The
+    # dictionaries contain only id/verb/target/target_type/status/dependencies.
+    completed_tasks: tuple[dict[str, Any], ...] = field(default_factory=tuple)
+    established_facts: tuple[str, ...] = field(default_factory=tuple)
+    available_artifacts: tuple[str, ...] = field(default_factory=tuple)
+    continuation_scope: tuple[dict[str, Any], ...] = field(default_factory=tuple)

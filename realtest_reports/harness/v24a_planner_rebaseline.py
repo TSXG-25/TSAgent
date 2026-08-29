@@ -33,9 +33,71 @@ if str(HARNESS_DIR) not in sys.path:
 
 DEFAULT_JSON = ROOT / "realtest_reports" / "results" / "v24a_planner_rebaseline.json"
 DEFAULT_MARKDOWN = ROOT / "realtest_reports" / "results" / "v24a_planner_rebaseline.md"
-HARNESS_VERSION = "v2.4A-2d-real-planner-rebaseline-v1"
+HARNESS_VERSION = "v2.4A-2d-real-planner-rebaseline-v2"
 DATASET_HASH = "8c268b5855d109c7a2be940257ae0acf7edc877793dd5914cc020ae380aae023"
 ROUTING_CASE_IDS = frozenset({"PA001", "PA002", "PA003", "PA004"})
+
+
+def _p12_planning_context(case: Mapping[str, Any]) -> Any | None:
+    """Build the same narrow projection a resumed Runtime would expose.
+
+    The Dataset remains unchanged.  P12 metadata supplies a deterministic
+    durable-state fixture; only task descriptors are passed to production
+    Planner code, never the golden plan or raw checkpoint-like payload.
+    """
+
+    if str(case.get("family", "")) != "P12":
+        return None
+    units = {
+        str(unit.get("id", "")): unit
+        for unit in case.get("goal_units", []) or []
+        if isinstance(unit, Mapping)
+    }
+    completed_ids = {
+        str(value) for value in case.get("completed_units", []) or []
+    }
+    active_ids = set(units) - completed_ids
+
+    def descriptor(unit: Mapping[str, Any], status: str, dependencies: list[str]) -> dict[str, Any]:
+        verbs = unit.get("verbs", []) or []
+        return {
+            "id": str(unit.get("id", "")),
+            "verb": str(verbs[0]) if verbs else "",
+            "target": str(unit.get("target", "") or ""),
+            "target_type": str(unit.get("target_type", "") or ""),
+            "status": status,
+            "dependencies": dependencies,
+        }
+
+    completed_tasks = tuple(
+        descriptor(
+            units[unit_id],
+            "succeeded",
+            [str(value) for value in units[unit_id].get("depends_on", []) or []],
+        )
+        for unit_id in case.get("completed_units", []) or []
+        if str(unit_id) in units
+    )
+    continuation_scope = tuple(
+        descriptor(
+            unit,
+            "pending",
+            [
+                str(value)
+                for value in unit.get("depends_on", []) or []
+                if str(value) in active_ids
+            ],
+        )
+        for unit_id, unit in units.items()
+        if unit_id in active_ids
+    )
+    from agent.cognition.cognitive_context import PlannerContext
+
+    return PlannerContext(
+        query=str(case.get("input", "")),
+        completed_tasks=completed_tasks,
+        continuation_scope=continuation_scope,
+    )
 
 
 def _build_attribution(records: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
@@ -223,6 +285,7 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
                 planner_module=planner_module,
                 production_llm=production_llm,
                 case_timeout=float(args.case_timeout),
+                planning_context=_p12_planning_context(case),
             )
             record["ownership"] = "planner"
             records.append(record)
@@ -259,6 +322,7 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
             "case_timeout_seconds": float(args.case_timeout),
             "uncertainty_policy_in_planner_score": False,
             "routing_cases_excluded": sorted(ROUTING_CASE_IDS),
+            "p12_context_projection": "Runtime PlannerContext projection enabled for P12 cases",
         },
         "case_selection": {
             "requested_ids": sorted(selected_ids) if selected_ids is not None else None,
@@ -307,6 +371,18 @@ def _markdown(report: Mapping[str, Any]) -> str:
         f"| Average / P95 tasks | {summary.get('average_task_count', 0.0):.2f} / {summary.get('p95_task_count', '—')} |",
         f"| Average / P95 latency | {float(summary.get('average_latency_ms', 0.0)):.0f}ms / {summary.get('p95_latency_ms', '—')} |",
         "",
+        "## Provider and format paths",
+        "",
+        f"- Provider path counts: `{json.dumps(summary.get('provider_path_counts', {}), ensure_ascii=False, sort_keys=True)}`",
+        f"- Format path counts: `{json.dumps(summary.get('format_path_counts', {}), ensure_ascii=False, sort_keys=True)}`",
+        f"- Cross-provider fallback cases: `{', '.join(summary.get('provider_fallback_case_ids', [])) or 'none'}`",
+        f"- Structured-to-raw cases: `{', '.join(summary.get('format_fallback_case_ids', [])) or 'none'}`",
+        "",
+        "## Continuation context",
+        "",
+        "P12 cases receive a narrow `PlannerContext` projection derived from the durable-state fixture; the raw Dataset case and golden plan are not passed to production Planner.",
+        f"- Projection cases: `{', '.join(record.get('case_id', '') for record in report.get('cases', []) if (record.get('planning_context') or {}).get('provided')) or 'none'}`",
+        "",
         "## Failure separation",
         "",
         f"- Provider/API failures: **{summary.get('provider_error_count', 0)}**",
@@ -339,8 +415,8 @@ def _markdown(report: Mapping[str, Any]) -> str:
             "",
             "## Case results",
             "",
-            "| Case | Mode | Provider | Pass | Tasks | Latency | Failure |",
-            "| --- | --- | --- | :---: | ---: | ---: | --- |",
+            "| Case | Mode | Provider status | Provider path | Format path | Context | Pass | Tasks | Latency | Failure |",
+            "| --- | --- | --- | --- | --- | :---: | :---: | ---: | ---: | --- |",
         ]
     )
     for record in report.get("cases", []):
@@ -351,6 +427,8 @@ def _markdown(report: Mapping[str, Any]) -> str:
         lines.append(
             f"| {record.get('case_id', '—')} | {record.get('expected_mode', '—')} | "
             f"{record.get('provider_status', '—')} | "
+            f"{record.get('provider_path', '—')} | {record.get('format_path', '—')} | "
+            f"{'yes' if (record.get('planning_context') or {}).get('provided') else 'no'} | "
             f"{'✅' if record.get('passed') else '❌'} | "
             f"{oracle.get('predicted_task_count', '—')} | "
             f"{float(record.get('latency_ms', 0.0)):.0f}ms | {failure} |"
@@ -362,6 +440,8 @@ def _markdown(report: Mapping[str, Any]) -> str:
             "",
             "- Provider/API, contract/oracle, and runtime failures are reported separately from Planner capability.",
             "- Each selected case is submitted once; internal production fallback calls, if any, are recorded as evidence and are not altered.",
+            "- Provider selection and response-format fallback are reported as separate evidence dimensions.",
+            "- P12 continuation cases receive only the Runtime-projected completed/remaining task scope.",
             "- Deterministic pre-Planner abstentions are classified as P-UNCERTAINTY and excluded from the Planner capability denominator.",
             "- No golden plan, case-specific correction, or JSON repair is used in the Planner score.",
             "- A new capability score requires this real run; v1.0 results are not re-scored in place.",

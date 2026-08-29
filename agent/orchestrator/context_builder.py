@@ -8,7 +8,8 @@
 Phase C.1：从 orchestrator.py 的 _build_cognitive_context / _render_context / _update_conversation_state 迁移。
 """
 from datetime import datetime
-from typing import Dict, Optional
+from enum import Enum
+from typing import Any, Dict, Mapping, Optional
 
 from agent.state import AgentState
 from agent.services import MemoryService
@@ -16,6 +17,108 @@ from agent.cognition.cognitive_context import ConversationState
 from agent.context.contracts import PlannerContext
 from agent.cognition.intent_schema import IntentResult
 from agent.context_policy import ContextPolicy
+
+
+_COMPLETED_TASK_STATUSES = frozenset({"succeeded", "skipped"})
+
+
+def _task_projection(
+    task: Mapping[str, Any],
+    *,
+    dependencies: Optional[list[str]] = None,
+) -> dict[str, Any]:
+    """Project one Runtime task into the Planner continuation contract.
+
+    Descriptions, inputs, observations, errors and policy are deliberately
+    excluded.  They are Runtime/Executor details, not Planner facts.
+    """
+
+    raw_verb = task.get("verb", "")
+    verb = raw_verb.value if isinstance(raw_verb, Enum) else str(raw_verb or "")
+    task_dependencies = dependencies
+    if task_dependencies is None:
+        task_dependencies = [
+            str(value)
+            for value in task.get("dependencies", []) or []
+        ]
+    return {
+        "id": str(task.get("id", "")),
+        "verb": verb,
+        "target": str(task.get("target", "") or ""),
+        "target_type": str(task.get("target_type", "") or ""),
+        "status": str(task.get("status", "pending") or "pending"),
+        "dependencies": list(task_dependencies),
+    }
+
+
+def _continuation_projection(
+    plan: object,
+) -> tuple[tuple[dict[str, Any], ...], tuple[dict[str, Any], ...]]:
+    """Return completed tasks and the remaining active task scope."""
+
+    if not isinstance(plan, list):
+        return (), ()
+    tasks = [item for item in plan if isinstance(item, Mapping)]
+    active_ids = {
+        str(task.get("id", ""))
+        for task in tasks
+        if str(task.get("status", "pending") or "pending")
+        not in _COMPLETED_TASK_STATUSES
+    }
+    completed: list[dict[str, Any]] = []
+    remaining: list[dict[str, Any]] = []
+    for task in tasks:
+        status = str(task.get("status", "pending") or "pending")
+        if status in _COMPLETED_TASK_STATUSES:
+            completed.append(_task_projection(task))
+        else:
+            dependencies = [
+                str(value)
+                for value in task.get("dependencies", []) or []
+                if str(value) in active_ids
+            ]
+            remaining.append(_task_projection(task, dependencies=dependencies))
+    return tuple(completed), tuple(remaining)
+
+
+def _established_fact_projection(state: Mapping[str, Any]) -> tuple[str, ...]:
+    """Collect compact, already-recorded observations for planning only."""
+
+    facts: list[str] = []
+    for task in state.get("plan", []) or []:
+        if not isinstance(task, Mapping):
+            continue
+        task_id = str(task.get("id", ""))
+        for observation in task.get("observations", []) or []:
+            if not isinstance(observation, Mapping):
+                continue
+            summary = str(observation.get("summary", "") or "").strip()
+            if summary:
+                facts.append(f"{task_id}: {summary[:300]}")
+    for evidence in state.get("goal_evidence", []) or []:
+        if not isinstance(evidence, Mapping):
+            continue
+        detail = str(evidence.get("detail", "") or "").strip()
+        if detail:
+            facts.append(detail[:300])
+    return tuple(dict.fromkeys(facts))
+
+
+def _artifact_reference_projection(artifacts: object) -> tuple[str, ...]:
+    """Expose opaque artifact identities, never filesystem paths."""
+
+    if not isinstance(artifacts, Mapping):
+        return ()
+    references: list[str] = []
+    for key, value in artifacts.items():
+        if isinstance(value, Mapping):
+            reference = value.get("artifact_id", value.get("id", key))
+        else:
+            reference = key
+        rendered = str(reference or "").strip()
+        if rendered:
+            references.append(rendered)
+    return tuple(dict.fromkeys(references))
 
 
 class ContextBuilder:
@@ -86,6 +189,7 @@ class ContextBuilder:
 
         # 当前 plan / task
         plan = state.get("plan", [])
+        completed_tasks, continuation_scope = _continuation_projection(plan)
         current_task = None
         task_idx = state.get("current_task_index", 0)
         if plan and task_idx < len(plan):
@@ -93,6 +197,8 @@ class ContextBuilder:
 
         # Artifacts
         artifacts = state.get("artifacts", {})
+        established_facts = _established_fact_projection(state)
+        available_artifacts = _artifact_reference_projection(artifacts)
 
         # Memory facts
         memory = {
@@ -136,6 +242,10 @@ class ContextBuilder:
             memory=memory,
             memory_resolutions=memory_resolutions,
             artifacts=artifacts,
+            completed_tasks=completed_tasks,
+            established_facts=established_facts,
+            available_artifacts=available_artifacts,
+            continuation_scope=continuation_scope,
         )
 
     def update_conversation_state(

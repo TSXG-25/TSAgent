@@ -14,6 +14,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from agent.planner.constraint_extractor import extract_constraints, detect_abstention
 from agent.planner.schemas import TaskList
 from agent.task import Task
+from agent.cognition.cognitive_context import PlannerContext
 from agent.interruption import RunInterruptionRequested, await_interruptibly
 from agent.execution_errors import classify_execution_error, stable_error_message
 
@@ -72,6 +73,51 @@ class PlannerPromptBuilder:
         if not conversation:
             return ""
         return "## 当前上下文\n" + "\n".join(conversation[:6])
+
+    @staticmethod
+    def render_planning_context(planning_context: PlannerContext) -> str:
+        """Render only the Runtime's continuation projection.
+
+        This is deliberately not a generic ``state`` serializer.  The
+        Planner needs durable facts and remaining scope, not checkpoint
+        internals or executor payloads.
+        """
+
+        if not any((
+            planning_context.completed_tasks,
+            planning_context.established_facts,
+            planning_context.available_artifacts,
+            planning_context.continuation_scope,
+        )):
+            return ""
+
+        lines = [
+            "## 续接规划上下文（Runtime projection；仅把它当作已确认事实）",
+            "只规划剩余范围；已完成任务不得重复其工作或副作用。",
+        ]
+        if planning_context.completed_tasks:
+            lines.append("已完成任务：")
+            lines.extend(
+                "- {id}: {verb} {target} ({target_type}, status={status})".format(
+                    **task,
+                )
+                for task in planning_context.completed_tasks
+            )
+        if planning_context.established_facts:
+            lines.append("已建立事实：")
+            lines.extend(f"- {fact}" for fact in planning_context.established_facts)
+        if planning_context.available_artifacts:
+            lines.append("可用 Artifact 引用（opaque identity）：")
+            lines.extend(f"- {reference}" for reference in planning_context.available_artifacts)
+        if planning_context.continuation_scope:
+            lines.append("当前剩余范围：")
+            lines.extend(
+                "- {id}: {verb} {target} ({target_type}, status={status}; depends_on={dependencies})".format(
+                    **task,
+                )
+                for task in planning_context.continuation_scope
+            )
+        return "\n".join(lines)
 
 PLANNER_PROMPT = """你是一个目标分解专家。将用户请求分解为子任务列表。
 
@@ -196,6 +242,7 @@ async def plan_with_metadata(
     skill_hint: str = "",
     intent=None,
     grounding=None,
+    planning_context: Optional[PlannerContext] = None,
 ) -> PlanOutput:
     """v2 完整入口（v2.0-A Planning Quality）。
 
@@ -242,6 +289,13 @@ async def plan_with_metadata(
         conv_text = PlannerPromptBuilder.render_conversation(getattr(grounding, "conversation", []))
         if conv_text:
             sections.append(conv_text)
+
+    if planning_context is not None:
+        planning_context_text = PlannerPromptBuilder.render_planning_context(
+            planning_context
+        )
+        if planning_context_text:
+            sections.append(planning_context_text)
 
     prompt_text = "\n\n".join(sections)
     messages = [

@@ -33,7 +33,7 @@ if str(ROOT) not in sys.path:
 DATASET_PATH = ROOT / "evals" / "planner" / "dataset.json"
 DEFAULT_JSON = ROOT / "realtest_reports" / "results" / "v24a_planner_baseline.json"
 DEFAULT_MARKDOWN = ROOT / "realtest_reports" / "results" / "v24a_planner_baseline.md"
-HARNESS_VERSION = "v2.4A-2-real-planner-v1"
+HARNESS_VERSION = "v2.4A-2-real-planner-v2"
 CAPABILITY_SUBCATEGORIES = (
     "UNDER_PLAN",
     "OVER_PLAN",
@@ -475,6 +475,66 @@ def _failure_taxonomy(
     return "P-CAP", categories[0], categories, evidence
 
 
+def _provider_evidence(recorder: _CallRecorder) -> dict[str, Any]:
+    """Classify provider selection and response-format paths independently."""
+
+    if not recorder.calls:
+        return {
+            "provider_path": "NOT_CALLED",
+            "format_path": "NOT_CALLED",
+            "provider_sequence": [],
+            "resolved_provider_sequence": [],
+        }
+
+    provider_sequence = list(dict.fromkeys(
+        str(call.get("provider", "")).strip().lower()
+        for call in recorder.calls
+        if str(call.get("provider", "")).strip()
+    ))
+    unresolved_labels = {"", "unknown", "auto"}
+    resolved_provider_sequence = [
+        provider
+        for provider in provider_sequence
+        if provider not in unresolved_labels
+    ]
+    if len(resolved_provider_sequence) > 1:
+        provider_path = "CROSS_PROVIDER_FALLBACK"
+    elif len(resolved_provider_sequence) == 1 and not any(
+        provider in unresolved_labels for provider in provider_sequence
+    ):
+        provider_path = "SINGLE_PROVIDER"
+    else:
+        # The explicit acceptance harness uses a concrete provider mode.  If
+        # an auto router is supplied, its internal provider choice is not
+        # observable through this transparent wrapper, so do not guess.
+        provider_path = "UNRESOLVED"
+
+    structured_kinds = {"structured_bind", "structured_ainvoke"}
+    raw_kinds = {"router_ainvoke", "router_invoke"}
+    has_structured = any(
+        str(call.get("call_kind", "")) in structured_kinds
+        for call in recorder.calls
+    )
+    has_raw = any(
+        str(call.get("call_kind", "")) in raw_kinds
+        for call in recorder.calls
+    )
+    if has_structured and has_raw:
+        format_path = "STRUCTURED_TO_RAW_FALLBACK"
+    elif has_structured:
+        format_path = "STRUCTURED_ONLY"
+    elif has_raw:
+        format_path = "RAW_ONLY"
+    else:
+        format_path = "UNRESOLVED"
+    return {
+        "provider_path": provider_path,
+        "format_path": format_path,
+        "provider_sequence": provider_sequence,
+        "resolved_provider_sequence": resolved_provider_sequence,
+    }
+
+
 def _provider_status(recorder: _CallRecorder, output: Any | None) -> str:
     if not recorder.calls:
         return "NOT_CALLED"
@@ -482,9 +542,26 @@ def _provider_status(recorder: _CallRecorder, output: Any | None) -> str:
         return "PROVIDER_ERROR"
     if not recorder.successes:
         return "PROVIDER_ERROR"
-    if recorder.errors:
+    evidence = _provider_evidence(recorder)
+    if evidence["provider_path"] == "CROSS_PROVIDER_FALLBACK":
         return "SUCCESS_WITH_PROVIDER_FALLBACK"
+    if evidence["format_path"] == "STRUCTURED_TO_RAW_FALLBACK":
+        return "SUCCESS_WITH_FORMAT_FALLBACK"
+    if recorder.errors:
+        return "SUCCESS_WITH_RETRY"
     return "SUCCESS"
+
+
+def _planning_context_evidence(planning_context: Any | None) -> dict[str, Any]:
+    if planning_context is None:
+        return {"provided": False}
+    return {
+        "provided": True,
+        "completed_tasks": _json_safe(planning_context.completed_tasks),
+        "established_facts": _json_safe(planning_context.established_facts),
+        "available_artifacts": _json_safe(planning_context.available_artifacts),
+        "continuation_scope": _json_safe(planning_context.continuation_scope),
+    }
 
 
 async def _run_case(
@@ -493,6 +570,7 @@ async def _run_case(
     planner_module: Any,
     production_llm: Any,
     case_timeout: float,
+    planning_context: Any | None = None,
 ) -> dict[str, Any]:
     recorder = _CallRecorder()
     original_planner_llm = planner_module.llm
@@ -509,6 +587,7 @@ async def _run_case(
                 skill_hint="",
                 intent=None,
                 grounding=None,
+                planning_context=planning_context,
             ),
             timeout=case_timeout,
         )
@@ -517,6 +596,7 @@ async def _run_case(
     finally:
         planner_module.llm = original_planner_llm
 
+    provider_evidence = _provider_evidence(recorder)
     record: dict[str, Any] = {
         "case_id": str(case["id"]),
         "family": str(case.get("family", "")),
@@ -526,6 +606,10 @@ async def _run_case(
         "case_attempts": 1,
         "latency_ms": round((time.perf_counter() - started) * 1000, 3),
         "provider_status": _provider_status(recorder, output),
+        "provider_path": provider_evidence["provider_path"],
+        "format_path": provider_evidence["format_path"],
+        "provider_sequence": provider_evidence["provider_sequence"],
+        "resolved_provider_sequence": provider_evidence["resolved_provider_sequence"],
         "provider_calls": recorder.calls,
         "token_usage": recorder.token_totals(),
         "planner_output": _planner_record(output) if output is not None else None,
@@ -537,6 +621,7 @@ async def _run_case(
         "failure_subcategory": None,
         "failure_categories": [],
         "evidence": {},
+        "planning_context": _planning_context_evidence(planning_context),
     }
 
     if runtime_error is not None:
@@ -712,6 +797,8 @@ def _build_summary(records: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     )
     runtime_errors = sum(record.get("failure_category") == "P-INT" for record in records)
     oracle_errors = sum(record.get("failure_category") == "P-CON" for record in records)
+    provider_paths = Counter(str(record.get("provider_path", "UNRESOLVED")) for record in records)
+    format_paths = Counter(str(record.get("format_path", "UNRESOLVED")) for record in records)
     return {
         "case_count": len(records),
         "evaluable_case_count": len(evaluated),
@@ -740,6 +827,18 @@ def _build_summary(records: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         "provider_error_count": provider_errors,
         "runtime_integration_failure_count": runtime_errors,
         "contract_or_oracle_failure_count": oracle_errors,
+        "provider_path_counts": dict(sorted(provider_paths.items())),
+        "format_path_counts": dict(sorted(format_paths.items())),
+        "provider_fallback_case_ids": [
+            str(record.get("case_id", ""))
+            for record in records
+            if record.get("provider_path") == "CROSS_PROVIDER_FALLBACK"
+        ],
+        "format_fallback_case_ids": [
+            str(record.get("case_id", ""))
+            for record in records
+            if record.get("format_path") == "STRUCTURED_TO_RAW_FALLBACK"
+        ],
         "failure_clusters": dict(clusters),
         "failure_clusters_by_family": {
             family: dict(values) for family, values in family_clusters.items()
@@ -793,6 +892,13 @@ def _markdown(report: Mapping[str, Any]) -> str:
         f"| Average / P95 tasks | {summary['average_task_count']:.2f} / {summary['p95_task_count']} |",
         f"| Average / P95 latency | {summary['average_latency_ms']:.0f}ms / {summary['p95_latency_ms']:.0f}ms |",
         "",
+        "## Provider and format paths",
+        "",
+        f"- Provider path counts: `{json.dumps(summary.get('provider_path_counts', {}), ensure_ascii=False, sort_keys=True)}`",
+        f"- Format path counts: `{json.dumps(summary.get('format_path_counts', {}), ensure_ascii=False, sort_keys=True)}`",
+        f"- Cross-provider fallback cases: `{', '.join(summary.get('provider_fallback_case_ids', [])) or 'none'}`",
+        f"- Structured-to-raw cases: `{', '.join(summary.get('format_fallback_case_ids', [])) or 'none'}`",
+        "",
         "## Failure separation",
         "",
         f"- Provider/API failures: **{summary['provider_error_count']}**",
@@ -814,8 +920,8 @@ def _markdown(report: Mapping[str, Any]) -> str:
             "",
             "## Case results",
             "",
-            "| Case | Family | Mode | Provider | Pass | Tasks | Latency | Failure |",
-            "| --- | --- | --- | --- | :---: | ---: | ---: | --- |",
+            "| Case | Family | Mode | Provider status | Provider path | Format path | Pass | Tasks | Latency | Failure |",
+            "| --- | --- | --- | --- | --- | --- | :---: | ---: | ---: | --- |",
         ]
     )
     for record in report["cases"]:
@@ -826,6 +932,7 @@ def _markdown(report: Mapping[str, Any]) -> str:
         lines.append(
             f"| {record['case_id']} | {record['family']} | "
             f"{record['expected_mode']} | {record['provider_status']} | "
+            f"{record.get('provider_path', '—')} | {record.get('format_path', '—')} | "
             f"{'✅' if record.get('passed') else '❌'} | "
             f"{oracle.get('predicted_task_count', '—')} | "
             f"{float(record.get('latency_ms', 0.0)):.0f}ms | {failure} |"

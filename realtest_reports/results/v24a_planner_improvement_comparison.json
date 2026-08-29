@@ -1,0 +1,186 @@
+{
+  "version": "v2.4A-3",
+  "status": "CANDIDATE_EVALUATED_NOT_FROZEN",
+  "evaluation_scope": {
+    "planner_cases": 46,
+    "dataset_version": "v2.4A-planner-v1.1",
+    "dataset_hash": "8c268b5855d109c7a2be940257ae0acf7edc877793dd5914cc020ae380aae023",
+    "provider": "deepseek",
+    "model": "deepseek-v4-flash",
+    "automatic_case_retry": false,
+    "golden_plan_fallback": false,
+    "uncertainty_in_planner_score": false,
+    "evaluation_git_head": "6cf9e0d0016b0f95d1717581b22784f2776be470",
+    "evaluation_working_tree_dirty": true,
+    "runtime_dataset_oracle_changed": false
+  },
+  "baseline_2d": {
+    "report": "realtest_reports/results/v24a_planner_rebaseline_calibrated.json",
+    "evaluable_cases": 44,
+    "capability_pass": "20/44",
+    "capability_pass_rate": 0.4545454545,
+    "schema_validity": 0.9090909091,
+    "dependency_validity": 0.9090909091,
+    "executable_plan_rate": 0.4545454545,
+    "missing_task_rate": 0.3176470588,
+    "overplanning_rate": 0.6590909091,
+    "clarification_accuracy": 0.9090909091,
+    "average_task_count": 2.7045454545,
+    "p95_task_count": 6,
+    "provider_errors": 1,
+    "runtime_integration_failures": 0,
+    "contract_or_oracle_failures": 0,
+    "p_cap": 24,
+    "p_cap_clusters": {
+      "UNDER_PLAN": 20,
+      "MISSED_CLARIFICATION": 4
+    }
+  },
+  "improvement_iterations": [
+    {
+      "iteration": "round1",
+      "raw_report": "realtest_reports/results/v24a_planner_improvement_round1.json",
+      "calibrated_report": null,
+      "evaluable_cases": 44,
+      "capability_pass": "33/44",
+      "capability_pass_rate": 0.75,
+      "schema_validity": 0.9318181818,
+      "dependency_validity": 0.9318181818,
+      "executable_plan_rate": 0.75,
+      "missing_task_rate": 0.1547619048,
+      "overplanning_rate": 0.3863636364,
+      "clarification_accuracy": 0.9318181818,
+      "average_task_count": 2.1818181818,
+      "p95_task_count": 5,
+      "provider_errors": 2,
+      "runtime_integration_failures": 0,
+      "contract_or_oracle_failures": 0,
+      "p_cap": 11,
+      "p_cap_clusters": {
+        "UNDER_PLAN": 8,
+        "MISSED_CLARIFICATION": 2,
+        "FALSE_CLARIFICATION": 1
+      },
+      "interpretation": "provisional first iteration; later rounds apply the final deterministic uncertainty calibration"
+    },
+    {
+      "iteration": "round2",
+      "raw_report": "realtest_reports/results/v24a_planner_improvement_round2.json",
+      "calibrated_report": "realtest_reports/results/v24a_planner_improvement_round2_calibrated.json",
+      "evaluable_cases": 45,
+      "capability_pass": "35/45",
+      "capability_pass_rate": 0.7777777778,
+      "schema_validity": 1.0,
+      "dependency_validity": 1.0,
+      "executable_plan_rate": 0.7777777778,
+      "missing_task_rate": 0.1647058824,
+      "overplanning_rate": 0.4222222222,
+      "clarification_accuracy": 1.0,
+      "average_task_count": 2.2222222222,
+      "p95_task_count": 5,
+      "provider_errors": 1,
+      "runtime_integration_failures": 0,
+      "contract_or_oracle_failures": 0,
+      "p_cap": 10,
+      "p_cap_clusters": {
+        "UNDER_PLAN": 10
+      }
+    },
+    {
+      "iteration": "round3_candidate",
+      "raw_report": "realtest_reports/results/v24a_planner_improvement_round3.json",
+      "calibrated_report": "realtest_reports/results/v24a_planner_improvement_round3_calibrated.json",
+      "evaluable_cases": 45,
+      "capability_pass": "37/45",
+      "capability_pass_rate": 0.8222222222,
+      "schema_validity": 1.0,
+      "dependency_validity": 1.0,
+      "executable_plan_rate": 0.8222222222,
+      "missing_task_rate": 0.1294117647,
+      "overplanning_rate": 0.3555555556,
+      "clarification_accuracy": 1.0,
+      "average_task_count": 2.1555555556,
+      "p95_task_count": 4,
+      "average_latency_ms": 9987.8821522,
+      "p95_latency_ms": 35275.092,
+      "provider_errors": 1,
+      "runtime_integration_failures": 0,
+      "contract_or_oracle_failures": 0,
+      "p_cap": 8,
+      "p_cap_clusters": {
+        "UNDER_PLAN": 8
+      },
+      "p_cap_case_ids": [
+        "PA016",
+        "PA018",
+        "PA021",
+        "PA023",
+        "PA029",
+        "PA042",
+        "PA046",
+        "PA049"
+      ]
+    }
+  ],
+  "delta_baseline_to_round3": {
+    "capability_pass_rate_percentage_points": 36.8,
+    "schema_validity_percentage_points": 9.1,
+    "dependency_validity_percentage_points": 9.1,
+    "executable_plan_rate_percentage_points": 36.8,
+    "missing_task_rate_percentage_points": -18.8,
+    "overplanning_rate_percentage_points": -30.4,
+    "clarification_accuracy_percentage_points": 9.1,
+    "average_task_count_delta": -0.55,
+    "p95_task_count_delta": -2,
+    "p_cap_delta": -16
+  },
+  "remaining_evidence": {
+    "round3_provider_error_case_ids": ["PA012"],
+    "round3_runtime_integration_failure_case_ids": [],
+    "round3_contract_or_oracle_failure_case_ids": [],
+    "round3_p_cap_case_ids": [
+      "PA016",
+      "PA018",
+      "PA021",
+      "PA023",
+      "PA029",
+      "PA042",
+      "PA046",
+      "PA049"
+    ],
+    "watchlist_notes": {
+      "PA016": "multi-action modification plan still omits a required test/documentation unit",
+      "PA018": "combined research/explanation target remains semantically under-covered",
+      "PA021": "research explanation target wording remains too broad or mismatched",
+      "PA023": "research explanation target wording remains too broad or mismatched",
+      "PA029": "search-plus-modification plan still misses a required target boundary",
+      "PA042": "comparison explanation target remains semantically under-covered",
+      "PA046": "resume/context-bound plan remains under-covered",
+      "PA049": "context-dependent modification request remains under-specified by the input"
+    },
+    "observed_provider_status_anomaly": {
+      "case_ids": ["PA005"],
+      "status": "SUCCESS_WITH_PROVIDER_FALLBACK",
+      "note": "Harness control provider_fallback=false, but the production evidence records this status; retained for provider-path audit and not counted as Planner capability failure"
+    }
+  },
+  "uncertainty_policy_separate": {
+    "report": "realtest_reports/results/v24a_uncertainty_after_planner_hardening.json",
+    "cases": 27,
+    "passed": 26,
+    "abstain_precision": 1.0,
+    "abstain_recall": 0.9166666667,
+    "false_abstention_rate": 0.0,
+    "missed_abstention_rate": 0.0833333333,
+    "remaining_case": "U007",
+    "status": "NEEDS_POLICY_WORK",
+    "excluded_from_planner_capability_score": true
+  },
+  "freeze_decision": {
+    "status": "NOT_FROZEN",
+    "reason": "Round 3 materially improves completeness and clarification, but missing_task_rate=12.9% and overplanning_rate=35.6% remain above the ADR gate targets; remaining P-CAP cases require joint review before any further Planner change",
+    "dataset_oracle_runtime_changes": false,
+    "raw_reports_preserved": true,
+    "next_decision": "review remaining P-CAP anatomy before deciding whether v2.4A-3b is justified"
+  }
+}

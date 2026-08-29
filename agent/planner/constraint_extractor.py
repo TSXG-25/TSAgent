@@ -30,8 +30,34 @@ _SCOPE_ONLY_RE = re.compile(
     r"[^，。；;\n]*?([\w./-]+)"
 )
 # 模糊指示词（无具体目标时的信息不足信号）
-_VAGUE_RE = re.compile(r"那个|这个|那(?:个|个文件|个函数|个模块|个东西)|它", re.I)
+_VAGUE_RE = re.compile(
+    r"那个|这个|那(?:个|个文件|个函数|个模块|个东西)|它|那里|这里|某处|某个地方",
+    re.I,
+)
+# 无指示词但缺少必要对象/目的地的动作，同样不能交给 Planner 猜测。
+_VAGUE_ACTION_RE = re.compile(
+    r"(?:加|新增|增加|实现|开发)\s*(?:个|一个)?\s*功能"
+    r"|部署到\s*(?:那里|这里|某处|某个地方)"
+    r"|(?:把|将).{0,24}(?:保存|导出|发送|发出去|发布|删除|修改|改动|改)"
+    r"(?:一下|出去)?\s*[。！？!?]*$"
+    r"|(?:按|按照).{0,24}(?:之前|上次|原来).{0,24}(?:方案|计划).{0,12}(?:改|做|继续)"
+    r"\s*[。！？!?]*$",
+    re.I,
+)
 _FILE_RE = re.compile(r"[\w./-]+\.(?:py|js|ts|md|json|txt|java|go|rs|pyc)")
+_LATIN_REFERENT_RE = re.compile(r"[A-Za-z][A-Za-z0-9_-]*(?:\s+[A-Za-z][A-Za-z0-9_-]*)*")
+
+
+def _has_vague_reference(text: str) -> bool:
+    """Return whether a vague reference lacks a concrete same-turn referent."""
+
+    for match in _VAGUE_RE.finditer(text):
+        if match.group(0) == "它":
+            prefix = text[: match.start()]
+            if _FILE_RE.search(prefix) or _LATIN_REFERENT_RE.search(prefix):
+                continue
+        return True
+    return False
 
 
 def extract_constraints(user_input: str) -> List[dict]:
@@ -90,4 +116,4 @@ def detect_abstention(user_input: str, grounding=None, repo_context: str = "") -
     if (repo_context or "").strip():
         return False
 
-    return bool(_VAGUE_RE.search(text))
+    return bool(_has_vague_reference(text) or _VAGUE_ACTION_RE.search(text))

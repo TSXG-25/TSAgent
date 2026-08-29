@@ -1,6 +1,6 @@
 # ADR-0029: Planner Capability Contract（v2.4A）
 
-- 状态: Accepted — v2.4A-2c Contract Calibrated
+- 状态: Accepted — v2.4A-3 Candidate Evaluated（未冻结）
 - 范围: Planner 的目标分解、任务结构和依赖质量评测
 - 前置基线: v2.3 Runtime / Service / Desktop 能力已冻结；本 ADR 不改变生产执行路径
 
@@ -220,9 +220,38 @@ raw plan、Provider、模型、prompt/fixture hash 和 latency。旧 v1 baseline
 对照，不能用 v1.1 Oracle 的重评分结果冒充新的 capability evidence。真实 acceptance
 过程中不得修改 Dataset、Oracle 或 prompt 后覆盖原始结果。
 
-PA013 与 PA016 保留为 Planner Capability Watchlist。只有在 v1.1 contract、Oracle 和
-Uncertainty 校准后的新一轮 Provider evidence 中形成同一 failure family，才进入
-v2.4A-3 Planner Improvement。
+在 v2.4A-2d 中，PA013 与 PA016 曾列入 Planner Capability Watchlist。v2.4A-3
+候选运行会重新记录它们的结果；只有在新一轮 evidence 中形成可复现的共同 failure family，
+才允许继续扩大 Planner Improvement，不能按单 case 添加规则。
+
+## 8. v2.4A-3 候选改进证据
+
+v2.4A-3 只调整 Planner instruction 与 uncertainty detector 的确定性边界，没有修改
+Dataset、Oracle、Runtime、Tool selection 或执行架构。完整的三轮 raw/calibrated evidence
+与对比摘要归档在：
+
+```text
+realtest_reports/results/v24a_planner_improvement_round1.json
+realtest_reports/results/v24a_planner_improvement_round2_calibrated.json
+realtest_reports/results/v24a_planner_improvement_round3_calibrated.json
+realtest_reports/results/v24a_planner_improvement_comparison.json
+realtest_reports/results/v24a_planner_improvement_comparison.md
+```
+
+Round 3 候选结果为：45 个可评估 case 中 `37/45 (82.2%)` capability pass，schema 与
+dependency validity 均为 `100%`，executable plan rate `82.2%`，missing task rate
+`12.9%`，overplanning rate `35.6%`，clarification accuracy `100%`。归因结果为
+`P-CAP=8`（全部 `UNDER_PLAN`）、`P-PROV=1`、`P-CON/P-ORACLE=0`、`P-INT=0`。
+
+这相对 v2.4A-2d 的 `20/44 (45.5%)` capability pass 有明显改善，但仍未达到本 ADR 的
+`missing_task_rate <= 5%` 与 `overplanning_rate <= 10%` gate。因此 ADR 当前只记录为
+`v2.4A-3 Candidate Evaluated`，不宣布 Planner 已冻结。剩余 watchlist 为
+`PA016, PA018, PA021, PA023, PA029, PA042, PA046, PA049`；不得针对单个 case 添加规则。
+
+其中 `PA012` 是 Provider Error，不计入 Planner capability failure；独立 uncertainty
+policy run 为 `26/27`，同样不进入 Planner capability 分数。候选真实运行发生在
+`6cf9e0d0` 的 dirty working tree 上，后续如需冻结必须先基于提交后的 clean checkout
+复核；raw report 不覆盖。
 
 v2.4B 再处理 Tool Selection / ReAct；v2.4C 处理 Workflow 编排；v2.4D 处理 Memory
 Learning。它们不应反向扩大本 ADR 的 Planner 结构合同。

@@ -67,6 +67,28 @@ class ConstraintExtractorTest(unittest.TestCase):
     def test_empty_input_abstain(self):
         self.assertTrue(detect_abstention(""))
 
+    def test_vague_action_without_pronoun_abstains(self):
+        for request in (
+            "帮我加个功能。",
+            "部署到那里。",
+            "把结果保存一下。",
+            "把配置改一下。",
+            "按之前的方案改。",
+        ):
+            with self.subTest(request=request):
+                self.assertTrue(detect_abstention(request))
+
+    def test_explicit_destination_or_file_still_proceeds(self):
+        self.assertFalse(detect_abstention("部署到 staging"))
+        self.assertFalse(detect_abstention("把当前结果保存到 output/result.md"))
+
+    def test_same_turn_named_referent_is_not_vague(self):
+        self.assertFalse(
+            detect_abstention(
+                "查阅 SQLite WAL 的官方资料，整理它的优缺点并附链接。"
+            )
+        )
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

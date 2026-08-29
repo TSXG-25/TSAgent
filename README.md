@@ -1,129 +1,105 @@
 # TSAgent
-面向复杂工程任务的长期运行 Agent。
 
-## Status Dashboard
+面向复杂工程任务的长期运行 Agent Runtime。项目当前重点是：在模型能力不稳定、进程
+重启、取消和多客户端接入时，仍然保持可验证的执行事实。
 
-```
-Architecture
-──────────────
-v1 Frozen (tag: v1.0-arch-freeze)
+## 当前状态
 
-Evaluation
-──────────────
-Datasets      14 (8 core + 6 navigation)
-Metrics       v1
-Regression    evaluation/regression/compare.py
-Quality Gate  PASS / WARNING / FAIL
+```text
+v2.3 Runtime Platform       已冻结
+  Context Isolation         ✅
+  Durable SQLite Store      ✅
+  AgentService + Events     ✅
+  Crash/Resume              ✅
+  Workspace / Effect Truth  ✅
+  Cancellation / Timeout    ✅
 
-Current Phase
-──────────────
-v2.0 RC1 — Release Candidate（Stability → Reproducibility → Release Gate）
-  RC Scope               暂停 Capability 扩展，完成 Context Boundary / Dependency Lock / CI / Demo
-  Offline Regression     149 passed（当前本地基线）
-  Tool Regression        17 passed / 3 deselected（网络工具离线排除）
-  Contract Verification  PASS
-  Reflection / Decision  PASS（10/10 benchmarks）
-  Architecture Verify   PASS
-  Trend Gate             PASS
-
-v2.0-D — Agent Intelligence: Decision（Policy → Confidence Gate → Next Action，已完成）
-  Decision              10/10 = 100%（Recovery Rate 1.000 / Wrong Recovery 0.000）
-  Decision Policy       retry/switch/ask/finish 四动作，PolicyRegistry（v2.1 可动态更新）
-  Decision Confidence   组合置信（诊断置信 + 重试耗尽 + 动作风险 + 证据完整度）< 0.5 → ASK
-  DecisionTrace         决策可解释性（rule/confidence/rejected）→ Wrong Recovery 分析
-  接入 Runtime          失败 → Reflection → Decision → next action（策略性停止不无限重试）
-  Trend Gate            PASS（planning + reflection + decision 三基线）
-
-v2.0-C — Agent Intelligence: Reflection（Diagnosis → Correction Proposal，已完成）
-  Reflection              10/10 = 100%（Diagnosis Accuracy / Correction Proposal / False Dx 0.000）
-  Reflection Contract     reflect(event: FailureEvent) 唯一入口（只消费 Fail Board Evidence）
-  Correction              Proposal（不执行，Executor 决定采纳）→ 已接入统一失败路径
-  Determinism Gate        10 场景 × 100 次 Diagnosis 完全一致
-  FixCommit               FIXED(commit) 生命周期闭环（REGRESSION 可关联首次修复）
-  Long Horizon            drift 0.333 → 0.0（Reflection 改善目标保持）
-
-v2.0-A — Agent Intelligence: Planning Quality（已完成）
-  Planning (real planner)    6/6 = 100%（Goal/Constraint/Task/Dependency/Order/Abstention）
-  Planning Dataset           8 场景（含 no_web / scope_only / no_delete / 信息不足 Abstain）
-  Structural Validator       可跨领域复用（SQL/Browser/Coding Planner 共享）
-  Trend Gate                 Capability Progress Curve（不能下降）
-  Fail Board v2              Diagnostic Backbone（Event Sourcing + Evidence + 统一 Root Cause 映射）
-  Contract Verification      PASS（v1 三层冻结持续有效）
-
-v1.2C — Capability Expansion（Resolver Contract 横向扩展，已完成）
-  Context Resolution       42/42 = 100%（+ ME001 跨会话 Memory）
-  Repository Resolution    10/10 = 100%
-  Capability Hint          7/7 = 100%
-  Capability Reuse Score   4/4 = 100%（Conversation/Repository/Memory/Capability 零新增抽象）
-  Contract Verification    PASS（fields + methods + signature + schema 四部分冻结）
-  Resolver Determinism     8/8 × 100 runs PASS
-
-Architecture Changes
-──────────────
-❌ Frozen
-New Runtime Layers: only if Architecture Gate triggered (ADR-0005)
+v2.4 Capability Development 进行中
+  v2.4A Planner Contract / Dataset / Oracle  ✅ 冻结
+  v2.4A 真实 Planner Capability               待验收
+  v2.4B Tool Selection / ReAct                后续
+  v2.4C Workflow                             后续
+  v2.4D Memory Learning                      后续
 ```
 
-## 核心模型（v2.0 RC，ADR-0001..0011）
+这里的“已冻结”表示对应合同和回归门禁已经建立；真实 Provider 的能力结果始终单独记录，
+不会用离线 golden self-check 冒充模型验收。
 
-```
-Intent → Task → ExecutionPlan → ExecutorFactory → ExecutionResult
-                                      │
-                                      └→ FailureEvent → Reflection → Decision
-```
+## 架构概览
 
-- 四个模型系统唯一，禁止平行模型。
-- Compiler 四阶段：Normalize → Semantic Check → Lower → Static Check（Pure Function）。
-- Grounder 只缩搜索空间（Search Space Reduction），不替 Planner 决策。
-- Executor 只消费 ExecutionPlan，不知道用户问题。
-- Runtime 使用 PlannerContext / ExecutorContext / ReflectionContext 做阶段边界。
-- Runtime 是唯一协调者。
-
-## 目录
-
-```
-agent/         # Intent / Grounding / Planner / Compiler / Executor / Runtime
-evaluation/    # Dataset / Benchmark / Regression / Metrics / History / Factory
-docs/adr/      # ADR-0001..0011（架构决策记录 + v2 开发纪律）
-benchmarks/    # 既有 benchmark 执行器（runner / report）
-.github/       # RC 自动门禁
-requirements-lock.txt  # RC 依赖锁
+```text
+CLI / Desktop / future REST
+              ↓
+         AgentService
+              ↓
+ ApplicationContext / SessionContext / RunContext
+              ↓
+          Runtime spine
+              ↓
+       SqliteRuntimeStore
 ```
 
-RC 架构总览见 [docs/architecture.md](docs/architecture.md)。
+执行主链是：
 
-## 工程循环（ADR-0005）
-
+```text
+Goal → NextAction → Task → Compiler → ExecutionPlan
+     → Executor → ActionResult → Verifier → next action / terminal state
 ```
-Dataset → Benchmark → Metrics → Regression → Quality Gate → Merge
+
+普通动作失败不会偷偷启动第二套 Planner 循环；结构性失败经过统一的
+`FailurePolicy → RecoveryDirective`。所有成功声明都必须有对应的执行或 Artifact evidence。
+
+完整当前架构见 [docs/architecture.md](docs/architecture.md)，历史决策见
+[docs/adr/](docs/adr/)。
+
+## 目录职责
+
+```text
+agent/              Runtime、Context、Service、Planner、Compiler、Executor
+apps/desktop/       Desktop UI 与本地传输适配器
+benchmarks/         子系统合同与离线集成 Dataset / Oracle
+evals/              能力评测 Dataset、Oracle 和报告工具
+evaluation/         历史全局门禁、Metrics、FailBoard 与趋势检查
+realtest_reports/   经脱敏的真实 Provider 证据归档
+tests/              单元、合同和离线集成回归
+tools/              受 Workspace/RunContext 约束的工具实现
 ```
 
-## 质量指标（Metrics v1）
+`input/` 和 `output/` 是本地 Runtime workspace，不是源码或测试 fixture，默认不会被 Git
+跟踪。测试所需文件应放在对应 Dataset 或 `tests/fixtures/` 中。
 
-- PlanningSuccess / GroundingRecall / GroundingTop1
-- CompileRejectRate / ExecutionSuccess / VerificationSuccess
-- Latency / Cost
+## 快速开始
 
-Quality Budget：Planning 与 Grounding 不得下降、Compile Reject 不得上升、
-Latency ≤+10%、Cost ≤+5%。否则 PR 不合并（ADR-0005）。
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements-lock.txt
+.venv/bin/python -m pytest -q
+```
 
-## Capability Lifecycle（ADR-0006）
+只运行 v2.4A Planner Dataset 的确定性自检：
 
-新增能力必须先写 Dataset（`evaluation/datasets/<capability>/`）→ Benchmark → 再实现。
-新增前回答两问：属于哪个模型？提升哪个指标？回答不了则不进入系统。
+```bash
+.venv/bin/python -m evals.planner.report --self-check
+```
 
----
+当前 Dataset 位于 `evals/planner/dataset.json`，共 50 个 case。真实 API 或本地模型测试
+需要自行配置 Provider 凭据，结果必须与离线回归分开归档。
 
-## TSAgent v1 Definition of Done
+## 工程循环
 
-- [x] Architecture Frozen (v1)
-- [x] Core Models Frozen（Intent → Task → ExecutionPlan → ExecutionResult）
-- [x] Compiler Stable（四阶段 + Pure Function）
-- [x] Grounding Stable（Recall 1.00 / Search Space Reduction）
-- [x] Evaluation Framework（Dataset → Benchmark → Metrics → Regression → Gate）
-- [x] Benchmark Driven（Stabilization 阶段，数据驱动）
-- [x] Quality Budget（PASS/WARNING/FAIL 三级）
-- [x] Regression Gate（compare.py + history 快照）
-- [x] Architecture Gate（量化门槛，ADR-0005）
+新增能力遵循：
 
-> v1 结束标志：以上全部落盘。此后进入长期维护，新能力走 Capability Lifecycle。
+```text
+ADR → Dataset → Oracle → implementation → offline regression → real-provider evidence
+```
+
+每项能力都要明确区分：
+
+- Capability Outcome：模型/Provider 是否完成用户目标；
+- Runtime Correctness：状态、权限、Artifact、事件和副作用是否符合合同；
+- Provider Error：外部服务不可达、超时或协议错误。
+
+## 版本边界
+
+当前不在 v2.4A 中加入新的 Runtime 状态机、取消策略、分布式执行或 Provider fallback。
+这些变化必须通过新的 ADR 和 Dataset 进入工程循环。

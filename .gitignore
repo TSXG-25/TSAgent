@@ -28,3 +28,11 @@ dist/
 # External reference repository; kept local and uploaded separately if needed.
 deepseek-harness/
 node_modules/
+
+# Runtime workspace content is local state, not repository source.
+input/*
+output/*
+!input/.gitkeep
+!output/.gitkeep
+~$*
+*.tmp

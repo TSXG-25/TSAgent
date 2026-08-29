@@ -1,11 +1,11 @@
-name: TSAgent RC Gate
+name: TSAgent Quality Gate
 
 on:
   push:
   pull_request:
 
 jobs:
-  rc-gate:
+  quality-gate:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:

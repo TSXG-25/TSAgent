@@ -1,0 +1,566 @@
+{
+  "version": "v2.4B-tool-selection-v1",
+  "scope": "next_action_selection",
+  "contract": "Task + State + Observation -> NextAction",
+  "cases": [
+    {
+      "id": "B001",
+      "family": "INITIAL_SELECTION",
+      "input": "读取 agent/runtime.py，并告诉我 Runtime 主循环做什么。",
+      "state": {
+        "goal": "读取文件并准备回答",
+        "current_task_id": "read-runtime",
+        "tasks": [
+          {"id": "read-runtime", "verb": "read", "target": "agent/runtime.py", "target_type": "file", "status": "pending", "dependencies": []}
+        ],
+        "required_outcomes": ["FILE_READ", "USER_VISIBLE_OUTPUT"],
+        "completed_outcomes": [],
+        "answer_ready": false,
+        "available_tools": ["filesystem.read", "filesystem.list"],
+        "completion_evidence": [],
+        "history": []
+      },
+      "observation": {"last_action": null, "last_result": null},
+      "expected": {"decision": "CONTINUE", "kind": "tool", "tools": ["filesystem.read"], "task_id": "read-runtime", "args": {"path": "agent/runtime.py"}}
+    },
+    {
+      "id": "B002",
+      "family": "INITIAL_SELECTION",
+      "input": "列出 agent/checkpoint/ 目录中的文件。",
+      "state": {
+        "goal": "列出目录",
+        "current_task_id": "list-checkpoint",
+        "tasks": [
+          {"id": "list-checkpoint", "verb": "list", "target": "agent/checkpoint", "target_type": "file", "status": "pending", "dependencies": []}
+        ],
+        "required_outcomes": ["FILE_READ", "USER_VISIBLE_OUTPUT"],
+        "completed_outcomes": [],
+        "answer_ready": false,
+        "available_tools": ["filesystem.read", "filesystem.list"],
+        "completion_evidence": [],
+        "history": []
+      },
+      "observation": {"last_action": null, "last_result": null},
+      "expected": {"decision": "CONTINUE", "kind": "tool", "tools": ["filesystem.list"], "task_id": "list-checkpoint", "args": {"path": "agent/checkpoint"}}
+    },
+    {
+      "id": "B003",
+      "family": "INITIAL_SELECTION",
+      "input": "搜索 SQLite WAL 的官方文档。",
+      "state": {
+        "goal": "获取官方资料",
+        "current_task_id": "search-wal",
+        "tasks": [
+          {"id": "search-wal", "verb": "search", "target": "SQLite WAL official documentation", "target_type": "text", "status": "pending", "dependencies": []}
+        ],
+        "required_outcomes": ["USER_VISIBLE_OUTPUT"],
+        "completed_outcomes": [],
+        "answer_ready": false,
+        "available_tools": ["web_search", "web_fetch"],
+        "completion_evidence": [],
+        "history": []
+      },
+      "observation": {"last_action": null, "last_result": null},
+      "expected": {"decision": "CONTINUE", "kind": "tool", "tools": ["web_search"], "task_id": "search-wal", "args": {"query": "SQLite WAL official documentation"}}
+    },
+    {
+      "id": "B004",
+      "family": "INITIAL_SELECTION",
+      "input": "用 Python 实际计算 17 * 19，并贴出执行结果。",
+      "state": {
+        "goal": "执行确定的 Python 计算并展示输出",
+        "current_task_id": "calculate",
+        "tasks": [
+          {"id": "calculate", "verb": "execute", "target": "print(17 * 19)", "target_type": "text", "status": "pending", "dependencies": []}
+        ],
+        "required_outcomes": ["CODE_EXECUTION", "USER_VISIBLE_OUTPUT"],
+        "completed_outcomes": [],
+        "answer_ready": false,
+        "available_tools": ["run_python", "run_python_file"],
+        "completion_evidence": [],
+        "history": []
+      },
+      "observation": {"last_action": null, "last_result": null},
+      "expected": {"decision": "CONTINUE", "kind": "tool", "tools": ["run_python"], "task_id": "calculate", "args": {"code": "print(17 * 19)"}}
+    },
+    {
+      "id": "B005",
+      "family": "RESULT_TRANSITION",
+      "input": "读取文件后总结其中的 Runtime 职责。",
+      "state": {
+        "goal": "根据已读取的文件回答问题",
+        "current_task_id": "read-runtime",
+        "tasks": [
+          {"id": "read-runtime", "verb": "read", "target": "agent/runtime.py", "target_type": "file", "status": "succeeded", "dependencies": []}
+        ],
+        "required_outcomes": ["FILE_READ", "USER_VISIBLE_OUTPUT"],
+        "completed_outcomes": ["FILE_READ"],
+        "answer_ready": true,
+        "available_tools": ["filesystem.read"],
+        "completion_evidence": ["read:agent/runtime.py"],
+        "history": [
+          {"kind": "tool", "tool": "filesystem.read", "task_id": "read-runtime", "args": {"path": "agent/runtime.py"}, "result": {"ok": true, "verified": true}}
+        ]
+      },
+      "observation": {
+        "last_action": {"kind": "tool", "tool": "filesystem.read", "task_id": "read-runtime", "args": {"path": "agent/runtime.py"}},
+        "last_result": {"ok": true, "verified": true, "content": "Runtime owns durable state transitions and delegates planning/execution."}
+      },
+      "expected": {"decision": "FINISH", "kind": "answer", "tools": [], "task_id": "", "args": {}}
+    },
+    {
+      "id": "B006",
+      "family": "RESULT_TRANSITION",
+      "input": "检索到两个来源后，比较它们对 WAL 并发的说明并回答我。",
+      "state": {
+        "goal": "综合已检索来源",
+        "current_task_id": "search-wal",
+        "tasks": [
+          {"id": "search-wal", "verb": "search", "target": "SQLite WAL concurrency", "target_type": "text", "status": "succeeded", "dependencies": []}
+        ],
+        "required_outcomes": ["USER_VISIBLE_OUTPUT"],
+        "completed_outcomes": [],
+        "answer_ready": true,
+        "available_tools": ["web_search", "web_fetch"],
+        "completion_evidence": ["source:https://sqlite.org/wal.html", "source:https://sqlite.org/lockingv3.html"],
+        "history": [
+          {"kind": "tool", "tool": "web_search", "task_id": "search-wal", "args": {"query": "SQLite WAL concurrency"}, "result": {"ok": true, "verified": true}}
+        ]
+      },
+      "observation": {
+        "last_action": {"kind": "tool", "tool": "web_search", "task_id": "search-wal", "args": {"query": "SQLite WAL concurrency"}},
+        "last_result": {"ok": true, "verified": true, "value": {"sources": ["https://sqlite.org/wal.html", "https://sqlite.org/lockingv3.html"]}}
+      },
+      "expected": {"decision": "FINISH", "kind": "answer", "tools": [], "task_id": "", "args": {}}
+    },
+    {
+      "id": "B007",
+      "family": "RESULT_TRANSITION",
+      "input": "把报告写入 output/report.md；写完后告诉我。",
+      "state": {
+        "goal": "确认已验证的报告写入",
+        "current_task_id": "write-report",
+        "tasks": [
+          {"id": "write-report", "verb": "write", "target": "output/report.md", "target_type": "file", "status": "succeeded", "dependencies": []}
+        ],
+        "required_outcomes": ["FILE_MUTATION", "USER_VISIBLE_OUTPUT"],
+        "completed_outcomes": ["FILE_MUTATION"],
+        "answer_ready": true,
+        "available_tools": ["filesystem.write"],
+        "completion_evidence": ["artifact:output/report.md", "verified:output/report.md"],
+        "history": [
+          {"kind": "tool", "tool": "filesystem.write", "task_id": "write-report", "args": {"path": "output/report.md", "content": "报告内容"}, "result": {"ok": true, "verified": true}}
+        ]
+      },
+      "observation": {
+        "last_action": {"kind": "tool", "tool": "filesystem.write", "task_id": "write-report", "args": {"path": "output/report.md", "content": "报告内容"}},
+        "last_result": {"ok": true, "verified": true, "value": {"artifact": "output/report.md"}}
+      },
+      "expected": {"decision": "FINISH", "kind": "answer", "tools": [], "task_id": "", "args": {}}
+    },
+    {
+      "id": "B008",
+      "family": "RESULT_TRANSITION",
+      "input": "写文件返回了结果，但还没有验证内容，请先确认文件事实。",
+      "state": {
+        "goal": "验证写入效果",
+        "current_task_id": "write-report",
+        "tasks": [
+          {"id": "write-report", "verb": "write", "target": "output/report.md", "target_type": "file", "status": "succeeded", "dependencies": []}
+        ],
+        "required_outcomes": ["FILE_MUTATION", "USER_VISIBLE_OUTPUT"],
+        "completed_outcomes": [],
+        "answer_ready": false,
+        "available_tools": ["filesystem.read", "filesystem.write"],
+        "completion_evidence": [],
+        "history": [
+          {"kind": "tool", "tool": "filesystem.write", "task_id": "write-report", "args": {"path": "output/report.md", "content": "报告内容"}, "result": {"ok": true, "verified": false}}
+        ]
+      },
+      "observation": {
+        "last_action": {"kind": "tool", "tool": "filesystem.write", "task_id": "write-report", "args": {"path": "output/report.md", "content": "报告内容"}},
+        "last_result": {"ok": true, "verified": false, "content": "write returned without verifier evidence"}
+      },
+      "expected": {"decision": "VERIFY", "kind": "tool", "tools": ["filesystem.read"], "task_id": "write-report", "args": {"path": "output/report.md"}}
+    },
+    {
+      "id": "B009",
+      "family": "FAILURE_RECOVERY",
+      "input": "搜索官方资料。",
+      "state": {
+        "goal": "完成官方资料搜索",
+        "current_task_id": "search-docs",
+        "tasks": [
+          {"id": "search-docs", "verb": "search", "target": "SQLite WAL official documentation", "target_type": "text", "status": "failed", "dependencies": []}
+        ],
+        "required_outcomes": ["USER_VISIBLE_OUTPUT"],
+        "completed_outcomes": [],
+        "answer_ready": false,
+        "available_tools": ["web_search", "web_fetch"],
+        "completion_evidence": [],
+        "history": [
+          {"kind": "tool", "tool": "web_search", "task_id": "search-docs", "args": {"query": "SQLite WAL official documentation"}, "result": {"ok": false, "verified": false, "error_code": "PROVIDER_TIMEOUT", "retryable": true}}
+        ]
+      },
+      "observation": {
+        "last_action": {"kind": "tool", "tool": "web_search", "task_id": "search-docs", "args": {"query": "SQLite WAL official documentation"}},
+        "last_result": {"ok": false, "verified": false, "error_code": "PROVIDER_TIMEOUT", "retryable": true}
+      },
+      "expected": {"decision": "RETRY", "kind": "tool", "tools": ["web_search"], "task_id": "search-docs", "args": {"query": "SQLite WAL official documentation"}}
+    },
+    {
+      "id": "B010",
+      "family": "FAILURE_RECOVERY",
+      "input": "读取用户提到的那个配置文件。",
+      "state": {
+        "goal": "读取明确的配置文件",
+        "current_task_id": "read-config",
+        "tasks": [
+          {"id": "read-config", "verb": "read", "target": "", "target_type": "file", "status": "pending", "dependencies": []}
+        ],
+        "required_outcomes": ["FILE_READ", "USER_VISIBLE_OUTPUT"],
+        "completed_outcomes": [],
+        "answer_ready": false,
+        "available_tools": ["filesystem.read"],
+        "completion_evidence": [],
+        "history": []
+      },
+      "observation": {
+        "last_action": {"kind": "tool", "tool": "filesystem.read", "task_id": "read-config", "args": {"path": "config.toml"}},
+        "last_result": {"ok": false, "verified": false, "error_code": "FILE_NOT_FOUND", "retryable": false}
+      },
+      "expected": {"decision": "ASK_CLARIFICATION", "kind": "ask", "tools": [], "task_id": "", "args": {}}
+    },
+    {
+      "id": "B011",
+      "family": "FAILURE_RECOVERY",
+      "input": "运行这个 Python 程序。",
+      "state": {
+        "goal": "运行用户指定的程序",
+        "current_task_id": "run-program",
+        "tasks": [
+          {"id": "run-program", "verb": "execute", "target": "", "target_type": "file", "status": "pending", "dependencies": []}
+        ],
+        "required_outcomes": ["CODE_EXECUTION", "USER_VISIBLE_OUTPUT"],
+        "completed_outcomes": [],
+        "answer_ready": false,
+        "available_tools": ["run_python", "run_python_file"],
+        "completion_evidence": [],
+        "history": [
+          {"kind": "tool", "tool": "run_python_file", "task_id": "run-program", "args": {"path": ""}, "result": {"ok": false, "verified": false, "error_code": "INVALID_TOOL_ARGUMENT", "retryable": false}}
+        ]
+      },
+      "observation": {
+        "last_action": {"kind": "tool", "tool": "run_python_file", "task_id": "run-program", "args": {"path": ""}},
+        "last_result": {"ok": false, "verified": false, "error_code": "INVALID_TOOL_ARGUMENT", "retryable": false}
+      },
+      "expected": {"decision": "ASK_CLARIFICATION", "kind": "ask", "tools": [], "task_id": "", "args": {}}
+    },
+    {
+      "id": "B012",
+      "family": "FAILURE_RECOVERY",
+      "input": "帮我发一封邮件给客户，说明项目延期。",
+      "state": {
+        "goal": "发送外部邮件",
+        "current_task_id": "send-email",
+        "tasks": [
+          {"id": "send-email", "verb": "execute", "target": "customer email", "target_type": "text", "status": "pending", "dependencies": []}
+        ],
+        "required_outcomes": ["USER_VISIBLE_OUTPUT"],
+        "completed_outcomes": [],
+        "answer_ready": false,
+        "available_tools": ["web_search", "filesystem.write"],
+        "completion_evidence": [],
+        "history": []
+      },
+      "observation": {"last_action": null, "last_result": null},
+      "expected": {"decision": "BOUNDARY_STOP", "kind": "ask", "tools": [], "task_id": "", "args": {}}
+    },
+    {
+      "id": "B013",
+      "family": "DEPENDENCY_CONTROL",
+      "input": "先读取源文件，再修改其中的函数。",
+      "state": {
+        "goal": "读取后修改源文件",
+        "current_task_id": "modify-function",
+        "tasks": [
+          {"id": "inspect-source", "verb": "read", "target": "src/auth.py", "target_type": "file", "status": "pending", "dependencies": []},
+          {"id": "modify-function", "verb": "modify", "target": "src/auth.py", "target_type": "file", "status": "pending", "dependencies": ["inspect-source"]}
+        ],
+        "required_outcomes": ["FILE_READ", "FILE_MUTATION", "USER_VISIBLE_OUTPUT"],
+        "completed_outcomes": [],
+        "answer_ready": false,
+        "available_tools": ["filesystem.read", "filesystem.write"],
+        "completion_evidence": [],
+        "history": []
+      },
+      "observation": {"last_action": null, "last_result": null},
+      "expected": {"decision": "CONTINUE", "kind": "tool", "tools": ["filesystem.read"], "task_id": "inspect-source", "args": {"path": "src/auth.py"}}
+    },
+    {
+      "id": "B014",
+      "family": "DEPENDENCY_CONTROL",
+      "input": "源文件已读取，按要求写入修复后的内容。",
+      "state": {
+        "goal": "写入已经准备好的修复内容",
+        "current_task_id": "write-fix",
+        "tasks": [
+          {"id": "inspect-source", "verb": "read", "target": "src/auth.py", "target_type": "file", "status": "succeeded", "dependencies": []},
+          {"id": "write-fix", "verb": "write", "target": "src/auth.py", "target_type": "file", "status": "pending", "dependencies": ["inspect-source"]}
+        ],
+        "required_outcomes": ["FILE_MUTATION", "USER_VISIBLE_OUTPUT"],
+        "completed_outcomes": [],
+        "answer_ready": false,
+        "available_tools": ["filesystem.write"],
+        "completion_evidence": ["fact:source-read"],
+        "history": [
+          {"kind": "tool", "tool": "filesystem.read", "task_id": "inspect-source", "args": {"path": "src/auth.py"}, "result": {"ok": true, "verified": true}}
+        ],
+        "facts": {"content": "def validate_token(value):\n    return value is not None\n"}
+      },
+      "observation": {
+        "last_action": {"kind": "tool", "tool": "filesystem.read", "task_id": "inspect-source", "args": {"path": "src/auth.py"}},
+        "last_result": {"ok": true, "verified": true, "content": "def validate_token(value):\n    return value is not None\n"}
+      },
+      "expected": {"decision": "CONTINUE", "kind": "tool", "tools": ["filesystem.write"], "task_id": "write-fix", "args": {"path": "src/auth.py", "content": "def validate_token(value):\n    return value is not None\n"}}
+    },
+    {
+      "id": "B015",
+      "family": "DEPENDENCY_CONTROL",
+      "input": "搜索 SQLite WAL 和 PostgreSQL MVCC，然后比较两者。",
+      "state": {
+        "goal": "先搜索资料，再进行比较",
+        "current_task_id": "compare-databases",
+        "tasks": [
+          {"id": "search-databases", "verb": "search", "target": "SQLite WAL and PostgreSQL MVCC", "target_type": "text", "status": "pending", "dependencies": []},
+          {"id": "compare-databases", "verb": "explain", "target": "SQLite WAL vs PostgreSQL MVCC", "target_type": "text", "status": "pending", "dependencies": ["search-databases"]}
+        ],
+        "required_outcomes": ["USER_VISIBLE_OUTPUT"],
+        "completed_outcomes": [],
+        "answer_ready": false,
+        "available_tools": ["web_search", "web_fetch"],
+        "completion_evidence": [],
+        "history": []
+      },
+      "observation": {"last_action": null, "last_result": null},
+      "expected": {"decision": "CONTINUE", "kind": "tool", "tools": ["web_search"], "task_id": "search-databases", "args": {"query": "SQLite WAL and PostgreSQL MVCC"}}
+    },
+    {
+      "id": "B016",
+      "family": "DEPENDENCY_CONTROL",
+      "input": "资料已经查完，请根据已获得的事实给出比较结论。",
+      "state": {
+        "goal": "基于已完成检索给出结论",
+        "current_task_id": "compare-databases",
+        "tasks": [
+          {"id": "search-databases", "verb": "search", "target": "SQLite WAL and PostgreSQL MVCC", "target_type": "text", "status": "succeeded", "dependencies": []},
+          {"id": "compare-databases", "verb": "explain", "target": "SQLite WAL vs PostgreSQL MVCC", "target_type": "text", "status": "succeeded", "dependencies": ["search-databases"]}
+        ],
+        "required_outcomes": ["USER_VISIBLE_OUTPUT"],
+        "completed_outcomes": [],
+        "answer_ready": true,
+        "available_tools": ["web_search", "web_fetch"],
+        "completion_evidence": ["source:sqlite", "source:postgresql", "fact:comparison-ready"],
+        "history": [
+          {"kind": "tool", "tool": "web_search", "task_id": "search-databases", "args": {"query": "SQLite WAL and PostgreSQL MVCC"}, "result": {"ok": true, "verified": true}},
+          {"kind": "tool", "tool": "web_fetch", "task_id": "compare-databases", "args": {"url": "https://sqlite.org/wal.html"}, "result": {"ok": true, "verified": true}}
+        ]
+      },
+      "observation": {
+        "last_action": {"kind": "tool", "tool": "web_fetch", "task_id": "compare-databases", "args": {"url": "https://sqlite.org/wal.html"}},
+        "last_result": {"ok": true, "verified": true, "content": "The source facts are available for synthesis."}
+      },
+      "expected": {"decision": "FINISH", "kind": "answer", "tools": [], "task_id": "", "args": {}}
+    },
+    {
+      "id": "B017",
+      "family": "VERIFICATION_BOUNDARY",
+      "input": "复制完成了，但目标内容还没有做一致性验证。",
+      "state": {
+        "goal": "验证复制目标",
+        "current_task_id": "copy-report",
+        "tasks": [
+          {"id": "copy-report", "verb": "copy", "target": "output/copy.md", "target_type": "file", "status": "succeeded", "dependencies": []}
+        ],
+        "required_outcomes": ["FILE_MUTATION", "USER_VISIBLE_OUTPUT"],
+        "completed_outcomes": [],
+        "answer_ready": false,
+        "available_tools": ["filesystem.read", "filesystem.copy"],
+        "completion_evidence": [],
+        "history": [
+          {"kind": "tool", "tool": "filesystem.copy", "task_id": "copy-report", "args": {"source": "input/report.md", "destination": "output/copy.md"}, "result": {"ok": true, "verified": false}}
+        ]
+      },
+      "observation": {
+        "last_action": {"kind": "tool", "tool": "filesystem.copy", "task_id": "copy-report", "args": {"source": "input/report.md", "destination": "output/copy.md"}},
+        "last_result": {"ok": true, "verified": false, "value": {"destination": "output/copy.md"}}
+      },
+      "expected": {"decision": "VERIFY", "kind": "tool", "tools": ["filesystem.read"], "task_id": "copy-report", "args": {"path": "output/copy.md"}}
+    },
+    {
+      "id": "B018",
+      "family": "VERIFICATION_BOUNDARY",
+      "input": "执行脚本返回了文本，但还没有确认执行证据，请先重新取得机器事实。",
+      "state": {
+        "goal": "确认代码执行事实",
+        "current_task_id": "run-script",
+        "tasks": [
+          {"id": "run-script", "verb": "execute", "target": "output/check.py", "target_type": "file", "status": "succeeded", "dependencies": []}
+        ],
+        "required_outcomes": ["CODE_EXECUTION", "USER_VISIBLE_OUTPUT"],
+        "completed_outcomes": [],
+        "answer_ready": false,
+        "available_tools": ["run_python_file"],
+        "completion_evidence": [],
+        "history": [
+          {"kind": "tool", "tool": "run_python_file", "task_id": "run-script", "args": {"path": "output/check.py"}, "result": {"ok": true, "verified": false, "content": "maybe output"}}
+        ]
+      },
+      "observation": {
+        "last_action": {"kind": "tool", "tool": "run_python_file", "task_id": "run-script", "args": {"path": "output/check.py"}},
+        "last_result": {"ok": true, "verified": false, "content": "maybe output"}
+      },
+      "expected": {"decision": "VERIFY", "kind": "tool", "tools": ["run_python_file"], "task_id": "run-script", "args": {"path": "output/check.py"}}
+    },
+    {
+      "id": "B019",
+      "family": "VERIFICATION_BOUNDARY",
+      "input": "只解释 Python 列表推导式的写法，不要执行代码。",
+      "state": {
+        "goal": "提供纯解释",
+        "current_task_id": "",
+        "tasks": [],
+        "required_outcomes": ["USER_VISIBLE_OUTPUT"],
+        "completed_outcomes": [],
+        "answer_ready": true,
+        "available_tools": ["run_python", "filesystem.read"],
+        "completion_evidence": [],
+        "history": []
+      },
+      "observation": {"last_action": null, "last_result": null},
+      "expected": {"decision": "FINISH", "kind": "answer", "tools": [], "task_id": "", "args": {}}
+    },
+    {
+      "id": "B020",
+      "family": "VERIFICATION_BOUNDARY",
+      "input": "写一个文件，但我还没有告诉你文件名和内容。",
+      "state": {
+        "goal": "写入用户文件",
+        "current_task_id": "write-file",
+        "tasks": [
+          {"id": "write-file", "verb": "write", "target": "", "target_type": "file", "status": "pending", "dependencies": []}
+        ],
+        "required_outcomes": ["FILE_MUTATION", "USER_VISIBLE_OUTPUT"],
+        "completed_outcomes": [],
+        "answer_ready": false,
+        "available_tools": ["filesystem.write"],
+        "completion_evidence": [],
+        "history": []
+      },
+      "observation": {"last_action": null, "last_result": null},
+      "expected": {"decision": "ASK_CLARIFICATION", "kind": "ask", "tools": [], "task_id": "", "args": {}}
+    },
+    {
+      "id": "B021",
+      "family": "OBSERVATION_BRANCH",
+      "input": "继续查找 SQLite WAL 的官方资料。",
+      "state": {
+        "goal": "在无结果后重新搜索资料",
+        "current_task_id": "search-wal",
+        "tasks": [
+          {"id": "search-wal", "verb": "search", "target": "SQLite WAL official documentation", "target_type": "text", "status": "failed", "dependencies": []}
+        ],
+        "required_outcomes": ["USER_VISIBLE_OUTPUT"],
+        "completed_outcomes": [],
+        "answer_ready": false,
+        "available_tools": ["web_search", "web_fetch"],
+        "completion_evidence": [],
+        "history": [
+          {"kind": "tool", "tool": "web_search", "task_id": "search-wal", "args": {"query": "SQLite WAL"}, "result": {"ok": true, "verified": true, "value": {"results": []}}}
+        ]
+      },
+      "observation": {
+        "last_action": {"kind": "tool", "tool": "web_search", "task_id": "search-wal", "args": {"query": "SQLite WAL"}},
+        "last_result": {"ok": true, "verified": true, "value": {"results": []}}
+      },
+      "expected": {"decision": "SWITCH", "kind": "tool", "tools": ["web_search"], "task_id": "search-wal", "args": {"query": "SQLite WAL official documentation"}}
+    },
+    {
+      "id": "B022",
+      "family": "OBSERVATION_BRANCH",
+      "input": "搜索结果里有官方链接，请抓取这个页面的正文。",
+      "state": {
+        "goal": "抓取已发现的官方页面",
+        "current_task_id": "fetch-source",
+        "tasks": [
+          {"id": "search-source", "verb": "search", "target": "SQLite WAL official documentation", "target_type": "text", "status": "succeeded", "dependencies": []},
+          {"id": "fetch-source", "verb": "read", "target": "https://sqlite.org/wal.html", "target_type": "text", "status": "pending", "dependencies": ["search-source"]}
+        ],
+        "required_outcomes": ["USER_VISIBLE_OUTPUT"],
+        "completed_outcomes": [],
+        "answer_ready": false,
+        "available_tools": ["web_search", "web_fetch"],
+        "completion_evidence": ["source:https://sqlite.org/wal.html"],
+        "history": [
+          {"kind": "tool", "tool": "web_search", "task_id": "search-source", "args": {"query": "SQLite WAL official documentation"}, "result": {"ok": true, "verified": true, "value": {"urls": ["https://sqlite.org/wal.html"]}}}
+        ]
+      },
+      "observation": {
+        "last_action": {"kind": "tool", "tool": "web_search", "task_id": "search-source", "args": {"query": "SQLite WAL official documentation"}},
+        "last_result": {"ok": true, "verified": true, "value": {"urls": ["https://sqlite.org/wal.html"]}
+        }
+      },
+      "expected": {"decision": "CONTINUE", "kind": "tool", "tools": ["web_fetch"], "task_id": "fetch-source", "args": {"url": "https://sqlite.org/wal.html"}}
+    },
+    {
+      "id": "B023",
+      "family": "OBSERVATION_BRANCH",
+      "input": "命令已经执行成功，请把原始输出贴给我。",
+      "state": {
+        "goal": "展示已有命令执行输出",
+        "current_task_id": "run-date",
+        "tasks": [
+          {"id": "run-date", "verb": "execute", "target": "date", "target_type": "text", "status": "succeeded", "dependencies": []}
+        ],
+        "required_outcomes": ["COMMAND_EXECUTION", "USER_VISIBLE_OUTPUT"],
+        "completed_outcomes": ["COMMAND_EXECUTION"],
+        "answer_ready": true,
+        "available_tools": ["shell"],
+        "completion_evidence": ["execution:date", "stdout:present"],
+        "history": [
+          {"kind": "tool", "tool": "shell", "task_id": "run-date", "args": {"cmd": "date"}, "result": {"ok": true, "verified": true, "value": {"stdout": "Sat Aug 29 12:00:00 CST 2026\n"}}}
+        ]
+      },
+      "observation": {
+        "last_action": {"kind": "tool", "tool": "shell", "task_id": "run-date", "args": {"cmd": "date"}},
+        "last_result": {"ok": true, "verified": true, "value": {"stdout": "Sat Aug 29 12:00:00 CST 2026\n"}}
+      },
+      "expected": {"decision": "FINISH", "kind": "answer", "tools": [], "task_id": "", "args": {}}
+    },
+    {
+      "id": "B024",
+      "family": "OBSERVATION_BRANCH",
+      "input": "报告已经写入并验证过了，请告诉我结果。",
+      "state": {
+        "goal": "报告已完成，只需反馈结果",
+        "current_task_id": "write-report",
+        "tasks": [
+          {"id": "write-report", "verb": "write", "target": "output/report.md", "target_type": "file", "status": "succeeded", "dependencies": []}
+        ],
+        "required_outcomes": ["FILE_MUTATION", "USER_VISIBLE_OUTPUT"],
+        "completed_outcomes": ["FILE_MUTATION"],
+        "answer_ready": true,
+        "available_tools": ["filesystem.write", "filesystem.read"],
+        "completion_evidence": ["artifact:output/report.md", "verified:output/report.md"],
+        "history": [
+          {"kind": "tool", "tool": "filesystem.write", "task_id": "write-report", "args": {"path": "output/report.md", "content": "报告内容"}, "result": {"ok": true, "verified": true}}
+        ]
+      },
+      "observation": {
+        "last_action": {"kind": "tool", "tool": "filesystem.write", "task_id": "write-report", "args": {"path": "output/report.md", "content": "报告内容"}},
+        "last_result": {"ok": true, "verified": true, "value": {"artifact": "output/report.md"}}
+      },
+      "expected": {"decision": "FINISH", "kind": "answer", "tools": [], "task_id": "", "args": {}}
+    }
+  ]
+}

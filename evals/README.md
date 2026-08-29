@@ -15,5 +15,12 @@
 - `evals/routing/`：验证 Chat 在 Planner 之外的路由合同；
 - `evals/uncertainty/`：验证信息不足时的 deterministic abstention policy。
 
+v2.4B-1 的 Tool Selection / ReAct 合同位于 `evals/tool_selection/`：
+
+- `dataset.json`：24-case `Task + State + Observation -> NextAction` Dataset；
+- `oracle.py`：只验证 action schema、工具/参数/依赖和 effect safety，不执行 Tool；
+- 真实 Provider baseline 必须在该合同冻结后单独运行，不能把 Planner 的结果直接当作
+  NextAction capability evidence。
+
 新的能力评测优先放在这里，并通过 ADR 声明范围和门禁。旧版本 hash 与真实 Provider
 结果不得被校准后的 Oracle 覆盖。

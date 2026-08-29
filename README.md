@@ -103,3 +103,9 @@ ADR → Dataset → Oracle → implementation → offline regression → real-pr
 
 当前不在 v2.4A 中加入新的 Runtime 状态机、取消策略、分布式执行或 Provider fallback。
 这些变化必须通过新的 ADR 和 Dataset 进入工程循环。
+
+## License
+
+Copyright 2026 TSXG-25.
+
+Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE).

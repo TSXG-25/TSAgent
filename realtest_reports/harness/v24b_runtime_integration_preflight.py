@@ -13,7 +13,7 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[2]
-HARNESS_VERSION = "v2.4B-4b-runtime-integration-preflight-v1"
+HARNESS_VERSION = "v2.4B-4b-runtime-integration-preflight-v2"
 
 
 def _git_head() -> str:
@@ -79,11 +79,42 @@ def _compiler_has_multi_step_plan() -> bool:
     return False
 
 
+def _has_single_owner_contract() -> bool:
+    source = (ROOT / "agent" / "execution_ownership.py").read_text(encoding="utf-8")
+    return all(token in source for token in (
+        "class ExecutionOwner",
+        'COMPILED = "compiled"',
+        'DYNAMIC = "dynamic"',
+        "EXECUTION_OWNER_IMMUTABLE",
+    ))
+
+
+def _dynamic_action_lowers_to_one_step() -> bool:
+    source = (ROOT / "agent" / "dynamic_action_lowering.py").read_text(
+        encoding="utf-8"
+    )
+    return "steps=[ExecutionStep(" in source and 'executor="tool"' in source
+
+
+def _both_owners_use_executor_factory() -> bool:
+    source = (ROOT / "agent" / "orchestrator" / "executor.py").read_text(
+        encoding="utf-8"
+    )
+    return all(token in source for token in (
+        "resolve_execution_ownership(state, tasks)",
+        "lower_dynamic_tool_action(task_obj, selected_action)",
+        "executor_factory.get(plan.executor)",
+    ))
+
+
 def build_preflight_report() -> dict[str, Any]:
     consumers = _selector_consumers()
     runtime_passthrough = _runtime_next_action_is_passthrough()
     whole_plan = _tool_executor_executes_whole_plan()
     multi_step = _compiler_has_multi_step_plan()
+    single_owner = _has_single_owner_contract()
+    single_step_lowering = _dynamic_action_lowers_to_one_step()
+    shared_executor = _both_owners_use_executor_factory()
     blockers: list[dict[str, str]] = []
     if not consumers:
         blockers.append({
@@ -91,27 +122,24 @@ def build_preflight_report() -> dict[str, Any]:
             "category": "P-INT",
             "evidence": "No production module imports or calls NextActionSelector.",
         })
-    if runtime_passthrough:
+    if not single_owner:
         blockers.append({
-            "code": "NEXT_ACTION_STATE_IS_PASSTHROUGH",
-            "category": "P-INT",
-            "evidence": "Runtime NEXT_ACTION transitions directly to EXECUTE.",
-        })
-    if whole_plan and multi_step:
-        blockers.append({
-            "code": "NEXT_ACTION_EXECUTION_UNIT_MISMATCH",
+            "code": "EXECUTION_OWNER_CONTRACT_MISSING",
             "category": "P-CON",
-            "evidence": (
-                "Selector returns one NextAction, while ToolExecutor executes a complete "
-                "ExecutionPlan and production Compiler rules can emit multiple steps."
-            ),
+            "evidence": "Task execution does not resolve to COMPILED xor DYNAMIC.",
+        })
+    if not single_step_lowering or not shared_executor:
+        blockers.append({
+            "code": "DYNAMIC_ACTION_EXECUTION_PATH_INVALID",
+            "category": "P-INT",
+            "evidence": "Dynamic action is not lowered into the shared Tool execution path.",
         })
 
     return {
         "harness_version": HARNESS_VERSION,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "head": _git_head(),
-        "status": "BLOCKED_PRECONDITION" if blockers else "READY_FOR_INTEGRATION",
+        "status": "BLOCKED_PRECONDITION" if blockers else "READY_FOR_MIXED_E2E",
         "configuration": {
             "provider_calls": 0,
             "tool_execution": False,
@@ -123,12 +151,13 @@ def build_preflight_report() -> dict[str, Any]:
             "runtime_next_action_passthrough": runtime_passthrough,
             "tool_executor_executes_whole_plan": whole_plan,
             "compiler_has_multi_step_plan": multi_step,
+            "single_owner_contract": single_owner,
+            "dynamic_action_lowers_to_one_step": single_step_lowering,
+            "both_owners_use_executor_factory": shared_executor,
         },
         "blockers": blockers,
         "decision_required": (
-            "Choose one authoritative execution unit before wiring: preserve "
-            "Compiler-owned ExecutionPlan selection or migrate execution to "
-            "one selected ExecutionStep per Runtime transition."
+            "Complete the selected COMPILED xor DYNAMIC ownership integration."
             if blockers else None
         ),
     }

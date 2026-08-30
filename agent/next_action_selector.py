@@ -12,9 +12,12 @@ canonical action so diagnostics cannot change action truth.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
 import json
 from typing import Any, Literal, Mapping
 
+from jsonschema import ValidationError as JsonSchemaValidationError
+from jsonschema import validate as validate_json_schema
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -22,6 +25,7 @@ from agent.action_result import ActionResult
 from agent.execution_errors import stable_error_message
 from agent.interruption import RunInterruptionRequested, await_interruptibly
 from agent.next_action import ActionKind, NextAction
+from agent.tool_action_projection import ToolActionProjection
 
 
 _EFFECT_TOOLS = frozenset({
@@ -62,10 +66,29 @@ class ExecutionStateProjection(BaseModel):
     required_outcomes: tuple[str, ...] = ()
     completed_outcomes: tuple[str, ...] = ()
     answer_ready: bool = False
-    available_tools: tuple[str, ...] = ()
+    available_actions: tuple[ToolActionProjection, ...] = ()
     completion_evidence: tuple[str, ...] = ()
     history: tuple[dict[str, Any], ...] = ()
     facts: dict[str, Any] = Field(default_factory=dict)
+
+
+SELECTOR_STATE_PROJECTION_VERSION = "v2.4B-selector-state-v2"
+
+
+def selector_state_projection_hash() -> str:
+    """Hash the production Selector state envelope."""
+
+    payload = {
+        "version": SELECTOR_STATE_PROJECTION_VERSION,
+        "schema": ExecutionStateProjection.model_json_schema(),
+    }
+    canonical = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 class ActionObservation(BaseModel):
@@ -181,8 +204,9 @@ Rules:
   inference. When state.answer_ready is true, choose ANSWER; do not start a new
   tool action and do not ask for information already represented as ready.
   When state.answer_ready is false, never choose ANSWER.
-- A tool action must use a canonical name from state.available_tools and a
-  task id from state.tasks whose dependencies are complete.
+- A tool action must use a canonical name from state.available_actions and a
+  task id from state.tasks whose dependencies are complete. Bind args against
+  that action's args_schema.
 - Bind arguments from explicit task/state/observation facts. Never invent or
   rename a path, URL, command, content, capability, argument, or completed
   effect.
@@ -386,7 +410,9 @@ class NextActionSelector:
         if action.kind is ActionKind.ASK:
             return
 
-        if action.tool not in state.available_tools:
+        available_actions = {item.tool: item for item in state.available_actions}
+        available_action = available_actions.get(action.tool)
+        if available_action is None:
             raise NextActionSelectionError(
                 "UNAVAILABLE_TOOL",
                 f"tool is not available: {action.tool}",
@@ -395,6 +421,17 @@ class NextActionSelector:
                 raw_output=raw_output,
                 candidate=action,
             )
+        try:
+            validate_json_schema(action.args, available_action.args_schema)
+        except JsonSchemaValidationError as error:
+            raise NextActionSelectionError(
+                "ARGUMENT_SCHEMA_INVALID",
+                f"arguments do not match {action.tool}: {error.message}",
+                provider=provider,
+                format_path=format_path,
+                raw_output=raw_output,
+                candidate=action,
+            ) from error
         tasks = {item.id: item for item in state.tasks}
         target_task = tasks.get(action.task_id)
         if target_task is None:
@@ -464,5 +501,7 @@ __all__ = [
     "NextActionSelectionError",
     "NextActionSelectionEvidence",
     "NextActionSelector",
+    "SELECTOR_STATE_PROJECTION_VERSION",
     "TaskProjection",
+    "selector_state_projection_hash",
 ]

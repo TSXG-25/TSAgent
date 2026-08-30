@@ -7,7 +7,7 @@ projection and never establishes that an effect occurred.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Mapping
 
 from agent.failure import (
     ClassificationSource,
@@ -102,6 +102,35 @@ class ActionResult:
             "concludes_turn": self.concludes_turn,
             "verified": self.verified,
         }
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "ActionResult":
+        """Restore the canonical Runtime observation projection."""
+
+        return cls(
+            ok=bool(value.get("ok", False)),
+            value=value.get("value"),
+            content=str(value.get("content", "")),
+            error_code=(
+                str(value["error_code"])
+                if value.get("error_code") is not None
+                else None
+            ),
+            failure_kind=(
+                str(value["failure_kind"])
+                if value.get("failure_kind") is not None
+                else None
+            ),
+            classification_source=(
+                str(value["classification_source"])
+                if value.get("classification_source") is not None
+                else None
+            ),
+            retryable=value.get("retryable"),
+            additional_context=tuple(value.get("additional_context") or ()),
+            concludes_turn=bool(value.get("concludes_turn", False)),
+            verified=value.get("verified"),
+        )
 
 
 __all__ = ["ActionResult"]

@@ -22,6 +22,7 @@ from agent.context_policy import ContextPolicy
 from agent.runtime_budget import RunBudget
 from agent.inbox import AgentInbox
 from agent.next_action import NextAction
+from agent.next_action_selector import NextActionSelector
 
 from .context_builder import ContextBuilder
 from .planner import PlannerStage
@@ -35,7 +36,12 @@ class ExecutionOrchestrator:
     Orchestrator 不知道状态机，只返回处理结果。
     """
 
-    def __init__(self, *, session_context: Optional[SessionContext] = None):
+    def __init__(
+        self,
+        *,
+        session_context: Optional[SessionContext] = None,
+        next_action_selector: Optional[NextActionSelector] = None,
+    ):
         self._timings: Dict[str, float] = {}
         self.replan_count = 0
         self.run_budget: RunBudget | None = None
@@ -45,6 +51,7 @@ class ExecutionOrchestrator:
         self._selector = Compiler()
         for rule in DEFAULT_RULES:
             self._selector.add_rule(rule)
+        self._next_action_selector = next_action_selector or NextActionSelector()
 
         # 认知层组件
         self._reference_resolver = ReferenceResolver()

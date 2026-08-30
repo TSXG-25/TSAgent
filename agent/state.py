@@ -98,4 +98,8 @@ class AgentState(TypedDict, total=False):
     goal_missing: List[str]
     inbox: Dict[str, Any]
     next_action: Dict[str, Any]
+    last_action_result: Dict[str, Any]
+    answer_ready: bool
     execution_mode: str
+    execution_ownership: Dict[str, Dict[str, Any]]
+    resolved_execution_ownership: Dict[str, Dict[str, Any]]

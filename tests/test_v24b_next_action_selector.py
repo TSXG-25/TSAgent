@@ -16,7 +16,9 @@ from agent.next_action_selector import (
     NextActionSelectionError,
     NextActionSelector,
     TaskProjection,
+    selector_state_projection_hash,
 )
+from agent.tool_action_projection import ToolActionProjection
 from evals.tool_selection.oracle import load_dataset
 
 
@@ -42,7 +44,15 @@ def _state(*, answer_ready: bool = False) -> ExecutionStateProjection:
         required_outcomes=("FILE_READ", "USER_VISIBLE_OUTPUT"),
         completed_outcomes=(),
         answer_ready=answer_ready,
-        available_tools=("filesystem.read",),
+        available_actions=(ToolActionProjection(
+            tool="filesystem.read",
+            args_schema={
+                "type": "object",
+                "properties": {"path": {"type": "string"}},
+                "required": ["path"],
+                "additionalProperties": False,
+            },
+        ),),
         completion_evidence=(),
         history=(),
     )
@@ -99,18 +109,18 @@ def test_production_selector_has_the_frozen_narrow_signature() -> None:
     assert inspect.iscoroutinefunction(NextActionSelector.select)
 
 
-def test_all_frozen_cases_fit_the_production_input_projection() -> None:
-    for case in load_dataset()["cases"]:
-        state = ExecutionStateProjection.model_validate(case["state"])
-        observation = ActionObservation.model_validate(case["observation"])
-        current = next(
-            (task for task in state.tasks if task.id == state.current_task_id),
-            None,
-        )
+def test_selector_state_v2_contract_hash_is_frozen() -> None:
+    assert selector_state_projection_hash() == (
+        "ec6ec4f58a567275cd04f9f87cc0723fdd04a64457d2075208da5786ed90d358"
+    )
 
-        assert set(observation.to_dict()) == {"last_action", "last_result"}
-        if state.current_task_id:
-            assert current is not None
+
+def test_frozen_v1_dataset_remains_bound_to_its_historical_projection() -> None:
+    for case in load_dataset()["cases"]:
+        assert "available_tools" in case["state"]
+        assert "available_actions" not in case["state"]
+        with pytest.raises(ValueError):
+            ExecutionStateProjection.model_validate(case["state"])
 
 
 def test_structured_selection_returns_canonical_next_action_without_mutation() -> None:
@@ -248,6 +258,23 @@ def test_premature_answer_is_rejected_with_candidate_evidence() -> None:
     assert captured.value.candidate is not None
     assert captured.value.candidate.kind is ActionKind.ANSWER
     assert captured.value.provider == "deepseek"
+
+
+def test_tool_arguments_must_match_projected_registry_schema() -> None:
+    provider = _StructuredProvider({
+        "kind": "tool",
+        "tool": "filesystem.read",
+        "args": {"url": "agent/runtime.py"},
+        "reason": "wrong argument name",
+        "task_id": "read-runtime",
+    })
+    selector = NextActionSelector(provider=provider, provider_name="deepseek")
+
+    with pytest.raises(NextActionSelectionError) as captured:
+        asyncio.run(selector.select(_task(), _state(), ActionObservation()))
+
+    assert captured.value.code == "ARGUMENT_SCHEMA_INVALID"
+    assert captured.value.candidate is not None
 
 
 def test_selector_source_does_not_cross_frozen_runtime_boundaries() -> None:

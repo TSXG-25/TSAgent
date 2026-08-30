@@ -31,6 +31,12 @@ _EXECUTION_TOOLS = frozenset({
     "run_python_file",
     "process.execute",
 })
+_MUTATION_TOOLS = frozenset({
+    "filesystem.write",
+    "filesystem.copy",
+    "filesystem.move",
+    "filesystem.delete",
+})
 
 _PLAN_REQUIREMENTS = {
     RequestedOutcome.FILE_READ: (
@@ -214,9 +220,34 @@ class EffectAuthorization:
             )
         return None
 
+    def validate_tool_action(self, tool: str, args: Mapping[str, Any]) -> str | None:
+        """Authorize the actual dynamic action, not only its Task wording."""
+
+        if tool in _MUTATION_TOOLS:
+            if not self.allows_file_mutation:
+                return (
+                    "EFFECT_SCOPE_VIOLATION: 用户未授权文件写入、修改、删除、移动或复制"
+                )
+            if tool in {"filesystem.copy", "filesystem.move"}:
+                targets = (str(args.get("destination", "")),)
+            else:
+                targets = (str(args.get("path", "")),)
+            if not self.write_scopes:
+                return "EFFECT_SCOPE_VIOLATION: 文件变更请求没有明确的授权目标路径"
+            for target in targets:
+                if not target or not self.allows_path(target):
+                    return (
+                        "EFFECT_SCOPE_VIOLATION: 目标不在用户授权的写入范围内: "
+                        f"{target}"
+                    )
+        if tool in _EXECUTION_TOOLS and not self.requires_execution:
+            return "EFFECT_SCOPE_VIOLATION: 用户未要求执行代码或命令，禁止执行副作用"
+        return None
+
     def validate_plan_set(
         self,
         plans: Sequence[Any],
+        available_dynamic_tools: Sequence[str] = (),
     ) -> str | None:
         """Validate requested capabilities against the complete execution set.
 
@@ -226,7 +257,7 @@ class EffectAuthorization:
         requiring every individual task to satisfy every requested outcome.
         """
 
-        tools: set[str] = set()
+        tools: set[str] = set(available_dynamic_tools)
         for plan in plans:
             if str(getattr(plan, "executor", "") or "") == "llm":
                 continue

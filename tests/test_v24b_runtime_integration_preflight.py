@@ -17,22 +17,23 @@ HARNESS = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(HARNESS)
 
 
-def test_current_runtime_integration_fails_closed_at_action_unit_mismatch() -> None:
+def test_runtime_integration_preserves_one_owner_and_one_execution_path() -> None:
     report = HARNESS.build_preflight_report()
 
-    assert report["status"] == "BLOCKED_PRECONDITION"
+    assert report["status"] == "READY_FOR_MIXED_E2E"
     assert report["configuration"] == {
         "provider_calls": 0,
         "tool_execution": False,
         "runtime_execution": False,
         "source_scan_only": True,
     }
-    assert report["discovery"]["selector_consumers"] == []
+    assert {
+        item["file"] for item in report["discovery"]["selector_consumers"]
+    } == {"agent/orchestrator/executor.py", "agent/orchestrator/main.py"}
     assert report["discovery"]["runtime_next_action_passthrough"] is True
     assert report["discovery"]["tool_executor_executes_whole_plan"] is True
     assert report["discovery"]["compiler_has_multi_step_plan"] is True
-    assert {blocker["code"] for blocker in report["blockers"]} == {
-        "SELECTOR_NOT_CONSUMED_BY_RUNTIME",
-        "NEXT_ACTION_STATE_IS_PASSTHROUGH",
-        "NEXT_ACTION_EXECUTION_UNIT_MISMATCH",
-    }
+    assert report["discovery"]["single_owner_contract"] is True
+    assert report["discovery"]["dynamic_action_lowers_to_one_step"] is True
+    assert report["discovery"]["both_owners_use_executor_factory"] is True
+    assert report["blockers"] == []

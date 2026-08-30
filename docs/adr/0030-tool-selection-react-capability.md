@@ -1,9 +1,9 @@
 # ADR-0030: Tool Selection / ReAct Capability Contract（v2.4B）
 
-- 状态: Proposed — v2.4B-3 Residual Audit Complete；Runtime Integration Pending
+- 状态: Proposed — v2.4B-4 Runtime Integration Implemented；Mixed E2E Pending
 - 范围: 单步 Tool Selection / ReAct action choice
 - 前置基线: v2.4A Planner Contract 已冻结；v2.3 Runtime spine、Verifier 和 durable state 已冻结
-- 本阶段: Selector capability 已完成独立真实基线与一次窄改进；Runtime Integration 尚未开始
+- 本阶段: Selector capability、Tool schema projection 与双 ownership Runtime 接线已完成；Mixed E2E 尚待冻结
 
 ## 1. 背景
 
@@ -65,7 +65,7 @@ Tool Registry 的实现别名（如 `read_file`、`write_file`）属于下游映
 ### 2.2 选择不变量
 
 1. 每次决策只返回一个 `NextAction`；不返回 action list，不在 Selector 中执行副作用。
-2. `tool` 必须存在于当前 projected `available_tools`；未知或不可用 Tool 不是可执行选择。
+2. `tool` 必须存在于当前 projected `available_actions`；未知或不可用 Tool 不是可执行选择，参数必须满足同一 action 的 `args_schema`。
 3. Tool action 的 Task 必须处于 pending/running，且所有依赖已达到 succeeded/skipped。
 4. retry 只由已有 `ActionResult.retryable` 与 Runtime budget 允许；Selector 不创建第二个隐式预算。
 5. 已有 verified effect 不得被再次选择为相同 Task 的副作用动作；验证不足时应选择验证动作或停止，而不是重复写入/执行。
@@ -115,7 +115,7 @@ NextActionSelector
 B017 在单轮 candidate 中机械通过，不足以关闭该合同缺口；在 B-4 integration 前必须先实现
 并验证上述 projection，不能继续依赖 Provider 对参数名的先验猜测。
 
-该前置 projection 已由以下 production boundary 实现，但尚未接入 Selector 或 Runtime：
+该 projection 已由以下 production boundary 实现并接入 Selector/Runtime：
 
 ```text
 agent.tool_identity
@@ -135,6 +135,43 @@ hash    = eb38faa4c12a2c8f8a89ff9973c64bf17a8d7aaf11e08fe0b43bb93bff6ee3bd
 `project_available_actions()` 不做 Tool ranking、policy 判断或 fallback；调用者先决定允许集合，
 projection 只完成 canonical identity 与 Registry `args_schema` 的只读投影。Registry Tool 或
 schema 缺失时 fail fast。
+
+完整 Selector state projection 已升级为：
+
+```text
+version = v2.4B-selector-state-v2
+hash    = ec6ec4f58a567275cd04f9f87cc0723fdd04a64457d2075208da5786ed90d358
+```
+
+Dataset v1 继续绑定历史 `available_tools` 投影，不被静默重解释。生产 v2 state 只接受
+`available_actions`，并在 Provider 边界按对应 JSON Schema 校验 Tool args。
+
+### 2.4 Runtime execution ownership
+
+Runtime Integration 保留 Compiler-owned whole-plan execution，并把 Selector ownership 收窄
+到可信 Runtime composition 显式声明的 dynamic/ReAct Task：
+
+```text
+Task owner = COMPILED xor DYNAMIC
+
+COMPILED
+  → Compiler produces the complete ExecutionPlan
+  → Selector calls = 0
+
+DYNAMIC
+  → Compiler calls = 0
+  → Selector produces exactly one NextAction per transition
+  → Tool NextAction lowers to a one-step ExecutionPlan
+```
+
+两种 owner 最终都进入现有 `ExecutorFactory → ToolExecutor → PlanExecutor → Verifier`，不得
+建立第二条 Tool invocation path。owner 在首个 Task effect 前解析并冻结；同一逻辑 Run 中
+禁止切换。Planner Task/TaskPolicy 不拥有该字段，避免 Planner 自行升级为动态执行。
+
+`answer` 和 `ask` 是控制动作而非 Tool effect：`answer` 仍要求 Runtime projection 的
+`answer_ready=true`；`ask` 产生稳定 BLOCKED 结果，不进入 ToolExecutor。动态 Tool 结果若尚未
+形成 verified/concludes-turn evidence，则作为下一次 Selector 的 Observation，Task 不得被假标
+为 succeeded。
 
 ## 3. Dataset / Oracle
 
@@ -210,8 +247,9 @@ v2.4B-2  Real Provider baseline
   └─ B-2b Real Provider baseline          ✅ 11/24
 v2.4B-3  Canonical action improvement     ✅ 21/24 + residual audit
 v2.4B-4  Runtime integration / clean freeze
-  ├─ B-4a available_actions projection    ✅ bootstrap, not wired
-  └─ B-4b Runtime integration preflight   ⛔ action-unit decision required
+  ├─ B-4a available_actions projection    ✅
+  ├─ B-4b ownership decision/integration  ✅ COMPILED xor DYNAMIC
+  └─ B-4c mixed E2E / clean freeze        ⏳
 ```
 
 `agent.next_action_selector.NextActionSelector` 是 B-2a 的唯一生产决策入口。它只消费
@@ -225,15 +263,7 @@ Checkpoint。
 `P-CON`/`P-INT`，保留原始 evidence，再决定是否做最小合同修订；不能在 harness 中静默
 适配成另一套 action schema。
 
-B-4b preflight 证明当前生产 execution unit 不一致：Selector 返回一个 `NextAction`，而
-`ToolExecutor` 一次执行整个 `ExecutionPlan`，且 Compiler 的生产 Rule 可以生成 multi-step
-plan。Runtime 的 `NEXT_ACTION` 状态当前也只直接跳回 `EXECUTE`。在决定以下 ownership
-之前禁止接线：
-
-1. 保留 Compiler-owned whole-plan execution，并把 Selector 的生产 ownership 收窄到明确的
-   dynamic/ReAct Task；或
-2. 将 Runtime/Executor 迁移为每个 transition 只执行一个 selected `ExecutionStep`，让
-   Selector 成为通用 action owner。
-
-不得让 Selector 选择一个 action 后仍无条件执行整个 plan，也不得绕过 Compiler 建立第二条
-Tool execution path。
+B-4b 已关闭原 execution-unit blocker：Compiler multi-step plan 只属于 COMPILED Task；
+Selector action 只属于 DYNAMIC Task。Runtime 的 `NEXT_ACTION → EXECUTE` 转移仍然成立，owner
+解析与动态 action selection 位于唯一 `ExecutionStage` 中。不得让两个 owner 同时控制同一
+Task，也不得让动态 action 绕过现有 Executor/Verifier。

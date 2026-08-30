@@ -4,7 +4,7 @@
 """
 import time
 from dataclasses import replace
-from typing import Tuple
+from typing import Any, Tuple
 
 from agent.state import AgentState
 from agent.executor.contract import executor_factory
@@ -20,8 +20,20 @@ from agent.failure import (
 )
 from agent.effect_truth import record_effect_result, record_execution_evidence
 from agent.inbox import AgentInbox
-from agent.next_action import NextAction
+from agent.next_action import ActionKind, NextAction
 from agent.action_result import ActionResult
+from agent.dynamic_action_lowering import lower_dynamic_tool_action
+from agent.execution_ownership import (
+    ExecutionOwner,
+    TaskExecutionOwnership,
+    resolve_execution_ownership,
+)
+from agent.next_action_selector import (
+    ActionObservation,
+    ExecutionStateProjection,
+    TaskProjection,
+)
+from agent.tool_action_projection import project_available_actions
 from agent.cognition.effect_authorization import EffectAuthorization
 from agent.runtime_gates import has_fresh_evidence
 from agent.interruption import (
@@ -54,6 +66,7 @@ class ExecutionStage:
             else ""
         )
         authorization = EffectAuthorization.from_request(user_input)
+        ownership = resolve_execution_ownership(state, tasks)
 
         # AgentState is a runtime cache; compile when a plan has not been cached.
         run_context = getattr(self._orch, "run_context", None)
@@ -70,6 +83,11 @@ class ExecutionStage:
         while len(execution_plans) < len(tasks):
             execution_plans.append(None)
         for idx, task_dict in enumerate(tasks):
+            task_owner = ownership[str(task_dict.get("id", ""))]
+            if task_owner.owner is ExecutionOwner.DYNAMIC:
+                if isinstance(execution_plans[idx], ExecutionPlan):
+                    raise ValueError("DYNAMIC_EXECUTION_CANNOT_USE_COMPILED_PLAN")
+                continue
             if isinstance(execution_plans[idx], ExecutionPlan):
                 continue
             task_obj = Task.from_dict(task_dict)
@@ -114,7 +132,16 @@ class ExecutionStage:
             state["execution_plans"] = execution_plans
             return state, "FAIL"
 
-        route_error = authorization.validate_plan_set(execution_plans)
+        dynamic_tools = tuple(
+            tool
+            for item in ownership.values()
+            if item.owner is ExecutionOwner.DYNAMIC
+            for tool in item.available_tools
+        )
+        route_error = authorization.validate_plan_set(
+            [plan for plan in execution_plans if isinstance(plan, ExecutionPlan)],
+            dynamic_tools,
+        )
         if route_error:
             failed_plan = execution_plans[0] if execution_plans else None
             if isinstance(failed_plan, ExecutionPlan):
@@ -174,18 +201,68 @@ class ExecutionStage:
                     if idx < len(execution_plans):
                         execution_plans[idx] = None
             task_obj = Task.from_dict(task_dict)
-            plan = execution_plans[idx] if idx < len(execution_plans) else None
-            if not isinstance(plan, ExecutionPlan):
-                plan = self._orch._selector.compile(
+            task_owner = ownership[task_obj.id]
+            selected_action: NextAction | None = None
+            if task_owner.owner is ExecutionOwner.DYNAMIC:
+                selected_action = await self._select_dynamic_action(
+                    state,
+                    tasks,
                     task_obj,
-                    context=CompilerContext(workspace=ws_service, registry=_tool_registry),
+                    task_owner,
+                    authorization,
                 )
-                if idx < len(execution_plans):
+                state["next_action"] = selected_action.to_dict()
+                if selected_action.kind is ActionKind.ASK:
+                    task_dict["status"] = "failed"
+                    task_dict["error"] = selected_action.reason
+                    task_dict["error_code"] = "DYNAMIC_ACTION_NEEDS_INPUT"
+                    state["runtime_failure_code"] = "DYNAMIC_ACTION_NEEDS_INPUT"
+                    state["runtime_terminal_status"] = "BLOCKED"
+                    state["execution_plans"] = execution_plans
+                    return state, "FAIL"
+                if selected_action.kind is ActionKind.ANSWER:
+                    task_dict["status"] = "succeeded"
+                    state["execution_plans"] = execution_plans
+                    state["current_task_index"] = idx + 1
+                    if any(
+                        str(task.get("status", "pending"))
+                        not in {"succeeded", "skipped"}
+                        for task in tasks
+                    ):
+                        return state, "NEXT_ACTION"
+                    return state, "NEXT_TASK"
+                action_authorization_error = authorization.validate_tool_action(
+                    selected_action.tool,
+                    selected_action.args,
+                )
+                if action_authorization_error:
+                    task_dict["status"] = "failed"
+                    task_dict["error"] = action_authorization_error
+                    task_dict["error_code"] = "EFFECT_SCOPE_VIOLATION"
+                    state["runtime_failure_code"] = "EFFECT_SCOPE_VIOLATION"
+                    state["runtime_terminal_status"] = "BLOCKED"
+                    state["execution_plans"] = execution_plans
+                    return state, "FAIL"
+                plan = lower_dynamic_tool_action(task_obj, selected_action)
+                print(
+                    f"  🔀 Selector: {task_dict.get('id', '?')} "
+                    f"→ {selected_action.tool}"
+                )
+            else:
+                plan = execution_plans[idx] if idx < len(execution_plans) else None
+                if not isinstance(plan, ExecutionPlan):
+                    plan = self._orch._selector.compile(
+                        task_obj,
+                        context=CompilerContext(
+                            workspace=ws_service,
+                            registry=_tool_registry,
+                        ),
+                    )
                     execution_plans[idx] = plan
-                else:
-                    execution_plans.append(plan)
-
-            print(f"  🔀 Compiler: {task_dict.get('id', '?')} → {plan.executor}_executor")
+                print(
+                    f"  🔀 Compiler: {task_dict.get('id', '?')} "
+                    f"→ {plan.executor}_executor"
+                )
             context = ExecutionContext(
                 task=task_obj,
                 user_input=user_input,
@@ -266,16 +343,33 @@ class ExecutionStage:
                 state["runtime_failure_source"] = fact.classification_source.value
                 state["runtime_failure_retryable"] = fact.retryable
 
-            self._apply_result(task_dict, plan, exec_result)
+            action_result = getattr(exec_result, "action_result", None)
+            dynamic_continues = bool(
+                task_owner.owner is ExecutionOwner.DYNAMIC
+                and action_result is not None
+                and not (
+                    action_result.ok
+                    and (
+                        action_result.verified is True
+                        or action_result.concludes_turn
+                    )
+                )
+            )
+            if dynamic_continues:
+                self._apply_dynamic_observation(task_dict, plan, exec_result)
+            else:
+                self._apply_result(task_dict, plan, exec_result)
             record_effect_result(state, task_dict, plan, exec_result)
             record_execution_evidence(state, plan, exec_result)
             inbox = AgentInbox.from_dict(state.get("inbox"))
-            next_action = NextAction.tool_call(
+            next_action = selected_action or NextAction.tool_call(
                 plan.executor,
                 task_id=str(task_dict.get("id", "")),
-                reason=str(task_dict.get("goal", "") or task_dict.get("description", "")),
+                reason=str(
+                    task_dict.get("goal", "")
+                    or task_dict.get("description", "")
+                ),
             )
-            action_result = getattr(exec_result, "action_result", None)
             if action_result is not None:
                 inbox.add_step({
                     "task_id": str(task_dict.get("id", "")),
@@ -296,8 +390,19 @@ class ExecutionStage:
                     },
                 })
             state["inbox"] = inbox.to_dict()
+            state["next_action"] = next_action.to_dict()
+            if action_result is not None:
+                state["last_action_result"] = action_result.to_dict()
             state["fresh_evidence"] = has_fresh_evidence(state)
             error_code = str((exec_result.metadata or {}).get("error_code", ""))
+            if task_owner.owner is ExecutionOwner.DYNAMIC and dynamic_continues:
+                state["current_task_index"] = idx
+                state["execution_plans"] = execution_plans
+                self._orch._timings["executor"] = round(
+                    time.perf_counter() - t_exec,
+                    3,
+                )
+                return state, "NEXT_ACTION"
             if (
                 not exec_result.success
                 and str(state.get("runtime_failure_kind", ""))
@@ -350,6 +455,79 @@ class ExecutionStage:
             # become a terminal Runtime failure here.
             return state, "OBSERVE"
         return state, "RECOVER"
+
+    async def _select_dynamic_action(
+        self,
+        state: AgentState,
+        tasks: list[dict[str, Any]],
+        task: Task,
+        ownership: TaskExecutionOwnership,
+        authorization: EffectAuthorization,
+    ) -> NextAction:
+        """Select one action from the trusted Runtime projection."""
+
+        task_projections = tuple(
+            TaskProjection(
+                id=str(item.get("id", "")),
+                verb=str(item.get("verb", "read")).lower(),
+                target=str(item.get("target", "")),
+                target_type=str(item.get("target_type", "none")),
+                status=str(item.get("status", "pending")),
+                dependencies=tuple(item.get("dependencies") or ()),
+            )
+            for item in tasks
+        )
+        facts = dict(state.get("selector_facts") or {})
+        for item in tasks:
+            for key, value in (item.get("facts") or {}).items():
+                facts[f"{item.get('id', '')}.{key}"] = value
+
+        observation = None
+        if state.get("next_action") and state.get("last_action_result"):
+            observation = ActionObservation(
+                last_action=NextAction.from_dict(state["next_action"]),
+                last_result=ActionResult.from_dict(state["last_action_result"]),
+            )
+        available_actions = project_available_actions(
+            ownership.available_tools,
+            _tool_registry,
+        )
+        projection = ExecutionStateProjection(
+            goal=str(
+                (state.get("goal_state") or {}).get("objective", "")
+                or (
+                    state.get("messages", [])[-1].content
+                    if state.get("messages")
+                    and hasattr(state["messages"][-1], "content")
+                    else ""
+                )
+            ),
+            current_task_id=task.id,
+            tasks=task_projections,
+            required_outcomes=tuple(
+                str(item)
+                for item in (
+                    state.get("requested_outcomes")
+                    or [item.value for item in authorization.requested_outcomes]
+                )
+            ),
+            completed_outcomes=tuple(state.get("completed_outcomes") or ()),
+            answer_ready=bool(state.get("answer_ready", False)),
+            available_actions=available_actions,
+            completion_evidence=tuple(
+                str(item) for item in (state.get("goal_evidence") or ())
+            ),
+            history=tuple(
+                AgentInbox.from_dict(state.get("inbox")).next_step
+            ),
+            facts=facts,
+        )
+        current = next(item for item in task_projections if item.id == task.id)
+        return await self._orch._next_action_selector.select(
+            current,
+            projection,
+            observation,
+        )
 
     @staticmethod
     def _failed_result(plan: ExecutionPlan, exc: Exception):
@@ -530,6 +708,33 @@ class ExecutionStage:
             "time_s": round(float(metadata.get("time_s", 0) or 0), 2),
         })
 
+        variables = metadata.get("variables")
+        if variables:
+            task_dict.setdefault("facts", {}).update(variables)
+
+    @staticmethod
+    def _apply_dynamic_observation(
+        task_dict: dict,
+        plan: ExecutionPlan,
+        result: Any,
+    ) -> None:
+        """Record one dynamic action without falsely completing its Task."""
+
+        metadata = result.metadata or {}
+        task_dict["status"] = "running"
+        task_dict["error"] = "" if result.success else result.error
+        task_dict["error_code"] = "" if result.success else str(
+            metadata.get("error_code", "")
+        )
+        task_dict.setdefault("observations", []).append({
+            "action": "dynamic_tool_action",
+            "tool": plan.steps[0].tool,
+            "tools": list(metadata.get("tools_called", []) or []),
+            "status": "succeeded" if result.success else "failed",
+            "summary": (result.text or result.error or "")[:300],
+            "artifact_ids": [artifact.id for artifact in result.artifacts],
+            "time_s": round(float(metadata.get("time_s", 0) or 0), 2),
+        })
         variables = metadata.get("variables")
         if variables:
             task_dict.setdefault("facts", {}).update(variables)

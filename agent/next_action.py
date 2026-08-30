@@ -54,5 +54,17 @@ class NextAction:
             "task_id": self.task_id,
         }
 
+    @classmethod
+    def from_dict(cls, value: dict[str, Any]) -> "NextAction":
+        """Restore one canonical Runtime action projection."""
+
+        return cls(
+            kind=ActionKind(str(value["kind"])),
+            tool=str(value.get("tool", "")),
+            args=dict(value.get("args") or {}),
+            reason=str(value.get("reason", "")),
+            task_id=str(value.get("task_id", "")),
+        )
+
 
 __all__ = ["ActionKind", "NextAction"]

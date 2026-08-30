@@ -1,0 +1,35 @@
+{
+  "version": "v2.4B-4a-evidence-v1",
+  "head": "fc488bc6b614fd3e2b78bbe525fa74adfcab7ddb",
+  "status": "PASS",
+  "projection_contract": {
+    "version": "v2.4B-available-actions-v1",
+    "hash": "eb38faa4c12a2c8f8a89ff9973c64bf17a8d7aaf11e08fe0b43bb93bff6ee3bd",
+    "entrypoint": "agent.tool_action_projection.project_available_actions",
+    "identity_source": "agent.tool_identity.CANONICAL_TOOL_ALIASES",
+    "argument_schema_source": "ToolRegistry tool.args_schema"
+  },
+  "invariants": {
+    "canonical_identity_preserved": true,
+    "registry_schema_projected": true,
+    "policy_approved_actions_only": true,
+    "missing_registry_tool_fails_fast": true,
+    "canonical_alias_source_count": 1,
+    "selector_registry_imports": 0,
+    "selector_compiler_imports": 0,
+    "selector_executor_imports": 0,
+    "dataset_v1_changed": false,
+    "runtime_integration": false,
+    "tool_execution": false,
+    "provider_calls": 0
+  },
+  "verification": {
+    "clean_checkout": true,
+    "related_tests": {
+      "passed": 62,
+      "failed": 0
+    },
+    "diff_check": "PASS"
+  },
+  "next_step": "B-4b explicit Selector state migration and Runtime composition wiring"
+}

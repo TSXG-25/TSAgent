@@ -211,7 +211,7 @@ v2.4B-2  Real Provider baseline
 v2.4B-3  Canonical action improvement     ✅ 21/24 + residual audit
 v2.4B-4  Runtime integration / clean freeze
   ├─ B-4a available_actions projection    ✅ bootstrap, not wired
-  └─ B-4b Runtime integration             ← next
+  └─ B-4b Runtime integration preflight   ⛔ action-unit decision required
 ```
 
 `agent.next_action_selector.NextActionSelector` 是 B-2a 的唯一生产决策入口。它只消费
@@ -224,3 +224,16 @@ Checkpoint。
 `NextAction` 与生产 Runtime 的 observation projection 不一致，应先归类为
 `P-CON`/`P-INT`，保留原始 evidence，再决定是否做最小合同修订；不能在 harness 中静默
 适配成另一套 action schema。
+
+B-4b preflight 证明当前生产 execution unit 不一致：Selector 返回一个 `NextAction`，而
+`ToolExecutor` 一次执行整个 `ExecutionPlan`，且 Compiler 的生产 Rule 可以生成 multi-step
+plan。Runtime 的 `NEXT_ACTION` 状态当前也只直接跳回 `EXECUTE`。在决定以下 ownership
+之前禁止接线：
+
+1. 保留 Compiler-owned whole-plan execution，并把 Selector 的生产 ownership 收窄到明确的
+   dynamic/ReAct Task；或
+2. 将 Runtime/Executor 迁移为每个 transition 只执行一个 selected `ExecutionStep`，让
+   Selector 成为通用 action owner。
+
+不得让 Selector 选择一个 action 后仍无条件执行整个 plan，也不得绕过 Compiler 建立第二条
+Tool execution path。

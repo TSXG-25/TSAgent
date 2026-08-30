@@ -1,0 +1,3755 @@
+{
+  "harness_version": "v2.4B-2b-real-tool-selection-v1",
+  "generated_at": "2026-08-30T07:37:26.367013+00:00",
+  "evaluated_head": "b25d85fd8b61acbef43b03b9e42306e328117bfc",
+  "working_tree_dirty": false,
+  "dataset": {
+    "version": "v2.4B-tool-selection-v1",
+    "hash": "bc0baa5afcf68ba68a787387edd7297a4c22bea6334e1e0afd06c61136952409",
+    "case_count": 24,
+    "fixture_hash": "ab2ddc290f2ce5f05e71006e495a7dd8015f36a933f49cc33f12e36dd2a50109"
+  },
+  "selector": {
+    "symbol": "agent.next_action_selector.NextActionSelector",
+    "prompt_hash": "934c851036951dd8ec1250f26d32f4220499b90deb735fc5296a514bd6ae90c1"
+  },
+  "provider": {
+    "provider": "deepseek",
+    "model": "deepseek-v4-flash",
+    "base_url": "https://api.deepseek.com/v1",
+    "fallback": false
+  },
+  "controls": {
+    "automatic_retry": false,
+    "provider_fallback": false,
+    "golden_repair": false,
+    "json_repair": false,
+    "tool_execution": false,
+    "runtime_loop": false,
+    "case_attempts": 1
+  },
+  "summary": {
+    "case_count": 24,
+    "evaluable_count": 24,
+    "pass_count": 21,
+    "capability_rate": 0.875,
+    "funnel": {
+      "case_count": 24,
+      "pass_count": 21,
+      "schema_validity": 1.0,
+      "kind_accuracy": 0.875,
+      "tool_selection_accuracy": 1.0,
+      "argument_accuracy": 1.0,
+      "task_targeting_accuracy": 1.0,
+      "safe_action_rate": 1.0,
+      "duplicate_effect_count": 0,
+      "premature_finish_count": 0,
+      "schema_error_count": 0
+    },
+    "risk": {
+      "duplicate_verified_effect_count": 0,
+      "premature_answer_count": 0,
+      "dependency_violation_count": 0
+    },
+    "failure_categories": {
+      "P-CAP": 3
+    },
+    "capability_failures": {
+      "WRONG_KIND": 3
+    },
+    "format_paths": {
+      "STRUCTURED_TO_RAW_FALLBACK": 24
+    },
+    "provider_error_count": 0,
+    "contract_error_count": 0,
+    "oracle_error_count": 0,
+    "integration_error_count": 0,
+    "latency_ms": {
+      "mean": 3248.832,
+      "p50": 2541.814,
+      "p95": 8157.425,
+      "max": 8457.145
+    },
+    "token_usage": {
+      "prompt_tokens": 18261,
+      "completion_tokens": 7162,
+      "total_tokens": 25423
+    }
+  },
+  "records": [
+    {
+      "case_id": "B001",
+      "family": "INITIAL_SELECTION",
+      "input": "读取 agent/runtime.py，并告诉我 Runtime 主循环做什么。",
+      "task_projection": {
+        "id": "read-runtime",
+        "verb": "read",
+        "target": "agent/runtime.py",
+        "target_type": "file",
+        "status": "pending",
+        "dependencies": []
+      },
+      "state_projection": {
+        "goal": "读取文件并准备回答",
+        "current_task_id": "read-runtime",
+        "tasks": [
+          {
+            "id": "read-runtime",
+            "verb": "read",
+            "target": "agent/runtime.py",
+            "target_type": "file",
+            "status": "pending",
+            "dependencies": []
+          }
+        ],
+        "required_outcomes": [
+          "FILE_READ",
+          "USER_VISIBLE_OUTPUT"
+        ],
+        "completed_outcomes": [],
+        "answer_ready": false,
+        "available_tools": [
+          "filesystem.read",
+          "filesystem.list"
+        ],
+        "completion_evidence": [],
+        "history": [],
+        "facts": {}
+      },
+      "observation": {
+        "last_action": null,
+        "last_result": null
+      },
+      "case_attempts": 1,
+      "latency_ms": 2392.668,
+      "provider_status": "SUCCESS_WITH_FORMAT_FALLBACK",
+      "provider_path": "SINGLE_PROVIDER",
+      "format_path": "STRUCTURED_TO_RAW_FALLBACK",
+      "provider_calls": [
+        {
+          "sequence": 1,
+          "provider": "deepseek",
+          "call_kind": "structured_bind",
+          "outcome": "SUCCESS",
+          "latency_ms": 1.022,
+          "token_usage": {},
+          "response_preview": null
+        },
+        {
+          "sequence": 2,
+          "provider": "deepseek",
+          "call_kind": "structured_ainvoke",
+          "outcome": "ERROR",
+          "latency_ms": 474.436,
+          "token_usage": {},
+          "response_preview": null,
+          "error_code": "STRUCTURED_OUTPUT_REJECTED",
+          "error": {
+            "type": "BadRequestError",
+            "message": "Error code: 400 - {'error': {'message': 'This response_format type is unavailable now', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}"
+          }
+        },
+        {
+          "sequence": 3,
+          "provider": "deepseek",
+          "call_kind": "raw_ainvoke",
+          "outcome": "SUCCESS",
+          "latency_ms": 1914.804,
+          "token_usage": {
+            "prompt_tokens": 670,
+            "completion_tokens": 185,
+            "total_tokens": 855
+          },
+          "response_preview": "{\"kind\":\"tool\",\"tool\":\"filesystem.read\",\"args\":{\"path\":\"agent/runtime.py\"},\"reason\":\"Task requires reading target file agent/runtime.py\",\"task_id\":\"read-runtime\"}"
+        }
+      ],
+      "token_usage": {
+        "prompt_tokens": 670,
+        "completion_tokens": 185,
+        "total_tokens": 855
+      },
+      "raw_provider_output": "{\"kind\":\"tool\",\"tool\":\"filesystem.read\",\"args\":{\"path\":\"agent/runtime.py\"},\"reason\":\"Task requires reading target file agent/runtime.py\",\"task_id\":\"read-runtime\"}",
+      "normalized_next_action": {
+        "kind": "tool",
+        "tool": "filesystem.read",
+        "args": {
+          "path": "agent/runtime.py"
+        },
+        "reason": "Task requires reading target file agent/runtime.py",
+        "task_id": "read-runtime"
+      },
+      "oracle_result": {
+        "case_id": "B001",
+        "family": "INITIAL_SELECTION",
+        "expected_decision": "CONTINUE",
+        "expected_kind": "tool",
+        "actual_kind": "tool",
+        "expected_tools": [
+          "filesystem.read"
+        ],
+        "actual_tool": "filesystem.read",
+        "expected_task_id": "read-runtime",
+        "actual_task_id": "read-runtime",
+        "schema_validity": 1.0,
+        "kind_accuracy": 1.0,
+        "tool_selection_accuracy": 1.0,
+        "argument_accuracy": 1.0,
+        "task_targeting_accuracy": 1.0,
+        "safe_action": 1.0,
+        "duplicate_effect": false,
+        "premature_finish": false,
+        "errors": [],
+        "passed": true
+      },
+      "evaluable": true,
+      "passed": true,
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {}
+    },
+    {
+      "case_id": "B002",
+      "family": "INITIAL_SELECTION",
+      "input": "列出 agent/checkpoint/ 目录中的文件。",
+      "task_projection": {
+        "id": "list-checkpoint",
+        "verb": "list",
+        "target": "agent/checkpoint",
+        "target_type": "file",
+        "status": "pending",
+        "dependencies": []
+      },
+      "state_projection": {
+        "goal": "列出目录",
+        "current_task_id": "list-checkpoint",
+        "tasks": [
+          {
+            "id": "list-checkpoint",
+            "verb": "list",
+            "target": "agent/checkpoint",
+            "target_type": "file",
+            "status": "pending",
+            "dependencies": []
+          }
+        ],
+        "required_outcomes": [
+          "FILE_READ",
+          "USER_VISIBLE_OUTPUT"
+        ],
+        "completed_outcomes": [],
+        "answer_ready": false,
+        "available_tools": [
+          "filesystem.read",
+          "filesystem.list"
+        ],
+        "completion_evidence": [],
+        "history": [],
+        "facts": {}
+      },
+      "observation": {
+        "last_action": null,
+        "last_result": null
+      },
+      "case_attempts": 1,
+      "latency_ms": 6772.497,
+      "provider_status": "SUCCESS_WITH_FORMAT_FALLBACK",
+      "provider_path": "SINGLE_PROVIDER",
+      "format_path": "STRUCTURED_TO_RAW_FALLBACK",
+      "provider_calls": [
+        {
+          "sequence": 1,
+          "provider": "deepseek",
+          "call_kind": "structured_bind",
+          "outcome": "SUCCESS",
+          "latency_ms": 0.533,
+          "token_usage": {},
+          "response_preview": null
+        },
+        {
+          "sequence": 2,
+          "provider": "deepseek",
+          "call_kind": "structured_ainvoke",
+          "outcome": "ERROR",
+          "latency_ms": 180.608,
+          "token_usage": {},
+          "response_preview": null,
+          "error_code": "STRUCTURED_OUTPUT_REJECTED",
+          "error": {
+            "type": "BadRequestError",
+            "message": "Error code: 400 - {'error': {'message': 'This response_format type is unavailable now', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}"
+          }
+        },
+        {
+          "sequence": 3,
+          "provider": "deepseek",
+          "call_kind": "raw_ainvoke",
+          "outcome": "SUCCESS",
+          "latency_ms": 6591.098,
+          "token_usage": {
+            "prompt_tokens": 667,
+            "completion_tokens": 734,
+            "total_tokens": 1401
+          },
+          "response_preview": "{\"kind\":\"tool\",\"tool\":\"filesystem.list\",\"args\":{\"path\":\"agent/checkpoint\"},\"reason\":\"列出目标目录以完成 list-checkpoint 任务\",\"task_id\":\"list-checkpoint\"}"
+        }
+      ],
+      "token_usage": {
+        "prompt_tokens": 667,
+        "completion_tokens": 734,
+        "total_tokens": 1401
+      },
+      "raw_provider_output": "{\"kind\":\"tool\",\"tool\":\"filesystem.list\",\"args\":{\"path\":\"agent/checkpoint\"},\"reason\":\"列出目标目录以完成 list-checkpoint 任务\",\"task_id\":\"list-checkpoint\"}",
+      "normalized_next_action": {
+        "kind": "tool",
+        "tool": "filesystem.list",
+        "args": {
+          "path": "agent/checkpoint"
+        },
+        "reason": "列出目标目录以完成 list-checkpoint 任务",
+        "task_id": "list-checkpoint"
+      },
+      "oracle_result": {
+        "case_id": "B002",
+        "family": "INITIAL_SELECTION",
+        "expected_decision": "CONTINUE",
+        "expected_kind": "tool",
+        "actual_kind": "tool",
+        "expected_tools": [
+          "filesystem.list"
+        ],
+        "actual_tool": "filesystem.list",
+        "expected_task_id": "list-checkpoint",
+        "actual_task_id": "list-checkpoint",
+        "schema_validity": 1.0,
+        "kind_accuracy": 1.0,
+        "tool_selection_accuracy": 1.0,
+        "argument_accuracy": 1.0,
+        "task_targeting_accuracy": 1.0,
+        "safe_action": 1.0,
+        "duplicate_effect": false,
+        "premature_finish": false,
+        "errors": [],
+        "passed": true
+      },
+      "evaluable": true,
+      "passed": true,
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {}
+    },
+    {
+      "case_id": "B003",
+      "family": "INITIAL_SELECTION",
+      "input": "搜索 SQLite WAL 的官方文档。",
+      "task_projection": {
+        "id": "search-wal",
+        "verb": "search",
+        "target": "SQLite WAL official documentation",
+        "target_type": "text",
+        "status": "pending",
+        "dependencies": []
+      },
+      "state_projection": {
+        "goal": "获取官方资料",
+        "current_task_id": "search-wal",
+        "tasks": [
+          {
+            "id": "search-wal",
+            "verb": "search",
+            "target": "SQLite WAL official documentation",
+            "target_type": "text",
+            "status": "pending",
+            "dependencies": []
+          }
+        ],
+        "required_outcomes": [
+          "USER_VISIBLE_OUTPUT"
+        ],
+        "completed_outcomes": [],
+        "answer_ready": false,
+        "available_tools": [
+          "web_search",
+          "web_fetch"
+        ],
+        "completion_evidence": [],
+        "history": [],
+        "facts": {}
+      },
+      "observation": {
+        "last_action": null,
+        "last_result": null
+      },
+      "case_attempts": 1,
+      "latency_ms": 2846.667,
+      "provider_status": "SUCCESS_WITH_FORMAT_FALLBACK",
+      "provider_path": "SINGLE_PROVIDER",
+      "format_path": "STRUCTURED_TO_RAW_FALLBACK",
+      "provider_calls": [
+        {
+          "sequence": 1,
+          "provider": "deepseek",
+          "call_kind": "structured_bind",
+          "outcome": "SUCCESS",
+          "latency_ms": 0.457,
+          "token_usage": {},
+          "response_preview": null
+        },
+        {
+          "sequence": 2,
+          "provider": "deepseek",
+          "call_kind": "structured_ainvoke",
+          "outcome": "ERROR",
+          "latency_ms": 119.048,
+          "token_usage": {},
+          "response_preview": null,
+          "error_code": "STRUCTURED_OUTPUT_REJECTED",
+          "error": {
+            "type": "BadRequestError",
+            "message": "Error code: 400 - {'error': {'message': 'This response_format type is unavailable now', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}"
+          }
+        },
+        {
+          "sequence": 3,
+          "provider": "deepseek",
+          "call_kind": "raw_ainvoke",
+          "outcome": "SUCCESS",
+          "latency_ms": 2726.921,
+          "token_usage": {
+            "prompt_tokens": 667,
+            "completion_tokens": 365,
+            "total_tokens": 1032
+          },
+          "response_preview": "{\"kind\":\"tool\",\"tool\":\"web_search\",\"args\":{\"query\":\"SQLite WAL official documentation\"},\"reason\":\"Task search-wal is pending with no dependencies and requires searching for SQLite WAL official documentation; web_search is the available canonical tool for this action.\",\"task_id\":\"search-wal\"}"
+        }
+      ],
+      "token_usage": {
+        "prompt_tokens": 667,
+        "completion_tokens": 365,
+        "total_tokens": 1032
+      },
+      "raw_provider_output": "{\"kind\":\"tool\",\"tool\":\"web_search\",\"args\":{\"query\":\"SQLite WAL official documentation\"},\"reason\":\"Task search-wal is pending with no dependencies and requires searching for SQLite WAL official documentation; web_search is the available canonical tool for this action.\",\"task_id\":\"search-wal\"}",
+      "normalized_next_action": {
+        "kind": "tool",
+        "tool": "web_search",
+        "args": {
+          "query": "SQLite WAL official documentation"
+        },
+        "reason": "Task search-wal is pending with no dependencies and requires searching for SQLite WAL official documentation; web_search is the available canonical tool for this action.",
+        "task_id": "search-wal"
+      },
+      "oracle_result": {
+        "case_id": "B003",
+        "family": "INITIAL_SELECTION",
+        "expected_decision": "CONTINUE",
+        "expected_kind": "tool",
+        "actual_kind": "tool",
+        "expected_tools": [
+          "web_search"
+        ],
+        "actual_tool": "web_search",
+        "expected_task_id": "search-wal",
+        "actual_task_id": "search-wal",
+        "schema_validity": 1.0,
+        "kind_accuracy": 1.0,
+        "tool_selection_accuracy": 1.0,
+        "argument_accuracy": 1.0,
+        "task_targeting_accuracy": 1.0,
+        "safe_action": 1.0,
+        "duplicate_effect": false,
+        "premature_finish": false,
+        "errors": [],
+        "passed": true
+      },
+      "evaluable": true,
+      "passed": true,
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {}
+    },
+    {
+      "case_id": "B004",
+      "family": "INITIAL_SELECTION",
+      "input": "用 Python 实际计算 17 * 19，并贴出执行结果。",
+      "task_projection": {
+        "id": "calculate",
+        "verb": "execute",
+        "target": "print(17 * 19)",
+        "target_type": "text",
+        "status": "pending",
+        "dependencies": []
+      },
+      "state_projection": {
+        "goal": "执行确定的 Python 计算并展示输出",
+        "current_task_id": "calculate",
+        "tasks": [
+          {
+            "id": "calculate",
+            "verb": "execute",
+            "target": "print(17 * 19)",
+            "target_type": "text",
+            "status": "pending",
+            "dependencies": []
+          }
+        ],
+        "required_outcomes": [
+          "CODE_EXECUTION",
+          "USER_VISIBLE_OUTPUT"
+        ],
+        "completed_outcomes": [],
+        "answer_ready": false,
+        "available_tools": [
+          "run_python",
+          "run_python_file"
+        ],
+        "completion_evidence": [],
+        "history": [],
+        "facts": {}
+      },
+      "observation": {
+        "last_action": null,
+        "last_result": null
+      },
+      "case_attempts": 1,
+      "latency_ms": 1710.233,
+      "provider_status": "SUCCESS_WITH_FORMAT_FALLBACK",
+      "provider_path": "SINGLE_PROVIDER",
+      "format_path": "STRUCTURED_TO_RAW_FALLBACK",
+      "provider_calls": [
+        {
+          "sequence": 1,
+          "provider": "deepseek",
+          "call_kind": "structured_bind",
+          "outcome": "SUCCESS",
+          "latency_ms": 0.733,
+          "token_usage": {},
+          "response_preview": null
+        },
+        {
+          "sequence": 2,
+          "provider": "deepseek",
+          "call_kind": "structured_ainvoke",
+          "outcome": "ERROR",
+          "latency_ms": 122.98,
+          "token_usage": {},
+          "response_preview": null,
+          "error_code": "STRUCTURED_OUTPUT_REJECTED",
+          "error": {
+            "type": "BadRequestError",
+            "message": "Error code: 400 - {'error': {'message': 'This response_format type is unavailable now', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}"
+          }
+        },
+        {
+          "sequence": 3,
+          "provider": "deepseek",
+          "call_kind": "raw_ainvoke",
+          "outcome": "SUCCESS",
+          "latency_ms": 1586.278,
+          "token_usage": {
+            "prompt_tokens": 675,
+            "completion_tokens": 151,
+            "total_tokens": 826
+          },
+          "response_preview": "{\"kind\":\"tool\",\"tool\":\"run_python\",\"args\":{\"code\":\"print(17 * 19)\"},\"reason\":\"Execute the pending Python calculation to produce the required output.\",\"task_id\":\"calculate\"}"
+        }
+      ],
+      "token_usage": {
+        "prompt_tokens": 675,
+        "completion_tokens": 151,
+        "total_tokens": 826
+      },
+      "raw_provider_output": "{\"kind\":\"tool\",\"tool\":\"run_python\",\"args\":{\"code\":\"print(17 * 19)\"},\"reason\":\"Execute the pending Python calculation to produce the required output.\",\"task_id\":\"calculate\"}",
+      "normalized_next_action": {
+        "kind": "tool",
+        "tool": "run_python",
+        "args": {
+          "code": "print(17 * 19)"
+        },
+        "reason": "Execute the pending Python calculation to produce the required output.",
+        "task_id": "calculate"
+      },
+      "oracle_result": {
+        "case_id": "B004",
+        "family": "INITIAL_SELECTION",
+        "expected_decision": "CONTINUE",
+        "expected_kind": "tool",
+        "actual_kind": "tool",
+        "expected_tools": [
+          "run_python"
+        ],
+        "actual_tool": "run_python",
+        "expected_task_id": "calculate",
+        "actual_task_id": "calculate",
+        "schema_validity": 1.0,
+        "kind_accuracy": 1.0,
+        "tool_selection_accuracy": 1.0,
+        "argument_accuracy": 1.0,
+        "task_targeting_accuracy": 1.0,
+        "safe_action": 1.0,
+        "duplicate_effect": false,
+        "premature_finish": false,
+        "errors": [],
+        "passed": true
+      },
+      "evaluable": true,
+      "passed": true,
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {}
+    },
+    {
+      "case_id": "B005",
+      "family": "RESULT_TRANSITION",
+      "input": "读取文件后总结其中的 Runtime 职责。",
+      "task_projection": {
+        "id": "read-runtime",
+        "verb": "read",
+        "target": "agent/runtime.py",
+        "target_type": "file",
+        "status": "succeeded",
+        "dependencies": []
+      },
+      "state_projection": {
+        "goal": "根据已读取的文件回答问题",
+        "current_task_id": "read-runtime",
+        "tasks": [
+          {
+            "id": "read-runtime",
+            "verb": "read",
+            "target": "agent/runtime.py",
+            "target_type": "file",
+            "status": "succeeded",
+            "dependencies": []
+          }
+        ],
+        "required_outcomes": [
+          "FILE_READ",
+          "USER_VISIBLE_OUTPUT"
+        ],
+        "completed_outcomes": [
+          "FILE_READ"
+        ],
+        "answer_ready": true,
+        "available_tools": [
+          "filesystem.read"
+        ],
+        "completion_evidence": [
+          "read:agent/runtime.py"
+        ],
+        "history": [
+          {
+            "kind": "tool",
+            "tool": "filesystem.read",
+            "task_id": "read-runtime",
+            "args": {
+              "path": "agent/runtime.py"
+            },
+            "result": {
+              "ok": true,
+              "verified": true
+            }
+          }
+        ],
+        "facts": {}
+      },
+      "observation": {
+        "last_action": {
+          "kind": "tool",
+          "tool": "filesystem.read",
+          "args": {
+            "path": "agent/runtime.py"
+          },
+          "reason": "",
+          "task_id": "read-runtime"
+        },
+        "last_result": {
+          "ok": true,
+          "value": null,
+          "content": "Runtime owns durable state transitions and delegates planning/execution.",
+          "error_code": null,
+          "failure_kind": null,
+          "classification_source": null,
+          "retryable": null,
+          "additional_context": [],
+          "concludes_turn": false,
+          "verified": true
+        }
+      },
+      "case_attempts": 1,
+      "latency_ms": 1461.185,
+      "provider_status": "SUCCESS_WITH_FORMAT_FALLBACK",
+      "provider_path": "SINGLE_PROVIDER",
+      "format_path": "STRUCTURED_TO_RAW_FALLBACK",
+      "provider_calls": [
+        {
+          "sequence": 1,
+          "provider": "deepseek",
+          "call_kind": "structured_bind",
+          "outcome": "SUCCESS",
+          "latency_ms": 0.487,
+          "token_usage": {},
+          "response_preview": null
+        },
+        {
+          "sequence": 2,
+          "provider": "deepseek",
+          "call_kind": "structured_ainvoke",
+          "outcome": "ERROR",
+          "latency_ms": 91.343,
+          "token_usage": {},
+          "response_preview": null,
+          "error_code": "STRUCTURED_OUTPUT_REJECTED",
+          "error": {
+            "type": "BadRequestError",
+            "message": "Error code: 400 - {'error': {'message': 'This response_format type is unavailable now', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}"
+          }
+        },
+        {
+          "sequence": 3,
+          "provider": "deepseek",
+          "call_kind": "raw_ainvoke",
+          "outcome": "SUCCESS",
+          "latency_ms": 1367.755,
+          "token_usage": {
+            "prompt_tokens": 805,
+            "completion_tokens": 98,
+            "total_tokens": 903
+          },
+          "response_preview": "{\"kind\":\"answer\",\"tool\":\"\",\"args\":{},\"reason\":\"State indicates the answer is ready after successfully reading the runtime file.\",\"task_id\":\"\"}"
+        }
+      ],
+      "token_usage": {
+        "prompt_tokens": 805,
+        "completion_tokens": 98,
+        "total_tokens": 903
+      },
+      "raw_provider_output": "{\"kind\":\"answer\",\"tool\":\"\",\"args\":{},\"reason\":\"State indicates the answer is ready after successfully reading the runtime file.\",\"task_id\":\"\"}",
+      "normalized_next_action": {
+        "kind": "answer",
+        "tool": "",
+        "args": {},
+        "reason": "State indicates the answer is ready after successfully reading the runtime file.",
+        "task_id": ""
+      },
+      "oracle_result": {
+        "case_id": "B005",
+        "family": "RESULT_TRANSITION",
+        "expected_decision": "FINISH",
+        "expected_kind": "answer",
+        "actual_kind": "answer",
+        "expected_tools": [],
+        "actual_tool": "",
+        "expected_task_id": "",
+        "actual_task_id": "",
+        "schema_validity": 1.0,
+        "kind_accuracy": 1.0,
+        "tool_selection_accuracy": 1.0,
+        "argument_accuracy": 1.0,
+        "task_targeting_accuracy": 1.0,
+        "safe_action": 1.0,
+        "duplicate_effect": false,
+        "premature_finish": false,
+        "errors": [],
+        "passed": true
+      },
+      "evaluable": true,
+      "passed": true,
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {}
+    },
+    {
+      "case_id": "B006",
+      "family": "RESULT_TRANSITION",
+      "input": "检索到两个来源后，比较它们对 WAL 并发的说明并回答我。",
+      "task_projection": {
+        "id": "search-wal",
+        "verb": "search",
+        "target": "SQLite WAL concurrency",
+        "target_type": "text",
+        "status": "succeeded",
+        "dependencies": []
+      },
+      "state_projection": {
+        "goal": "综合已检索来源",
+        "current_task_id": "search-wal",
+        "tasks": [
+          {
+            "id": "search-wal",
+            "verb": "search",
+            "target": "SQLite WAL concurrency",
+            "target_type": "text",
+            "status": "succeeded",
+            "dependencies": []
+          }
+        ],
+        "required_outcomes": [
+          "USER_VISIBLE_OUTPUT"
+        ],
+        "completed_outcomes": [],
+        "answer_ready": true,
+        "available_tools": [
+          "web_search",
+          "web_fetch"
+        ],
+        "completion_evidence": [
+          "source:https://sqlite.org/wal.html",
+          "source:https://sqlite.org/lockingv3.html"
+        ],
+        "history": [
+          {
+            "kind": "tool",
+            "tool": "web_search",
+            "task_id": "search-wal",
+            "args": {
+              "query": "SQLite WAL concurrency"
+            },
+            "result": {
+              "ok": true,
+              "verified": true
+            }
+          }
+        ],
+        "facts": {}
+      },
+      "observation": {
+        "last_action": {
+          "kind": "tool",
+          "tool": "web_search",
+          "args": {
+            "query": "SQLite WAL concurrency"
+          },
+          "reason": "",
+          "task_id": "search-wal"
+        },
+        "last_result": {
+          "ok": true,
+          "value": {
+            "sources": [
+              "https://sqlite.org/wal.html",
+              "https://sqlite.org/lockingv3.html"
+            ]
+          },
+          "content": "",
+          "error_code": null,
+          "failure_kind": null,
+          "classification_source": null,
+          "retryable": null,
+          "additional_context": [],
+          "concludes_turn": false,
+          "verified": true
+        }
+      },
+      "case_attempts": 1,
+      "latency_ms": 1621.262,
+      "provider_status": "SUCCESS_WITH_FORMAT_FALLBACK",
+      "provider_path": "SINGLE_PROVIDER",
+      "format_path": "STRUCTURED_TO_RAW_FALLBACK",
+      "provider_calls": [
+        {
+          "sequence": 1,
+          "provider": "deepseek",
+          "call_kind": "structured_bind",
+          "outcome": "SUCCESS",
+          "latency_ms": 0.466,
+          "token_usage": {},
+          "response_preview": null
+        },
+        {
+          "sequence": 2,
+          "provider": "deepseek",
+          "call_kind": "structured_ainvoke",
+          "outcome": "ERROR",
+          "latency_ms": 88.553,
+          "token_usage": {},
+          "response_preview": null,
+          "error_code": "STRUCTURED_OUTPUT_REJECTED",
+          "error": {
+            "type": "BadRequestError",
+            "message": "Error code: 400 - {'error': {'message': 'This response_format type is unavailable now', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}"
+          }
+        },
+        {
+          "sequence": 3,
+          "provider": "deepseek",
+          "call_kind": "raw_ainvoke",
+          "outcome": "SUCCESS",
+          "latency_ms": 1531.949,
+          "token_usage": {
+            "prompt_tokens": 834,
+            "completion_tokens": 102,
+            "total_tokens": 936
+          },
+          "response_preview": "{\"kind\":\"answer\",\"tool\":\"\",\"args\":{},\"reason\":\"State indicates answer_ready is true; no further tool action is permitted.\",\"task_id\":\"\"}"
+        }
+      ],
+      "token_usage": {
+        "prompt_tokens": 834,
+        "completion_tokens": 102,
+        "total_tokens": 936
+      },
+      "raw_provider_output": "{\"kind\":\"answer\",\"tool\":\"\",\"args\":{},\"reason\":\"State indicates answer_ready is true; no further tool action is permitted.\",\"task_id\":\"\"}",
+      "normalized_next_action": {
+        "kind": "answer",
+        "tool": "",
+        "args": {},
+        "reason": "State indicates answer_ready is true; no further tool action is permitted.",
+        "task_id": ""
+      },
+      "oracle_result": {
+        "case_id": "B006",
+        "family": "RESULT_TRANSITION",
+        "expected_decision": "FINISH",
+        "expected_kind": "answer",
+        "actual_kind": "answer",
+        "expected_tools": [],
+        "actual_tool": "",
+        "expected_task_id": "",
+        "actual_task_id": "",
+        "schema_validity": 1.0,
+        "kind_accuracy": 1.0,
+        "tool_selection_accuracy": 1.0,
+        "argument_accuracy": 1.0,
+        "task_targeting_accuracy": 1.0,
+        "safe_action": 1.0,
+        "duplicate_effect": false,
+        "premature_finish": false,
+        "errors": [],
+        "passed": true
+      },
+      "evaluable": true,
+      "passed": true,
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {}
+    },
+    {
+      "case_id": "B007",
+      "family": "RESULT_TRANSITION",
+      "input": "把报告写入 output/report.md；写完后告诉我。",
+      "task_projection": {
+        "id": "write-report",
+        "verb": "write",
+        "target": "output/report.md",
+        "target_type": "file",
+        "status": "succeeded",
+        "dependencies": []
+      },
+      "state_projection": {
+        "goal": "确认已验证的报告写入",
+        "current_task_id": "write-report",
+        "tasks": [
+          {
+            "id": "write-report",
+            "verb": "write",
+            "target": "output/report.md",
+            "target_type": "file",
+            "status": "succeeded",
+            "dependencies": []
+          }
+        ],
+        "required_outcomes": [
+          "FILE_MUTATION",
+          "USER_VISIBLE_OUTPUT"
+        ],
+        "completed_outcomes": [
+          "FILE_MUTATION"
+        ],
+        "answer_ready": true,
+        "available_tools": [
+          "filesystem.write"
+        ],
+        "completion_evidence": [
+          "artifact:output/report.md",
+          "verified:output/report.md"
+        ],
+        "history": [
+          {
+            "kind": "tool",
+            "tool": "filesystem.write",
+            "task_id": "write-report",
+            "args": {
+              "path": "output/report.md",
+              "content": "报告内容"
+            },
+            "result": {
+              "ok": true,
+              "verified": true
+            }
+          }
+        ],
+        "facts": {}
+      },
+      "observation": {
+        "last_action": {
+          "kind": "tool",
+          "tool": "filesystem.write",
+          "args": {
+            "path": "output/report.md",
+            "content": "报告内容"
+          },
+          "reason": "",
+          "task_id": "write-report"
+        },
+        "last_result": {
+          "ok": true,
+          "value": {
+            "artifact": "output/report.md"
+          },
+          "content": "",
+          "error_code": null,
+          "failure_kind": null,
+          "classification_source": null,
+          "retryable": null,
+          "additional_context": [],
+          "concludes_turn": false,
+          "verified": true
+        }
+      },
+      "case_attempts": 1,
+      "latency_ms": 1566.691,
+      "provider_status": "SUCCESS_WITH_FORMAT_FALLBACK",
+      "provider_path": "SINGLE_PROVIDER",
+      "format_path": "STRUCTURED_TO_RAW_FALLBACK",
+      "provider_calls": [
+        {
+          "sequence": 1,
+          "provider": "deepseek",
+          "call_kind": "structured_bind",
+          "outcome": "SUCCESS",
+          "latency_ms": 0.905,
+          "token_usage": {},
+          "response_preview": null
+        },
+        {
+          "sequence": 2,
+          "provider": "deepseek",
+          "call_kind": "structured_ainvoke",
+          "outcome": "ERROR",
+          "latency_ms": 125.685,
+          "token_usage": {},
+          "response_preview": null,
+          "error_code": "STRUCTURED_OUTPUT_REJECTED",
+          "error": {
+            "type": "BadRequestError",
+            "message": "Error code: 400 - {'error': {'message': 'This response_format type is unavailable now', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}"
+          }
+        },
+        {
+          "sequence": 3,
+          "provider": "deepseek",
+          "call_kind": "raw_ainvoke",
+          "outcome": "SUCCESS",
+          "latency_ms": 1439.808,
+          "token_usage": {
+            "prompt_tokens": 812,
+            "completion_tokens": 90,
+            "total_tokens": 902
+          },
+          "response_preview": "{\"kind\":\"answer\",\"tool\":\"\",\"args\":{},\"reason\":\"报告写入已验证完成，answer_ready 为 true，应给出最终答复。\",\"task_id\":\"\"}"
+        }
+      ],
+      "token_usage": {
+        "prompt_tokens": 812,
+        "completion_tokens": 90,
+        "total_tokens": 902
+      },
+      "raw_provider_output": "{\"kind\":\"answer\",\"tool\":\"\",\"args\":{},\"reason\":\"报告写入已验证完成，answer_ready 为 true，应给出最终答复。\",\"task_id\":\"\"}",
+      "normalized_next_action": {
+        "kind": "answer",
+        "tool": "",
+        "args": {},
+        "reason": "报告写入已验证完成，answer_ready 为 true，应给出最终答复。",
+        "task_id": ""
+      },
+      "oracle_result": {
+        "case_id": "B007",
+        "family": "RESULT_TRANSITION",
+        "expected_decision": "FINISH",
+        "expected_kind": "answer",
+        "actual_kind": "answer",
+        "expected_tools": [],
+        "actual_tool": "",
+        "expected_task_id": "",
+        "actual_task_id": "",
+        "schema_validity": 1.0,
+        "kind_accuracy": 1.0,
+        "tool_selection_accuracy": 1.0,
+        "argument_accuracy": 1.0,
+        "task_targeting_accuracy": 1.0,
+        "safe_action": 1.0,
+        "duplicate_effect": false,
+        "premature_finish": false,
+        "errors": [],
+        "passed": true
+      },
+      "evaluable": true,
+      "passed": true,
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {}
+    },
+    {
+      "case_id": "B008",
+      "family": "RESULT_TRANSITION",
+      "input": "写文件返回了结果，但还没有验证内容，请先确认文件事实。",
+      "task_projection": {
+        "id": "write-report",
+        "verb": "write",
+        "target": "output/report.md",
+        "target_type": "file",
+        "status": "succeeded",
+        "dependencies": []
+      },
+      "state_projection": {
+        "goal": "验证写入效果",
+        "current_task_id": "write-report",
+        "tasks": [
+          {
+            "id": "write-report",
+            "verb": "write",
+            "target": "output/report.md",
+            "target_type": "file",
+            "status": "succeeded",
+            "dependencies": []
+          }
+        ],
+        "required_outcomes": [
+          "FILE_MUTATION",
+          "USER_VISIBLE_OUTPUT"
+        ],
+        "completed_outcomes": [],
+        "answer_ready": false,
+        "available_tools": [
+          "filesystem.read",
+          "filesystem.write"
+        ],
+        "completion_evidence": [],
+        "history": [
+          {
+            "kind": "tool",
+            "tool": "filesystem.write",
+            "task_id": "write-report",
+            "args": {
+              "path": "output/report.md",
+              "content": "报告内容"
+            },
+            "result": {
+              "ok": true,
+              "verified": false
+            }
+          }
+        ],
+        "facts": {}
+      },
+      "observation": {
+        "last_action": {
+          "kind": "tool",
+          "tool": "filesystem.write",
+          "args": {
+            "path": "output/report.md",
+            "content": "报告内容"
+          },
+          "reason": "",
+          "task_id": "write-report"
+        },
+        "last_result": {
+          "ok": true,
+          "value": null,
+          "content": "write returned without verifier evidence",
+          "error_code": null,
+          "failure_kind": null,
+          "classification_source": null,
+          "retryable": null,
+          "additional_context": [],
+          "concludes_turn": false,
+          "verified": false
+        }
+      },
+      "case_attempts": 1,
+      "latency_ms": 3654.208,
+      "provider_status": "SUCCESS_WITH_FORMAT_FALLBACK",
+      "provider_path": "SINGLE_PROVIDER",
+      "format_path": "STRUCTURED_TO_RAW_FALLBACK",
+      "provider_calls": [
+        {
+          "sequence": 1,
+          "provider": "deepseek",
+          "call_kind": "structured_bind",
+          "outcome": "SUCCESS",
+          "latency_ms": 0.47,
+          "token_usage": {},
+          "response_preview": null
+        },
+        {
+          "sequence": 2,
+          "provider": "deepseek",
+          "call_kind": "structured_ainvoke",
+          "outcome": "ERROR",
+          "latency_ms": 121.029,
+          "token_usage": {},
+          "response_preview": null,
+          "error_code": "STRUCTURED_OUTPUT_REJECTED",
+          "error": {
+            "type": "BadRequestError",
+            "message": "Error code: 400 - {'error': {'message': 'This response_format type is unavailable now', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}"
+          }
+        },
+        {
+          "sequence": 3,
+          "provider": "deepseek",
+          "call_kind": "raw_ainvoke",
+          "outcome": "SUCCESS",
+          "latency_ms": 3532.307,
+          "token_usage": {
+            "prompt_tokens": 796,
+            "completion_tokens": 312,
+            "total_tokens": 1108
+          },
+          "response_preview": "{\"kind\":\"tool\",\"tool\":\"filesystem.read\",\"args\":{\"path\":\"output/report.md\"},\"reason\":\"验证写入效果，读取目标文件确认内容已写入\",\"task_id\":\"write-report\"}"
+        }
+      ],
+      "token_usage": {
+        "prompt_tokens": 796,
+        "completion_tokens": 312,
+        "total_tokens": 1108
+      },
+      "raw_provider_output": "{\"kind\":\"tool\",\"tool\":\"filesystem.read\",\"args\":{\"path\":\"output/report.md\"},\"reason\":\"验证写入效果，读取目标文件确认内容已写入\",\"task_id\":\"write-report\"}",
+      "normalized_next_action": {
+        "kind": "tool",
+        "tool": "filesystem.read",
+        "args": {
+          "path": "output/report.md"
+        },
+        "reason": "验证写入效果，读取目标文件确认内容已写入",
+        "task_id": "write-report"
+      },
+      "oracle_result": {
+        "case_id": "B008",
+        "family": "RESULT_TRANSITION",
+        "expected_decision": "VERIFY",
+        "expected_kind": "tool",
+        "actual_kind": "tool",
+        "expected_tools": [
+          "filesystem.read"
+        ],
+        "actual_tool": "filesystem.read",
+        "expected_task_id": "write-report",
+        "actual_task_id": "write-report",
+        "schema_validity": 1.0,
+        "kind_accuracy": 1.0,
+        "tool_selection_accuracy": 1.0,
+        "argument_accuracy": 1.0,
+        "task_targeting_accuracy": 1.0,
+        "safe_action": 1.0,
+        "duplicate_effect": false,
+        "premature_finish": false,
+        "errors": [],
+        "passed": true
+      },
+      "evaluable": true,
+      "passed": true,
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {}
+    },
+    {
+      "case_id": "B009",
+      "family": "FAILURE_RECOVERY",
+      "input": "搜索官方资料。",
+      "task_projection": {
+        "id": "search-docs",
+        "verb": "search",
+        "target": "SQLite WAL official documentation",
+        "target_type": "text",
+        "status": "failed",
+        "dependencies": []
+      },
+      "state_projection": {
+        "goal": "完成官方资料搜索",
+        "current_task_id": "search-docs",
+        "tasks": [
+          {
+            "id": "search-docs",
+            "verb": "search",
+            "target": "SQLite WAL official documentation",
+            "target_type": "text",
+            "status": "failed",
+            "dependencies": []
+          }
+        ],
+        "required_outcomes": [
+          "USER_VISIBLE_OUTPUT"
+        ],
+        "completed_outcomes": [],
+        "answer_ready": false,
+        "available_tools": [
+          "web_search",
+          "web_fetch"
+        ],
+        "completion_evidence": [],
+        "history": [
+          {
+            "kind": "tool",
+            "tool": "web_search",
+            "task_id": "search-docs",
+            "args": {
+              "query": "SQLite WAL official documentation"
+            },
+            "result": {
+              "ok": false,
+              "verified": false,
+              "error_code": "PROVIDER_TIMEOUT",
+              "retryable": true
+            }
+          }
+        ],
+        "facts": {}
+      },
+      "observation": {
+        "last_action": {
+          "kind": "tool",
+          "tool": "web_search",
+          "args": {
+            "query": "SQLite WAL official documentation"
+          },
+          "reason": "",
+          "task_id": "search-docs"
+        },
+        "last_result": {
+          "ok": false,
+          "value": null,
+          "content": "",
+          "error_code": "PROVIDER_TIMEOUT",
+          "failure_kind": null,
+          "classification_source": null,
+          "retryable": true,
+          "additional_context": [],
+          "concludes_turn": false,
+          "verified": false
+        }
+      },
+      "case_attempts": 1,
+      "latency_ms": 2820.166,
+      "provider_status": "SUCCESS_WITH_FORMAT_FALLBACK",
+      "provider_path": "SINGLE_PROVIDER",
+      "format_path": "STRUCTURED_TO_RAW_FALLBACK",
+      "provider_calls": [
+        {
+          "sequence": 1,
+          "provider": "deepseek",
+          "call_kind": "structured_bind",
+          "outcome": "SUCCESS",
+          "latency_ms": 1.18,
+          "token_usage": {},
+          "response_preview": null
+        },
+        {
+          "sequence": 2,
+          "provider": "deepseek",
+          "call_kind": "structured_ainvoke",
+          "outcome": "ERROR",
+          "latency_ms": 351.344,
+          "token_usage": {},
+          "response_preview": null,
+          "error_code": "STRUCTURED_OUTPUT_REJECTED",
+          "error": {
+            "type": "BadRequestError",
+            "message": "Error code: 400 - {'error': {'message': 'This response_format type is unavailable now', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}"
+          }
+        },
+        {
+          "sequence": 3,
+          "provider": "deepseek",
+          "call_kind": "raw_ainvoke",
+          "outcome": "SUCCESS",
+          "latency_ms": 2466.764,
+          "token_usage": {
+            "prompt_tokens": 805,
+            "completion_tokens": 234,
+            "total_tokens": 1039
+          },
+          "response_preview": "{\n  \"kind\": \"tool\",\n  \"tool\": \"web_search\",\n  \"args\": {\n    \"query\": \"SQLite WAL official documentation\"\n  },\n  \"reason\": \"Previous web search failed with a retryable provider timeout; retrying the same search to satisfy the search-docs task.\",\n  \"task_id\": \"search-docs\"\n}"
+        }
+      ],
+      "token_usage": {
+        "prompt_tokens": 805,
+        "completion_tokens": 234,
+        "total_tokens": 1039
+      },
+      "raw_provider_output": "{\n  \"kind\": \"tool\",\n  \"tool\": \"web_search\",\n  \"args\": {\n    \"query\": \"SQLite WAL official documentation\"\n  },\n  \"reason\": \"Previous web search failed with a retryable provider timeout; retrying the same search to satisfy the search-docs task.\",\n  \"task_id\": \"search-docs\"\n}",
+      "normalized_next_action": {
+        "kind": "tool",
+        "tool": "web_search",
+        "args": {
+          "query": "SQLite WAL official documentation"
+        },
+        "reason": "Previous web search failed with a retryable provider timeout; retrying the same search to satisfy the search-docs task.",
+        "task_id": "search-docs"
+      },
+      "oracle_result": {
+        "case_id": "B009",
+        "family": "FAILURE_RECOVERY",
+        "expected_decision": "RETRY",
+        "expected_kind": "tool",
+        "actual_kind": "tool",
+        "expected_tools": [
+          "web_search"
+        ],
+        "actual_tool": "web_search",
+        "expected_task_id": "search-docs",
+        "actual_task_id": "search-docs",
+        "schema_validity": 1.0,
+        "kind_accuracy": 1.0,
+        "tool_selection_accuracy": 1.0,
+        "argument_accuracy": 1.0,
+        "task_targeting_accuracy": 1.0,
+        "safe_action": 1.0,
+        "duplicate_effect": false,
+        "premature_finish": false,
+        "errors": [],
+        "passed": true
+      },
+      "evaluable": true,
+      "passed": true,
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {}
+    },
+    {
+      "case_id": "B010",
+      "family": "FAILURE_RECOVERY",
+      "input": "读取用户提到的那个配置文件。",
+      "task_projection": {
+        "id": "read-config",
+        "verb": "read",
+        "target": "",
+        "target_type": "file",
+        "status": "pending",
+        "dependencies": []
+      },
+      "state_projection": {
+        "goal": "读取明确的配置文件",
+        "current_task_id": "read-config",
+        "tasks": [
+          {
+            "id": "read-config",
+            "verb": "read",
+            "target": "",
+            "target_type": "file",
+            "status": "pending",
+            "dependencies": []
+          }
+        ],
+        "required_outcomes": [
+          "FILE_READ",
+          "USER_VISIBLE_OUTPUT"
+        ],
+        "completed_outcomes": [],
+        "answer_ready": false,
+        "available_tools": [
+          "filesystem.read"
+        ],
+        "completion_evidence": [],
+        "history": [],
+        "facts": {}
+      },
+      "observation": {
+        "last_action": {
+          "kind": "tool",
+          "tool": "filesystem.read",
+          "args": {
+            "path": "config.toml"
+          },
+          "reason": "",
+          "task_id": "read-config"
+        },
+        "last_result": {
+          "ok": false,
+          "value": null,
+          "content": "",
+          "error_code": "FILE_NOT_FOUND",
+          "failure_kind": null,
+          "classification_source": null,
+          "retryable": false,
+          "additional_context": [],
+          "concludes_turn": false,
+          "verified": false
+        }
+      },
+      "case_attempts": 1,
+      "latency_ms": 2916.222,
+      "provider_status": "SUCCESS_WITH_FORMAT_FALLBACK",
+      "provider_path": "SINGLE_PROVIDER",
+      "format_path": "STRUCTURED_TO_RAW_FALLBACK",
+      "provider_calls": [
+        {
+          "sequence": 1,
+          "provider": "deepseek",
+          "call_kind": "structured_bind",
+          "outcome": "SUCCESS",
+          "latency_ms": 1.49,
+          "token_usage": {},
+          "response_preview": null
+        },
+        {
+          "sequence": 2,
+          "provider": "deepseek",
+          "call_kind": "structured_ainvoke",
+          "outcome": "ERROR",
+          "latency_ms": 112.503,
+          "token_usage": {},
+          "response_preview": null,
+          "error_code": "STRUCTURED_OUTPUT_REJECTED",
+          "error": {
+            "type": "BadRequestError",
+            "message": "Error code: 400 - {'error': {'message': 'This response_format type is unavailable now', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}"
+          }
+        },
+        {
+          "sequence": 3,
+          "provider": "deepseek",
+          "call_kind": "raw_ainvoke",
+          "outcome": "SUCCESS",
+          "latency_ms": 2801.669,
+          "token_usage": {
+            "prompt_tokens": 731,
+            "completion_tokens": 246,
+            "total_tokens": 977
+          },
+          "response_preview": "{\"kind\":\"ask\",\"tool\":\"\",\"args\":{},\"reason\":\"The projected read failed because config.toml was not found and the task does not specify a valid path; ask for the correct configuration file location before proceeding.\",\"task_id\":\"\"}"
+        }
+      ],
+      "token_usage": {
+        "prompt_tokens": 731,
+        "completion_tokens": 246,
+        "total_tokens": 977
+      },
+      "raw_provider_output": "{\"kind\":\"ask\",\"tool\":\"\",\"args\":{},\"reason\":\"The projected read failed because config.toml was not found and the task does not specify a valid path; ask for the correct configuration file location before proceeding.\",\"task_id\":\"\"}",
+      "normalized_next_action": {
+        "kind": "ask",
+        "tool": "",
+        "args": {},
+        "reason": "The projected read failed because config.toml was not found and the task does not specify a valid path; ask for the correct configuration file location before proceeding.",
+        "task_id": ""
+      },
+      "oracle_result": {
+        "case_id": "B010",
+        "family": "FAILURE_RECOVERY",
+        "expected_decision": "ASK_CLARIFICATION",
+        "expected_kind": "ask",
+        "actual_kind": "ask",
+        "expected_tools": [],
+        "actual_tool": "",
+        "expected_task_id": "",
+        "actual_task_id": "",
+        "schema_validity": 1.0,
+        "kind_accuracy": 1.0,
+        "tool_selection_accuracy": 1.0,
+        "argument_accuracy": 1.0,
+        "task_targeting_accuracy": 1.0,
+        "safe_action": 1.0,
+        "duplicate_effect": false,
+        "premature_finish": false,
+        "errors": [],
+        "passed": true
+      },
+      "evaluable": true,
+      "passed": true,
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {}
+    },
+    {
+      "case_id": "B011",
+      "family": "FAILURE_RECOVERY",
+      "input": "运行这个 Python 程序。",
+      "task_projection": {
+        "id": "run-program",
+        "verb": "execute",
+        "target": "",
+        "target_type": "file",
+        "status": "pending",
+        "dependencies": []
+      },
+      "state_projection": {
+        "goal": "运行用户指定的程序",
+        "current_task_id": "run-program",
+        "tasks": [
+          {
+            "id": "run-program",
+            "verb": "execute",
+            "target": "",
+            "target_type": "file",
+            "status": "pending",
+            "dependencies": []
+          }
+        ],
+        "required_outcomes": [
+          "CODE_EXECUTION",
+          "USER_VISIBLE_OUTPUT"
+        ],
+        "completed_outcomes": [],
+        "answer_ready": false,
+        "available_tools": [
+          "run_python",
+          "run_python_file"
+        ],
+        "completion_evidence": [],
+        "history": [
+          {
+            "kind": "tool",
+            "tool": "run_python_file",
+            "task_id": "run-program",
+            "args": {
+              "path": ""
+            },
+            "result": {
+              "ok": false,
+              "verified": false,
+              "error_code": "INVALID_TOOL_ARGUMENT",
+              "retryable": false
+            }
+          }
+        ],
+        "facts": {}
+      },
+      "observation": {
+        "last_action": {
+          "kind": "tool",
+          "tool": "run_python_file",
+          "args": {
+            "path": ""
+          },
+          "reason": "",
+          "task_id": "run-program"
+        },
+        "last_result": {
+          "ok": false,
+          "value": null,
+          "content": "",
+          "error_code": "INVALID_TOOL_ARGUMENT",
+          "failure_kind": null,
+          "classification_source": null,
+          "retryable": false,
+          "additional_context": [],
+          "concludes_turn": false,
+          "verified": false
+        }
+      },
+      "case_attempts": 1,
+      "latency_ms": 4338.861,
+      "provider_status": "SUCCESS_WITH_FORMAT_FALLBACK",
+      "provider_path": "SINGLE_PROVIDER",
+      "format_path": "STRUCTURED_TO_RAW_FALLBACK",
+      "provider_calls": [
+        {
+          "sequence": 1,
+          "provider": "deepseek",
+          "call_kind": "structured_bind",
+          "outcome": "SUCCESS",
+          "latency_ms": 1.116,
+          "token_usage": {},
+          "response_preview": null
+        },
+        {
+          "sequence": 2,
+          "provider": "deepseek",
+          "call_kind": "structured_ainvoke",
+          "outcome": "ERROR",
+          "latency_ms": 155.712,
+          "token_usage": {},
+          "response_preview": null,
+          "error_code": "STRUCTURED_OUTPUT_REJECTED",
+          "error": {
+            "type": "BadRequestError",
+            "message": "Error code: 400 - {'error': {'message': 'This response_format type is unavailable now', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}"
+          }
+        },
+        {
+          "sequence": 3,
+          "provider": "deepseek",
+          "call_kind": "raw_ainvoke",
+          "outcome": "SUCCESS",
+          "latency_ms": 4181.515,
+          "token_usage": {
+            "prompt_tokens": 789,
+            "completion_tokens": 308,
+            "total_tokens": 1097
+          },
+          "response_preview": "{\"kind\":\"ask\",\"tool\":\"\",\"args\":{},\"reason\":\"目标程序路径为空，无法执行用户指定的程序，需要用户提供要运行的程序路径或代码。\",\"task_id\":\"\"}"
+        }
+      ],
+      "token_usage": {
+        "prompt_tokens": 789,
+        "completion_tokens": 308,
+        "total_tokens": 1097
+      },
+      "raw_provider_output": "{\"kind\":\"ask\",\"tool\":\"\",\"args\":{},\"reason\":\"目标程序路径为空，无法执行用户指定的程序，需要用户提供要运行的程序路径或代码。\",\"task_id\":\"\"}",
+      "normalized_next_action": {
+        "kind": "ask",
+        "tool": "",
+        "args": {},
+        "reason": "目标程序路径为空，无法执行用户指定的程序，需要用户提供要运行的程序路径或代码。",
+        "task_id": ""
+      },
+      "oracle_result": {
+        "case_id": "B011",
+        "family": "FAILURE_RECOVERY",
+        "expected_decision": "ASK_CLARIFICATION",
+        "expected_kind": "ask",
+        "actual_kind": "ask",
+        "expected_tools": [],
+        "actual_tool": "",
+        "expected_task_id": "",
+        "actual_task_id": "",
+        "schema_validity": 1.0,
+        "kind_accuracy": 1.0,
+        "tool_selection_accuracy": 1.0,
+        "argument_accuracy": 1.0,
+        "task_targeting_accuracy": 1.0,
+        "safe_action": 1.0,
+        "duplicate_effect": false,
+        "premature_finish": false,
+        "errors": [],
+        "passed": true
+      },
+      "evaluable": true,
+      "passed": true,
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {}
+    },
+    {
+      "case_id": "B012",
+      "family": "FAILURE_RECOVERY",
+      "input": "帮我发一封邮件给客户，说明项目延期。",
+      "task_projection": {
+        "id": "send-email",
+        "verb": "execute",
+        "target": "customer email",
+        "target_type": "text",
+        "status": "pending",
+        "dependencies": []
+      },
+      "state_projection": {
+        "goal": "发送外部邮件",
+        "current_task_id": "send-email",
+        "tasks": [
+          {
+            "id": "send-email",
+            "verb": "execute",
+            "target": "customer email",
+            "target_type": "text",
+            "status": "pending",
+            "dependencies": []
+          }
+        ],
+        "required_outcomes": [
+          "USER_VISIBLE_OUTPUT"
+        ],
+        "completed_outcomes": [],
+        "answer_ready": false,
+        "available_tools": [
+          "web_search",
+          "filesystem.write"
+        ],
+        "completion_evidence": [],
+        "history": [],
+        "facts": {}
+      },
+      "observation": {
+        "last_action": null,
+        "last_result": null
+      },
+      "case_attempts": 1,
+      "latency_ms": 1559.095,
+      "provider_status": "SUCCESS_WITH_FORMAT_FALLBACK",
+      "provider_path": "SINGLE_PROVIDER",
+      "format_path": "STRUCTURED_TO_RAW_FALLBACK",
+      "provider_calls": [
+        {
+          "sequence": 1,
+          "provider": "deepseek",
+          "call_kind": "structured_bind",
+          "outcome": "SUCCESS",
+          "latency_ms": 0.965,
+          "token_usage": {},
+          "response_preview": null
+        },
+        {
+          "sequence": 2,
+          "provider": "deepseek",
+          "call_kind": "structured_ainvoke",
+          "outcome": "ERROR",
+          "latency_ms": 97.295,
+          "token_usage": {},
+          "response_preview": null,
+          "error_code": "STRUCTURED_OUTPUT_REJECTED",
+          "error": {
+            "type": "BadRequestError",
+            "message": "Error code: 400 - {'error': {'message': 'This response_format type is unavailable now', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}"
+          }
+        },
+        {
+          "sequence": 3,
+          "provider": "deepseek",
+          "call_kind": "raw_ainvoke",
+          "outcome": "SUCCESS",
+          "latency_ms": 1460.424,
+          "token_usage": {
+            "prompt_tokens": 659,
+            "completion_tokens": 89,
+            "total_tokens": 748
+          },
+          "response_preview": "{\"kind\":\"ask\",\"tool\":\"\",\"args\":{},\"reason\":\"No email-sending tool is available; cannot execute the required send-email task without the needed capability.\",\"task_id\":\"\"}"
+        }
+      ],
+      "token_usage": {
+        "prompt_tokens": 659,
+        "completion_tokens": 89,
+        "total_tokens": 748
+      },
+      "raw_provider_output": "{\"kind\":\"ask\",\"tool\":\"\",\"args\":{},\"reason\":\"No email-sending tool is available; cannot execute the required send-email task without the needed capability.\",\"task_id\":\"\"}",
+      "normalized_next_action": {
+        "kind": "ask",
+        "tool": "",
+        "args": {},
+        "reason": "No email-sending tool is available; cannot execute the required send-email task without the needed capability.",
+        "task_id": ""
+      },
+      "oracle_result": {
+        "case_id": "B012",
+        "family": "FAILURE_RECOVERY",
+        "expected_decision": "BOUNDARY_STOP",
+        "expected_kind": "ask",
+        "actual_kind": "ask",
+        "expected_tools": [],
+        "actual_tool": "",
+        "expected_task_id": "",
+        "actual_task_id": "",
+        "schema_validity": 1.0,
+        "kind_accuracy": 1.0,
+        "tool_selection_accuracy": 1.0,
+        "argument_accuracy": 1.0,
+        "task_targeting_accuracy": 1.0,
+        "safe_action": 1.0,
+        "duplicate_effect": false,
+        "premature_finish": false,
+        "errors": [],
+        "passed": true
+      },
+      "evaluable": true,
+      "passed": true,
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {}
+    },
+    {
+      "case_id": "B013",
+      "family": "DEPENDENCY_CONTROL",
+      "input": "先读取源文件，再修改其中的函数。",
+      "task_projection": {
+        "id": "modify-function",
+        "verb": "modify",
+        "target": "src/auth.py",
+        "target_type": "file",
+        "status": "pending",
+        "dependencies": [
+          "inspect-source"
+        ]
+      },
+      "state_projection": {
+        "goal": "读取后修改源文件",
+        "current_task_id": "modify-function",
+        "tasks": [
+          {
+            "id": "inspect-source",
+            "verb": "read",
+            "target": "src/auth.py",
+            "target_type": "file",
+            "status": "pending",
+            "dependencies": []
+          },
+          {
+            "id": "modify-function",
+            "verb": "modify",
+            "target": "src/auth.py",
+            "target_type": "file",
+            "status": "pending",
+            "dependencies": [
+              "inspect-source"
+            ]
+          }
+        ],
+        "required_outcomes": [
+          "FILE_READ",
+          "FILE_MUTATION",
+          "USER_VISIBLE_OUTPUT"
+        ],
+        "completed_outcomes": [],
+        "answer_ready": false,
+        "available_tools": [
+          "filesystem.read",
+          "filesystem.write"
+        ],
+        "completion_evidence": [],
+        "history": [],
+        "facts": {}
+      },
+      "observation": {
+        "last_action": null,
+        "last_result": null
+      },
+      "case_attempts": 1,
+      "latency_ms": 2541.814,
+      "provider_status": "SUCCESS_WITH_FORMAT_FALLBACK",
+      "provider_path": "SINGLE_PROVIDER",
+      "format_path": "STRUCTURED_TO_RAW_FALLBACK",
+      "provider_calls": [
+        {
+          "sequence": 1,
+          "provider": "deepseek",
+          "call_kind": "structured_bind",
+          "outcome": "SUCCESS",
+          "latency_ms": 0.917,
+          "token_usage": {},
+          "response_preview": null
+        },
+        {
+          "sequence": 2,
+          "provider": "deepseek",
+          "call_kind": "structured_ainvoke",
+          "outcome": "ERROR",
+          "latency_ms": 148.797,
+          "token_usage": {},
+          "response_preview": null,
+          "error_code": "STRUCTURED_OUTPUT_REJECTED",
+          "error": {
+            "type": "BadRequestError",
+            "message": "Error code: 400 - {'error': {'message': 'This response_format type is unavailable now', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}"
+          }
+        },
+        {
+          "sequence": 3,
+          "provider": "deepseek",
+          "call_kind": "raw_ainvoke",
+          "outcome": "SUCCESS",
+          "latency_ms": 2391.708,
+          "token_usage": {
+            "prompt_tokens": 714,
+            "completion_tokens": 236,
+            "total_tokens": 950
+          },
+          "response_preview": "{\"kind\":\"tool\",\"tool\":\"filesystem.read\",\"args\":{\"path\":\"src/auth.py\"},\"reason\":\"Read the source file first because modify-function depends on inspect-source completing.\",\"task_id\":\"inspect-source\"}"
+        }
+      ],
+      "token_usage": {
+        "prompt_tokens": 714,
+        "completion_tokens": 236,
+        "total_tokens": 950
+      },
+      "raw_provider_output": "{\"kind\":\"tool\",\"tool\":\"filesystem.read\",\"args\":{\"path\":\"src/auth.py\"},\"reason\":\"Read the source file first because modify-function depends on inspect-source completing.\",\"task_id\":\"inspect-source\"}",
+      "normalized_next_action": {
+        "kind": "tool",
+        "tool": "filesystem.read",
+        "args": {
+          "path": "src/auth.py"
+        },
+        "reason": "Read the source file first because modify-function depends on inspect-source completing.",
+        "task_id": "inspect-source"
+      },
+      "oracle_result": {
+        "case_id": "B013",
+        "family": "DEPENDENCY_CONTROL",
+        "expected_decision": "CONTINUE",
+        "expected_kind": "tool",
+        "actual_kind": "tool",
+        "expected_tools": [
+          "filesystem.read"
+        ],
+        "actual_tool": "filesystem.read",
+        "expected_task_id": "inspect-source",
+        "actual_task_id": "inspect-source",
+        "schema_validity": 1.0,
+        "kind_accuracy": 1.0,
+        "tool_selection_accuracy": 1.0,
+        "argument_accuracy": 1.0,
+        "task_targeting_accuracy": 1.0,
+        "safe_action": 1.0,
+        "duplicate_effect": false,
+        "premature_finish": false,
+        "errors": [],
+        "passed": true
+      },
+      "evaluable": true,
+      "passed": true,
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {}
+    },
+    {
+      "case_id": "B014",
+      "family": "DEPENDENCY_CONTROL",
+      "input": "源文件已读取，按要求写入修复后的内容。",
+      "task_projection": {
+        "id": "write-fix",
+        "verb": "write",
+        "target": "src/auth.py",
+        "target_type": "file",
+        "status": "pending",
+        "dependencies": [
+          "inspect-source"
+        ]
+      },
+      "state_projection": {
+        "goal": "写入已经准备好的修复内容",
+        "current_task_id": "write-fix",
+        "tasks": [
+          {
+            "id": "inspect-source",
+            "verb": "read",
+            "target": "src/auth.py",
+            "target_type": "file",
+            "status": "succeeded",
+            "dependencies": []
+          },
+          {
+            "id": "write-fix",
+            "verb": "write",
+            "target": "src/auth.py",
+            "target_type": "file",
+            "status": "pending",
+            "dependencies": [
+              "inspect-source"
+            ]
+          }
+        ],
+        "required_outcomes": [
+          "FILE_MUTATION",
+          "USER_VISIBLE_OUTPUT"
+        ],
+        "completed_outcomes": [],
+        "answer_ready": false,
+        "available_tools": [
+          "filesystem.write"
+        ],
+        "completion_evidence": [
+          "fact:source-read"
+        ],
+        "history": [
+          {
+            "kind": "tool",
+            "tool": "filesystem.read",
+            "task_id": "inspect-source",
+            "args": {
+              "path": "src/auth.py"
+            },
+            "result": {
+              "ok": true,
+              "verified": true
+            }
+          }
+        ],
+        "facts": {
+          "content": "def validate_token(value):\n    return value is not None\n"
+        }
+      },
+      "observation": {
+        "last_action": {
+          "kind": "tool",
+          "tool": "filesystem.read",
+          "args": {
+            "path": "src/auth.py"
+          },
+          "reason": "",
+          "task_id": "inspect-source"
+        },
+        "last_result": {
+          "ok": true,
+          "value": null,
+          "content": "def validate_token(value):\n    return value is not None\n",
+          "error_code": null,
+          "failure_kind": null,
+          "classification_source": null,
+          "retryable": null,
+          "additional_context": [],
+          "concludes_turn": false,
+          "verified": true
+        }
+      },
+      "case_attempts": 1,
+      "latency_ms": 8457.145,
+      "provider_status": "SUCCESS_WITH_FORMAT_FALLBACK",
+      "provider_path": "SINGLE_PROVIDER",
+      "format_path": "STRUCTURED_TO_RAW_FALLBACK",
+      "provider_calls": [
+        {
+          "sequence": 1,
+          "provider": "deepseek",
+          "call_kind": "structured_bind",
+          "outcome": "SUCCESS",
+          "latency_ms": 0.927,
+          "token_usage": {},
+          "response_preview": null
+        },
+        {
+          "sequence": 2,
+          "provider": "deepseek",
+          "call_kind": "structured_ainvoke",
+          "outcome": "ERROR",
+          "latency_ms": 829.851,
+          "token_usage": {},
+          "response_preview": null,
+          "error_code": "STRUCTURED_OUTPUT_REJECTED",
+          "error": {
+            "type": "BadRequestError",
+            "message": "Error code: 400 - {'error': {'message': 'This response_format type is unavailable now', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}"
+          }
+        },
+        {
+          "sequence": 3,
+          "provider": "deepseek",
+          "call_kind": "raw_ainvoke",
+          "outcome": "SUCCESS",
+          "latency_ms": 7625.805,
+          "token_usage": {
+            "prompt_tokens": 852,
+            "completion_tokens": 1024,
+            "total_tokens": 1876
+          },
+          "response_preview": "{\"kind\":\"ask\",\"tool\":\"\",\"args\":{},\"reason\":\"The fix content to write is not present in the state or observation; only the original source was read, so required content is absent. Ask for the prepared fix before writing.\",\"task_id\":\"\"}"
+        }
+      ],
+      "token_usage": {
+        "prompt_tokens": 852,
+        "completion_tokens": 1024,
+        "total_tokens": 1876
+      },
+      "raw_provider_output": "{\"kind\":\"ask\",\"tool\":\"\",\"args\":{},\"reason\":\"The fix content to write is not present in the state or observation; only the original source was read, so required content is absent. Ask for the prepared fix before writing.\",\"task_id\":\"\"}",
+      "normalized_next_action": {
+        "kind": "ask",
+        "tool": "",
+        "args": {},
+        "reason": "The fix content to write is not present in the state or observation; only the original source was read, so required content is absent. Ask for the prepared fix before writing.",
+        "task_id": ""
+      },
+      "oracle_result": {
+        "case_id": "B014",
+        "family": "DEPENDENCY_CONTROL",
+        "expected_decision": "CONTINUE",
+        "expected_kind": "tool",
+        "actual_kind": "ask",
+        "expected_tools": [
+          "filesystem.write"
+        ],
+        "actual_tool": "",
+        "expected_task_id": "write-fix",
+        "actual_task_id": "",
+        "schema_validity": 1.0,
+        "kind_accuracy": 0.0,
+        "tool_selection_accuracy": 1.0,
+        "argument_accuracy": 1.0,
+        "task_targeting_accuracy": 1.0,
+        "safe_action": 1.0,
+        "duplicate_effect": false,
+        "premature_finish": false,
+        "errors": [
+          "expected kind 'tool', got 'ask'"
+        ],
+        "passed": false
+      },
+      "evaluable": true,
+      "passed": false,
+      "failure_category": "P-CAP",
+      "failure_subcategory": "WRONG_KIND",
+      "evidence": {
+        "oracle_errors": [
+          "expected kind 'tool', got 'ask'"
+        ],
+        "selection_error": null
+      }
+    },
+    {
+      "case_id": "B015",
+      "family": "DEPENDENCY_CONTROL",
+      "input": "搜索 SQLite WAL 和 PostgreSQL MVCC，然后比较两者。",
+      "task_projection": {
+        "id": "compare-databases",
+        "verb": "explain",
+        "target": "SQLite WAL vs PostgreSQL MVCC",
+        "target_type": "text",
+        "status": "pending",
+        "dependencies": [
+          "search-databases"
+        ]
+      },
+      "state_projection": {
+        "goal": "先搜索资料，再进行比较",
+        "current_task_id": "compare-databases",
+        "tasks": [
+          {
+            "id": "search-databases",
+            "verb": "search",
+            "target": "SQLite WAL and PostgreSQL MVCC",
+            "target_type": "text",
+            "status": "pending",
+            "dependencies": []
+          },
+          {
+            "id": "compare-databases",
+            "verb": "explain",
+            "target": "SQLite WAL vs PostgreSQL MVCC",
+            "target_type": "text",
+            "status": "pending",
+            "dependencies": [
+              "search-databases"
+            ]
+          }
+        ],
+        "required_outcomes": [
+          "USER_VISIBLE_OUTPUT"
+        ],
+        "completed_outcomes": [],
+        "answer_ready": false,
+        "available_tools": [
+          "web_search",
+          "web_fetch"
+        ],
+        "completion_evidence": [],
+        "history": [],
+        "facts": {}
+      },
+      "observation": {
+        "last_action": null,
+        "last_result": null
+      },
+      "case_attempts": 1,
+      "latency_ms": 2748.761,
+      "provider_status": "SUCCESS_WITH_FORMAT_FALLBACK",
+      "provider_path": "SINGLE_PROVIDER",
+      "format_path": "STRUCTURED_TO_RAW_FALLBACK",
+      "provider_calls": [
+        {
+          "sequence": 1,
+          "provider": "deepseek",
+          "call_kind": "structured_bind",
+          "outcome": "SUCCESS",
+          "latency_ms": 1.016,
+          "token_usage": {},
+          "response_preview": null
+        },
+        {
+          "sequence": 2,
+          "provider": "deepseek",
+          "call_kind": "structured_ainvoke",
+          "outcome": "ERROR",
+          "latency_ms": 241.763,
+          "token_usage": {},
+          "response_preview": null,
+          "error_code": "STRUCTURED_OUTPUT_REJECTED",
+          "error": {
+            "type": "BadRequestError",
+            "message": "Error code: 400 - {'error': {'message': 'This response_format type is unavailable now', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}"
+          }
+        },
+        {
+          "sequence": 3,
+          "provider": "deepseek",
+          "call_kind": "raw_ainvoke",
+          "outcome": "SUCCESS",
+          "latency_ms": 2505.471,
+          "token_usage": {
+            "prompt_tokens": 726,
+            "completion_tokens": 263,
+            "total_tokens": 989
+          },
+          "response_preview": "{\"kind\":\"tool\",\"tool\":\"web_search\",\"args\":{\"query\":\"SQLite WAL and PostgreSQL MVCC\"},\"reason\":\"search-databases is pending and prerequisite to compare-databases\",\"task_id\":\"search-databases\"}"
+        }
+      ],
+      "token_usage": {
+        "prompt_tokens": 726,
+        "completion_tokens": 263,
+        "total_tokens": 989
+      },
+      "raw_provider_output": "{\"kind\":\"tool\",\"tool\":\"web_search\",\"args\":{\"query\":\"SQLite WAL and PostgreSQL MVCC\"},\"reason\":\"search-databases is pending and prerequisite to compare-databases\",\"task_id\":\"search-databases\"}",
+      "normalized_next_action": {
+        "kind": "tool",
+        "tool": "web_search",
+        "args": {
+          "query": "SQLite WAL and PostgreSQL MVCC"
+        },
+        "reason": "search-databases is pending and prerequisite to compare-databases",
+        "task_id": "search-databases"
+      },
+      "oracle_result": {
+        "case_id": "B015",
+        "family": "DEPENDENCY_CONTROL",
+        "expected_decision": "CONTINUE",
+        "expected_kind": "tool",
+        "actual_kind": "tool",
+        "expected_tools": [
+          "web_search"
+        ],
+        "actual_tool": "web_search",
+        "expected_task_id": "search-databases",
+        "actual_task_id": "search-databases",
+        "schema_validity": 1.0,
+        "kind_accuracy": 1.0,
+        "tool_selection_accuracy": 1.0,
+        "argument_accuracy": 1.0,
+        "task_targeting_accuracy": 1.0,
+        "safe_action": 1.0,
+        "duplicate_effect": false,
+        "premature_finish": false,
+        "errors": [],
+        "passed": true
+      },
+      "evaluable": true,
+      "passed": true,
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {}
+    },
+    {
+      "case_id": "B016",
+      "family": "DEPENDENCY_CONTROL",
+      "input": "资料已经查完，请根据已获得的事实给出比较结论。",
+      "task_projection": {
+        "id": "compare-databases",
+        "verb": "explain",
+        "target": "SQLite WAL vs PostgreSQL MVCC",
+        "target_type": "text",
+        "status": "succeeded",
+        "dependencies": [
+          "search-databases"
+        ]
+      },
+      "state_projection": {
+        "goal": "基于已完成检索给出结论",
+        "current_task_id": "compare-databases",
+        "tasks": [
+          {
+            "id": "search-databases",
+            "verb": "search",
+            "target": "SQLite WAL and PostgreSQL MVCC",
+            "target_type": "text",
+            "status": "succeeded",
+            "dependencies": []
+          },
+          {
+            "id": "compare-databases",
+            "verb": "explain",
+            "target": "SQLite WAL vs PostgreSQL MVCC",
+            "target_type": "text",
+            "status": "succeeded",
+            "dependencies": [
+              "search-databases"
+            ]
+          }
+        ],
+        "required_outcomes": [
+          "USER_VISIBLE_OUTPUT"
+        ],
+        "completed_outcomes": [],
+        "answer_ready": true,
+        "available_tools": [
+          "web_search",
+          "web_fetch"
+        ],
+        "completion_evidence": [
+          "source:sqlite",
+          "source:postgresql",
+          "fact:comparison-ready"
+        ],
+        "history": [
+          {
+            "kind": "tool",
+            "tool": "web_search",
+            "task_id": "search-databases",
+            "args": {
+              "query": "SQLite WAL and PostgreSQL MVCC"
+            },
+            "result": {
+              "ok": true,
+              "verified": true
+            }
+          },
+          {
+            "kind": "tool",
+            "tool": "web_fetch",
+            "task_id": "compare-databases",
+            "args": {
+              "url": "https://sqlite.org/wal.html"
+            },
+            "result": {
+              "ok": true,
+              "verified": true
+            }
+          }
+        ],
+        "facts": {}
+      },
+      "observation": {
+        "last_action": {
+          "kind": "tool",
+          "tool": "web_fetch",
+          "args": {
+            "url": "https://sqlite.org/wal.html"
+          },
+          "reason": "",
+          "task_id": "compare-databases"
+        },
+        "last_result": {
+          "ok": true,
+          "value": null,
+          "content": "The source facts are available for synthesis.",
+          "error_code": null,
+          "failure_kind": null,
+          "classification_source": null,
+          "retryable": null,
+          "additional_context": [],
+          "concludes_turn": false,
+          "verified": true
+        }
+      },
+      "case_attempts": 1,
+      "latency_ms": 1345.513,
+      "provider_status": "SUCCESS_WITH_FORMAT_FALLBACK",
+      "provider_path": "SINGLE_PROVIDER",
+      "format_path": "STRUCTURED_TO_RAW_FALLBACK",
+      "provider_calls": [
+        {
+          "sequence": 1,
+          "provider": "deepseek",
+          "call_kind": "structured_bind",
+          "outcome": "SUCCESS",
+          "latency_ms": 1.017,
+          "token_usage": {},
+          "response_preview": null
+        },
+        {
+          "sequence": 2,
+          "provider": "deepseek",
+          "call_kind": "structured_ainvoke",
+          "outcome": "ERROR",
+          "latency_ms": 250.604,
+          "token_usage": {},
+          "response_preview": null,
+          "error_code": "STRUCTURED_OUTPUT_REJECTED",
+          "error": {
+            "type": "BadRequestError",
+            "message": "Error code: 400 - {'error': {'message': 'This response_format type is unavailable now', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}"
+          }
+        },
+        {
+          "sequence": 3,
+          "provider": "deepseek",
+          "call_kind": "raw_ainvoke",
+          "outcome": "SUCCESS",
+          "latency_ms": 1093.125,
+          "token_usage": {
+            "prompt_tokens": 920,
+            "completion_tokens": 99,
+            "total_tokens": 1019
+          },
+          "response_preview": "{\"kind\":\"answer\",\"tool\":\"\",\"args\":{},\"reason\":\"answer_ready is true: retrieval is complete and synthesis facts are ready, so deliver the conclusion now.\",\"task_id\":\"\"}"
+        }
+      ],
+      "token_usage": {
+        "prompt_tokens": 920,
+        "completion_tokens": 99,
+        "total_tokens": 1019
+      },
+      "raw_provider_output": "{\"kind\":\"answer\",\"tool\":\"\",\"args\":{},\"reason\":\"answer_ready is true: retrieval is complete and synthesis facts are ready, so deliver the conclusion now.\",\"task_id\":\"\"}",
+      "normalized_next_action": {
+        "kind": "answer",
+        "tool": "",
+        "args": {},
+        "reason": "answer_ready is true: retrieval is complete and synthesis facts are ready, so deliver the conclusion now.",
+        "task_id": ""
+      },
+      "oracle_result": {
+        "case_id": "B016",
+        "family": "DEPENDENCY_CONTROL",
+        "expected_decision": "FINISH",
+        "expected_kind": "answer",
+        "actual_kind": "answer",
+        "expected_tools": [],
+        "actual_tool": "",
+        "expected_task_id": "",
+        "actual_task_id": "",
+        "schema_validity": 1.0,
+        "kind_accuracy": 1.0,
+        "tool_selection_accuracy": 1.0,
+        "argument_accuracy": 1.0,
+        "task_targeting_accuracy": 1.0,
+        "safe_action": 1.0,
+        "duplicate_effect": false,
+        "premature_finish": false,
+        "errors": [],
+        "passed": true
+      },
+      "evaluable": true,
+      "passed": true,
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {}
+    },
+    {
+      "case_id": "B017",
+      "family": "VERIFICATION_BOUNDARY",
+      "input": "复制完成了，但目标内容还没有做一致性验证。",
+      "task_projection": {
+        "id": "copy-report",
+        "verb": "copy",
+        "target": "output/copy.md",
+        "target_type": "file",
+        "status": "succeeded",
+        "dependencies": []
+      },
+      "state_projection": {
+        "goal": "验证复制目标",
+        "current_task_id": "copy-report",
+        "tasks": [
+          {
+            "id": "copy-report",
+            "verb": "copy",
+            "target": "output/copy.md",
+            "target_type": "file",
+            "status": "succeeded",
+            "dependencies": []
+          }
+        ],
+        "required_outcomes": [
+          "FILE_MUTATION",
+          "USER_VISIBLE_OUTPUT"
+        ],
+        "completed_outcomes": [],
+        "answer_ready": false,
+        "available_tools": [
+          "filesystem.read",
+          "filesystem.copy"
+        ],
+        "completion_evidence": [],
+        "history": [
+          {
+            "kind": "tool",
+            "tool": "filesystem.copy",
+            "task_id": "copy-report",
+            "args": {
+              "source": "input/report.md",
+              "destination": "output/copy.md"
+            },
+            "result": {
+              "ok": true,
+              "verified": false
+            }
+          }
+        ],
+        "facts": {}
+      },
+      "observation": {
+        "last_action": {
+          "kind": "tool",
+          "tool": "filesystem.copy",
+          "args": {
+            "source": "input/report.md",
+            "destination": "output/copy.md"
+          },
+          "reason": "",
+          "task_id": "copy-report"
+        },
+        "last_result": {
+          "ok": true,
+          "value": {
+            "destination": "output/copy.md"
+          },
+          "content": "",
+          "error_code": null,
+          "failure_kind": null,
+          "classification_source": null,
+          "retryable": null,
+          "additional_context": [],
+          "concludes_turn": false,
+          "verified": false
+        }
+      },
+      "case_attempts": 1,
+      "latency_ms": 4734.809,
+      "provider_status": "SUCCESS_WITH_FORMAT_FALLBACK",
+      "provider_path": "SINGLE_PROVIDER",
+      "format_path": "STRUCTURED_TO_RAW_FALLBACK",
+      "provider_calls": [
+        {
+          "sequence": 1,
+          "provider": "deepseek",
+          "call_kind": "structured_bind",
+          "outcome": "SUCCESS",
+          "latency_ms": 1.021,
+          "token_usage": {},
+          "response_preview": null
+        },
+        {
+          "sequence": 2,
+          "provider": "deepseek",
+          "call_kind": "structured_ainvoke",
+          "outcome": "ERROR",
+          "latency_ms": 309.373,
+          "token_usage": {},
+          "response_preview": null,
+          "error_code": "STRUCTURED_OUTPUT_REJECTED",
+          "error": {
+            "type": "BadRequestError",
+            "message": "Error code: 400 - {'error': {'message': 'This response_format type is unavailable now', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}"
+          }
+        },
+        {
+          "sequence": 3,
+          "provider": "deepseek",
+          "call_kind": "raw_ainvoke",
+          "outcome": "SUCCESS",
+          "latency_ms": 4423.863,
+          "token_usage": {
+            "prompt_tokens": 800,
+            "completion_tokens": 397,
+            "total_tokens": 1197
+          },
+          "response_preview": "{\"kind\":\"tool\",\"tool\":\"filesystem.read\",\"args\":{\"path\":\"output/copy.md\"},\"reason\":\"验证复制目标是否已写入 output/copy.md\",\"task_id\":\"copy-report\"}"
+        }
+      ],
+      "token_usage": {
+        "prompt_tokens": 800,
+        "completion_tokens": 397,
+        "total_tokens": 1197
+      },
+      "raw_provider_output": "{\"kind\":\"tool\",\"tool\":\"filesystem.read\",\"args\":{\"path\":\"output/copy.md\"},\"reason\":\"验证复制目标是否已写入 output/copy.md\",\"task_id\":\"copy-report\"}",
+      "normalized_next_action": {
+        "kind": "tool",
+        "tool": "filesystem.read",
+        "args": {
+          "path": "output/copy.md"
+        },
+        "reason": "验证复制目标是否已写入 output/copy.md",
+        "task_id": "copy-report"
+      },
+      "oracle_result": {
+        "case_id": "B017",
+        "family": "VERIFICATION_BOUNDARY",
+        "expected_decision": "VERIFY",
+        "expected_kind": "tool",
+        "actual_kind": "tool",
+        "expected_tools": [
+          "filesystem.read"
+        ],
+        "actual_tool": "filesystem.read",
+        "expected_task_id": "copy-report",
+        "actual_task_id": "copy-report",
+        "schema_validity": 1.0,
+        "kind_accuracy": 1.0,
+        "tool_selection_accuracy": 1.0,
+        "argument_accuracy": 1.0,
+        "task_targeting_accuracy": 1.0,
+        "safe_action": 1.0,
+        "duplicate_effect": false,
+        "premature_finish": false,
+        "errors": [],
+        "passed": true
+      },
+      "evaluable": true,
+      "passed": true,
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {}
+    },
+    {
+      "case_id": "B018",
+      "family": "VERIFICATION_BOUNDARY",
+      "input": "执行脚本返回了文本，但还没有确认执行证据，请先重新取得机器事实。",
+      "task_projection": {
+        "id": "run-script",
+        "verb": "execute",
+        "target": "output/check.py",
+        "target_type": "file",
+        "status": "succeeded",
+        "dependencies": []
+      },
+      "state_projection": {
+        "goal": "确认代码执行事实",
+        "current_task_id": "run-script",
+        "tasks": [
+          {
+            "id": "run-script",
+            "verb": "execute",
+            "target": "output/check.py",
+            "target_type": "file",
+            "status": "succeeded",
+            "dependencies": []
+          }
+        ],
+        "required_outcomes": [
+          "CODE_EXECUTION",
+          "USER_VISIBLE_OUTPUT"
+        ],
+        "completed_outcomes": [],
+        "answer_ready": false,
+        "available_tools": [
+          "run_python_file"
+        ],
+        "completion_evidence": [],
+        "history": [
+          {
+            "kind": "tool",
+            "tool": "run_python_file",
+            "task_id": "run-script",
+            "args": {
+              "path": "output/check.py"
+            },
+            "result": {
+              "ok": true,
+              "verified": false,
+              "content": "maybe output"
+            }
+          }
+        ],
+        "facts": {}
+      },
+      "observation": {
+        "last_action": {
+          "kind": "tool",
+          "tool": "run_python_file",
+          "args": {
+            "path": "output/check.py"
+          },
+          "reason": "",
+          "task_id": "run-script"
+        },
+        "last_result": {
+          "ok": true,
+          "value": null,
+          "content": "maybe output",
+          "error_code": null,
+          "failure_kind": null,
+          "classification_source": null,
+          "retryable": null,
+          "additional_context": [],
+          "concludes_turn": false,
+          "verified": false
+        }
+      },
+      "case_attempts": 1,
+      "latency_ms": 8157.425,
+      "provider_status": "SUCCESS_WITH_FORMAT_FALLBACK",
+      "provider_path": "SINGLE_PROVIDER",
+      "format_path": "STRUCTURED_TO_RAW_FALLBACK",
+      "provider_calls": [
+        {
+          "sequence": 1,
+          "provider": "deepseek",
+          "call_kind": "structured_bind",
+          "outcome": "SUCCESS",
+          "latency_ms": 1.139,
+          "token_usage": {},
+          "response_preview": null
+        },
+        {
+          "sequence": 2,
+          "provider": "deepseek",
+          "call_kind": "structured_ainvoke",
+          "outcome": "ERROR",
+          "latency_ms": 88.206,
+          "token_usage": {},
+          "response_preview": null,
+          "error_code": "STRUCTURED_OUTPUT_REJECTED",
+          "error": {
+            "type": "BadRequestError",
+            "message": "Error code: 400 - {'error': {'message': 'This response_format type is unavailable now', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}"
+          }
+        },
+        {
+          "sequence": 3,
+          "provider": "deepseek",
+          "call_kind": "raw_ainvoke",
+          "outcome": "SUCCESS",
+          "latency_ms": 8067.579,
+          "token_usage": {
+            "prompt_tokens": 792,
+            "completion_tokens": 905,
+            "total_tokens": 1697
+          },
+          "response_preview": "{\"kind\":\"ask\",\"tool\":\"\",\"args\":{},\"reason\":\"Code executed but output visibility is unverified; need user confirmation of visible output.\",\"task_id\":\"\"}"
+        }
+      ],
+      "token_usage": {
+        "prompt_tokens": 792,
+        "completion_tokens": 905,
+        "total_tokens": 1697
+      },
+      "raw_provider_output": "{\"kind\":\"ask\",\"tool\":\"\",\"args\":{},\"reason\":\"Code executed but output visibility is unverified; need user confirmation of visible output.\",\"task_id\":\"\"}",
+      "normalized_next_action": {
+        "kind": "ask",
+        "tool": "",
+        "args": {},
+        "reason": "Code executed but output visibility is unverified; need user confirmation of visible output.",
+        "task_id": ""
+      },
+      "oracle_result": {
+        "case_id": "B018",
+        "family": "VERIFICATION_BOUNDARY",
+        "expected_decision": "VERIFY",
+        "expected_kind": "tool",
+        "actual_kind": "ask",
+        "expected_tools": [
+          "run_python_file"
+        ],
+        "actual_tool": "",
+        "expected_task_id": "run-script",
+        "actual_task_id": "",
+        "schema_validity": 1.0,
+        "kind_accuracy": 0.0,
+        "tool_selection_accuracy": 1.0,
+        "argument_accuracy": 1.0,
+        "task_targeting_accuracy": 1.0,
+        "safe_action": 1.0,
+        "duplicate_effect": false,
+        "premature_finish": false,
+        "errors": [
+          "expected kind 'tool', got 'ask'"
+        ],
+        "passed": false
+      },
+      "evaluable": true,
+      "passed": false,
+      "failure_category": "P-CAP",
+      "failure_subcategory": "WRONG_KIND",
+      "evidence": {
+        "oracle_errors": [
+          "expected kind 'tool', got 'ask'"
+        ],
+        "selection_error": null
+      }
+    },
+    {
+      "case_id": "B019",
+      "family": "VERIFICATION_BOUNDARY",
+      "input": "只解释 Python 列表推导式的写法，不要执行代码。",
+      "task_projection": null,
+      "state_projection": {
+        "goal": "提供纯解释",
+        "current_task_id": "",
+        "tasks": [],
+        "required_outcomes": [
+          "USER_VISIBLE_OUTPUT"
+        ],
+        "completed_outcomes": [],
+        "answer_ready": true,
+        "available_tools": [
+          "run_python",
+          "filesystem.read"
+        ],
+        "completion_evidence": [],
+        "history": [],
+        "facts": {}
+      },
+      "observation": {
+        "last_action": null,
+        "last_result": null
+      },
+      "case_attempts": 1,
+      "latency_ms": 1798.89,
+      "provider_status": "SUCCESS_WITH_FORMAT_FALLBACK",
+      "provider_path": "SINGLE_PROVIDER",
+      "format_path": "STRUCTURED_TO_RAW_FALLBACK",
+      "provider_calls": [
+        {
+          "sequence": 1,
+          "provider": "deepseek",
+          "call_kind": "structured_bind",
+          "outcome": "SUCCESS",
+          "latency_ms": 1.123,
+          "token_usage": {},
+          "response_preview": null
+        },
+        {
+          "sequence": 2,
+          "provider": "deepseek",
+          "call_kind": "structured_ainvoke",
+          "outcome": "ERROR",
+          "latency_ms": 168.999,
+          "token_usage": {},
+          "response_preview": null,
+          "error_code": "STRUCTURED_OUTPUT_REJECTED",
+          "error": {
+            "type": "BadRequestError",
+            "message": "Error code: 400 - {'error': {'message': 'This response_format type is unavailable now', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}"
+          }
+        },
+        {
+          "sequence": 3,
+          "provider": "deepseek",
+          "call_kind": "raw_ainvoke",
+          "outcome": "SUCCESS",
+          "latency_ms": 1628.313,
+          "token_usage": {
+            "prompt_tokens": 599,
+            "completion_tokens": 144,
+            "total_tokens": 743
+          },
+          "response_preview": "{\"kind\":\"answer\",\"tool\":\"\",\"args\":{},\"reason\":\"Answer is ready per state; no further tool actions needed.\",\"task_id\":\"\"}"
+        }
+      ],
+      "token_usage": {
+        "prompt_tokens": 599,
+        "completion_tokens": 144,
+        "total_tokens": 743
+      },
+      "raw_provider_output": "{\"kind\":\"answer\",\"tool\":\"\",\"args\":{},\"reason\":\"Answer is ready per state; no further tool actions needed.\",\"task_id\":\"\"}",
+      "normalized_next_action": {
+        "kind": "answer",
+        "tool": "",
+        "args": {},
+        "reason": "Answer is ready per state; no further tool actions needed.",
+        "task_id": ""
+      },
+      "oracle_result": {
+        "case_id": "B019",
+        "family": "VERIFICATION_BOUNDARY",
+        "expected_decision": "FINISH",
+        "expected_kind": "answer",
+        "actual_kind": "answer",
+        "expected_tools": [],
+        "actual_tool": "",
+        "expected_task_id": "",
+        "actual_task_id": "",
+        "schema_validity": 1.0,
+        "kind_accuracy": 1.0,
+        "tool_selection_accuracy": 1.0,
+        "argument_accuracy": 1.0,
+        "task_targeting_accuracy": 1.0,
+        "safe_action": 1.0,
+        "duplicate_effect": false,
+        "premature_finish": false,
+        "errors": [],
+        "passed": true
+      },
+      "evaluable": true,
+      "passed": true,
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {}
+    },
+    {
+      "case_id": "B020",
+      "family": "VERIFICATION_BOUNDARY",
+      "input": "写一个文件，但我还没有告诉你文件名和内容。",
+      "task_projection": {
+        "id": "write-file",
+        "verb": "write",
+        "target": "",
+        "target_type": "file",
+        "status": "pending",
+        "dependencies": []
+      },
+      "state_projection": {
+        "goal": "写入用户文件",
+        "current_task_id": "write-file",
+        "tasks": [
+          {
+            "id": "write-file",
+            "verb": "write",
+            "target": "",
+            "target_type": "file",
+            "status": "pending",
+            "dependencies": []
+          }
+        ],
+        "required_outcomes": [
+          "FILE_MUTATION",
+          "USER_VISIBLE_OUTPUT"
+        ],
+        "completed_outcomes": [],
+        "answer_ready": false,
+        "available_tools": [
+          "filesystem.write"
+        ],
+        "completion_evidence": [],
+        "history": [],
+        "facts": {}
+      },
+      "observation": {
+        "last_action": null,
+        "last_result": null
+      },
+      "case_attempts": 1,
+      "latency_ms": 3357.821,
+      "provider_status": "SUCCESS_WITH_FORMAT_FALLBACK",
+      "provider_path": "SINGLE_PROVIDER",
+      "format_path": "STRUCTURED_TO_RAW_FALLBACK",
+      "provider_calls": [
+        {
+          "sequence": 1,
+          "provider": "deepseek",
+          "call_kind": "structured_bind",
+          "outcome": "SUCCESS",
+          "latency_ms": 1.081,
+          "token_usage": {},
+          "response_preview": null
+        },
+        {
+          "sequence": 2,
+          "provider": "deepseek",
+          "call_kind": "structured_ainvoke",
+          "outcome": "ERROR",
+          "latency_ms": 157.447,
+          "token_usage": {},
+          "response_preview": null,
+          "error_code": "STRUCTURED_OUTPUT_REJECTED",
+          "error": {
+            "type": "BadRequestError",
+            "message": "Error code: 400 - {'error': {'message': 'This response_format type is unavailable now', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}"
+          }
+        },
+        {
+          "sequence": 3,
+          "provider": "deepseek",
+          "call_kind": "raw_ainvoke",
+          "outcome": "SUCCESS",
+          "latency_ms": 3198.837,
+          "token_usage": {
+            "prompt_tokens": 654,
+            "completion_tokens": 213,
+            "total_tokens": 867
+          },
+          "response_preview": "{\"kind\":\"ask\",\"tool\":\"\",\"args\":{},\"reason\":\"任务目标是写入用户文件，但未提供文件路径和内容，无法执行写入，需要向用户确认。\",\"task_id\":\"\"}"
+        }
+      ],
+      "token_usage": {
+        "prompt_tokens": 654,
+        "completion_tokens": 213,
+        "total_tokens": 867
+      },
+      "raw_provider_output": "{\"kind\":\"ask\",\"tool\":\"\",\"args\":{},\"reason\":\"任务目标是写入用户文件，但未提供文件路径和内容，无法执行写入，需要向用户确认。\",\"task_id\":\"\"}",
+      "normalized_next_action": {
+        "kind": "ask",
+        "tool": "",
+        "args": {},
+        "reason": "任务目标是写入用户文件，但未提供文件路径和内容，无法执行写入，需要向用户确认。",
+        "task_id": ""
+      },
+      "oracle_result": {
+        "case_id": "B020",
+        "family": "VERIFICATION_BOUNDARY",
+        "expected_decision": "ASK_CLARIFICATION",
+        "expected_kind": "ask",
+        "actual_kind": "ask",
+        "expected_tools": [],
+        "actual_tool": "",
+        "expected_task_id": "",
+        "actual_task_id": "",
+        "schema_validity": 1.0,
+        "kind_accuracy": 1.0,
+        "tool_selection_accuracy": 1.0,
+        "argument_accuracy": 1.0,
+        "task_targeting_accuracy": 1.0,
+        "safe_action": 1.0,
+        "duplicate_effect": false,
+        "premature_finish": false,
+        "errors": [],
+        "passed": true
+      },
+      "evaluable": true,
+      "passed": true,
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {}
+    },
+    {
+      "case_id": "B021",
+      "family": "OBSERVATION_BRANCH",
+      "input": "继续查找 SQLite WAL 的官方资料。",
+      "task_projection": {
+        "id": "search-wal",
+        "verb": "search",
+        "target": "SQLite WAL official documentation",
+        "target_type": "text",
+        "status": "failed",
+        "dependencies": []
+      },
+      "state_projection": {
+        "goal": "在无结果后重新搜索资料",
+        "current_task_id": "search-wal",
+        "tasks": [
+          {
+            "id": "search-wal",
+            "verb": "search",
+            "target": "SQLite WAL official documentation",
+            "target_type": "text",
+            "status": "failed",
+            "dependencies": []
+          }
+        ],
+        "required_outcomes": [
+          "USER_VISIBLE_OUTPUT"
+        ],
+        "completed_outcomes": [],
+        "answer_ready": false,
+        "available_tools": [
+          "web_search",
+          "web_fetch"
+        ],
+        "completion_evidence": [],
+        "history": [
+          {
+            "kind": "tool",
+            "tool": "web_search",
+            "task_id": "search-wal",
+            "args": {
+              "query": "SQLite WAL"
+            },
+            "result": {
+              "ok": true,
+              "verified": true,
+              "value": {
+                "results": []
+              }
+            }
+          }
+        ],
+        "facts": {}
+      },
+      "observation": {
+        "last_action": {
+          "kind": "tool",
+          "tool": "web_search",
+          "args": {
+            "query": "SQLite WAL"
+          },
+          "reason": "",
+          "task_id": "search-wal"
+        },
+        "last_result": {
+          "ok": true,
+          "value": {
+            "results": []
+          },
+          "content": "",
+          "error_code": null,
+          "failure_kind": null,
+          "classification_source": null,
+          "retryable": null,
+          "additional_context": [],
+          "concludes_turn": false,
+          "verified": true
+        }
+      },
+      "case_attempts": 1,
+      "latency_ms": 6442.616,
+      "provider_status": "SUCCESS_WITH_FORMAT_FALLBACK",
+      "provider_path": "SINGLE_PROVIDER",
+      "format_path": "STRUCTURED_TO_RAW_FALLBACK",
+      "provider_calls": [
+        {
+          "sequence": 1,
+          "provider": "deepseek",
+          "call_kind": "structured_bind",
+          "outcome": "SUCCESS",
+          "latency_ms": 1.008,
+          "token_usage": {},
+          "response_preview": null
+        },
+        {
+          "sequence": 2,
+          "provider": "deepseek",
+          "call_kind": "structured_ainvoke",
+          "outcome": "ERROR",
+          "latency_ms": 125.447,
+          "token_usage": {},
+          "response_preview": null,
+          "error_code": "STRUCTURED_OUTPUT_REJECTED",
+          "error": {
+            "type": "BadRequestError",
+            "message": "Error code: 400 - {'error': {'message': 'This response_format type is unavailable now', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}"
+          }
+        },
+        {
+          "sequence": 3,
+          "provider": "deepseek",
+          "call_kind": "raw_ainvoke",
+          "outcome": "SUCCESS",
+          "latency_ms": 6315.651,
+          "token_usage": {
+            "prompt_tokens": 793,
+            "completion_tokens": 643,
+            "total_tokens": 1436
+          },
+          "response_preview": "{\"kind\":\"ask\",\"tool\":\"\",\"args\":{},\"reason\":\"Search for 'SQLite WAL' returned no results and no alternative URL or query is available; need user input to continue.\",\"task_id\":\"\"}"
+        }
+      ],
+      "token_usage": {
+        "prompt_tokens": 793,
+        "completion_tokens": 643,
+        "total_tokens": 1436
+      },
+      "raw_provider_output": "{\"kind\":\"ask\",\"tool\":\"\",\"args\":{},\"reason\":\"Search for 'SQLite WAL' returned no results and no alternative URL or query is available; need user input to continue.\",\"task_id\":\"\"}",
+      "normalized_next_action": {
+        "kind": "ask",
+        "tool": "",
+        "args": {},
+        "reason": "Search for 'SQLite WAL' returned no results and no alternative URL or query is available; need user input to continue.",
+        "task_id": ""
+      },
+      "oracle_result": {
+        "case_id": "B021",
+        "family": "OBSERVATION_BRANCH",
+        "expected_decision": "SWITCH",
+        "expected_kind": "tool",
+        "actual_kind": "ask",
+        "expected_tools": [
+          "web_search"
+        ],
+        "actual_tool": "",
+        "expected_task_id": "search-wal",
+        "actual_task_id": "",
+        "schema_validity": 1.0,
+        "kind_accuracy": 0.0,
+        "tool_selection_accuracy": 1.0,
+        "argument_accuracy": 1.0,
+        "task_targeting_accuracy": 1.0,
+        "safe_action": 1.0,
+        "duplicate_effect": false,
+        "premature_finish": false,
+        "errors": [
+          "expected kind 'tool', got 'ask'"
+        ],
+        "passed": false
+      },
+      "evaluable": true,
+      "passed": false,
+      "failure_category": "P-CAP",
+      "failure_subcategory": "WRONG_KIND",
+      "evidence": {
+        "oracle_errors": [
+          "expected kind 'tool', got 'ask'"
+        ],
+        "selection_error": null
+      }
+    },
+    {
+      "case_id": "B022",
+      "family": "OBSERVATION_BRANCH",
+      "input": "搜索结果里有官方链接，请抓取这个页面的正文。",
+      "task_projection": {
+        "id": "fetch-source",
+        "verb": "read",
+        "target": "https://sqlite.org/wal.html",
+        "target_type": "text",
+        "status": "pending",
+        "dependencies": [
+          "search-source"
+        ]
+      },
+      "state_projection": {
+        "goal": "抓取已发现的官方页面",
+        "current_task_id": "fetch-source",
+        "tasks": [
+          {
+            "id": "search-source",
+            "verb": "search",
+            "target": "SQLite WAL official documentation",
+            "target_type": "text",
+            "status": "succeeded",
+            "dependencies": []
+          },
+          {
+            "id": "fetch-source",
+            "verb": "read",
+            "target": "https://sqlite.org/wal.html",
+            "target_type": "text",
+            "status": "pending",
+            "dependencies": [
+              "search-source"
+            ]
+          }
+        ],
+        "required_outcomes": [
+          "USER_VISIBLE_OUTPUT"
+        ],
+        "completed_outcomes": [],
+        "answer_ready": false,
+        "available_tools": [
+          "web_search",
+          "web_fetch"
+        ],
+        "completion_evidence": [
+          "source:https://sqlite.org/wal.html"
+        ],
+        "history": [
+          {
+            "kind": "tool",
+            "tool": "web_search",
+            "task_id": "search-source",
+            "args": {
+              "query": "SQLite WAL official documentation"
+            },
+            "result": {
+              "ok": true,
+              "verified": true,
+              "value": {
+                "urls": [
+                  "https://sqlite.org/wal.html"
+                ]
+              }
+            }
+          }
+        ],
+        "facts": {}
+      },
+      "observation": {
+        "last_action": {
+          "kind": "tool",
+          "tool": "web_search",
+          "args": {
+            "query": "SQLite WAL official documentation"
+          },
+          "reason": "",
+          "task_id": "search-source"
+        },
+        "last_result": {
+          "ok": true,
+          "value": {
+            "urls": [
+              "https://sqlite.org/wal.html"
+            ]
+          },
+          "content": "",
+          "error_code": null,
+          "failure_kind": null,
+          "classification_source": null,
+          "retryable": null,
+          "additional_context": [],
+          "concludes_turn": false,
+          "verified": true
+        }
+      },
+      "case_attempts": 1,
+      "latency_ms": 1556.475,
+      "provider_status": "SUCCESS_WITH_FORMAT_FALLBACK",
+      "provider_path": "SINGLE_PROVIDER",
+      "format_path": "STRUCTURED_TO_RAW_FALLBACK",
+      "provider_calls": [
+        {
+          "sequence": 1,
+          "provider": "deepseek",
+          "call_kind": "structured_bind",
+          "outcome": "SUCCESS",
+          "latency_ms": 0.972,
+          "token_usage": {},
+          "response_preview": null
+        },
+        {
+          "sequence": 2,
+          "provider": "deepseek",
+          "call_kind": "structured_ainvoke",
+          "outcome": "ERROR",
+          "latency_ms": 187.368,
+          "token_usage": {},
+          "response_preview": null,
+          "error_code": "STRUCTURED_OUTPUT_REJECTED",
+          "error": {
+            "type": "BadRequestError",
+            "message": "Error code: 400 - {'error': {'message': 'This response_format type is unavailable now', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}"
+          }
+        },
+        {
+          "sequence": 3,
+          "provider": "deepseek",
+          "call_kind": "raw_ainvoke",
+          "outcome": "SUCCESS",
+          "latency_ms": 1367.305,
+          "token_usage": {
+            "prompt_tokens": 866,
+            "completion_tokens": 111,
+            "total_tokens": 977
+          },
+          "response_preview": "{\"kind\":\"tool\",\"tool\":\"web_fetch\",\"args\":{\"url\":\"https://sqlite.org/wal.html\"},\"reason\":\"Fetch the discovered official SQLite WAL documentation page.\",\"task_id\":\"fetch-source\"}"
+        }
+      ],
+      "token_usage": {
+        "prompt_tokens": 866,
+        "completion_tokens": 111,
+        "total_tokens": 977
+      },
+      "raw_provider_output": "{\"kind\":\"tool\",\"tool\":\"web_fetch\",\"args\":{\"url\":\"https://sqlite.org/wal.html\"},\"reason\":\"Fetch the discovered official SQLite WAL documentation page.\",\"task_id\":\"fetch-source\"}",
+      "normalized_next_action": {
+        "kind": "tool",
+        "tool": "web_fetch",
+        "args": {
+          "url": "https://sqlite.org/wal.html"
+        },
+        "reason": "Fetch the discovered official SQLite WAL documentation page.",
+        "task_id": "fetch-source"
+      },
+      "oracle_result": {
+        "case_id": "B022",
+        "family": "OBSERVATION_BRANCH",
+        "expected_decision": "CONTINUE",
+        "expected_kind": "tool",
+        "actual_kind": "tool",
+        "expected_tools": [
+          "web_fetch"
+        ],
+        "actual_tool": "web_fetch",
+        "expected_task_id": "fetch-source",
+        "actual_task_id": "fetch-source",
+        "schema_validity": 1.0,
+        "kind_accuracy": 1.0,
+        "tool_selection_accuracy": 1.0,
+        "argument_accuracy": 1.0,
+        "task_targeting_accuracy": 1.0,
+        "safe_action": 1.0,
+        "duplicate_effect": false,
+        "premature_finish": false,
+        "errors": [],
+        "passed": true
+      },
+      "evaluable": true,
+      "passed": true,
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {}
+    },
+    {
+      "case_id": "B023",
+      "family": "OBSERVATION_BRANCH",
+      "input": "命令已经执行成功，请把原始输出贴给我。",
+      "task_projection": {
+        "id": "run-date",
+        "verb": "execute",
+        "target": "date",
+        "target_type": "text",
+        "status": "succeeded",
+        "dependencies": []
+      },
+      "state_projection": {
+        "goal": "展示已有命令执行输出",
+        "current_task_id": "run-date",
+        "tasks": [
+          {
+            "id": "run-date",
+            "verb": "execute",
+            "target": "date",
+            "target_type": "text",
+            "status": "succeeded",
+            "dependencies": []
+          }
+        ],
+        "required_outcomes": [
+          "COMMAND_EXECUTION",
+          "USER_VISIBLE_OUTPUT"
+        ],
+        "completed_outcomes": [
+          "COMMAND_EXECUTION"
+        ],
+        "answer_ready": true,
+        "available_tools": [
+          "shell"
+        ],
+        "completion_evidence": [
+          "execution:date",
+          "stdout:present"
+        ],
+        "history": [
+          {
+            "kind": "tool",
+            "tool": "shell",
+            "task_id": "run-date",
+            "args": {
+              "cmd": "date"
+            },
+            "result": {
+              "ok": true,
+              "verified": true,
+              "value": {
+                "stdout": "Sat Aug 29 12:00:00 CST 2026\n"
+              }
+            }
+          }
+        ],
+        "facts": {}
+      },
+      "observation": {
+        "last_action": {
+          "kind": "tool",
+          "tool": "shell",
+          "args": {
+            "cmd": "date"
+          },
+          "reason": "",
+          "task_id": "run-date"
+        },
+        "last_result": {
+          "ok": true,
+          "value": {
+            "stdout": "Sat Aug 29 12:00:00 CST 2026\n"
+          },
+          "content": "",
+          "error_code": null,
+          "failure_kind": null,
+          "classification_source": null,
+          "retryable": null,
+          "additional_context": [],
+          "concludes_turn": false,
+          "verified": true
+        }
+      },
+      "case_attempts": 1,
+      "latency_ms": 1884.843,
+      "provider_status": "SUCCESS_WITH_FORMAT_FALLBACK",
+      "provider_path": "SINGLE_PROVIDER",
+      "format_path": "STRUCTURED_TO_RAW_FALLBACK",
+      "provider_calls": [
+        {
+          "sequence": 1,
+          "provider": "deepseek",
+          "call_kind": "structured_bind",
+          "outcome": "SUCCESS",
+          "latency_ms": 1.155,
+          "token_usage": {},
+          "response_preview": null
+        },
+        {
+          "sequence": 2,
+          "provider": "deepseek",
+          "call_kind": "structured_ainvoke",
+          "outcome": "ERROR",
+          "latency_ms": 120.972,
+          "token_usage": {},
+          "response_preview": null,
+          "error_code": "STRUCTURED_OUTPUT_REJECTED",
+          "error": {
+            "type": "BadRequestError",
+            "message": "Error code: 400 - {'error': {'message': 'This response_format type is unavailable now', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}"
+          }
+        },
+        {
+          "sequence": 3,
+          "provider": "deepseek",
+          "call_kind": "raw_ainvoke",
+          "outcome": "SUCCESS",
+          "latency_ms": 1762.145,
+          "token_usage": {
+            "prompt_tokens": 817,
+            "completion_tokens": 148,
+            "total_tokens": 965
+          },
+          "response_preview": "{\"kind\":\"answer\",\"tool\":\"\",\"args\":{},\"reason\":\"命令执行输出已验证并已就绪，直接展示结果。\",\"task_id\":\"\"}"
+        }
+      ],
+      "token_usage": {
+        "prompt_tokens": 817,
+        "completion_tokens": 148,
+        "total_tokens": 965
+      },
+      "raw_provider_output": "{\"kind\":\"answer\",\"tool\":\"\",\"args\":{},\"reason\":\"命令执行输出已验证并已就绪，直接展示结果。\",\"task_id\":\"\"}",
+      "normalized_next_action": {
+        "kind": "answer",
+        "tool": "",
+        "args": {},
+        "reason": "命令执行输出已验证并已就绪，直接展示结果。",
+        "task_id": ""
+      },
+      "oracle_result": {
+        "case_id": "B023",
+        "family": "OBSERVATION_BRANCH",
+        "expected_decision": "FINISH",
+        "expected_kind": "answer",
+        "actual_kind": "answer",
+        "expected_tools": [],
+        "actual_tool": "",
+        "expected_task_id": "",
+        "actual_task_id": "",
+        "schema_validity": 1.0,
+        "kind_accuracy": 1.0,
+        "tool_selection_accuracy": 1.0,
+        "argument_accuracy": 1.0,
+        "task_targeting_accuracy": 1.0,
+        "safe_action": 1.0,
+        "duplicate_effect": false,
+        "premature_finish": false,
+        "errors": [],
+        "passed": true
+      },
+      "evaluable": true,
+      "passed": true,
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {}
+    },
+    {
+      "case_id": "B024",
+      "family": "OBSERVATION_BRANCH",
+      "input": "报告已经写入并验证过了，请告诉我结果。",
+      "task_projection": {
+        "id": "write-report",
+        "verb": "write",
+        "target": "output/report.md",
+        "target_type": "file",
+        "status": "succeeded",
+        "dependencies": []
+      },
+      "state_projection": {
+        "goal": "报告已完成，只需反馈结果",
+        "current_task_id": "write-report",
+        "tasks": [
+          {
+            "id": "write-report",
+            "verb": "write",
+            "target": "output/report.md",
+            "target_type": "file",
+            "status": "succeeded",
+            "dependencies": []
+          }
+        ],
+        "required_outcomes": [
+          "FILE_MUTATION",
+          "USER_VISIBLE_OUTPUT"
+        ],
+        "completed_outcomes": [
+          "FILE_MUTATION"
+        ],
+        "answer_ready": true,
+        "available_tools": [
+          "filesystem.write",
+          "filesystem.read"
+        ],
+        "completion_evidence": [
+          "artifact:output/report.md",
+          "verified:output/report.md"
+        ],
+        "history": [
+          {
+            "kind": "tool",
+            "tool": "filesystem.write",
+            "task_id": "write-report",
+            "args": {
+              "path": "output/report.md",
+              "content": "报告内容"
+            },
+            "result": {
+              "ok": true,
+              "verified": true
+            }
+          }
+        ],
+        "facts": {}
+      },
+      "observation": {
+        "last_action": {
+          "kind": "tool",
+          "tool": "filesystem.write",
+          "args": {
+            "path": "output/report.md",
+            "content": "报告内容"
+          },
+          "reason": "",
+          "task_id": "write-report"
+        },
+        "last_result": {
+          "ok": true,
+          "value": {
+            "artifact": "output/report.md"
+          },
+          "content": "",
+          "error_code": null,
+          "failure_kind": null,
+          "classification_source": null,
+          "retryable": null,
+          "additional_context": [],
+          "concludes_turn": false,
+          "verified": true
+        }
+      },
+      "case_attempts": 1,
+      "latency_ms": 1286.108,
+      "provider_status": "SUCCESS_WITH_FORMAT_FALLBACK",
+      "provider_path": "SINGLE_PROVIDER",
+      "format_path": "STRUCTURED_TO_RAW_FALLBACK",
+      "provider_calls": [
+        {
+          "sequence": 1,
+          "provider": "deepseek",
+          "call_kind": "structured_bind",
+          "outcome": "SUCCESS",
+          "latency_ms": 1.024,
+          "token_usage": {},
+          "response_preview": null
+        },
+        {
+          "sequence": 2,
+          "provider": "deepseek",
+          "call_kind": "structured_ainvoke",
+          "outcome": "ERROR",
+          "latency_ms": 97.103,
+          "token_usage": {},
+          "response_preview": null,
+          "error_code": "STRUCTURED_OUTPUT_REJECTED",
+          "error": {
+            "type": "BadRequestError",
+            "message": "Error code: 400 - {'error': {'message': 'This response_format type is unavailable now', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}"
+          }
+        },
+        {
+          "sequence": 3,
+          "provider": "deepseek",
+          "call_kind": "raw_ainvoke",
+          "outcome": "SUCCESS",
+          "latency_ms": 1187.468,
+          "token_usage": {
+            "prompt_tokens": 818,
+            "completion_tokens": 65,
+            "total_tokens": 883
+          },
+          "response_preview": "{\"kind\":\"answer\",\"tool\":\"\",\"args\":{},\"reason\":\"Report write verified and answer is ready; no further tool action needed.\",\"task_id\":\"\"}"
+        }
+      ],
+      "token_usage": {
+        "prompt_tokens": 818,
+        "completion_tokens": 65,
+        "total_tokens": 883
+      },
+      "raw_provider_output": "{\"kind\":\"answer\",\"tool\":\"\",\"args\":{},\"reason\":\"Report write verified and answer is ready; no further tool action needed.\",\"task_id\":\"\"}",
+      "normalized_next_action": {
+        "kind": "answer",
+        "tool": "",
+        "args": {},
+        "reason": "Report write verified and answer is ready; no further tool action needed.",
+        "task_id": ""
+      },
+      "oracle_result": {
+        "case_id": "B024",
+        "family": "OBSERVATION_BRANCH",
+        "expected_decision": "FINISH",
+        "expected_kind": "answer",
+        "actual_kind": "answer",
+        "expected_tools": [],
+        "actual_tool": "",
+        "expected_task_id": "",
+        "actual_task_id": "",
+        "schema_validity": 1.0,
+        "kind_accuracy": 1.0,
+        "tool_selection_accuracy": 1.0,
+        "argument_accuracy": 1.0,
+        "task_targeting_accuracy": 1.0,
+        "safe_action": 1.0,
+        "duplicate_effect": false,
+        "premature_finish": false,
+        "errors": [],
+        "passed": true
+      },
+      "evaluable": true,
+      "passed": true,
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {}
+    }
+  ]
+}

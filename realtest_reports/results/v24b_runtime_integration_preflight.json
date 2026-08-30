@@ -1,8 +1,8 @@
 {
-  "harness_version": "v2.4B-4b-runtime-integration-preflight-v1",
-  "generated_at": "2026-08-30T13:41:49.034379+00:00",
-  "head": "2d01778dacf50c44bf8f87dcf803c996a764a25c",
-  "status": "BLOCKED_PRECONDITION",
+  "harness_version": "v2.4B-4b-runtime-integration-preflight-v2",
+  "generated_at": "2026-08-30T21:11:52.187609+00:00",
+  "head": "13885d40702b78fc4c38820dbe1fbf548a386a25",
+  "status": "READY_FOR_MIXED_E2E",
   "configuration": {
     "provider_calls": 0,
     "tool_execution": false,
@@ -10,27 +10,17 @@
     "source_scan_only": true
   },
   "discovery": {
-    "selector_consumers": [],
+    "selector_consumers": [
+      {"file": "agent/orchestrator/executor.py", "line": 31, "kind": "import"},
+      {"file": "agent/orchestrator/main.py", "line": 25, "kind": "import"}
+    ],
     "runtime_next_action_passthrough": true,
     "tool_executor_executes_whole_plan": true,
-    "compiler_has_multi_step_plan": true
+    "compiler_has_multi_step_plan": true,
+    "single_owner_contract": true,
+    "dynamic_action_lowers_to_one_step": true,
+    "both_owners_use_executor_factory": true
   },
-  "blockers": [
-    {
-      "code": "SELECTOR_NOT_CONSUMED_BY_RUNTIME",
-      "category": "P-INT",
-      "evidence": "No production module imports or calls NextActionSelector."
-    },
-    {
-      "code": "NEXT_ACTION_STATE_IS_PASSTHROUGH",
-      "category": "P-INT",
-      "evidence": "Runtime NEXT_ACTION transitions directly to EXECUTE."
-    },
-    {
-      "code": "NEXT_ACTION_EXECUTION_UNIT_MISMATCH",
-      "category": "P-CON",
-      "evidence": "Selector returns one NextAction, while ToolExecutor executes a complete ExecutionPlan and production Compiler rules can emit multiple steps."
-    }
-  ],
-  "decision_required": "Choose one authoritative execution unit before wiring: preserve Compiler-owned ExecutionPlan selection or migrate execution to one selected ExecutionStep per Runtime transition."
+  "blockers": [],
+  "decision_required": null
 }

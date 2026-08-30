@@ -1,0 +1,39 @@
+{
+  "version": "v2.4B-4c-runtime-integration-closeout-v1",
+  "evaluated_head": "13885d40702b78fc4c38820dbe1fbf548a386a25",
+  "status": "PASS",
+  "selector_state_projection": {
+    "version": "v2.4B-selector-state-v2",
+    "hash": "ec6ec4f58a567275cd04f9f87cc0723fdd04a64457d2075208da5786ed90d358"
+  },
+  "clean_checkout": true,
+  "related_tests": {"passed": 67, "failed": 0},
+  "acceptance": {
+    "compiled_task_selector_calls": 0,
+    "dynamic_task_compiler_calls": 0,
+    "dynamic_actions_per_transition": 1,
+    "dynamic_tool_plan_steps": 1,
+    "shared_executor_path": "PASS",
+    "mixed_compiled_then_dynamic": "PASS",
+    "owner_immutability": "PASS",
+    "pre_effect_authorization": "PASS",
+    "ask_without_tool_effect": "PASS",
+    "unverified_observation_loop": "PASS"
+  },
+  "hard_invariant_violations": {
+    "dual_owner_task": 0,
+    "owner_switch_after_resolution": 0,
+    "compiled_task_selector_call": 0,
+    "dynamic_task_compiler_call": 0,
+    "dynamic_direct_tool_invocation": 0,
+    "effect_before_selection": 0,
+    "unauthorized_dynamic_effect": 0,
+    "false_task_completion": 0,
+    "duplicate_effect": 0
+  },
+  "provider_calls": 0,
+  "notes": [
+    "Selector real-provider capability evidence remains the frozen v2.4B-3 evidence.",
+    "The full repository suite was not claimed: a development-worktree run was manually interrupted after 349 passed and 17 skipped while an existing external slow test produced no output."
+  ]
+}

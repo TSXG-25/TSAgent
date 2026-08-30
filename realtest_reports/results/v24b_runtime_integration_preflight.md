@@ -1,7 +1,7 @@
 # v2.4B-4b Runtime Integration Preflight
 
-- Evaluated HEAD: `2d01778dacf50c44bf8f87dcf803c996a764a25c`
-- Status: `BLOCKED_PRECONDITION`
+- Evaluated HEAD: `13885d40702b78fc4c38820dbe1fbf548a386a25`
+- Status: `READY_FOR_MIXED_E2E`
 - Provider calls: `0`
 - Tool execution: `0`
 - Runtime execution: `0`
@@ -10,34 +10,19 @@
 ## Discovery
 
 ```text
-production NextActionSelector consumers   0
-Runtime NEXT_ACTION                       passthrough → EXECUTE
-ToolExecutor execution unit               complete ExecutionPlan
-Compiler multi-step plans                 present
+production NextActionSelector consumers   2
+Runtime NEXT_ACTION                       passthrough → ExecutionStage
+Compiler Task execution unit              complete ExecutionPlan
+Dynamic Task execution unit               one selected action
+Task owner                                COMPILED xor DYNAMIC
+Shared effect path                        ExecutorFactory / ToolExecutor / PlanExecutor
 ```
 
-The Selector contract returns exactly one `NextAction`. Production execution
-currently compiles a Task into a complete `ExecutionPlan` and executes all plan
-steps in one ToolExecutor call. Wiring the Selector before that call would not
-make its action authoritative; wiring it around the Compiler would create a
-second Tool-selection and execution path.
+The original action-unit blocker is closed. Compiler multi-step plans remain
+authoritative for compiled Tasks. Explicitly dynamic Tasks bypass Compiler,
+select one action per Runtime transition, and lower Tool actions into a
+one-step `ExecutionPlan` consumed by the existing execution and verification
+path.
 
-## Blockers
-
-```text
-SELECTOR_NOT_CONSUMED_BY_RUNTIME       P-INT
-NEXT_ACTION_STATE_IS_PASSTHROUGH       P-INT
-NEXT_ACTION_EXECUTION_UNIT_MISMATCH    P-CON
-```
-
-## Required ownership decision
-
-Choose exactly one production model before implementation:
-
-1. Preserve Compiler-owned whole-plan execution and scope Selector ownership to
-   explicit dynamic/ReAct Tasks; or
-2. Migrate Runtime/Executor to execute one selected `ExecutionStep` per state
-   transition, making Selector the general action owner.
-
-The implementation must not select one action and then execute an unrelated
-whole plan, and must not preserve both models as fallback paths.
+No blockers remain in the source preflight. Mixed execution is verified by the
+separate clean-checkout closeout evidence.

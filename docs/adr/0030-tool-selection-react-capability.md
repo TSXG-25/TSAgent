@@ -1,9 +1,9 @@
 # ADR-0030: Tool Selection / ReAct Capability Contract（v2.4B）
 
-- 状态: Proposed — v2.4B-4 Runtime Integration Implemented；Mixed E2E Pending
+- 状态: Accepted — v2.4B Implemented and Integration Verified
 - 范围: 单步 Tool Selection / ReAct action choice
 - 前置基线: v2.4A Planner Contract 已冻结；v2.3 Runtime spine、Verifier 和 durable state 已冻结
-- 本阶段: Selector capability、Tool schema projection 与双 ownership Runtime 接线已完成；Mixed E2E 尚待冻结
+- 本阶段: Selector capability、Tool schema projection、双 ownership Runtime 接线与 mixed E2E 已冻结
 
 ## 1. 背景
 
@@ -249,7 +249,7 @@ v2.4B-3  Canonical action improvement     ✅ 21/24 + residual audit
 v2.4B-4  Runtime integration / clean freeze
   ├─ B-4a available_actions projection    ✅
   ├─ B-4b ownership decision/integration  ✅ COMPILED xor DYNAMIC
-  └─ B-4c mixed E2E / clean freeze        ⏳
+  └─ B-4c mixed E2E / clean freeze        ✅ 67 PASS
 ```
 
 `agent.next_action_selector.NextActionSelector` 是 B-2a 的唯一生产决策入口。它只消费

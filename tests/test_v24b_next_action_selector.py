@@ -53,13 +53,15 @@ class _StructuredProvider:
         self.action = action
         self.structured_calls = 0
         self.raw_calls = 0
+        self.messages = None
 
     def with_structured_output(self, _schema):
         provider = self
 
         class Runnable:
-            async def ainvoke(self, _messages):
+            async def ainvoke(self, messages):
                 provider.structured_calls += 1
+                provider.messages = messages
                 return dict(provider.action)
 
         return Runnable()
@@ -139,6 +141,30 @@ def test_structured_selection_returns_canonical_next_action_without_mutation() -
     assert provider.structured_calls == 1
     assert provider.raw_calls == 0
     assert state.model_dump(mode="json") == before
+
+
+def test_prompt_freezes_mutually_exclusive_canonical_envelopes() -> None:
+    provider = _StructuredProvider({
+        "kind": "answer",
+        "tool": "",
+        "args": {},
+        "reason": "the Runtime projection marks the answer ready",
+        "task_id": "",
+    })
+    selector = NextActionSelector(provider=provider, provider_name="deepseek")
+
+    selection = asyncio.run(
+        selector.select_with_evidence(None, _state(answer_ready=True), None)
+    )
+
+    assert selection.action.kind is ActionKind.ANSWER
+    assert provider.messages is not None
+    system_prompt = provider.messages[0].content
+    assert '{"kind":"answer","tool":"","args":{}' in system_prompt
+    assert '{"kind":"ask","tool":"","args":{}' in system_prompt
+    assert "Do not use null" in system_prompt
+    assert "When state.answer_ready is true, choose ANSWER" in system_prompt
+    assert provider.structured_calls == 1
 
 
 def test_structured_to_raw_fallback_is_same_provider_and_observable() -> None:

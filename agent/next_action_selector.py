@@ -158,18 +158,35 @@ class _NextActionSchema(BaseModel):
 NEXT_ACTION_PROMPT = """You are TSAgent's bounded NextAction Selector.
 
 Choose exactly one next action from the supplied Task, projected Runtime
-state, and latest observation. Return only the canonical fields:
-kind, tool, args, reason, task_id.
+state, and latest observation. Return one JSON object with exactly these five
+fields: kind, tool, args, reason, task_id. The three valid envelopes are
+mutually exclusive:
+
+TOOL:
+{"kind":"tool","tool":"<available canonical tool>","args":{},"reason":"<brief reason>","task_id":"<state task id>"}
+
+ANSWER:
+{"kind":"answer","tool":"","args":{},"reason":"<brief reason>","task_id":""}
+
+ASK:
+{"kind":"ask","tool":"","args":{},"reason":"<brief reason>","task_id":""}
+
+Do not use null. Do not add answer, question, message, content, or any other
+field. For answer and ask, tool and task_id must be empty strings and args must
+be an empty object. Never put answer or question prose in args.
 
 Rules:
 - kind is exactly one of tool, answer, ask.
+- Projected Runtime state is authoritative over task wording and model
+  inference. When state.answer_ready is true, choose ANSWER; do not start a new
+  tool action and do not ask for information already represented as ready.
+  When state.answer_ready is false, never choose ANSWER.
 - A tool action must use a canonical name from state.available_tools and a
   task id from state.tasks whose dependencies are complete.
-- Bind arguments from explicit task/state/observation facts. Never invent a
-  path, URL, command, content, capability, or completed effect.
-- Choose answer only when state.answer_ready is true. answer means produce a
-  user-facing answer; it does not merely mean that one task finished.
-- Choose ask when required information or capability is absent.
+- Bind arguments from explicit task/state/observation facts. Never invent or
+  rename a path, URL, command, content, capability, argument, or completed
+  effect.
+- Choose ASK when required information or capability is absent.
 - A retry is permitted only when the projected last result says retryable=true.
 - Never repeat a verified effect. Verification may use an available read or
   execution primitive when the prior result is not verified.

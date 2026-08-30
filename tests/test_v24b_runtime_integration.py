@@ -287,3 +287,88 @@ def test_dynamic_effect_is_authorized_before_shared_executor(
     assert next_state == "FAIL"
     assert updated["runtime_failure_code"] == "EFFECT_SCOPE_VIOLATION"
     assert executor.plans == []
+
+
+def test_mixed_run_executes_compiled_whole_plan_then_dynamic_action(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+    registry = ToolRegistry()
+
+    def compiled_one(value: str) -> str:
+        calls.append("compiled.one")
+        return value
+
+    def compiled_two(value: str) -> str:
+        calls.append("compiled.two")
+        return value
+
+    def dynamic_probe(value: str) -> str:
+        calls.append("dynamic.probe")
+        return value
+
+    registry.register(compiled_one, name="compiled.one")
+    registry.register(compiled_two, name="compiled.two")
+    registry.register(dynamic_probe, name="dynamic.probe")
+
+    class MixedCompiler(_Compiler):
+        def compile(self, task: Task, context=None) -> ExecutionPlan:
+            self.calls += 1
+            return ExecutionPlan(
+                task=task,
+                steps=[
+                    ExecutionStep(tool="compiled.one", args={"value": "one"}),
+                    ExecutionStep(tool="compiled.two", args={"value": "two"}),
+                ],
+                executor="tool",
+            )
+
+    compiler = MixedCompiler()
+    selector = _SequenceSelector(NextAction.tool_call(
+        "dynamic.probe",
+        task_id="task-dynamic",
+        args={"value": "dynamic"},
+    ))
+    monkeypatch.setitem(executor_factory._registry, "tool", ToolExecutor)
+    monkeypatch.setattr("agent.orchestrator.executor._tool_registry", registry)
+    monkeypatch.setattr("agent.executor.plan_executor.tool_registry", registry)
+    state = {
+        "messages": [HumanMessage(content="inspect two projected values")],
+        "plan": [
+            {
+                "id": "task-compiled",
+                "verb": "read",
+                "target": "first value",
+                "target_type": "text",
+                "status": "pending",
+                "observations": [],
+            },
+            {
+                "id": "task-dynamic",
+                "verb": "read",
+                "target": "second value",
+                "target_type": "text",
+                "status": "pending",
+                "dependencies": ["task-compiled"],
+                "observations": [],
+            },
+        ],
+        "execution_plans": [],
+        "execution_mode": "result_driven",
+        "inbox": {},
+    }
+    configure_dynamic_execution(state, "task-dynamic", ("dynamic.probe",))
+    stage = ExecutionStage(_Orchestrator(compiler, selector))
+
+    state, first_next = asyncio.run(stage.run(state))
+    state, second_next = asyncio.run(stage.run(state))
+
+    assert first_next == "NEXT_ACTION"
+    assert second_next == "NEXT_TASK"
+    assert compiler.calls == 1
+    assert selector.calls == 1
+    assert calls == ["compiled.one", "compiled.two", "dynamic.probe"]
+    assert [task["status"] for task in state["plan"]] == [
+        "succeeded",
+        "succeeded",
+    ]

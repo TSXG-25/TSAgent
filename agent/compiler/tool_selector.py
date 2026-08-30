@@ -30,6 +30,7 @@ from typing import Any, Optional
 from agent.task import Task, Verb, ExecutionPlan, ExecutionStep
 from agent.compiler.context import CompilerContext
 from agent.registry.tool_registry import registry as _application_registry
+from agent.tool_identity import CANONICAL_TOOL_ALIASES, registry_tool_name
 
 
 class CompileError(Exception):
@@ -329,29 +330,10 @@ class Compiler:
         "text.materialize_research",
         # Scoped filesystem primitives are implemented by PlanExecutor and
         # therefore do not depend on the process-global ToolRegistry.
-        "filesystem.read",
-        "filesystem.write",
-        "filesystem.list",
-        "filesystem.delete",
-        "filesystem.move",
-        "filesystem.copy",
+        *CANONICAL_TOOL_ALIASES,
         # Raw names remain accepted only for hand-built contract tests and
         # the registry adapter; production lowering emits filesystem.*.
-        "read_file",
-        "write_file",
-        "list_directory",
-        "delete_file",
-        "move_file",
-        "copy_file",
-    }
-    # filesystem.* 前缀映射到实际工具名
-    _FS_PREFIX_MAP = {
-        "filesystem.read": "read_file",
-        "filesystem.write": "write_file",
-        "filesystem.list": "list_directory",
-        "filesystem.delete": "delete_file",
-        "filesystem.move": "move_file",
-        "filesystem.copy": "copy_file",
+        *CANONICAL_TOOL_ALIASES.values(),
     }
 
     def _static_check(self, plan: ExecutionPlan, context: Optional[CompilerContext] = None) -> None:
@@ -400,10 +382,7 @@ class Compiler:
         """工具存在性：内置特殊工具 / filesystem.* 映射 / ToolRegistry 注册。"""
         if tool in cls._BUILTIN_TOOLS:
             return True
-        if tool.startswith("filesystem."):
-            actual = cls._FS_PREFIX_MAP.get(tool, tool.split(".", 1)[1])
-        else:
-            actual = tool
+        actual = registry_tool_name(tool)
         try:
             return registry.get(actual) is not None
         except Exception as exc:

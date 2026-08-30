@@ -17,6 +17,7 @@ import re
 from typing import Any, Dict, Optional
 
 from agent.task import ExecutionPlan, ExecutionStep
+from agent.tool_identity import CANONICAL_TOOL_ALIASES, registry_tool_name
 from agent.security import redact_sensitive_text
 from agent.execution_errors import classify_execution_error, stable_error_message
 from agent.registry.tool_registry import registry as tool_registry
@@ -313,14 +314,6 @@ class PlanExecutor:
             "text.materialize_research",
             "text.transform_upper",
         }
-        filesystem = {
-            "filesystem.read": "read_file",
-            "filesystem.write": "write_file",
-            "filesystem.list": "list_directory",
-            "filesystem.delete": "delete_file",
-            "filesystem.move": "move_file",
-            "filesystem.copy": "copy_file",
-        }
         lazy_modules = {
             "web_search": "web",
             "web_fetch": "web",
@@ -348,9 +341,9 @@ class PlanExecutor:
 
             load_tool_modules(modules_to_load)
         for step in plan.steps:
-            if step.tool in builtin or step.tool in filesystem:
+            if step.tool in builtin or step.tool in CANONICAL_TOOL_ALIASES:
                 continue
-            actual = filesystem.get(step.tool, step.tool)
+            actual = registry_tool_name(step.tool)
             if step.tool.startswith("knowledge."):
                 actual = step.tool.split(".", 1)[1]
             if tool_registry.get(actual) is None and tool_registry.get(step.tool) is None:

@@ -115,6 +115,27 @@ NextActionSelector
 B017 在单轮 candidate 中机械通过，不足以关闭该合同缺口；在 B-4 integration 前必须先实现
 并验证上述 projection，不能继续依赖 Provider 对参数名的先验猜测。
 
+该前置 projection 已由以下 production boundary 实现，但尚未接入 Selector 或 Runtime：
+
+```text
+agent.tool_identity
+  canonical Tool identity → Registry implementation identity
+
+agent.tool_action_projection.project_available_actions
+  policy-approved canonical names + Tool Registry → ToolActionProjection[]
+```
+
+合同版本与 envelope hash：
+
+```text
+version = v2.4B-available-actions-v1
+hash    = eb38faa4c12a2c8f8a89ff9973c64bf17a8d7aaf11e08fe0b43bb93bff6ee3bd
+```
+
+`project_available_actions()` 不做 Tool ranking、policy 判断或 fallback；调用者先决定允许集合，
+projection 只完成 canonical identity 与 Registry `args_schema` 的只读投影。Registry Tool 或
+schema 缺失时 fail fast。
+
 ## 3. Dataset / Oracle
 
 第一版 Dataset 位于：
@@ -188,8 +209,9 @@ v2.4B-2  Real Provider baseline
   ├─ B-2a Production Selector Bootstrap   ✅
   └─ B-2b Real Provider baseline          ✅ 11/24
 v2.4B-3  Canonical action improvement     ✅ 21/24 + residual audit
-v2.4B-4  Tool schema projection / Runtime integration / clean freeze
-                                           ← next after projection contract implementation
+v2.4B-4  Runtime integration / clean freeze
+  ├─ B-4a available_actions projection    ✅ bootstrap, not wired
+  └─ B-4b Runtime integration             ← next
 ```
 
 `agent.next_action_selector.NextActionSelector` 是 B-2a 的唯一生产决策入口。它只消费

@@ -1,6 +1,6 @@
 # ADR-0030: Tool Selection / ReAct Capability Contract（v2.4B）
 
-- 状态: Proposed — v2.4B-1 Contract / Dataset / Oracle Implemented
+- 状态: Proposed — v2.4B-2a Production Selector Bootstrap Implemented
 - 范围: 单步 Tool Selection / ReAct action choice
 - 前置基线: v2.4A Planner Contract 已冻结；v2.3 Runtime spine、Verifier 和 durable state 已冻结
 - 本阶段: 只建立合同、确定性 Dataset 和 Oracle；不修改 Planner、Compiler、Runtime 或 Tool 实现
@@ -141,13 +141,22 @@ failure category
 ## 5. 后续阶段
 
 ```text
-v2.4B-1  Contract / Dataset / Oracle       ← 本 ADR
+v2.4B-1  Contract / Dataset / Oracle       ✅
 v2.4B-2  Real Provider baseline
+  ├─ B-2 preflight                        ✅ production selector missing evidence
+  ├─ B-2a Production Selector Bootstrap   ← current
+  └─ B-2b Real Provider baseline
 v2.4B-3  Attribution / capability improvement（仅在形成系统性 cluster 时）
 v2.4B-4  Clean freeze evidence
 ```
 
-v2.4B-1 不改变 Planner、Runtime、Tool Registry 或 Compiler。若真实 baseline 发现当前
+`agent.next_action_selector.NextActionSelector` 是 B-2a 的唯一生产决策入口。它只消费
+`TaskProjection`、`ExecutionStateProjection` 和 `ActionObservation`，输出 canonical
+`NextAction`；Provider/format evidence 通过独立结果返回，不改变动作真值。B-2a 不接入
+Runtime 主循环，也不修改 Planner、Compiler、Executor、Tool Registry、Workspace 或
+Checkpoint。
+
+若真实 baseline 发现当前
 `NextAction` 与生产 Runtime 的 observation projection 不一致，应先归类为
 `P-CON`/`P-INT`，保留原始 evidence，再决定是否做最小合同修订；不能在 harness 中静默
 适配成另一套 action schema。

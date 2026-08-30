@@ -36,3 +36,16 @@ def test_preflight_fails_closed_without_production_selector(monkeypatch) -> None
     assert {
         case["failure_subcategory"] for case in report["case_reports"]
     } == {"PRODUCTION_SELECTOR_MISSING"}
+
+
+def test_current_production_selector_makes_preflight_ready() -> None:
+    report = HARNESS.build_preflight_report()
+
+    assert report["status"] == "READY_FOR_REAL_BASELINE"
+    assert report["dataset"]["hash_match"] is True
+    assert report["provider"]["calls"] == 0
+    assert report["case_reports"] == []
+    assert {
+        symbol["symbol"]
+        for symbol in report["production_selector_discovery"]["selector_symbols"]
+    } == {"NextActionSelector"}

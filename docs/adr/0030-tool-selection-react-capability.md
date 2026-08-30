@@ -1,9 +1,9 @@
 # ADR-0030: Tool Selection / ReAct Capability Contract（v2.4B）
 
-- 状态: Proposed — v2.4B-2a Production Selector Bootstrap Implemented
+- 状态: Proposed — v2.4B-3 Residual Audit Complete；Runtime Integration Pending
 - 范围: 单步 Tool Selection / ReAct action choice
 - 前置基线: v2.4A Planner Contract 已冻结；v2.3 Runtime spine、Verifier 和 durable state 已冻结
-- 本阶段: 只建立合同、确定性 Dataset 和 Oracle；不修改 Planner、Compiler、Runtime 或 Tool 实现
+- 本阶段: Selector capability 已完成独立真实基线与一次窄改进；Runtime Integration 尚未开始
 
 ## 1. 背景
 
@@ -73,6 +73,47 @@ Tool Registry 的实现别名（如 `read_file`、`write_file`）属于下游映
 7. `ask` 用于缺少必要信息或能力边界；它不声明任何外部动作已经发生。
 8. Selector 不读取 SQLite、Checkpoint、Workspace、绝对路径或 Provider 原始上下文；它只消费窄投影。
 9. action 选择失败属于能力/合同结果，不能由 Oracle 自动重写、由 harness retry 或由 golden action 修复。
+
+### 2.3 Action class 与 Tool schema ownership
+
+`retry`、`verify` 和 `switch` 是不同的 action class，不能只按 Tool 名判断：
+
+- `retry` 是失败后再次选择同一 `tool + task_id + args`；它要求投影的
+  `ActionResult.retryable=true`，并继续服从 Runtime budget；
+- `verify` 是在已有 `ok=true, verified=false` 事实后取得机器验证证据。它不创建 retry
+  budget；可用的 verification action 必须由 Runtime projection 明确允许；
+- `switch` 是根据无结果或其他 observation，改用不同 Tool 或不同参数继续当前 Task。
+  action identity 已改变，因此不等同于 retry，但仍受当前 Task、dependency 和 effect policy
+  约束。
+
+Selector 不推断某个 action 是否获 Runtime policy 授权。B-4 integration 的 state projection
+必须只暴露当前允许选择的 action capability。
+
+仅有 `available_tools: [name, ...]` 不足以支持 arbitrary Tool 的 canonical argument
+binding。正式 ownership 决定如下：
+
+```text
+Tool Registry args_schema
+        +
+canonical execution identity / alias mapping
+        ↓  Runtime composition projection
+available_actions:
+  - tool: filesystem.read
+    args_schema: <read-only canonical JSON schema>
+        ↓
+NextActionSelector
+```
+
+- Tool Registry 的真实 `args_schema` 是参数合同来源；
+- canonical identity/alias resolution 在 composition projection 时完成一次，不由 Selector
+  或 Prompt 复制映射；
+- Selector 只消费只读 `available_actions`，不导入 Tool Registry、Compiler 或 Executor；
+- projection 只包含当前 Run/Task 被 policy 允许的 Tool，不暴露整个 Registry；
+- Dataset v1 和既有 evidence 保持冻结。引入 `available_actions` 时必须发布显式的新 projection
+  contract/hash，不能静默重解释 v1 结果。
+
+B017 在单轮 candidate 中机械通过，不足以关闭该合同缺口；在 B-4 integration 前必须先实现
+并验证上述 projection，不能继续依赖 Provider 对参数名的先验猜测。
 
 ## 3. Dataset / Oracle
 
@@ -144,10 +185,11 @@ failure category
 v2.4B-1  Contract / Dataset / Oracle       ✅
 v2.4B-2  Real Provider baseline
   ├─ B-2 preflight                        ✅ production selector missing evidence
-  ├─ B-2a Production Selector Bootstrap   ← current
-  └─ B-2b Real Provider baseline
-v2.4B-3  Attribution / capability improvement（仅在形成系统性 cluster 时）
-v2.4B-4  Clean freeze evidence
+  ├─ B-2a Production Selector Bootstrap   ✅
+  └─ B-2b Real Provider baseline          ✅ 11/24
+v2.4B-3  Canonical action improvement     ✅ 21/24 + residual audit
+v2.4B-4  Tool schema projection / Runtime integration / clean freeze
+                                           ← next after projection contract implementation
 ```
 
 `agent.next_action_selector.NextActionSelector` 是 B-2a 的唯一生产决策入口。它只消费

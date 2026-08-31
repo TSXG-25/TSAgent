@@ -1,0 +1,148 @@
+{
+  "version": "v2.4D-memory-learning-v1",
+  "scope": "memory_learning_decision",
+  "contract": "InteractionEvidence + MemoryPolicyProjection -> MemoryLearningDecision",
+  "families": [
+    "ELIGIBILITY",
+    "SOURCE_AUTHORITY",
+    "SCOPE",
+    "DEDUP_CONFLICT",
+    "SENSITIVITY_VOLATILITY",
+    "LIFECYCLE_BOUNDARY"
+  ],
+  "policy": {
+    "actions": ["STORE", "UPDATE", "IGNORE"],
+    "scopes": ["session", "user", "repository"],
+    "memory_types": ["fact", "preference", "summary", "resolution"],
+    "sensitive_requires_explicit_persist": true,
+    "secrets_never_store": true,
+    "volatile_observations_default_ignore": true
+  },
+  "cases": [
+    {
+      "id": "D001", "family": "ELIGIBILITY",
+      "evidence": {"id": "ev-001", "source_kind": "user_statement", "source_ref": "turn:1", "text": "我叫小明。", "memory_type": "fact", "requested_scope": "user", "canonical_key": "personal.name", "value": "小明", "explicit_persist": true, "sensitive": false, "secret": false, "volatile": false, "existing": null},
+      "expected": {"action": "STORE", "memory_type": "fact", "scope": "user", "canonical_key": "personal.name", "value": "小明", "provenance": {"evidence_id": "ev-001", "source_kind": "user_statement", "source_ref": "turn:1"}, "reason_code": "EXPLICIT_USER_FACT"}
+    },
+    {
+      "id": "D002", "family": "ELIGIBILITY",
+      "evidence": {"id": "ev-002", "source_kind": "user_statement", "source_ref": "turn:2", "text": "我喜欢深色主题，以后优先用深色主题。", "memory_type": "preference", "requested_scope": "user", "canonical_key": "preference.ui_theme", "value": "dark", "explicit_persist": true, "sensitive": false, "secret": false, "volatile": false, "existing": null},
+      "expected": {"action": "STORE", "memory_type": "preference", "scope": "user", "canonical_key": "preference.ui_theme", "value": "dark", "provenance": {"evidence_id": "ev-002", "source_kind": "user_statement", "source_ref": "turn:2"}, "reason_code": "EXPLICIT_USER_PREFERENCE"}
+    },
+    {
+      "id": "D003", "family": "ELIGIBILITY",
+      "evidence": {"id": "ev-003", "source_kind": "user_statement", "source_ref": "turn:3", "text": "记住我用 Python 写后端。", "memory_type": "preference", "requested_scope": "user", "canonical_key": "programming.language", "value": "Python", "explicit_persist": true, "sensitive": false, "secret": false, "volatile": false, "existing": null},
+      "expected": {"action": "STORE", "memory_type": "preference", "scope": "user", "canonical_key": "programming.language", "value": "Python", "provenance": {"evidence_id": "ev-003", "source_kind": "user_statement", "source_ref": "turn:3"}, "reason_code": "EXPLICIT_USER_PREFERENCE"}
+    },
+    {
+      "id": "D004", "family": "ELIGIBILITY",
+      "evidence": {"id": "ev-004", "source_kind": "user_request", "source_ref": "turn:4", "text": "你记得我叫什么吗？", "memory_type": "fact", "requested_scope": "user", "canonical_key": "", "value": "", "explicit_persist": false, "sensitive": false, "secret": false, "volatile": false, "existing": null},
+      "expected": {"action": "IGNORE", "memory_type": "", "scope": "", "canonical_key": "", "value": "", "provenance": {}, "reason_code": "NO_PERSISTABLE_EVIDENCE"}
+    },
+
+    {
+      "id": "D005", "family": "SOURCE_AUTHORITY",
+      "evidence": {"id": "ev-005", "source_kind": "user_statement", "source_ref": "turn:5", "text": "以后这个项目默认使用 uv。", "memory_type": "preference", "requested_scope": "repository", "canonical_key": "project.package_manager", "value": "uv", "explicit_persist": true, "sensitive": false, "secret": false, "volatile": false, "existing": null},
+      "expected": {"action": "STORE", "memory_type": "preference", "scope": "repository", "canonical_key": "project.package_manager", "value": "uv", "provenance": {"evidence_id": "ev-005", "source_kind": "user_statement", "source_ref": "turn:5"}, "reason_code": "EXPLICIT_PROJECT_PREFERENCE"}
+    },
+    {
+      "id": "D006", "family": "SOURCE_AUTHORITY",
+      "evidence": {"id": "ev-006", "source_kind": "assistant_output", "source_ref": "run:6", "text": "你偏好使用 Vim。", "memory_type": "preference", "requested_scope": "user", "canonical_key": "programming.editor", "value": "Vim", "explicit_persist": false, "sensitive": false, "secret": false, "volatile": false, "existing": null},
+      "expected": {"action": "IGNORE", "memory_type": "", "scope": "", "canonical_key": "", "value": "", "provenance": {}, "reason_code": "ASSISTANT_INFERENCE"}
+    },
+    {
+      "id": "D007", "family": "SOURCE_AUTHORITY",
+      "evidence": {"id": "ev-007", "source_kind": "tool_observation", "source_ref": "tool:market:7", "text": "BTC 当前价格为 100000 美元。", "memory_type": "fact", "requested_scope": "user", "canonical_key": "market.btc_price", "value": "100000 USD", "explicit_persist": false, "sensitive": false, "secret": false, "volatile": true, "existing": null},
+      "expected": {"action": "IGNORE", "memory_type": "", "scope": "", "canonical_key": "", "value": "", "provenance": {}, "reason_code": "VOLATILE_OBSERVATION"}
+    },
+    {
+      "id": "D008", "family": "SOURCE_AUTHORITY",
+      "evidence": {"id": "ev-008", "source_kind": "repository_observation", "source_ref": "repo:index:8", "text": "这个函数使用了 SQLite 连接。", "memory_type": "fact", "requested_scope": "repository", "canonical_key": "code.uses_sqlite", "value": "true", "explicit_persist": false, "sensitive": false, "secret": false, "volatile": false, "existing": null},
+      "expected": {"action": "IGNORE", "memory_type": "", "scope": "", "canonical_key": "", "value": "", "provenance": {}, "reason_code": "REPOSITORY_INDEX_OUT_OF_SCOPE"}
+    },
+
+    {
+      "id": "D009", "family": "SCOPE",
+      "evidence": {"id": "ev-009", "source_kind": "run_artifact", "source_ref": "run:9/artifact:report", "text": "本次运行生成了 output/report.md。", "memory_type": "summary", "requested_scope": "session", "canonical_key": "run.report", "value": "output/report.md", "explicit_persist": false, "sensitive": false, "secret": false, "volatile": false, "existing": null},
+      "expected": {"action": "IGNORE", "memory_type": "", "scope": "", "canonical_key": "", "value": "", "provenance": {}, "reason_code": "RUN_FACT_NOT_USER_MEMORY"}
+    },
+    {
+      "id": "D010", "family": "SCOPE",
+      "evidence": {"id": "ev-010", "source_kind": "user_statement", "source_ref": "turn:10", "text": "这次会话先用简短回答。", "memory_type": "preference", "requested_scope": "session", "canonical_key": "response.style", "value": "concise", "explicit_persist": true, "sensitive": false, "secret": false, "volatile": false, "existing": null},
+      "expected": {"action": "STORE", "memory_type": "preference", "scope": "session", "canonical_key": "response.style", "value": "concise", "provenance": {"evidence_id": "ev-010", "source_kind": "user_statement", "source_ref": "turn:10"}, "reason_code": "EXPLICIT_SESSION_PREFERENCE"}
+    },
+    {
+      "id": "D011", "family": "SCOPE",
+      "evidence": {"id": "ev-011", "source_kind": "user_statement", "source_ref": "turn:11", "text": "我长期偏好中文回答。", "memory_type": "preference", "requested_scope": "user", "canonical_key": "response.language", "value": "Chinese", "explicit_persist": true, "sensitive": false, "secret": false, "volatile": false, "existing": null},
+      "expected": {"action": "STORE", "memory_type": "preference", "scope": "user", "canonical_key": "response.language", "value": "Chinese", "provenance": {"evidence_id": "ev-011", "source_kind": "user_statement", "source_ref": "turn:11"}, "reason_code": "EXPLICIT_USER_PREFERENCE"}
+    },
+    {
+      "id": "D012", "family": "SCOPE",
+      "evidence": {"id": "ev-012", "source_kind": "user_statement", "source_ref": "turn:12", "text": "这个仓库的测试命令是 pytest。", "memory_type": "fact", "requested_scope": "repository", "canonical_key": "repo.test_command", "value": "pytest", "explicit_persist": true, "sensitive": false, "secret": false, "volatile": false, "existing": null},
+      "expected": {"action": "STORE", "memory_type": "fact", "scope": "repository", "canonical_key": "repo.test_command", "value": "pytest", "provenance": {"evidence_id": "ev-012", "source_kind": "user_statement", "source_ref": "turn:12"}, "reason_code": "EXPLICIT_REPOSITORY_FACT"}
+    },
+
+    {
+      "id": "D013", "family": "DEDUP_CONFLICT",
+      "evidence": {"id": "ev-013", "source_kind": "user_statement", "source_ref": "turn:13", "text": "我喜欢 Vim。", "memory_type": "preference", "requested_scope": "user", "canonical_key": "programming.editor", "value": "Vim", "explicit_persist": true, "sensitive": false, "secret": false, "volatile": false, "existing": null},
+      "expected": {"action": "STORE", "memory_type": "preference", "scope": "user", "canonical_key": "programming.editor", "value": "Vim", "provenance": {"evidence_id": "ev-013", "source_kind": "user_statement", "source_ref": "turn:13"}, "reason_code": "NEW_CANONICAL_FACT"}
+    },
+    {
+      "id": "D014", "family": "DEDUP_CONFLICT",
+      "evidence": {"id": "ev-014", "source_kind": "user_statement", "source_ref": "turn:14", "text": "我还是喜欢 Vim。", "memory_type": "preference", "requested_scope": "user", "canonical_key": "programming.editor", "value": "Vim", "explicit_persist": true, "sensitive": false, "secret": false, "volatile": false, "existing": {"scope": "user", "canonical_key": "programming.editor", "value": "Vim"}},
+      "expected": {"action": "IGNORE", "memory_type": "", "scope": "", "canonical_key": "", "value": "", "provenance": {}, "reason_code": "DUPLICATE_SAME_VALUE"}
+    },
+    {
+      "id": "D015", "family": "DEDUP_CONFLICT",
+      "evidence": {"id": "ev-015", "source_kind": "user_statement", "source_ref": "turn:15", "text": "我现在改用 Neovim。", "memory_type": "preference", "requested_scope": "user", "canonical_key": "programming.editor", "value": "Neovim", "explicit_persist": true, "sensitive": false, "secret": false, "volatile": false, "existing": {"scope": "user", "canonical_key": "programming.editor", "value": "Vim"}},
+      "expected": {"action": "UPDATE", "memory_type": "preference", "scope": "user", "canonical_key": "programming.editor", "value": "Neovim", "provenance": {"evidence_id": "ev-015", "source_kind": "user_statement", "source_ref": "turn:15"}, "reason_code": "EXPLICIT_VALUE_UPDATE"}
+    },
+    {
+      "id": "D016", "family": "DEDUP_CONFLICT",
+      "evidence": {"id": "ev-016", "source_kind": "assistant_output", "source_ref": "run:16", "text": "有人说你喜欢 Emacs。", "memory_type": "preference", "requested_scope": "user", "canonical_key": "programming.editor", "value": "Emacs", "explicit_persist": false, "sensitive": false, "secret": false, "volatile": false, "existing": {"scope": "user", "canonical_key": "programming.editor", "value": "Vim"}},
+      "expected": {"action": "IGNORE", "memory_type": "", "scope": "", "canonical_key": "", "value": "", "provenance": {}, "reason_code": "CONFLICT_UNCONFIRMED"}
+    },
+
+    {
+      "id": "D017", "family": "SENSITIVITY_VOLATILITY",
+      "evidence": {"id": "ev-017", "source_kind": "user_statement", "source_ref": "turn:17", "text": "请记住我的邮箱 a@example.com。", "memory_type": "fact", "requested_scope": "user", "canonical_key": "personal.email", "value": "a@example.com", "explicit_persist": true, "sensitive": true, "secret": false, "volatile": false, "existing": null},
+      "expected": {"action": "STORE", "memory_type": "fact", "scope": "user", "canonical_key": "personal.email", "value": "a@example.com", "provenance": {"evidence_id": "ev-017", "source_kind": "user_statement", "source_ref": "turn:17"}, "reason_code": "EXPLICIT_SENSITIVE_PERSISTENCE"}
+    },
+    {
+      "id": "D018", "family": "SENSITIVITY_VOLATILITY",
+      "evidence": {"id": "ev-018", "source_kind": "user_statement", "source_ref": "turn:18", "text": "我的手机号是 13800000000。", "memory_type": "fact", "requested_scope": "user", "canonical_key": "personal.phone", "value": "13800000000", "explicit_persist": false, "sensitive": true, "secret": false, "volatile": false, "existing": null},
+      "expected": {"action": "IGNORE", "memory_type": "", "scope": "", "canonical_key": "", "value": "", "provenance": {}, "reason_code": "SENSITIVE_WITHOUT_EXPLICIT_PERSISTENCE"}
+    },
+    {
+      "id": "D019", "family": "SENSITIVITY_VOLATILITY",
+      "evidence": {"id": "ev-019", "source_kind": "tool_observation", "source_ref": "tool:weather:19", "text": "今天北京 30℃。", "memory_type": "fact", "requested_scope": "user", "canonical_key": "weather.beijing.today", "value": "30C", "explicit_persist": false, "sensitive": false, "secret": false, "volatile": true, "existing": null},
+      "expected": {"action": "IGNORE", "memory_type": "", "scope": "", "canonical_key": "", "value": "", "provenance": {}, "reason_code": "VOLATILE_OBSERVATION"}
+    },
+    {
+      "id": "D020", "family": "SENSITIVITY_VOLATILITY",
+      "evidence": {"id": "ev-020", "source_kind": "user_statement", "source_ref": "turn:20", "text": "请记住我的 API key sk-example。", "memory_type": "fact", "requested_scope": "user", "canonical_key": "secret.api_key", "value": "sk-example", "explicit_persist": true, "sensitive": true, "secret": true, "volatile": false, "existing": null},
+      "expected": {"action": "IGNORE", "memory_type": "", "scope": "", "canonical_key": "", "value": "", "provenance": {}, "reason_code": "SECRET_NEVER_STORE"}
+    },
+
+    {
+      "id": "D021", "family": "LIFECYCLE_BOUNDARY",
+      "evidence": {"id": "ev-021", "source_kind": "user_request", "source_ref": "turn:21", "text": "忘记我叫小明。", "memory_type": "fact", "requested_scope": "user", "canonical_key": "personal.name", "value": "小明", "explicit_persist": false, "sensitive": false, "secret": false, "volatile": false, "existing": {"scope": "user", "canonical_key": "personal.name", "value": "小明"}},
+      "expected": {"action": "IGNORE", "memory_type": "", "scope": "", "canonical_key": "", "value": "", "provenance": {}, "reason_code": "DELETE_OWNED_BY_LIFECYCLE"}
+    },
+    {
+      "id": "D022", "family": "LIFECYCLE_BOUNDARY",
+      "evidence": {"id": "ev-022", "source_kind": "assistant_output", "source_ref": "run:22", "text": "已保存你的偏好。", "memory_type": "summary", "requested_scope": "user", "canonical_key": "assistant.claim", "value": "saved", "explicit_persist": false, "sensitive": false, "secret": false, "volatile": false, "existing": null},
+      "expected": {"action": "IGNORE", "memory_type": "", "scope": "", "canonical_key": "", "value": "", "provenance": {}, "reason_code": "ASSISTANT_OUTPUT_NOT_EVIDENCE"}
+    },
+    {
+      "id": "D023", "family": "LIFECYCLE_BOUNDARY",
+      "evidence": {"id": "ev-023", "source_kind": "user_confirmed_resolution", "source_ref": "turn:23/resolution:1", "text": "请记住我刚打开的是 agent/runtime.py。", "memory_type": "resolution", "requested_scope": "session", "canonical_key": "recent.file", "value": "agent/runtime.py", "explicit_persist": true, "sensitive": false, "secret": false, "volatile": false, "existing": null},
+      "expected": {"action": "STORE", "memory_type": "resolution", "scope": "session", "canonical_key": "recent.file", "value": "agent/runtime.py", "provenance": {"evidence_id": "ev-023", "source_kind": "user_confirmed_resolution", "source_ref": "turn:23/resolution:1"}, "reason_code": "CONFIRMED_RESOLUTION"}
+    },
+    {
+      "id": "D024", "family": "LIFECYCLE_BOUNDARY",
+      "evidence": {"id": "ev-024", "source_kind": "user_statement", "source_ref": "turn:24", "text": "以后报告都用 Markdown。", "memory_type": "preference", "requested_scope": "user", "canonical_key": "output.format", "value": "Markdown", "explicit_persist": true, "sensitive": false, "secret": false, "volatile": false, "existing": null},
+      "expected": {"action": "STORE", "memory_type": "preference", "scope": "user", "canonical_key": "output.format", "value": "Markdown", "provenance": {"evidence_id": "ev-024", "source_kind": "user_statement", "source_ref": "turn:24"}, "reason_code": "EXPLICIT_USER_PREFERENCE"}
+    }
+  ]
+}

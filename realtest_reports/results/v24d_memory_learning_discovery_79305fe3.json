@@ -1,0 +1,676 @@
+{
+  "harness_version": "v2.4D-1-memory-learning-preflight-v1",
+  "generated_at": "2026-08-31T14:07:59.043976+00:00",
+  "head": "79305fe355258b79ad0e91a654f5ddb0ebc251b5",
+  "status": "BLOCKED_PRECONDITION",
+  "configuration": {
+    "provider_calls": 0,
+    "memory_writes": 0,
+    "store_imports": 0,
+    "source_scan_only": true
+  },
+  "dataset": {
+    "path": "evals/memory_learning/dataset.json",
+    "version": "v2.4D-memory-learning-v1",
+    "case_count": 24,
+    "hash": "e821b67e7da66b40a7c1cc38ac6e18d1636b6d01c6aeaa3e873f03bb95f928b7"
+  },
+  "discovery": {
+    "production_memory_learning_entries": [],
+    "production_writer_symbols": [
+      {
+        "file": "agent/memory/session.py",
+        "line": 25,
+        "symbol": "add_message",
+        "kind": "writer"
+      },
+      {
+        "file": "agent/memory/session.py",
+        "line": 46,
+        "symbol": "add_user_message",
+        "kind": "writer"
+      },
+      {
+        "file": "agent/memory/session.py",
+        "line": 54,
+        "symbol": "add_assistant_message",
+        "kind": "writer"
+      },
+      {
+        "file": "agent/memory/short_term.py",
+        "line": 49,
+        "symbol": "add_exchange",
+        "kind": "writer"
+      },
+      {
+        "file": "agent/memory/long_term.py",
+        "line": 42,
+        "symbol": "store_summary",
+        "kind": "writer"
+      },
+      {
+        "file": "agent/memory/long_term.py",
+        "line": 138,
+        "symbol": "save_fact",
+        "kind": "writer"
+      },
+      {
+        "file": "agent/memory/preference.py",
+        "line": 126,
+        "symbol": "async_extract_and_save_facts",
+        "kind": "writer"
+      },
+      {
+        "file": "agent/memory/resolution.py",
+        "line": 56,
+        "symbol": "record_resolution",
+        "kind": "writer"
+      },
+      {
+        "file": "agent/services/memory_service.py",
+        "line": 35,
+        "symbol": "add_exchange",
+        "kind": "writer"
+      },
+      {
+        "file": "agent/services/memory_service.py",
+        "line": 55,
+        "symbol": "store_summary",
+        "kind": "writer"
+      },
+      {
+        "file": "agent/services/memory_service.py",
+        "line": 71,
+        "symbol": "record_resolution",
+        "kind": "writer"
+      },
+      {
+        "file": "agent/services/memory_service.py",
+        "line": 146,
+        "symbol": "record_full_exchange",
+        "kind": "writer"
+      },
+      {
+        "file": "agent/services/memory_service.py",
+        "line": 198,
+        "symbol": "add_exchange",
+        "kind": "writer"
+      },
+      {
+        "file": "agent/services/memory_service.py",
+        "line": 210,
+        "symbol": "store_summary",
+        "kind": "writer"
+      },
+      {
+        "file": "agent/services/memory_service.py",
+        "line": 218,
+        "symbol": "record_resolution",
+        "kind": "writer"
+      },
+      {
+        "file": "agent/services/memory_service.py",
+        "line": 246,
+        "symbol": "record_full_exchange",
+        "kind": "writer"
+      }
+    ],
+    "production_write_call_sites": [
+      {
+        "file": "agent/orchestrator/finalizer.py",
+        "line": 90,
+        "text": "self._memory().record_full_exchange(user_input, effect_failure)"
+      },
+      {
+        "file": "agent/orchestrator/finalizer.py",
+        "line": 107,
+        "text": "self._memory().record_full_exchange(user_input, answer)"
+      },
+      {
+        "file": "agent/orchestrator/finalizer.py",
+        "line": 113,
+        "text": "self._memory().record_full_exchange(user_input, failure_answer)"
+      },
+      {
+        "file": "agent/orchestrator/finalizer.py",
+        "line": 125,
+        "text": "self._memory().record_full_exchange(user_input, checked)"
+      },
+      {
+        "file": "agent/orchestrator/finalizer.py",
+        "line": 128,
+        "text": "self._memory().record_full_exchange(user_input, best_answer)"
+      },
+      {
+        "file": "agent/orchestrator/finalizer.py",
+        "line": 136,
+        "text": "self._memory().record_full_exchange(user_input, deterministic_answer)"
+      },
+      {
+        "file": "agent/orchestrator/finalizer.py",
+        "line": 149,
+        "text": "self._memory().record_full_exchange(user_input, final_answer)"
+      },
+      {
+        "file": "agent/orchestrator/planner.py",
+        "line": 975,
+        "text": "memory_view.record_full_exchange(user_input, answer)"
+      },
+      {
+        "file": "agent/orchestrator/planner.py",
+        "line": 977,
+        "text": "_get_memory_service().record_full_exchange(user_id, user_input, answer)"
+      },
+      {
+        "file": "agent/orchestrator/planner.py",
+        "line": 988,
+        "text": "memory_view.record_resolution(utterance, resolved_target, kind)"
+      },
+      {
+        "file": "agent/orchestrator/planner.py",
+        "line": 990,
+        "text": "_get_memory_service().record_resolution(user_id, utterance, resolved_target, kind)"
+      },
+      {
+        "file": "agent/runtime.py",
+        "line": 571,
+        "text": "self._memory_view.record_full_exchange(user_input, answer)"
+      },
+      {
+        "file": "agent/runtime.py",
+        "line": 649,
+        "text": "self._memory_view.record_full_exchange(user_input, answer)"
+      },
+      {
+        "file": "agent/runtime.py",
+        "line": 734,
+        "text": "self._memory_view.record_full_exchange(user_input, answer)"
+      },
+      {
+        "file": "agent/runtime.py",
+        "line": 792,
+        "text": "self._memory_view.extract_and_save_facts(user_input),"
+      },
+      {
+        "file": "agent/runtime.py",
+        "line": 1053,
+        "text": "self._memory_view.extract_and_save_facts(user_input),"
+      },
+      {
+        "file": "agent/runtime.py",
+        "line": 1071,
+        "text": "self._memory_view.record_full_exchange(user_input, final_answer)"
+      },
+      {
+        "file": "agent/services/memory_service.py",
+        "line": 18,
+        "text": "add_user_message(user_id, content)"
+      },
+      {
+        "file": "agent/services/memory_service.py",
+        "line": 24,
+        "text": "add_assistant_message(user_id, content)"
+      },
+      {
+        "file": "agent/services/memory_service.py",
+        "line": 58,
+        "text": "store_summary(user_id, summary)"
+      },
+      {
+        "file": "agent/services/memory_service.py",
+        "line": 160,
+        "text": "MemoryService.add_exchange(user_id, user_input, assistant_response)"
+      },
+      {
+        "file": "agent/services/memory_service.py",
+        "line": 200,
+        "text": "MemoryService.add_exchange(self.namespace, user_input, assistant_response)"
+      },
+      {
+        "file": "agent/services/memory_service.py",
+        "line": 212,
+        "text": "MemoryService.store_summary(self.namespace, summary)"
+      },
+      {
+        "file": "agent/services/memory_service.py",
+        "line": 226,
+        "text": "MemoryService.record_resolution("
+      },
+      {
+        "file": "agent/services/memory_service.py",
+        "line": 244,
+        "text": "return await MemoryService.extract_and_save_facts(self.namespace, text)"
+      },
+      {
+        "file": "agent/services/memory_service.py",
+        "line": 248,
+        "text": "MemoryService.record_full_exchange("
+      }
+    ],
+    "writer_inventory": [
+      {
+        "layer": "session",
+        "file": "agent/memory/session.py",
+        "symbols": [
+          "add_message",
+          "add_user_message",
+          "add_assistant_message"
+        ],
+        "storage": "process-global _sessions dict",
+        "scope": "namespace key",
+        "provenance": "none",
+        "dedup_conflict": "adjacent same role/content collapse only",
+        "expiry": "MAX_MESSAGES capacity trim",
+        "delete": "clear_session"
+      },
+      {
+        "layer": "short_term",
+        "file": "agent/memory/short_term.py",
+        "symbols": [
+          "add_exchange",
+          "_save"
+        ],
+        "storage": "data/short_term/<namespace>.json",
+        "scope": "filename namespace",
+        "provenance": "timestamp only",
+        "dedup_conflict": "append",
+        "expiry": "window/compression threshold only",
+        "delete": "clear_history"
+      },
+      {
+        "layer": "long_term_summary",
+        "file": "agent/memory/long_term.py",
+        "symbols": [
+          "store_summary"
+        ],
+        "storage": "Chroma long_term collection",
+        "scope": "metadata.user_id filter",
+        "provenance": "user_id/type/timestamp only",
+        "dedup_conflict": "add_documents append",
+        "expiry": "none",
+        "delete": "clear_summaries"
+      },
+      {
+        "layer": "user_fact",
+        "file": "agent/memory/long_term.py",
+        "symbols": [
+          "save_fact"
+        ],
+        "storage": "data/user_facts.db facts table",
+        "scope": "user_id column",
+        "provenance": "none",
+        "dedup_conflict": "UNIQUE + INSERT OR REPLACE",
+        "expiry": "none",
+        "delete": "clear_facts"
+      },
+      {
+        "layer": "preference_extractor",
+        "file": "agent/memory/preference.py",
+        "symbols": [
+          "async_extract_and_save_facts"
+        ],
+        "storage": "delegates to user_fact",
+        "scope": "caller namespace",
+        "provenance": "LLM/regex result has no evidence id",
+        "dedup_conflict": "delegated overwrite",
+        "expiry": "none",
+        "delete": "not owned here"
+      },
+      {
+        "layer": "resolution",
+        "file": "agent/memory/resolution.py",
+        "symbols": [
+          "record_resolution"
+        ],
+        "storage": "data/resolution_memory/<namespace>.json",
+        "scope": "filename namespace",
+        "provenance": "metadata optional; current caller omits it",
+        "dedup_conflict": "append",
+        "expiry": "MAX_ENTRIES capacity trim",
+        "delete": "clear_resolutions"
+      }
+    ],
+    "scoped_memory_view_present": true,
+    "facts_unique_key": true,
+    "facts_overwrite_semantics": true,
+    "summary_append_semantics": true,
+    "short_term_append_semantics": true,
+    "resolution_append_semantics": true,
+    "preference_extractor_directly_persists": true,
+    "retrieval_scope_fallback_without_filter": true,
+    "expiry_is_fact_level": false,
+    "delete_owner": "MemoryRuntime.reset"
+  },
+  "blockers": [
+    {
+      "code": "PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING",
+      "category": "P-INT",
+      "evidence": "No production MemoryLearner/MemoryLearningDecision entry consumes InteractionEvidence + MemoryPolicyProjection."
+    },
+    {
+      "code": "MEMORY_WRITE_AUTHORIZATION_FRAGMENTED",
+      "category": "P-CON",
+      "evidence": "Production source exposes 16 memory writer symbols across multiple layers without a learning decision boundary."
+    },
+    {
+      "code": "MEMORY_PROVENANCE_CONTRACT_MISSING",
+      "category": "P-CON",
+      "evidence": "Summary/fact persistence schemas do not carry evidence_id and source_ref."
+    }
+  ],
+  "watchlist": [
+    {
+      "code": "MEMORY_NAMESPACE_SCOPE_AMBIGUOUS",
+      "category": "P-CON",
+      "evidence": "SessionRuntime uses session id or tenant:user as a store namespace; no typed learning scope is projected."
+    },
+    {
+      "code": "MEMORY_COMMIT_EVIDENCE_MISSING",
+      "category": "P-INT",
+      "evidence": "save_fact/store_summary swallow persistence exceptions and return no durable commit evidence."
+    },
+    {
+      "code": "RETRIEVAL_SCOPE_FALLBACK_PRESENT",
+      "category": "P-INT",
+      "evidence": "Filtered summary retrieval has an unfiltered fallback path."
+    }
+  ],
+  "preserved_boundaries": {
+    "memory_store_modified": false,
+    "runtime_modified": false,
+    "provider_called": false,
+    "conversation_runtime_reclassified": false,
+    "run_output_reclassified": false
+  },
+  "case_reports": [
+    {
+      "case_id": "D001",
+      "case_result": "NOT_EVALUABLE",
+      "evaluable": false,
+      "provider_status": "NOT_CALLED",
+      "oracle_result": null,
+      "failure_category": "P-INT",
+      "failure_subcategory": "PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING",
+      "evidence": [
+        "PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING"
+      ]
+    },
+    {
+      "case_id": "D002",
+      "case_result": "NOT_EVALUABLE",
+      "evaluable": false,
+      "provider_status": "NOT_CALLED",
+      "oracle_result": null,
+      "failure_category": "P-INT",
+      "failure_subcategory": "PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING",
+      "evidence": [
+        "PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING"
+      ]
+    },
+    {
+      "case_id": "D003",
+      "case_result": "NOT_EVALUABLE",
+      "evaluable": false,
+      "provider_status": "NOT_CALLED",
+      "oracle_result": null,
+      "failure_category": "P-INT",
+      "failure_subcategory": "PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING",
+      "evidence": [
+        "PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING"
+      ]
+    },
+    {
+      "case_id": "D004",
+      "case_result": "NOT_EVALUABLE",
+      "evaluable": false,
+      "provider_status": "NOT_CALLED",
+      "oracle_result": null,
+      "failure_category": "P-INT",
+      "failure_subcategory": "PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING",
+      "evidence": [
+        "PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING"
+      ]
+    },
+    {
+      "case_id": "D005",
+      "case_result": "NOT_EVALUABLE",
+      "evaluable": false,
+      "provider_status": "NOT_CALLED",
+      "oracle_result": null,
+      "failure_category": "P-INT",
+      "failure_subcategory": "PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING",
+      "evidence": [
+        "PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING"
+      ]
+    },
+    {
+      "case_id": "D006",
+      "case_result": "NOT_EVALUABLE",
+      "evaluable": false,
+      "provider_status": "NOT_CALLED",
+      "oracle_result": null,
+      "failure_category": "P-INT",
+      "failure_subcategory": "PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING",
+      "evidence": [
+        "PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING"
+      ]
+    },
+    {
+      "case_id": "D007",
+      "case_result": "NOT_EVALUABLE",
+      "evaluable": false,
+      "provider_status": "NOT_CALLED",
+      "oracle_result": null,
+      "failure_category": "P-INT",
+      "failure_subcategory": "PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING",
+      "evidence": [
+        "PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING"
+      ]
+    },
+    {
+      "case_id": "D008",
+      "case_result": "NOT_EVALUABLE",
+      "evaluable": false,
+      "provider_status": "NOT_CALLED",
+      "oracle_result": null,
+      "failure_category": "P-INT",
+      "failure_subcategory": "PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING",
+      "evidence": [
+        "PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING"
+      ]
+    },
+    {
+      "case_id": "D009",
+      "case_result": "NOT_EVALUABLE",
+      "evaluable": false,
+      "provider_status": "NOT_CALLED",
+      "oracle_result": null,
+      "failure_category": "P-INT",
+      "failure_subcategory": "PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING",
+      "evidence": [
+        "PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING"
+      ]
+    },
+    {
+      "case_id": "D010",
+      "case_result": "NOT_EVALUABLE",
+      "evaluable": false,
+      "provider_status": "NOT_CALLED",
+      "oracle_result": null,
+      "failure_category": "P-INT",
+      "failure_subcategory": "PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING",
+      "evidence": [
+        "PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING"
+      ]
+    },
+    {
+      "case_id": "D011",
+      "case_result": "NOT_EVALUABLE",
+      "evaluable": false,
+      "provider_status": "NOT_CALLED",
+      "oracle_result": null,
+      "failure_category": "P-INT",
+      "failure_subcategory": "PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING",
+      "evidence": [
+        "PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING"
+      ]
+    },
+    {
+      "case_id": "D012",
+      "case_result": "NOT_EVALUABLE",
+      "evaluable": false,
+      "provider_status": "NOT_CALLED",
+      "oracle_result": null,
+      "failure_category": "P-INT",
+      "failure_subcategory": "PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING",
+      "evidence": [
+        "PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING"
+      ]
+    },
+    {
+      "case_id": "D013",
+      "case_result": "NOT_EVALUABLE",
+      "evaluable": false,
+      "provider_status": "NOT_CALLED",
+      "oracle_result": null,
+      "failure_category": "P-INT",
+      "failure_subcategory": "PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING",
+      "evidence": [
+        "PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING"
+      ]
+    },
+    {
+      "case_id": "D014",
+      "case_result": "NOT_EVALUABLE",
+      "evaluable": false,
+      "provider_status": "NOT_CALLED",
+      "oracle_result": null,
+      "failure_category": "P-INT",
+      "failure_subcategory": "PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING",
+      "evidence": [
+        "PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING"
+      ]
+    },
+    {
+      "case_id": "D015",
+      "case_result": "NOT_EVALUABLE",
+      "evaluable": false,
+      "provider_status": "NOT_CALLED",
+      "oracle_result": null,
+      "failure_category": "P-INT",
+      "failure_subcategory": "PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING",
+      "evidence": [
+        "PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING"
+      ]
+    },
+    {
+      "case_id": "D016",
+      "case_result": "NOT_EVALUABLE",
+      "evaluable": false,
+      "provider_status": "NOT_CALLED",
+      "oracle_result": null,
+      "failure_category": "P-INT",
+      "failure_subcategory": "PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING",
+      "evidence": [
+        "PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING"
+      ]
+    },
+    {
+      "case_id": "D017",
+      "case_result": "NOT_EVALUABLE",
+      "evaluable": false,
+      "provider_status": "NOT_CALLED",
+      "oracle_result": null,
+      "failure_category": "P-INT",
+      "failure_subcategory": "PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING",
+      "evidence": [
+        "PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING"
+      ]
+    },
+    {
+      "case_id": "D018",
+      "case_result": "NOT_EVALUABLE",
+      "evaluable": false,
+      "provider_status": "NOT_CALLED",
+      "oracle_result": null,
+      "failure_category": "P-INT",
+      "failure_subcategory": "PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING",
+      "evidence": [
+        "PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING"
+      ]
+    },
+    {
+      "case_id": "D019",
+      "case_result": "NOT_EVALUABLE",
+      "evaluable": false,
+      "provider_status": "NOT_CALLED",
+      "oracle_result": null,
+      "failure_category": "P-INT",
+      "failure_subcategory": "PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING",
+      "evidence": [
+        "PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING"
+      ]
+    },
+    {
+      "case_id": "D020",
+      "case_result": "NOT_EVALUABLE",
+      "evaluable": false,
+      "provider_status": "NOT_CALLED",
+      "oracle_result": null,
+      "failure_category": "P-INT",
+      "failure_subcategory": "PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING",
+      "evidence": [
+        "PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING"
+      ]
+    },
+    {
+      "case_id": "D021",
+      "case_result": "NOT_EVALUABLE",
+      "evaluable": false,
+      "provider_status": "NOT_CALLED",
+      "oracle_result": null,
+      "failure_category": "P-INT",
+      "failure_subcategory": "PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING",
+      "evidence": [
+        "PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING"
+      ]
+    },
+    {
+      "case_id": "D022",
+      "case_result": "NOT_EVALUABLE",
+      "evaluable": false,
+      "provider_status": "NOT_CALLED",
+      "oracle_result": null,
+      "failure_category": "P-INT",
+      "failure_subcategory": "PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING",
+      "evidence": [
+        "PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING"
+      ]
+    },
+    {
+      "case_id": "D023",
+      "case_result": "NOT_EVALUABLE",
+      "evaluable": false,
+      "provider_status": "NOT_CALLED",
+      "oracle_result": null,
+      "failure_category": "P-INT",
+      "failure_subcategory": "PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING",
+      "evidence": [
+        "PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING"
+      ]
+    },
+    {
+      "case_id": "D024",
+      "case_result": "NOT_EVALUABLE",
+      "evaluable": false,
+      "provider_status": "NOT_CALLED",
+      "oracle_result": null,
+      "failure_category": "P-INT",
+      "failure_subcategory": "PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING",
+      "evidence": [
+        "PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING"
+      ]
+    }
+  ],
+  "conclusion": "Production Memory Learning is not evaluable until a canonical learning decision entry and one scoped persistence boundary are implemented."
+}

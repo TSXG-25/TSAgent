@@ -13,7 +13,7 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[2]
-HARNESS_VERSION = "v2.4C-1-workflow-preflight-v1"
+HARNESS_VERSION = "v2.4C-2a-workflow-preflight-v2"
 
 
 def _git_head() -> str:
@@ -43,6 +43,39 @@ def _production_selector_symbols() -> list[dict[str, Any]]:
                         "symbol": node.name,
                     })
     return symbols
+
+
+def _selector_has_narrow_signature() -> bool:
+    path = ROOT / "agent" / "workflow_selector.py"
+    if not path.exists():
+        return False
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ClassDef) or node.name != "WorkflowDecisionSelector":
+            continue
+        for child in node.body:
+            if isinstance(child, ast.AsyncFunctionDef) and child.name == "select":
+                arguments = [argument.arg for argument in child.args.args]
+                return arguments == [
+                    "self", "goal", "context", "available_workflows",
+                ]
+    return False
+
+
+def _selector_preserves_boundaries() -> bool:
+    path = ROOT / "agent" / "workflow_selector.py"
+    if not path.exists():
+        return False
+    source = path.read_text(encoding="utf-8")
+    forbidden = (
+        "agent.planner",
+        "agent.executor",
+        "agent.workflow.registry",
+        "agent.checkpoint",
+        "agent.runtime_store",
+        "agent.workspace",
+    )
+    return not any(token in source for token in forbidden)
 
 
 def _router_is_intent_only() -> bool:
@@ -106,6 +139,8 @@ def _resume_policy_is_separate() -> bool:
 
 def build_preflight_report() -> dict[str, Any]:
     selectors = _production_selector_symbols()
+    narrow_signature = _selector_has_narrow_signature()
+    selector_boundaries = _selector_preserves_boundaries()
     intent_only_router = _router_is_intent_only()
     hardcoded_bindings = _planner_hardcodes_workflow_bindings()
     registered = _registered_workflow_definitions()
@@ -121,14 +156,17 @@ def build_preflight_report() -> dict[str, Any]:
                 "AvailableWorkflows and returns WorkflowDecision."
             ),
         })
-    if hardcoded_bindings:
+    if selectors and not narrow_signature:
         blockers.append({
-            "code": "WORKFLOW_INSTANTIATION_BOUNDARY_HARDCODED",
-            "category": "P-CON",
-            "evidence": (
-                "PlannerStage constructs code_generation question/output "
-                "Artifacts directly instead of consuming canonical bindings."
-            ),
+            "code": "PRODUCTION_WORKFLOW_SELECTOR_SIGNATURE_DRIFT",
+            "category": "P-INT",
+            "evidence": "WorkflowDecisionSelector does not expose the frozen narrow input.",
+        })
+    if selectors and not selector_boundaries:
+        blockers.append({
+            "code": "PRODUCTION_WORKFLOW_SELECTOR_BOUNDARY_DRIFT",
+            "category": "P-INT",
+            "evidence": "WorkflowDecisionSelector imports a forbidden execution/state owner.",
         })
 
     return {
@@ -144,6 +182,8 @@ def build_preflight_report() -> dict[str, Any]:
         },
         "discovery": {
             "production_selector_symbols": selectors,
+            "production_selector_narrow_signature": narrow_signature,
+            "production_selector_boundaries_preserved": selector_boundaries,
             "workflow_router_input": "IntentResult" if intent_only_router else "unknown",
             "planner_hardcoded_workflow_bindings": hardcoded_bindings,
             "registered_workflows": registered,
@@ -151,6 +191,14 @@ def build_preflight_report() -> dict[str, Any]:
             "resume_policy_separate": separate_resume,
         },
         "blockers": blockers,
+        "integration_watchlist": ([{
+            "code": "WORKFLOW_INSTANTIATION_BOUNDARY_HARDCODED",
+            "category": "P-CON",
+            "evidence": (
+                "PlannerStage constructs code_generation question/output "
+                "Artifacts directly instead of consuming canonical bindings."
+            ),
+        }] if hardcoded_bindings else []),
         "preserved_boundaries": {
             "workflow_executor_rewrite_required": False,
             "resume_policy_rewrite_required": False,

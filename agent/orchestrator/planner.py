@@ -35,6 +35,7 @@ from agent.task import ExecutionPlan, ExecutionStep, Task, Verb
 from agent.compiler.context import CompilerContext
 from agent.registry.tool_registry import registry as _tool_registry
 from agent.registry.capability_registry import registry as _capability_registry
+from agent.registry.workflow_registry import workflow_registry
 from agent.cognition.intent_schema import (
     DOMAIN_CHAT,
     DOMAIN_DEVELOPMENT,
@@ -58,6 +59,13 @@ from agent.cognition.resource_binding import (
 )
 from agent.context_policy import ContextMode, ContextPolicy
 from agent.inbox import AgentInbox
+from agent.tool_identity import registry_tool_name
+from agent.workflow_decision import WorkflowDecisionKind
+from agent.workflow_selector import (
+    WorkflowContextProjection,
+    WorkflowDefinitionProjection,
+    WorkflowSelectionError,
+)
 
 
 def _get_memory_service():
@@ -389,11 +397,6 @@ def _apply_conversation_contract(
         intent.requires_execution = False
         intent.reference_kind = "instruction"
     return kind
-
-
-def _extract_workflow_output_path(user_input: str) -> str:
-    """Extract an explicit output file for the question-code workflow."""
-    return _extract_explicit_output_path(user_input) or "output/solution.py"
 
 
 def _extract_explicit_output_path(user_input: str) -> Optional[str]:
@@ -1546,15 +1549,78 @@ class PlannerStage:
 
         if wf_obj:
             wf_name = wf_obj.id if hasattr(wf_obj, 'id') else str(wf_obj)
-            print(f"\n{'='*50}\n🚀 路由到 Workflow: {wf_name}\n{'='*50}")
-
-            # 更新 ConversationState
-            self._orch._conversation_state.last_workflow = wf_name
-
             from agent.executor.executors.workflow import WorkflowExecutor
             from agent.workflow import Artifact, ExecutionContext, Workflow
 
             if isinstance(wf_obj, Workflow):
+                workflow_projection = WorkflowDefinitionProjection.from_workflow(wf_obj)
+                available_capabilities = tuple(
+                    capability
+                    for capability in workflow_projection.required_capabilities
+                    if _tool_registry.get(registry_tool_name(capability)) is not None
+                )
+                workflow_context = WorkflowContextProjection(
+                    artifacts={},
+                    capabilities=available_capabilities,
+                    facts={},
+                    active_workflow=None,
+                )
+                try:
+                    workflow_selection = await self._orch._workflow_selector.select_with_evidence(
+                        user_input,
+                        workflow_context,
+                        (workflow_projection,),
+                    )
+                except WorkflowSelectionError as exc:
+                    print(
+                        "  ⚠️ Workflow 选择失败，使用通用 Planner: "
+                        f"{stable_error_message(exc, fallback='Workflow selection failed')[:160]}"
+                    )
+                    return await self._fallback_to_generic_planner(
+                        user_input=user_input,
+                        context=context,
+                        repo_context=repo_context,
+                        skill_hint=skill_hint,
+                        planner_context=planner_context,
+                        intent=intent,
+                        state=state,
+                        planning_memory=planning_memory,
+                        started_at=t0,
+                    )
+
+                workflow_decision = workflow_selection.decision
+                if workflow_decision.kind is WorkflowDecisionKind.ASK:
+                    answer = workflow_decision.reason or "请补充运行该 Workflow 所需的信息。"
+                    state["conversation_clarification_required"] = True
+                    state["runtime_terminal_status"] = "BLOCKED"
+                    state["runtime_failure_code"] = "WORKFLOW_BINDINGS_REQUIRED"
+                    self._record_exchange(user_id, user_input, answer)
+                    return state, "FINISH", answer
+                if workflow_decision.kind is WorkflowDecisionKind.DECLINE:
+                    return await self._fallback_to_generic_planner(
+                        user_input=user_input,
+                        context=context,
+                        repo_context=repo_context,
+                        skill_hint=skill_hint,
+                        planner_context=planner_context,
+                        intent=intent,
+                        state=state,
+                        planning_memory=planning_memory,
+                        started_at=t0,
+                    )
+                if workflow_decision.kind is not WorkflowDecisionKind.INSTANTIATE:
+                    raise ValueError("new Workflow selection cannot reuse an active Workflow")
+
+                selected_workflow = workflow_registry.get(workflow_decision.workflow_id)
+                if selected_workflow is None:
+                    raise ValueError(
+                        f"selected Workflow is not registered: {workflow_decision.workflow_id}"
+                    )
+                wf_obj = selected_workflow
+                wf_name = wf_obj.id
+                print(f"\n{'='*50}\n🚀 路由到 Workflow: {wf_name}\n{'='*50}")
+                self._orch._conversation_state.last_workflow = wf_name
+
                 # Canonical Workflow → WorkflowExecutor
                 state["workflow"] = wf_name
                 ctx = ExecutionContext(
@@ -1567,16 +1633,14 @@ class PlannerStage:
                         goal=user_input,
                     ),
                 )
-                path_match = re.search(r'input/([\w.]+)', user_input)
-                qpath = f"input/{path_match.group(1)}" if path_match else "input/question.docx"
-                ctx.set_artifact(Artifact(id="p", type="question_path", content=qpath, summary=qpath))
-                output_path = _extract_workflow_output_path(user_input)
-                ctx.set_artifact(Artifact(
-                    id="output-path",
-                    type="output_path",
-                    content=output_path,
-                    summary=output_path,
-                ))
+                for binding_name, binding_value in workflow_decision.bindings.items():
+                    summary = str(binding_value)
+                    ctx.set_artifact(Artifact(
+                        id=f"workflow-binding-{binding_name}",
+                        type=binding_name,
+                        content=binding_value,
+                        summary=summary,
+                    ))
 
                 try:
                     result = await WorkflowExecutor().execute(wf_obj, ctx)

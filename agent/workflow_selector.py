@@ -38,6 +38,21 @@ class WorkflowDefinitionProjection(BaseModel):
     required_capabilities: tuple[str, ...] = ()
     output_types: tuple[str, ...] = ()
 
+    @classmethod
+    def from_workflow(cls, workflow: Any) -> "WorkflowDefinitionProjection":
+        metadata = workflow.metadata or {}
+        capability = metadata.get("capability")
+        if not isinstance(capability, Mapping):
+            raise ValueError(
+                f"WORKFLOW_CAPABILITY_METADATA_MISSING: {workflow.id}"
+            )
+        return cls(
+            id=workflow.id,
+            version=workflow.version,
+            description=workflow.description,
+            **capability,
+        )
+
 
 class ActiveWorkflowProjection(BaseModel):
     """Continuation facts already authorized by Runtime resume policy."""

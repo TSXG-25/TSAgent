@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from agent.workflow import Workflow
 from agent.workflow_decision import WorkflowDecisionKind
 from agent.workflow_selector import (
     ActiveWorkflowProjection,
@@ -102,6 +103,37 @@ def test_selector_has_frozen_narrow_signature() -> None:
         "self", "goal", "context", "available_workflows",
     )
     assert inspect.iscoroutinefunction(WorkflowDecisionSelector.select)
+
+
+def test_workflow_definition_projects_declared_capability_metadata() -> None:
+    workflow = Workflow(
+        id="example",
+        version="1.0",
+        description="example workflow",
+        stages=[],
+        metadata={
+            "capability": {
+                "required_bindings": ["input_path"],
+                "defaults": {},
+                "required_artifacts": [],
+                "required_capabilities": ["filesystem.read"],
+                "output_types": ["report"],
+            },
+        },
+    )
+
+    projection = WorkflowDefinitionProjection.from_workflow(workflow)
+
+    assert projection.id == "example"
+    assert projection.required_bindings == ("input_path",)
+    assert projection.required_capabilities == ("filesystem.read",)
+
+
+def test_workflow_definition_without_capability_metadata_fails_fast() -> None:
+    workflow = Workflow(id="legacy", stages=[])
+
+    with pytest.raises(ValueError, match="WORKFLOW_CAPABILITY_METADATA_MISSING"):
+        WorkflowDefinitionProjection.from_workflow(workflow)
 
 
 def test_workflow_projection_hash_is_frozen() -> None:

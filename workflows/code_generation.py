@@ -12,6 +12,19 @@ code_generation_workflow = Workflow(
     id="code_generation",
     description="从题目描述生成解题代码",
     version="3.0",
+    metadata={
+        "capability": {
+            "required_bindings": ["question_path", "output_path"],
+            "defaults": {"output_path": "output/solution.py"},
+            "required_artifacts": [],
+            "required_capabilities": [
+                "filesystem.read",
+                "filesystem.write",
+                "run_python",
+            ],
+            "output_types": ["solution_file"],
+        },
+    },
     stages=[
         Stage(
             id="read_question",

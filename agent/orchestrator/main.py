@@ -23,6 +23,7 @@ from agent.runtime_budget import RunBudget
 from agent.inbox import AgentInbox
 from agent.next_action import NextAction
 from agent.next_action_selector import NextActionSelector
+from agent.workflow_selector import WorkflowDecisionSelector
 
 from .context_builder import ContextBuilder
 from .planner import PlannerStage
@@ -41,6 +42,7 @@ class ExecutionOrchestrator:
         *,
         session_context: Optional[SessionContext] = None,
         next_action_selector: Optional[NextActionSelector] = None,
+        workflow_selector: Optional[WorkflowDecisionSelector] = None,
     ):
         self._timings: Dict[str, float] = {}
         self.replan_count = 0
@@ -52,6 +54,7 @@ class ExecutionOrchestrator:
         for rule in DEFAULT_RULES:
             self._selector.add_rule(rule)
         self._next_action_selector = next_action_selector or NextActionSelector()
+        self._workflow_selector = workflow_selector or WorkflowDecisionSelector()
 
         # 认知层组件
         self._reference_resolver = ReferenceResolver()

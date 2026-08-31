@@ -1,0 +1,194 @@
+{
+  "version": "v2.4C-workflow-capability-v1",
+  "scope": "workflow_decision",
+  "contract": "Goal + Context + AvailableWorkflows -> WorkflowDecision",
+  "workflow_catalog": {
+    "code_generation": {
+      "version": "3.0",
+      "description": "从题目文件生成 Python 解题代码",
+      "required_bindings": ["question_path", "output_path"],
+      "defaults": {"output_path": "output/solution.py"},
+      "required_artifacts": [],
+      "required_capabilities": ["filesystem.read", "filesystem.write", "run_python"],
+      "output_types": ["solution_file"]
+    },
+    "research_report": {
+      "version": "1.0",
+      "description": "检索外部资料并生成带来源的报告",
+      "required_bindings": ["topic", "output_path"],
+      "defaults": {},
+      "required_artifacts": [],
+      "required_capabilities": ["web_search", "filesystem.write"],
+      "output_types": ["research_report"]
+    },
+    "release_validation": {
+      "version": "1.0",
+      "description": "按固定检查清单验证一个 staging release",
+      "required_bindings": ["release_tag", "staging_env"],
+      "defaults": {"staging_env": "staging"},
+      "required_artifacts": ["release_manifest"],
+      "required_capabilities": ["run_python", "filesystem.read"],
+      "output_types": ["release_report"]
+    },
+    "data_cleanup": {
+      "version": "1.0",
+      "description": "读取结构化数据、清洗并保存结果",
+      "required_bindings": ["source_path", "output_path"],
+      "defaults": {},
+      "required_artifacts": [],
+      "required_capabilities": ["filesystem.read", "filesystem.write", "run_python"],
+      "output_types": ["clean_dataset"]
+    }
+  },
+  "cases": [
+    {
+      "id": "C001", "family": "CLEAR_MATCH",
+      "goal": "根据 input/question.docx 解题并保存为 output/answer.py。",
+      "state": {"available_workflows": ["code_generation"], "artifacts": {}, "capabilities": ["filesystem.read", "filesystem.write", "run_python"], "facts": {}, "active_workflow": null},
+      "expected": {"kind": "instantiate", "workflow_id": "code_generation", "bindings": {"question_path": "input/question.docx", "output_path": "output/answer.py"}}
+    },
+    {
+      "id": "C002", "family": "CLEAR_MATCH",
+      "goal": "研究 SQLite WAL 的最新官方资料并写入 output/wal.md。",
+      "state": {"available_workflows": ["research_report", "code_generation"], "artifacts": {}, "capabilities": ["web_search", "filesystem.write"], "facts": {}, "active_workflow": null},
+      "expected": {"kind": "instantiate", "workflow_id": "research_report", "bindings": {"topic": "SQLite WAL", "output_path": "output/wal.md"}}
+    },
+    {
+      "id": "C003", "family": "CLEAR_MATCH",
+      "goal": "验证 release v2.4.0 在 staging 的发布清单。",
+      "state": {"available_workflows": ["release_validation"], "artifacts": {"release_manifest": "artifact:manifest-v240"}, "capabilities": ["run_python", "filesystem.read"], "facts": {}, "active_workflow": null},
+      "expected": {"kind": "instantiate", "workflow_id": "release_validation", "bindings": {"release_tag": "v2.4.0", "staging_env": "staging"}}
+    },
+    {
+      "id": "C004", "family": "CLEAR_MATCH",
+      "goal": "清洗 input/sales.csv 并保存为 output/sales_clean.csv。",
+      "state": {"available_workflows": ["data_cleanup"], "artifacts": {}, "capabilities": ["filesystem.read", "filesystem.write", "run_python"], "facts": {}, "active_workflow": null},
+      "expected": {"kind": "instantiate", "workflow_id": "data_cleanup", "bindings": {"source_path": "input/sales.csv", "output_path": "output/sales_clean.csv"}}
+    },
+
+    {
+      "id": "C005", "family": "FALSE_MATCH_GUARD",
+      "goal": "帮我写一个 Python 排序函数。",
+      "state": {"available_workflows": ["code_generation"], "artifacts": {}, "capabilities": ["filesystem.read", "filesystem.write", "run_python"], "facts": {}, "active_workflow": null},
+      "expected": {"kind": "decline", "workflow_id": "", "bindings": {}}
+    },
+    {
+      "id": "C006", "family": "FALSE_MATCH_GUARD",
+      "goal": "修改 agent/runtime.py 的超时处理并补测试。",
+      "state": {"available_workflows": ["code_generation", "release_validation"], "artifacts": {}, "capabilities": ["filesystem.read", "filesystem.write", "run_python"], "facts": {}, "active_workflow": null},
+      "expected": {"kind": "decline", "workflow_id": "", "bindings": {}}
+    },
+    {
+      "id": "C007", "family": "FALSE_MATCH_GUARD",
+      "goal": "根据 input/question.docx 把答案整理成 output/answer.xlsx。",
+      "state": {"available_workflows": ["code_generation"], "artifacts": {}, "capabilities": ["filesystem.read", "filesystem.write", "run_python"], "facts": {}, "active_workflow": null},
+      "expected": {"kind": "decline", "workflow_id": "", "bindings": {}}
+    },
+    {
+      "id": "C008", "family": "FALSE_MATCH_GUARD",
+      "goal": "解释什么是 SQLite WAL。",
+      "state": {"available_workflows": ["research_report"], "artifacts": {}, "capabilities": ["web_search", "filesystem.write"], "facts": {}, "active_workflow": null},
+      "expected": {"kind": "decline", "workflow_id": "", "bindings": {}}
+    },
+
+    {
+      "id": "C009", "family": "PARAMETER_BINDING",
+      "goal": "读取 input/two_sum.md 解题，输出到 output/two_sum.py。",
+      "state": {"available_workflows": ["code_generation"], "artifacts": {}, "capabilities": ["filesystem.read", "filesystem.write", "run_python"], "facts": {"language": "python"}, "active_workflow": null},
+      "expected": {"kind": "instantiate", "workflow_id": "code_generation", "bindings": {"question_path": "input/two_sum.md", "output_path": "output/two_sum.py"}}
+    },
+    {
+      "id": "C010", "family": "PARAMETER_BINDING",
+      "goal": "根据 input/question.docx 解题。",
+      "state": {"available_workflows": ["code_generation"], "artifacts": {}, "capabilities": ["filesystem.read", "filesystem.write", "run_python"], "facts": {}, "active_workflow": null},
+      "expected": {"kind": "instantiate", "workflow_id": "code_generation", "bindings": {"question_path": "input/question.docx", "output_path": "output/solution.py"}}
+    },
+    {
+      "id": "C011", "family": "PARAMETER_BINDING",
+      "goal": "用现有解题流程处理那个题目并保存为 output/result.py。",
+      "state": {"available_workflows": ["code_generation"], "artifacts": {}, "capabilities": ["filesystem.read", "filesystem.write", "run_python"], "facts": {}, "active_workflow": null},
+      "expected": {"kind": "ask", "workflow_id": "", "bindings": {}}
+    },
+    {
+      "id": "C012", "family": "PARAMETER_BINDING",
+      "goal": "生成 SQLite WAL 研究报告。",
+      "state": {"available_workflows": ["research_report"], "artifacts": {}, "capabilities": ["web_search", "filesystem.write"], "facts": {}, "active_workflow": null},
+      "expected": {"kind": "ask", "workflow_id": "", "bindings": {}}
+    },
+
+    {
+      "id": "C013", "family": "SIMPLE_TASK_DECLINE",
+      "goal": "读取 agent/runtime.py。",
+      "state": {"available_workflows": ["code_generation", "research_report"], "artifacts": {}, "capabilities": ["filesystem.read", "filesystem.write", "web_search", "run_python"], "facts": {}, "active_workflow": null},
+      "expected": {"kind": "decline", "workflow_id": "", "bindings": {}}
+    },
+    {
+      "id": "C014", "family": "SIMPLE_TASK_DECLINE",
+      "goal": "把 hello 写入 output/hello.txt。",
+      "state": {"available_workflows": ["code_generation", "data_cleanup"], "artifacts": {}, "capabilities": ["filesystem.read", "filesystem.write", "run_python"], "facts": {}, "active_workflow": null},
+      "expected": {"kind": "decline", "workflow_id": "", "bindings": {}}
+    },
+    {
+      "id": "C015", "family": "SIMPLE_TASK_DECLINE",
+      "goal": "运行 date 命令并贴出结果。",
+      "state": {"available_workflows": ["release_validation"], "artifacts": {}, "capabilities": ["shell"], "facts": {}, "active_workflow": null},
+      "expected": {"kind": "decline", "workflow_id": "", "bindings": {}}
+    },
+    {
+      "id": "C016", "family": "SIMPLE_TASK_DECLINE",
+      "goal": "总结我们刚才的对话。",
+      "state": {"available_workflows": ["research_report"], "artifacts": {}, "capabilities": ["web_search", "filesystem.write"], "facts": {"conversation_available": true}, "active_workflow": null},
+      "expected": {"kind": "decline", "workflow_id": "", "bindings": {}}
+    },
+
+    {
+      "id": "C017", "family": "CONTINUATION",
+      "goal": "继续刚才的解题流程。",
+      "state": {"available_workflows": ["code_generation"], "artifacts": {"question_text": "artifact:q", "algorithm_design": "artifact:a"}, "capabilities": ["filesystem.read", "filesystem.write", "run_python"], "facts": {}, "active_workflow": {"workflow_id": "code_generation", "status": "active", "completed_stages": ["read_question", "design_algorithm"], "active_stage": "generate_code", "reuse_allowed": true}},
+      "expected": {"kind": "reuse", "workflow_id": "code_generation", "bindings": {}}
+    },
+    {
+      "id": "C018", "family": "CONTINUATION",
+      "goal": "继续刚才的发布验证。",
+      "state": {"available_workflows": ["release_validation"], "artifacts": {"release_manifest": "artifact:m"}, "capabilities": ["run_python", "filesystem.read"], "facts": {"stale_reason": "manifest digest changed"}, "active_workflow": {"workflow_id": "release_validation", "status": "blocked", "completed_stages": ["load_manifest"], "active_stage": "run_checks", "reuse_allowed": false}},
+      "expected": {"kind": "ask", "workflow_id": "", "bindings": {}}
+    },
+    {
+      "id": "C019", "family": "CONTINUATION",
+      "goal": "再继续刚才已经完成的清洗流程。",
+      "state": {"available_workflows": ["data_cleanup"], "artifacts": {"clean_dataset": "artifact:clean"}, "capabilities": ["filesystem.read", "filesystem.write", "run_python"], "facts": {}, "active_workflow": {"workflow_id": "data_cleanup", "status": "completed", "completed_stages": ["read", "clean", "write"], "active_stage": "", "reuse_allowed": false}},
+      "expected": {"kind": "decline", "workflow_id": "", "bindings": {}}
+    },
+    {
+      "id": "C020", "family": "CONTINUATION",
+      "goal": "读取 README.md；不要继续之前的研究流程。",
+      "state": {"available_workflows": ["research_report"], "artifacts": {}, "capabilities": ["filesystem.read", "web_search", "filesystem.write"], "facts": {}, "active_workflow": {"workflow_id": "research_report", "status": "active", "completed_stages": ["search"], "active_stage": "synthesize", "reuse_allowed": true}},
+      "expected": {"kind": "decline", "workflow_id": "", "bindings": {}}
+    },
+
+    {
+      "id": "C021", "family": "RUNTIME_BOUNDARY",
+      "goal": "用研究报告流程分析 AI 芯片并保存 output/chips.md。",
+      "state": {"available_workflows": ["research_report"], "artifacts": {}, "capabilities": ["web_search", "filesystem.write"], "facts": {"workflow_execution_profile": "compiled_and_dynamic_stages"}, "active_workflow": null},
+      "expected": {"kind": "instantiate", "workflow_id": "research_report", "bindings": {"topic": "AI 芯片", "output_path": "output/chips.md"}}
+    },
+    {
+      "id": "C022", "family": "RUNTIME_BOUNDARY",
+      "goal": "动态搜索一个官方链接后回答，不要生成报告。",
+      "state": {"available_workflows": ["research_report"], "artifacts": {}, "capabilities": ["web_search", "filesystem.write"], "facts": {"dynamic_task_available": true}, "active_workflow": null},
+      "expected": {"kind": "decline", "workflow_id": "", "bindings": {}}
+    },
+    {
+      "id": "C023", "family": "RUNTIME_BOUNDARY",
+      "goal": "继续当前研究报告流程。",
+      "state": {"available_workflows": ["research_report"], "artifacts": {"sources": "artifact:sources"}, "capabilities": ["web_search", "filesystem.write"], "facts": {"next_stage_execution_owner": "dynamic"}, "active_workflow": {"workflow_id": "research_report", "status": "active", "completed_stages": ["search"], "active_stage": "synthesize", "reuse_allowed": true}},
+      "expected": {"kind": "reuse", "workflow_id": "research_report", "bindings": {}}
+    },
+    {
+      "id": "C024", "family": "RUNTIME_BOUNDARY",
+      "goal": "研究当前市场并生成 output/market.md。",
+      "state": {"available_workflows": ["research_report"], "artifacts": {}, "capabilities": ["filesystem.write"], "facts": {"web_search_unavailable": true}, "active_workflow": null},
+      "expected": {"kind": "decline", "workflow_id": "", "bindings": {}}
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "version": "v2.4C-1",
+  "evaluated_head": "c31ac7ef84b0dcc7f556064876c5e86cfa2465d3",
+  "generated_at": "2026-08-31T02:16:03.498892+00:00",
+  "status": "BLOCKED_PRECONDITION",
+  "dataset": {
+    "version": "v2.4C-workflow-capability-v1",
+    "cases": 24,
+    "hash": "43338803cbe9192c19a2957887a8013c17058a6dbea9e7bb6cb66c06d60fbd69",
+    "golden_self_check": "24/24"
+  },
+  "configuration": {
+    "provider_calls": 0,
+    "workflow_execution": false,
+    "runtime_mutation": false,
+    "source_scan_only": true
+  },
+  "clean_checkout_verification": {
+    "targeted_regression": "40 passed",
+    "dataset_hash_match": true,
+    "golden_self_check": "24/24"
+  },
+  "discovery": {
+    "production_selector_symbols": [],
+    "workflow_router_input": "IntentResult",
+    "planner_hardcoded_workflow_bindings": true,
+    "registered_workflows": [
+      "code_generation"
+    ],
+    "workflow_executor_canonical_task_path": true,
+    "resume_policy_separate": true
+  },
+  "blockers": [
+    {
+      "code": "PRODUCTION_WORKFLOW_SELECTOR_MISSING",
+      "category": "P-INT",
+      "evidence": "No production entry consumes Goal + projected Context + AvailableWorkflows and returns WorkflowDecision."
+    },
+    {
+      "code": "WORKFLOW_INSTANTIATION_BOUNDARY_HARDCODED",
+      "category": "P-CON",
+      "evidence": "PlannerStage constructs code_generation question/output Artifacts directly instead of consuming canonical bindings."
+    }
+  ],
+  "preserved_boundaries": {
+    "workflow_executor_rewrite_required": false,
+    "resume_policy_rewrite_required": false,
+    "planner_change_required_for_preflight": false
+  },
+  "conclusion": "v2.4C-1 contract, dataset, oracle, and preflight are verified. Real Provider capability is not yet evaluable and no capability score is claimed."
+}

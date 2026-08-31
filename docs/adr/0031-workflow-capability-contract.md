@@ -1,6 +1,6 @@
 # ADR-0031: Workflow Capability Contract（v2.4C）
 
-- 状态: Proposed — v2.4C-1 Contract / Dataset / Oracle
+- 状态: Accepted — v2.4C Implemented and Integration Verified
 - 前置基线: ADR-0029 Planner Capability、ADR-0030 Tool Selection / ReAct 已冻结
 - 范围: Workflow 选择、实例化、拒绝与 continuation nomination
 - 非范围: WorkflowExecutor 重写、Resume policy、Stage execution、Tool selection
@@ -211,8 +211,31 @@ Resume policy duplication               0
 ## 6. 阶段
 
 ```text
-v2.4C-1  Contract / Dataset / Oracle / Preflight    ← current
-v2.4C-2  Production decision baseline/bootstrap      evidence-dependent
-v2.4C-3  Attribution / capability improvement        evidence-dependent
-v2.4C-4  Runtime integration / clean freeze          pending
+v2.4C-1  Contract / Dataset / Oracle / Preflight    DONE
+v2.4C-2  Production selector + real baseline         DONE
+v2.4C-3  Attribution audit                           DONE — no systemic gap proven
+v2.4C-4  Runtime integration / clean freeze          DONE
 ```
+
+## 7. Freeze evidence
+
+```text
+Freeze integration HEAD          df7bb543161ec1bd83d804e49877cf793a7f66b5
+Real baseline HEAD               a040c48aab4b0abb2fcdb31beb902a5758c0e5c8
+Mechanical capability            22/24 (91.7%)
+Schema / Workflow / Safety       100% / 100% / 100%
+False Workflow Selection         0
+Unsafe reuse                     0
+Provider / Contract / Oracle /
+Integration failures             0 / 0 / 0 / 0
+Clean related regression         106 PASS
+Preflight blockers/watchlist     0 / 0
+```
+
+Real baseline 后新增的 Runtime composition 只增加 Workflow metadata projection 与
+generic binding consumption；`WorkflowDecisionSelector` prompt、projection hash 和决策逻辑未变。
+两份证据的 prompt/projection hash 完全一致。
+
+机械失败 C002/C019 保留在 frozen Oracle 结果中。semantic audit 分别归为自由文本 binding
+测量边界与 completed Workflow 的 `decline/ask` 合同边界；没有证据支持新的系统性 P-CAP
+cluster，因此未做逐 case prompt fitting。

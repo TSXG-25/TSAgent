@@ -212,9 +212,14 @@ def golden_decision(case: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _normalize_decision(
-    value: Mapping[str, Any] | WorkflowDecision,
+    value: Any,
 ) -> tuple[dict[str, Any] | None, tuple[str, ...]]:
-    raw = value.to_dict() if isinstance(value, WorkflowDecision) else dict(value)
+    if isinstance(value, WorkflowDecision):
+        raw = value.to_dict()
+    elif isinstance(value, Mapping):
+        raw = dict(value)
+    else:
+        return None, ("decision must be an object",)
     errors: list[str] = []
     if set(raw) != _DECISION_FIELDS:
         errors.append("decision fields must be kind, workflow_id, bindings, reason")
@@ -229,7 +234,7 @@ def _normalize_decision(
 def evaluate_decision(
     dataset: Mapping[str, Any],
     case: Mapping[str, Any],
-    decision: Mapping[str, Any] | WorkflowDecision,
+    decision: Any,
 ) -> dict[str, Any]:
     normalized, schema_errors = _normalize_decision(decision)
     expected = case["expected"]

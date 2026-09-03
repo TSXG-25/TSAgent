@@ -25,6 +25,7 @@ from evals.memory_learning.oracle import dataset_hash, load_dataset  # noqa: E40
 
 
 AUDIT_VERSION = "v2.4D-3b-attribution-audit-v1"
+CALIBRATION_VERSION = "v2.4D-3c-semantic-evaluation-v1"
 DEFAULT_BASELINE = Path("/private/tmp/v24d_d3b_deepseek.json")
 DEFAULT_JSON = Path("/private/tmp/v24d_d3b_deepseek_attribution.json")
 DEFAULT_MARKDOWN = Path("/private/tmp/v24d_d3b_deepseek_attribution.md")
@@ -36,6 +37,21 @@ SEMANTIC_FIELDS = (
     "value",
     "provenance",
 )
+
+
+def _calibration_spec(base_dataset_hash: str) -> dict[str, Any]:
+    """Return the explicit D-3c measurement contract."""
+    spec: dict[str, Any] = {
+        "version": CALIBRATION_VERSION,
+        "base_dataset_hash": base_dataset_hash,
+        "semantic_fields": list(SEMANTIC_FIELDS),
+        "reason_code_scoring": False,
+        "reason_code_retained_as": "diagnostic",
+        "ignore_provenance_shape": "canonical_empty_object",
+    }
+    canonical = json.dumps(spec, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    spec["hash"] = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    return spec
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -151,6 +167,8 @@ def _review(
 
 def build_audit(baseline: Mapping[str, Any], baseline_path: Path) -> dict[str, Any]:
     dataset = load_dataset()
+    current_dataset_hash = dataset_hash(dataset)
+    calibration = _calibration_spec(current_dataset_hash)
     cases_by_id = {str(case["id"]): case for case in dataset["cases"]}
     records: list[dict[str, Any]] = []
     for record in baseline.get("cases", []):
@@ -187,9 +205,10 @@ def build_audit(baseline: Mapping[str, Any], baseline_path: Path) -> dict[str, A
         },
         "dataset": {
             "version": dataset.get("version"),
-            "hash": dataset_hash(dataset),
+            "hash": current_dataset_hash,
             "case_count": len(dataset.get("cases", [])),
         },
+        "calibration": calibration,
         "configuration": {
             "provider_calls_in_audit": 0,
             "baseline_unchanged": True,
@@ -210,6 +229,13 @@ def build_audit(baseline: Mapping[str, Any], baseline_path: Path) -> dict[str, A
             "semantic_match_without_reason_rate_over_all_cases": round(
                 semantic_matches / len(records) * 100, 1
             ) if records else None,
+            "calibrated_semantic_pass_count": semantic_matches,
+            "calibrated_semantic_pass_rate_over_all_cases": round(
+                semantic_matches / len(records) * 100, 1
+            ) if records else None,
+            "calibrated_semantic_pass_rate_over_parsed_cases": round(
+                semantic_matches / parsed * 100, 1
+            ) if parsed else None,
             "attribution_category_counts": dict(category_counts),
             "attribution_subcategory_counts": dict(subcategory_counts),
             "structured_to_raw_fallback_count": sum(
@@ -237,6 +263,7 @@ def _markdown(report: Mapping[str, Any]) -> str:
         f"- Source SHA-256: `{report['source_baseline']['sha256']}`",
         f"- HEAD: `{report['source_baseline']['git_head']}`",
         f"- Dataset: `{report['dataset']['version']}` / `{report['dataset']['hash']}`",
+        f"- Calibration: `{report['calibration']['version']}` / `{report['calibration']['hash']}` (reason_code scoring: `{report['calibration']['reason_code_scoring']}`)",
         f"- Provider calls in audit: **{report['configuration']['provider_calls_in_audit']}**",
         "",
         "## Summary",
@@ -244,11 +271,12 @@ def _markdown(report: Mapping[str, Any]) -> str:
         f"- Strict frozen Oracle: **{summary['strict_oracle_pass_count']}/{summary['case_count']}**",
         f"- Canonical schema-valid responses: **{summary['schema_valid_count']}/{summary['case_count']}**",
         f"- Semantic match excluding reason_code: **{summary['semantic_match_without_reason_count']}/{summary['case_count']}**",
+        f"- Calibrated semantic view (diagnostic only): **{summary['calibrated_semantic_pass_count']}/{summary['case_count']}**",
         f"- Attribution categories: `{json.dumps(summary['attribution_category_counts'], ensure_ascii=False, sort_keys=True)}`",
         f"- Attribution subcategories: `{json.dumps(summary['attribution_subcategory_counts'], ensure_ascii=False, sort_keys=True)}`",
         f"- Format fallback path: `{summary['structured_to_raw_fallback_count']}/{summary['case_count']}` same-provider structured→raw",
         "",
-        "The original baseline remains authoritative for the strict score. This report only adds a diagnostic attribution view.",
+        "The original baseline remains authoritative for the strict score. This report adds an explicit D-3c semantic measurement view without rewriting that baseline.",
         "",
         "## Cases",
         "",

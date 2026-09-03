@@ -1,6 +1,6 @@
 # ADR-0032: Memory Learning Capability Contract（v2.4D-2）
 
-- 状态: Implemented — D-2 deterministic boundary and D-3a Provider entry verified; real Provider baseline pending
+- 状态: Implemented — D-2/D-3a verified; D-3b real baseline and D-3c calibration recorded; persistence-aware integration pending
 - 评估基线: `5aa814d7`（v2.4D-1 discovery）；D-2 实现：`306d5adc`
 - 范围: Memory learning evidence、资格判断、scope、provenance、去重/冲突边界、commit evidence
 - 非范围: 现有 Memory store 架构重写、retrieval 排序、Conversation Runtime、RunOutput、Repository index、MemoryLearner 实现
@@ -275,16 +275,76 @@ Provider transport 的 structured/raw path 只用于记录证据；`STRUCTURED_T
 表示同一 Provider 的格式降级，不表示 Provider 切换。D-3a 离线 contract/preflight 通过后，
 才允许使用固定 Dataset 执行真实 Provider baseline。
 
-## 10. 非目标与后续决策
+## 10. D-3c Measurement Calibration
+
+The real Provider baseline keeps the original strict Oracle result immutable.  The
+Provider must still emit the seven-field canonical decision shape, including a
+non-empty `reason_code`, so transport and audit evidence remain complete.  However,
+`reason_code` is diagnostic metadata, not a semantic capability gate: it is not
+used by D-2 authorization to choose a different safety, scope, deduplication, or
+persistence branch.
+
+The D-3c calibrated semantic view therefore scores only:
+
+```text
+action + memory_type + scope + canonical_key + value + provenance
+```
+
+and reports `reason_code` vocabulary mismatches separately as
+`P-MEASUREMENT:REASON_CODE_VOCABULARY`.  The calibration has its own version/hash
+and never rewrites the v2.4D-memory-learning-v1 dataset or the D-3b raw result.
+
+`IGNORE` still requires the canonical empty object `{}` for `provenance`; an empty
+string is a schema-invalid Provider response, not an implicit repair target.  An
+`IGNORE` decision carries no durable provenance claim or write fields.
+
+The reproducible audit is:
+
+```text
+realtest_reports/harness/v24d_memory_learning_attribution.py
+```
+
+It makes zero Provider calls and consumes only the immutable D-3b result.
+
+## 11. D-3d Persistence-aware Integration
+
+The persistence-aware evidence replays the captured real Provider proposals through:
+
+```text
+Provider proposal
+    → authorize_memory_learning_proposal()
+    → MemoryPersistenceBoundary.commit()
+    → MemoryCommitEvidence
+```
+
+It uses disposable isolated stores and does not make a second Provider call.  The
+Provider is not a safety boundary: D018/D020 may remain unsafe proposals, but the
+deterministic policy must veto them before durable commit.  Only
+`MemoryCommitEvidence.committed == true` can support a persistence acknowledgement.
+
+D023 also demonstrates that resolution persistence needs its `utterance` and `kind`
+details in the projected evidence; missing details are a contract/integration
+failure and must not be reported as a successful commit.
+
+The replay harness is:
+
+```text
+realtest_reports/harness/v24d_memory_learning_integration.py
+```
+
+## 12. 非目标与后续决策
 
 本阶段不把事实抽取器改造成 Learning Provider，不做 expiry/TTL engine，不改变 retrieval
 ranking，不将 Provider 直接接入 Runtime 主循环，也不在此提交中启动 real-provider baseline。
 后续单独进入：
 
 ```text
-v2.4D-3b  real Provider baseline / attribution
-v2.4D-4   persistence-aware integration / freeze
+v2.4D-3b  real Provider baseline / attribution                 DONE
+v2.4D-3c  semantic measurement calibration                     DONE
+v2.4D-3d  persistence-aware integration replay                  DONE
+v2.4D-4   integration contract fixes / final freeze             PENDING
 ```
 
-真实 Provider 的 Memory Learning baseline 与 attribution 仍需要单独的 D-3b evidence；Provider
-准确率不能替代 durable commit truthfulness。
+Provider proposal capability 不能替代 durable commit truthfulness；D-3d 的
+unauthorized/sensitive/secret/scope commit、false acknowledgement 和 cross-scope
+leakage 指标必须保持为零后，才可进入最终 freeze。

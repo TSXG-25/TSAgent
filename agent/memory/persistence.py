@@ -8,7 +8,7 @@ turns every write into explicit commit evidence.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Mapping
 
 from .learning import MemoryLearningDecision, MemoryPolicyProjection
 
@@ -27,6 +27,9 @@ class MemoryCommitEvidence:
     record_id: str | None = None
     revision: int | None = None
     error: str | None = None
+    # Canonical content projection returned only for a durable commit. This
+    # lets callers verify what was written without reading Runtime state.
+    content: Mapping[str, object] | None = None
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -40,6 +43,7 @@ class MemoryCommitEvidence:
             "record_id": self.record_id,
             "revision": self.revision,
             "error": self.error,
+            "content": dict(self.content) if self.content is not None else None,
         }
 
 
@@ -55,6 +59,22 @@ def _store_name(memory_type: str) -> str:
 def _stable_error(error: Exception) -> str:
     message = str(error).strip() or type(error).__name__
     return f"{type(error).__name__}: {message}"[:300]
+
+
+def _content_projection(decision: MemoryLearningDecision) -> dict[str, object]:
+    if decision.memory_type in {"fact", "preference"}:
+        return {"value": decision.value}
+    if decision.memory_type == "summary":
+        return {"summary": decision.value}
+    resolution = decision.resolution
+    if resolution is None:
+        raise AssertionError("resolution content requires canonical resolution evidence")
+    return {
+        "utterance": resolution.utterance,
+        "resolved_target": decision.value,
+        "kind": resolution.kind,
+        "metadata": dict(resolution.metadata),
+    }
 
 
 class MemoryPersistenceBoundary:
@@ -90,6 +110,17 @@ class MemoryPersistenceBoundary:
             )
 
         store_name = _store_name(decision.memory_type)
+        if decision.memory_type == "resolution" and decision.resolution is None:
+            return MemoryCommitEvidence(
+                committed=False,
+                action=decision.action,
+                store=store_name,
+                scope=decision.scope,
+                canonical_key=decision.canonical_key,
+                evidence_id=evidence_id,
+                reason_code=decision.reason_code,
+                error="resolution decision requires canonical resolution evidence",
+            )
         try:
             receipt: dict[str, Any]
             if decision.memory_type in {"fact", "preference"}:
@@ -122,24 +153,20 @@ class MemoryPersistenceBoundary:
             else:
                 from agent.memory.resolution import _persist_resolution
 
-                utterance = decision.details.get("utterance", "")
-                kind = decision.details.get("kind", "")
-                if not isinstance(utterance, str) or not isinstance(kind, str):
-                    raise TypeError("resolution details require string utterance and kind")
-                raw_metadata = decision.details.get("metadata", {})
-                if not isinstance(raw_metadata, dict):
-                    raise TypeError("resolution metadata must be a mapping")
+                resolution = decision.resolution
+                if resolution is None:
+                    raise AssertionError("resolution evidence checked before persistence")
                 receipt = _persist_resolution(
                     policy.namespace,
-                    utterance,
+                    resolution.utterance,
                     decision.value,
-                    kind,
+                    resolution.kind,
                     scope=decision.scope,
                     canonical_key=decision.canonical_key,
                     evidence_id=evidence_id,
                     source_kind=decision.provenance["source_kind"],
                     source_ref=decision.provenance["source_ref"],
-                    metadata=dict(raw_metadata),
+                    metadata=dict(resolution.metadata),
                 )
         except Exception as error:
             return MemoryCommitEvidence(
@@ -167,6 +194,7 @@ class MemoryPersistenceBoundary:
                 if receipt.get("revision") is not None
                 else None
             ),
+            content=_content_projection(decision),
         )
 
 

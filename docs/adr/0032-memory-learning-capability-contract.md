@@ -1,6 +1,6 @@
-# ADR-0032: Memory Learning Capability Contract（v2.4D-2）
+# ADR-0032: Memory Learning Capability Contract（v2.4D）
 
-- 状态: Implemented — D-2/D-3a verified; D-3b real baseline and D-3c calibration recorded; persistence-aware integration pending
+- 状态: Implemented — D-2/D-3a/D-3b/D-3c/D-3d/D-3e verified; Human Acceptance #1 next
 - 评估基线: `5aa814d7`（v2.4D-1 discovery）；D-2 实现：`306d5adc`
 - 范围: Memory learning evidence、资格判断、scope、provenance、去重/冲突边界、commit evidence
 - 非范围: 现有 Memory store 架构重写、retrieval 排序、Conversation Runtime、RunOutput、Repository index、MemoryLearner 实现
@@ -106,6 +106,7 @@ sensitive
 secret
 volatile
 existing               # 当前同 scope/key 的已持久化事实（可空）
+resolution             # resolution memory 的最小 ResolutionEvidence（v1.1 起必需）
 ```
 
 `assistant_output`、`tool_observation`、`repository_observation`、`run_artifact` 可以作为
@@ -332,7 +333,51 @@ The replay harness is:
 realtest_reports/harness/v24d_memory_learning_integration.py
 ```
 
-## 12. 非目标与后续决策
+## 12. D-3e Resolution Evidence Contract
+
+D023 的 persistence failure 是一个合同缺口，而不是 Provider prompt 问题：resolution
+decision 已经包含 target，但 persistence 还需要原始 `utterance` 与解析 `kind`。
+这些字段必须作为 Runtime projection 的一部分显式进入 learning boundary，不能由
+persistence 回头读取 Conversation、Runtime 或其他全局状态补齐。
+
+v1 数据集保持不可变。D-3e 发布了显式的 v1.1 数据集和新 hash：
+
+```text
+evals/memory_learning/dataset_v1_1.json
+version = v2.4D-memory-learning-v1.1
+base_dataset_hash = e821b67e7da66b40a7c1cc38ac6e18d1636b6d01c6aeaa3e873f03bb95f928b7
+dataset_hash = c3b4ed509f6629674c4476f00bf0026561c1f5b1ceb54084ca1bca7443692e82
+```
+
+v1.1 的输入合同明确增加：
+
+```text
+InteractionEvidence + ResolutionEvidence + MemoryPolicyProjection
+    → MemoryLearningDecision
+
+ResolutionEvidence = {
+    utterance: non-empty string,
+    kind: non-empty string,
+    metadata: object
+}
+```
+
+`agent.memory.learning.ResolutionEvidence` 是 typed canonical payload；它只在
+`memory_type == "resolution"` 时允许出现。`decide_memory_learning()` 将它绑定到
+内部 decision，Provider 的七字段公开 proposal 形状不变；授权后的 decision 才能把
+该 payload 交给 `MemoryPersistenceBoundary`。
+
+Resolution persistence 只消费 `decision.resolution`，缺少该 payload 时返回稳定的非提交
+`MemoryCommitEvidence`，不会从 Runtime 或 Conversation 读取字段。成功的
+`MemoryCommitEvidence` 还包含 canonical `content` projection（`utterance`、resolved
+target、`kind`、metadata），并携带 record id/revision；调用方可以据此核对实际 durable
+record，而不把 `committed == true` 当作唯一证据。
+
+D-3e 回放使用不可变的 D-3b Provider proposal、v1.1 evidence 和隔离存储，不产生新的
+Provider 调用。D023 的 resolution record 现在逐字段验证通过；D018/D020 仍保持
+`proposal → deterministic veto → 0 durable commit`。
+
+## 13. 非目标与后续决策
 
 本阶段不把事实抽取器改造成 Learning Provider，不做 expiry/TTL engine，不改变 retrieval
 ranking，不将 Provider 直接接入 Runtime 主循环，也不在此提交中启动 real-provider baseline。
@@ -342,7 +387,8 @@ ranking，不将 Provider 直接接入 Runtime 主循环，也不在此提交中
 v2.4D-3b  real Provider baseline / attribution                 DONE
 v2.4D-3c  semantic measurement calibration                     DONE
 v2.4D-3d  persistence-aware integration replay                  DONE
-v2.4D-4   integration contract fixes / final freeze             PENDING
+v2.4D-3e  resolution evidence contract closeout                 DONE
+v2.4D-4   Human Acceptance #1 / final freeze                     NEXT
 ```
 
 Provider proposal capability 不能替代 durable commit truthfulness；D-3d 的

@@ -29,17 +29,18 @@ from agent.memory.learning import (  # noqa: E402
     InteractionEvidence,
     MemoryLearningDecision,
     MemoryPolicyProjection,
+    ResolutionEvidence,
     authorize_memory_learning_proposal,
     decide_memory_learning,
 )
 from agent.memory.persistence import MemoryCommitEvidence, MemoryPersistenceBoundary  # noqa: E402
-from evals.memory_learning.oracle import dataset_hash, load_dataset  # noqa: E402
+from evals.memory_learning.oracle import dataset_hash, load_dataset_v11  # noqa: E402
 
 
-HARNESS_VERSION = "v2.4D-3d-persistence-aware-replay-v1"
+HARNESS_VERSION = "v2.4D-3e-resolution-evidence-replay-v1"
 DEFAULT_BASELINE = Path("/private/tmp/v24d_d3b_deepseek.json")
-DEFAULT_JSON = Path("/private/tmp/v24d_d3d_deepseek.json")
-DEFAULT_MARKDOWN = Path("/private/tmp/v24d_d3d_deepseek.md")
+DEFAULT_JSON = Path("/private/tmp/v24d_d3e_resolution.json")
+DEFAULT_MARKDOWN = Path("/private/tmp/v24d_d3e_resolution.md")
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -65,6 +66,16 @@ def _existing(value: Mapping[str, Any] | None) -> ExistingMemory | None:
 
 def _evidence(case: Mapping[str, Any]) -> InteractionEvidence:
     raw = case["evidence"]
+    raw_resolution = raw.get("resolution")
+    resolution = (
+        ResolutionEvidence(
+            utterance=str(raw_resolution["utterance"]),
+            kind=str(raw_resolution["kind"]),
+            metadata=dict(raw_resolution["metadata"]),
+        )
+        if isinstance(raw_resolution, Mapping)
+        else None
+    )
     return InteractionEvidence(
         evidence_id=str(raw["id"]),
         source_kind=str(raw["source_kind"]),
@@ -79,11 +90,7 @@ def _evidence(case: Mapping[str, Any]) -> InteractionEvidence:
         secret=bool(raw["secret"]),
         volatile=bool(raw["volatile"]),
         existing=_existing(raw.get("existing")),
-        attributes=(
-            dict(raw["attributes"])
-            if isinstance(raw.get("attributes"), Mapping)
-            else {}
-        ),
+        resolution=resolution,
     )
 
 
@@ -163,9 +170,9 @@ def _verify_commit(
     commit: MemoryCommitEvidence,
     policy: MemoryPolicyProjection,
     stores: tuple[Any, Any],
-) -> tuple[bool, str]:
+) -> tuple[bool, str, dict[str, object] | None]:
     if not commit.committed:
-        return decision.action == "IGNORE", "no durable commit expected"
+        return decision.action == "IGNORE", "no durable commit expected", None
     long_term, resolution = stores
     if decision.memory_type in {"fact", "preference"}:
         category, key = decision.canonical_key.split(".", 1)
@@ -175,17 +182,74 @@ def _verify_commit(
             key,
             scope=decision.scope,
         )
-        return actual == decision.value, f"fact value={actual!r}"
+        content = {"value": actual}
+        return (
+            actual == decision.value and commit.content == content,
+            f"fact value={actual!r}",
+            content,
+        )
     if decision.memory_type == "resolution":
         entries = resolution.get_resolutions(policy.namespace, scope=decision.scope)
-        found = any(
-            str(entry.get("record_id", "")) == str(commit.record_id)
-            for entry in entries
+        matching = next(
+            (
+                entry for entry in entries
+                if str(entry.get("record_id", "")) == str(commit.record_id)
+            ),
+            None,
         )
-        return found, f"resolution record_id={commit.record_id!r}"
+        resolution_evidence = decision.resolution
+        if resolution_evidence is None:
+            return False, "resolution evidence missing from decision", None
+        expected_content = {
+            "utterance": resolution_evidence.utterance,
+            "resolved_target": decision.value,
+            "kind": resolution_evidence.kind,
+            "metadata": dict(resolution_evidence.metadata),
+        }
+        stored_metadata = matching.get("metadata", {}) if matching else {}
+        content = {
+            "utterance": matching.get("utterance") if matching else None,
+            "resolved_target": matching.get("resolved_target") if matching else None,
+            "kind": matching.get("kind") if matching else None,
+            # Storage adds audit fields to metadata.  The commit content is
+            # the canonical payload, so compare only the caller-supplied
+            # metadata keys here and validate audit fields separately below.
+            "metadata": {
+                key: stored_metadata.get(key)
+                for key in resolution_evidence.metadata
+            },
+        }
+        metadata_matches = (
+            isinstance(stored_metadata, Mapping)
+            and all(
+                stored_metadata.get(key) == value
+                for key, value in resolution_evidence.metadata.items()
+            )
+        )
+        durable_fields_match = bool(matching) and all(
+            matching.get(field) == expected
+            for field, expected in {
+                "resolved_target": decision.value,
+                "kind": resolution_evidence.kind,
+                "utterance": resolution_evidence.utterance,
+                "scope": decision.scope,
+                "canonical_key": decision.canonical_key,
+                "evidence_id": commit.evidence_id,
+                "source_kind": decision.provenance["source_kind"],
+                "source_ref": decision.provenance["source_ref"],
+            }.items()
+        )
+        return (
+            durable_fields_match
+            and metadata_matches
+            and content == expected_content
+            and commit.content == expected_content,
+            f"resolution record_id={commit.record_id!r}",
+            content,
+        )
     # The current dataset has no committed summary, but keep this explicit so
     # an unexpected successful summary commit is never silently accepted.
-    return False, "summary commit verification is not implemented in this harness"
+    return False, "summary commit verification is not implemented in this harness", None
 
 
 def _classify_persistence_failure(
@@ -193,7 +257,10 @@ def _classify_persistence_failure(
     commit: MemoryCommitEvidence,
 ) -> tuple[str, str, str]:
     error = str(commit.error or "")
-    if decision.memory_type == "resolution" and "resolution persistence requires" in error:
+    if (
+        decision.memory_type == "resolution"
+        and "resolution decision requires canonical" in error
+    ):
         return (
             "P-CON",
             "RESOLUTION_DETAILS_MISSING",
@@ -264,9 +331,15 @@ def _run_case(
     result["commit_evidence"] = commit.to_dict()
     result["durable_write"] = bool(commit.committed)
     result["evidence"]["memory_write_performed"] = bool(commit.committed)
-    verified, verification_note = _verify_commit(authorized, commit, policy, stores)
+    verified, verification_note, verified_content = _verify_commit(
+        authorized,
+        commit,
+        policy,
+        stores,
+    )
     result["commit_verified"] = verified
     result["commit_verification_note"] = verification_note
+    result["verified_content"] = verified_content
     result["false_commit_acknowledgement"] = int(
         not commit.committed and bool(result["evidence"].get("user_acknowledgement", False))
     )
@@ -294,13 +367,14 @@ def _run_case(
 
 
 def build_report(baseline: Mapping[str, Any], baseline_path: Path) -> dict[str, Any]:
-    dataset = load_dataset()
+    dataset = load_dataset_v11()
     expected_hash = dataset_hash(dataset)
     baseline_hash = str(baseline.get("dataset", {}).get("hash", ""))
-    if baseline_hash != expected_hash:
+    base_dataset_hash = str(dataset.get("base_dataset_hash", ""))
+    if baseline_hash != base_dataset_hash:
         raise ValueError(
-            "baseline dataset hash does not match the current frozen dataset: "
-            f"{baseline_hash} != {expected_hash}"
+            "source baseline dataset hash does not match the v1.1 base dataset: "
+            f"{baseline_hash} != {base_dataset_hash}"
         )
     cases_by_id = {str(case["id"]): case for case in dataset["cases"]}
     baseline_cases = {
@@ -342,6 +416,7 @@ def build_report(baseline: Mapping[str, Any], baseline_path: Path) -> dict[str, 
         "dataset": {
             "version": dataset.get("version"),
             "hash": expected_hash,
+            "base_dataset_hash": base_dataset_hash,
             "case_count": len(dataset.get("cases", [])),
         },
         "configuration": {
@@ -402,6 +477,7 @@ def _markdown(report: Mapping[str, Any]) -> str:
         f"- Source SHA-256: `{report['source_baseline']['sha256']}`",
         f"- Provider source: `{report['source_baseline']['provider']}`",
         f"- Dataset: `{report['dataset']['version']}` / `{report['dataset']['hash']}`",
+        f"- Base dataset hash (immutable D-3b source): `{report['dataset']['base_dataset_hash']}`",
         "- New Provider calls: **0**; source proposals replayed in isolated stores",
         "",
         "## Summary",

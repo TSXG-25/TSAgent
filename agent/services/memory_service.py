@@ -14,6 +14,7 @@ from typing import Optional
 from agent.memory.learning import (
     InteractionEvidence,
     MemoryPolicyProjection,
+    ResolutionEvidence,
     VALID_SCOPES,
     decide_memory_learning,
 )
@@ -175,11 +176,11 @@ class MemoryService:
             sensitive=False,
             secret=False,
             volatile=False,
-            attributes={
-                "utterance": utterance,
-                "kind": kind,
-                "metadata": dict(metadata or {}),
-            },
+            resolution=ResolutionEvidence(
+                utterance=utterance,
+                kind=kind,
+                metadata=dict(metadata or {}),
+            ),
         )
         policy = MemoryService._learning_policy(
             user_id,

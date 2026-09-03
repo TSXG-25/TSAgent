@@ -7,6 +7,7 @@ from .learning import (
     MemoryLearningDecision,
     MemoryLearningPolicy,
     MemoryPolicyProjection,
+    ResolutionEvidence,
     authorize_memory_learning_proposal,
     decide_memory_learning,
 )
@@ -32,6 +33,7 @@ __all__ = [
     "MemoryPolicyProjection",
     "MemoryResetReport",
     "MemoryRuntime",
+    "ResolutionEvidence",
     "authorize_memory_learning_proposal",
     "decide_memory_learning",
 ]

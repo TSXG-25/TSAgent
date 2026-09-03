@@ -211,6 +211,14 @@ class MemoryLearningProvider:
                 value=schema.value,
                 provenance=dict(schema.provenance),
                 reason_code=schema.reason_code,
+                resolution=(
+                    bound_evidence.resolution
+                    if (
+                        schema.action != "IGNORE"
+                        and bound_evidence.memory_type == "resolution"
+                    )
+                    else None
+                ),
             )
         except Exception as error:
             raise MemoryLearningSelectionError(
@@ -325,6 +333,11 @@ class MemoryLearningProvider:
                     "value": evidence.existing.value,
                 }
                 if evidence.existing is not None
+                else None
+            ),
+            "resolution": (
+                evidence.resolution.to_dict()
+                if evidence.resolution is not None
                 else None
             ),
         }

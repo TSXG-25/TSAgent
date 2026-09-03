@@ -65,6 +65,28 @@ class ExistingMemory:
 
 
 @dataclass(frozen=True, slots=True)
+class ResolutionEvidence:
+    """Minimal canonical payload required to persist a resolution fact."""
+
+    utterance: str
+    kind: str
+    metadata: Mapping[str, object] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        _required_text(self.utterance, "resolution utterance")
+        _required_text(self.kind, "resolution kind")
+        if not isinstance(self.metadata, Mapping):
+            raise TypeError("resolution metadata must be a mapping")
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "utterance": self.utterance,
+            "kind": self.kind,
+            "metadata": dict(self.metadata),
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class InteractionEvidence:
     """Runtime-projected evidence presented to the learning policy."""
 
@@ -81,7 +103,11 @@ class InteractionEvidence:
     secret: bool
     volatile: bool
     existing: ExistingMemory | None = None
-    attributes: Mapping[str, object] = field(default_factory=dict, repr=False, compare=False)
+    resolution: ResolutionEvidence | None = field(
+        default=None,
+        repr=False,
+        compare=False,
+    )
 
     def __post_init__(self) -> None:
         for name in ("evidence_id", "source_kind", "source_ref", "text", "memory_type", "requested_scope"):
@@ -90,6 +116,11 @@ class InteractionEvidence:
             raise ValueError(f"invalid memory type: {self.memory_type}")
         if self.requested_scope not in VALID_SCOPES:
             raise ValueError(f"invalid requested scope: {self.requested_scope}")
+        if self.resolution is not None:
+            if not isinstance(self.resolution, ResolutionEvidence):
+                raise TypeError("resolution must be ResolutionEvidence")
+            if self.memory_type != "resolution":
+                raise ValueError("resolution evidence is only valid for resolution memory")
         for name in ("explicit_persist", "sensitive", "secret", "volatile"):
             if not isinstance(getattr(self, name), bool):
                 raise TypeError(f"{name} must be bool")
@@ -132,9 +163,13 @@ class MemoryLearningDecision:
     value: str
     provenance: Mapping[str, str]
     reason_code: str
-    # Persistence-only details are intentionally excluded from ``to_dict``.
-    # The public contract remains the seven decision fields above.
-    details: Mapping[str, object] = field(default_factory=dict, repr=False, compare=False)
+    # Resolution payload is bound from projected evidence and intentionally
+    # excluded from ``to_dict``; the Provider contract remains seven fields.
+    resolution: ResolutionEvidence | None = field(
+        default=None,
+        repr=False,
+        compare=False,
+    )
 
     def __post_init__(self) -> None:
         if self.action not in VALID_ACTIONS:
@@ -145,6 +180,8 @@ class MemoryLearningDecision:
                 raise ValueError("IGNORE cannot carry write fields")
             if self.provenance:
                 raise ValueError("IGNORE cannot carry provenance")
+            if self.resolution is not None:
+                raise ValueError("IGNORE cannot carry resolution evidence")
             return
         if self.memory_type not in VALID_MEMORY_TYPES:
             raise ValueError(f"invalid decision memory type: {self.memory_type}")
@@ -157,6 +194,11 @@ class MemoryLearningDecision:
             raise ValueError("write decision provenance is incomplete")
         for key in required_provenance:
             _required_text(self.provenance[key], f"provenance.{key}")
+        if self.resolution is not None:
+            if not isinstance(self.resolution, ResolutionEvidence):
+                raise TypeError("resolution must be ResolutionEvidence")
+            if self.memory_type != "resolution":
+                raise ValueError("resolution evidence is only valid for resolution memory")
 
     @classmethod
     def ignore(cls, reason_code: str) -> "MemoryLearningDecision":
@@ -312,7 +354,11 @@ def decide_memory_learning(
             "source_ref": evidence.source_ref,
         },
         reason_code=reason_code,
-        details=dict(evidence.attributes),
+        resolution=(
+            evidence.resolution
+            if evidence.memory_type == "resolution"
+            else None
+        ),
     )
 
 
@@ -360,6 +406,7 @@ __all__ = [
     "MemoryLearningDecision",
     "MemoryLearningPolicy",
     "MemoryPolicyProjection",
+    "ResolutionEvidence",
     "VALID_ACTIONS",
     "VALID_MEMORY_TYPES",
     "VALID_SCOPES",

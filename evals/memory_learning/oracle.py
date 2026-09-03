@@ -16,6 +16,11 @@ from typing import Any, Iterable
 
 DATASET_PATH = Path(__file__).with_name("dataset.json")
 DATASET_VERSION = "v2.4D-memory-learning-v1"
+DATASET_V11_PATH = Path(__file__).with_name("dataset_v1_1.json")
+DATASET_V11_VERSION = "v2.4D-memory-learning-v1.1"
+DATASET_V11_BASE_HASH = (
+    "e821b67e7da66b40a7c1cc38ac6e18d1636b6d01c6aeaa3e873f03bb95f928b7"
+)
 VALID_FAMILIES = {
     "ELIGIBILITY",
     "SOURCE_AUTHORITY",
@@ -40,24 +45,46 @@ DECISION_FIELDS = frozenset({
 PROVENANCE_FIELDS = frozenset({"evidence_id", "source_kind", "source_ref"})
 
 
-def load_dataset(path: Path = DATASET_PATH) -> dict[str, Any]:
+def load_dataset(
+    path: Path = DATASET_PATH,
+    *,
+    expected_version: str = DATASET_VERSION,
+) -> dict[str, Any]:
     payload = json.loads(path.read_text(encoding="utf-8"))
-    errors = validate_dataset(payload)
+    errors = validate_dataset(payload, expected_version=expected_version)
     if errors:
         raise ValueError("invalid memory learning dataset: " + "; ".join(errors))
     return payload
 
 
-def validate_dataset(payload: Mapping[str, Any]) -> tuple[str, ...]:
+def load_dataset_v11(path: Path = DATASET_V11_PATH) -> dict[str, Any]:
+    """Load the explicit D-3e resolution-evidence contract revision."""
+    return load_dataset(path, expected_version=DATASET_V11_VERSION)
+
+
+def validate_dataset(
+    payload: Mapping[str, Any],
+    *,
+    expected_version: str = DATASET_VERSION,
+) -> tuple[str, ...]:
     errors: list[str] = []
-    if payload.get("version") != DATASET_VERSION:
-        errors.append(f"version must be {DATASET_VERSION!r}")
+    version = str(payload.get("version", ""))
+    if version != expected_version:
+        errors.append(f"version must be {expected_version!r}")
     if payload.get("scope") != "memory_learning_decision":
         errors.append("scope must be memory_learning_decision")
-    if payload.get("contract") != (
+    expected_contract = (
         "InteractionEvidence + MemoryPolicyProjection -> MemoryLearningDecision"
-    ):
+        if version == DATASET_VERSION
+        else "InteractionEvidence + ResolutionEvidence + MemoryPolicyProjection -> MemoryLearningDecision"
+    )
+    if payload.get("contract") != expected_contract:
         errors.append("contract declaration is invalid")
+    if (
+        version == DATASET_V11_VERSION
+        and payload.get("base_dataset_hash") != DATASET_V11_BASE_HASH
+    ):
+        errors.append("base_dataset_hash must reference the immutable v1 dataset")
 
     policy = payload.get("policy")
     if not isinstance(policy, Mapping):
@@ -101,7 +128,12 @@ def validate_dataset(payload: Mapping[str, Any]) -> tuple[str, ...]:
         if not isinstance(evidence, Mapping):
             errors.append(f"{case_id} evidence must be an object")
         else:
-            _validate_evidence(case_id, evidence, errors)
+            _validate_evidence(
+                case_id,
+                evidence,
+                errors,
+                require_resolution_payload=version == DATASET_V11_VERSION,
+            )
         expected = case.get("expected")
         if not isinstance(expected, Mapping):
             errors.append(f"{case_id} expected must be an object")
@@ -119,6 +151,8 @@ def _validate_evidence(
     case_id: str,
     evidence: Mapping[str, Any],
     errors: list[str],
+    *,
+    require_resolution_payload: bool,
 ) -> None:
     for field in (
         "id", "source_kind", "source_ref", "text", "memory_type",
@@ -145,6 +179,22 @@ def _validate_evidence(
             for field in ("scope", "canonical_key", "value"):
                 if not str(existing.get(field, "")).strip():
                     errors.append(f"{case_id} existing.{field} must be non-empty")
+    resolution = evidence.get("resolution")
+    if require_resolution_payload and evidence.get("memory_type") == "resolution":
+        if not isinstance(resolution, Mapping):
+            errors.append(f"{case_id} resolution evidence is required")
+    if resolution is not None:
+        if not isinstance(resolution, Mapping):
+            errors.append(f"{case_id} resolution evidence must be an object")
+        else:
+            if set(resolution) != {"utterance", "kind", "metadata"}:
+                errors.append(f"{case_id} resolution fields are invalid")
+            if not str(resolution.get("utterance", "")).strip():
+                errors.append(f"{case_id} resolution utterance must be non-empty")
+            if not str(resolution.get("kind", "")).strip():
+                errors.append(f"{case_id} resolution kind must be non-empty")
+            if not isinstance(resolution.get("metadata"), Mapping):
+                errors.append(f"{case_id} resolution metadata must be an object")
 
 
 def _validate_expected(
@@ -352,11 +402,15 @@ def golden_self_check(dataset: Mapping[str, Any] | None = None) -> dict[str, Any
 __all__ = [
     "DATASET_PATH",
     "DATASET_VERSION",
+    "DATASET_V11_PATH",
+    "DATASET_V11_BASE_HASH",
+    "DATASET_V11_VERSION",
     "aggregate_metrics",
     "dataset_hash",
     "evaluate_decision",
     "golden_decision",
     "golden_self_check",
     "load_dataset",
+    "load_dataset_v11",
     "validate_dataset",
 ]

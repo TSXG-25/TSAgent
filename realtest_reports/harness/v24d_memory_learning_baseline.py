@@ -31,6 +31,7 @@ from agent.memory.learning import (  # noqa: E402
     ExistingMemory,
     InteractionEvidence,
     MemoryPolicyProjection,
+    ResolutionEvidence,
 )
 from agent.memory.learning_provider import (  # noqa: E402
     MemoryLearningProvider,
@@ -69,6 +70,16 @@ def _existing(value: Mapping[str, Any] | None) -> ExistingMemory | None:
 
 def _evidence(case: Mapping[str, Any]) -> InteractionEvidence:
     raw = case["evidence"]
+    raw_resolution = raw.get("resolution")
+    resolution = (
+        ResolutionEvidence(
+            utterance=str(raw_resolution["utterance"]),
+            kind=str(raw_resolution["kind"]),
+            metadata=dict(raw_resolution["metadata"]),
+        )
+        if isinstance(raw_resolution, Mapping)
+        else None
+    )
     return InteractionEvidence(
         evidence_id=str(raw["id"]),
         source_kind=str(raw["source_kind"]),
@@ -83,6 +94,7 @@ def _evidence(case: Mapping[str, Any]) -> InteractionEvidence:
         secret=bool(raw["secret"]),
         volatile=bool(raw["volatile"]),
         existing=_existing(raw.get("existing")),
+        resolution=resolution,
     )
 
 

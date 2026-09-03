@@ -11,6 +11,7 @@ from agent.memory.learning import (
     InteractionEvidence,
     MemoryLearningDecision,
     MemoryPolicyProjection,
+    ResolutionEvidence,
     authorize_memory_learning_proposal,
 )
 from agent.memory.learning_provider import (
@@ -181,6 +182,47 @@ def test_provider_keeps_existing_memory_in_the_narrow_projection() -> None:
 
     assert selection.decision.action == "UPDATE"
     assert '"value":"Vim"' in provider.messages[1].content
+
+
+def test_provider_projects_resolution_evidence_without_binding_it_to_ignore() -> None:
+    provider = _StructuredProvider(_decision_payload(action="IGNORE"))
+    selector = MemoryLearningProvider(provider=provider, provider_name="deepseek")
+    evidence = InteractionEvidence(
+        evidence_id="ev-resolution-provider",
+        source_kind="user_confirmed_resolution",
+        source_ref="turn:resolution-provider",
+        text="刚打开的是 agent/runtime.py。",
+        memory_type="resolution",
+        requested_scope="session",
+        canonical_key="recent.file",
+        value="agent/runtime.py",
+        explicit_persist=True,
+        sensitive=False,
+        secret=False,
+        volatile=False,
+        resolution=ResolutionEvidence(
+            utterance="刚打开的是 agent/runtime.py。",
+            kind="file",
+            metadata={},
+        ),
+    )
+
+    selection = asyncio.run(
+        selector.select_with_evidence(
+            evidence,
+            None,
+            MemoryPolicyProjection(scope="session", namespace="resolution-provider"),
+        )
+    )
+
+    projected = json.loads(provider.messages[1].content)
+    assert projected["evidence"]["resolution"] == {
+        "utterance": "刚打开的是 agent/runtime.py。",
+        "kind": "file",
+        "metadata": {},
+    }
+    assert selection.decision.action == "IGNORE"
+    assert selection.decision.resolution is None
 
 
 def test_provider_does_not_accept_conflicting_existing_projection() -> None:

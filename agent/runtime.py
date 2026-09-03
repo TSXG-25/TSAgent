@@ -800,7 +800,11 @@ class UniversalAgent:
         self._memory_view.record_user_message(user_input)
 
         from agent.query_normalizer import QueryNormalizer
-        normalized_input = QueryNormalizer.process(user_input, self._memory_namespace)
+        normalized_input = QueryNormalizer.process(
+            user_input,
+            self._memory_namespace,
+            scope=self._session_context.memory_scope,
+        )
         if context_policy.memory_retrieval:
             # Chroma/SQLite-backed retrieval is synchronous.  Keep it off the
             # event loop so event delivery, cancellation and watchdogs remain

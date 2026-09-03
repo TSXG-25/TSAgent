@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Read-only production preflight for v2.4D Memory Learning.
 
-The preflight intentionally scans source instead of importing production
-Memory modules.  Importing those modules would initialize local stores and
-would make a contract discovery command mutate the workspace.
+The preflight scans source instead of importing production Memory modules.
+Importing those modules initializes local stores and would make a discovery
+command mutate the workspace. Runtime/session buffers are inventoried, but
+only direct calls to learned-memory storage adapters are a boundary
+violation.
 """
 
 from __future__ import annotations
@@ -21,7 +23,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 DATASET_PATH = ROOT / "evals" / "memory_learning" / "dataset.json"
-HARNESS_VERSION = "v2.4D-1-memory-learning-preflight-v1"
+HARNESS_VERSION = "v2.4D-2-memory-learning-preflight-v1"
 
 _PRODUCTION_MEMORY_FILES = (
     "agent/memory/session.py",
@@ -29,6 +31,8 @@ _PRODUCTION_MEMORY_FILES = (
     "agent/memory/long_term.py",
     "agent/memory/preference.py",
     "agent/memory/resolution.py",
+    "agent/memory/learning.py",
+    "agent/memory/persistence.py",
     "agent/services/memory_service.py",
     "agent/memory/lifecycle.py",
 )
@@ -37,20 +41,31 @@ _WRITE_SYMBOLS = {
     "add_user_message",
     "add_assistant_message",
     "add_exchange",
-    "store_summary",
-    "save_fact",
+    "_save",
     "async_extract_and_save_facts",
-    "record_resolution",
     "record_full_exchange",
 }
+_LEARNED_STORAGE_SYMBOLS = {
+    "save_fact",
+    "store_summary",
+    "record_resolution",
+    "_persist_fact",
+    "_persist_summary",
+    "_persist_resolution",
+}
 _LEARNING_SYMBOLS = {
-    "MemoryLearner",
+    "InteractionEvidence",
     "MemoryLearningDecision",
-    "LearningEligibility",
     "MemoryLearningPolicy",
-    "select_memory_learning",
+    "MemoryPolicyProjection",
+    "MemoryPersistenceBoundary",
     "decide_memory_learning",
 }
+_LEARNED_STORAGE_MODULES = {
+    "agent.memory.long_term",
+    "agent.memory.resolution",
+}
+_BOUNDARY_PATH = "agent/memory/persistence.py"
 
 
 def _git_head() -> str | None:
@@ -64,7 +79,12 @@ def _git_head() -> str | None:
 
 def _dataset_metadata() -> dict[str, Any]:
     payload = json.loads(DATASET_PATH.read_text(encoding="utf-8"))
-    canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    canonical = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
     return {
         "path": DATASET_PATH.relative_to(ROOT).as_posix(),
         "version": payload.get("version"),
@@ -83,33 +103,79 @@ def _production_symbols() -> list[dict[str, Any]]:
         path = ROOT / relative
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):
-            if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
-                if node.name in _WRITE_SYMBOLS or node.name in _LEARNING_SYMBOLS:
-                    symbols.append({
-                        "file": relative,
-                        "line": node.lineno,
-                        "symbol": node.name,
-                        "kind": "learning_entry" if node.name in _LEARNING_SYMBOLS else "writer",
-                    })
+            if not isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            if node.name in _LEARNING_SYMBOLS:
+                kind = "learning_entry"
+            elif node.name in _LEARNED_STORAGE_SYMBOLS:
+                kind = "learned_storage_adapter"
+            elif node.name in _WRITE_SYMBOLS:
+                kind = "transient_or_projection_writer"
+            else:
+                continue
+            symbols.append({
+                "file": relative,
+                "line": node.lineno,
+                "symbol": node.name,
+                "kind": kind,
+            })
     return symbols
 
 
 def _write_call_sites() -> list[dict[str, Any]]:
+    """Find low-level learned-store imports/calls outside the boundary.
+
+    Calls through MemoryService are intentionally allowed: that facade is the
+    application-facing projection and commits through this boundary. A direct
+    import of save_fact/_persist_fact or equivalent is not.
+    """
     sites: list[dict[str, Any]] = []
-    call_pattern = re.compile(
-        r"\b(?:record_full_exchange|extract_and_save_facts|record_resolution|"
-        r"store_summary|save_fact|add_exchange|add_user_message|add_assistant_message)\s*\("
-    )
     for path in sorted((ROOT / "agent").rglob("*.py")):
-        if "/memory/" in path.as_posix() and path.name in {"session.py", "short_term.py", "long_term.py", "preference.py", "resolution.py"}:
+        relative = path.relative_to(ROOT).as_posix()
+        if relative == _BOUNDARY_PATH:
             continue
-        source = path.read_text(encoding="utf-8")
-        for line_number, line in enumerate(source.splitlines(), 1):
-            if call_pattern.search(line) and not re.search(r"^\s*(?:async\s+)?def\s+", line):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        direct_names: set[str] = set()
+        module_aliases: set[str] = set()
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module in _LEARNED_STORAGE_MODULES:
+                for item in node.names:
+                    if item.name in _LEARNED_STORAGE_SYMBOLS:
+                        direct_names.add(item.asname or item.name)
+                        sites.append({
+                            "file": relative,
+                            "line": node.lineno,
+                            "kind": "direct_learned_store_import",
+                            "text": ast.unparse(node)[:180],
+                        })
+            elif isinstance(node, ast.Import):
+                for item in node.names:
+                    if item.name in _LEARNED_STORAGE_MODULES:
+                        module_aliases.add(item.asname or item.name.rsplit(".", 1)[-1])
+
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            function = node.func
+            if isinstance(function, ast.Name) and function.id in direct_names:
                 sites.append({
-                    "file": path.relative_to(ROOT).as_posix(),
-                    "line": line_number,
-                    "text": line.strip()[:180],
+                    "file": relative,
+                    "line": node.lineno,
+                    "kind": "direct_learned_store_call",
+                    "text": ast.unparse(node)[:180],
+                })
+            elif (
+                isinstance(function, ast.Attribute)
+                and function.attr in _LEARNED_STORAGE_SYMBOLS
+                and isinstance(function.value, ast.Name)
+                and function.value.id in module_aliases
+            ):
+                sites.append({
+                    "file": relative,
+                    "line": node.lineno,
+                    "kind": "direct_learned_store_call",
+                    "text": ast.unparse(node)[:180],
                 })
     return sites
 
@@ -121,10 +187,8 @@ def _writer_inventory() -> list[dict[str, Any]]:
             "file": "agent/memory/session.py",
             "symbols": ["add_message", "add_user_message", "add_assistant_message"],
             "storage": "process-global _sessions dict",
+            "classification": "runtime/transient; outside learned-memory gate",
             "scope": "namespace key",
-            "provenance": "none",
-            "dedup_conflict": "adjacent same role/content collapse only",
-            "expiry": "MAX_MESSAGES capacity trim",
             "delete": "clear_session",
         },
         {
@@ -132,54 +196,47 @@ def _writer_inventory() -> list[dict[str, Any]]:
             "file": "agent/memory/short_term.py",
             "symbols": ["add_exchange", "_save"],
             "storage": "data/short_term/<namespace>.json",
-            "scope": "filename namespace",
-            "provenance": "timestamp only",
-            "dedup_conflict": "append",
-            "expiry": "window/compression threshold only",
+            "classification": "runtime/transient; generated summary uses boundary",
+            "scope": "explicit learning scope on compression",
             "delete": "clear_history",
         },
         {
-            "layer": "long_term_summary",
-            "file": "agent/memory/long_term.py",
-            "symbols": ["store_summary"],
-            "storage": "Chroma long_term collection",
-            "scope": "metadata.user_id filter",
-            "provenance": "user_id/type/timestamp only",
-            "dedup_conflict": "add_documents append",
-            "expiry": "none",
-            "delete": "clear_summaries",
+            "layer": "learning_decision",
+            "file": "agent/memory/learning.py",
+            "symbols": ["InteractionEvidence", "MemoryPolicyProjection", "decide_memory_learning"],
+            "storage": "none",
+            "classification": "authorized STORE/UPDATE/IGNORE decision",
+            "scope": "typed policy projection",
+            "delete": "not owned here",
         },
         {
-            "layer": "user_fact",
-            "file": "agent/memory/long_term.py",
-            "symbols": ["save_fact"],
-            "storage": "data/user_facts.db facts table",
-            "scope": "user_id column",
-            "provenance": "none",
-            "dedup_conflict": "UNIQUE + INSERT OR REPLACE",
-            "expiry": "none",
-            "delete": "clear_facts",
+            "layer": "persistence_boundary",
+            "file": "agent/memory/persistence.py",
+            "symbols": ["MemoryPersistenceBoundary.commit"],
+            "storage": "delegates to existing fact/summary/resolution stores",
+            "classification": "single durable learned-memory commit boundary",
+            "scope": "decision scope + policy namespace",
+            "provenance": "evidence_id/source_kind/source_ref",
+            "delete": "MemoryRuntime.reset",
         },
         {
             "layer": "preference_extractor",
             "file": "agent/memory/preference.py",
             "symbols": ["async_extract_and_save_facts"],
-            "storage": "delegates to user_fact",
-            "scope": "caller namespace",
-            "provenance": "LLM/regex result has no evidence id",
-            "dedup_conflict": "delegated overwrite",
-            "expiry": "none",
-            "delete": "not owned here",
+            "storage": "decision + persistence boundary",
+            "classification": "evidence projection; no direct store call",
+            "scope": "caller-provided scope",
+            "provenance": "generated evidence_id/source_ref",
+            "delete": "MemoryRuntime.reset",
         },
         {
             "layer": "resolution",
             "file": "agent/memory/resolution.py",
-            "symbols": ["record_resolution"],
+            "symbols": ["_persist_resolution"],
             "storage": "data/resolution_memory/<namespace>.json",
-            "scope": "filename namespace",
-            "provenance": "metadata optional; current caller omits it",
-            "dedup_conflict": "append",
-            "expiry": "MAX_ENTRIES capacity trim",
+            "classification": "private storage adapter; boundary-only caller",
+            "scope": "record field + scoped retrieval",
+            "provenance": "evidence_id/source_kind/source_ref",
             "delete": "clear_resolutions",
         },
     ]
@@ -188,43 +245,96 @@ def _writer_inventory() -> list[dict[str, Any]]:
 def build_preflight_report() -> dict[str, Any]:
     symbols = _production_symbols()
     learning_entries = [item for item in symbols if item["kind"] == "learning_entry"]
-    writer_symbols = [item for item in symbols if item["kind"] == "writer"]
+    writer_symbols = [
+        item for item in symbols
+        if item["kind"] in {"transient_or_projection_writer", "learned_storage_adapter"}
+    ]
     call_sites = _write_call_sites()
     long_term = _source("agent/memory/long_term.py")
     preference = _source("agent/memory/preference.py")
     short_term = _source("agent/memory/short_term.py")
     resolution = _source("agent/memory/resolution.py")
+    learning = _source("agent/memory/learning.py")
+    persistence = _source("agent/memory/persistence.py")
     memory_service = _source("agent/services/memory_service.py")
+    runtime_context = _source("agent/runtime_context.py")
     blockers: list[dict[str, str]] = []
-    if not learning_entries:
+
+    required_learning_symbols = {
+        "MemoryLearningDecision",
+        "MemoryPolicyProjection",
+        "decide_memory_learning",
+    }
+    discovered_learning_names = {item["symbol"] for item in learning_entries}
+    missing_learning = sorted(required_learning_symbols - discovered_learning_names)
+    if missing_learning:
         blockers.append({
             "code": "PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING",
             "category": "P-INT",
-            "evidence": (
-                "No production MemoryLearner/MemoryLearningDecision entry consumes "
-                "InteractionEvidence + MemoryPolicyProjection."
-            ),
+            "evidence": f"Missing production learning symbols: {', '.join(missing_learning)}.",
         })
-    if len(writer_symbols) > 1:
+
+    if not any(item["symbol"] == "MemoryPersistenceBoundary" for item in learning_entries):
         blockers.append({
-            "code": "MEMORY_WRITE_AUTHORIZATION_FRAGMENTED",
+            "code": "PRODUCTION_MEMORY_PERSISTENCE_BOUNDARY_MISSING",
+            "category": "P-INT",
+            "evidence": "No production MemoryPersistenceBoundary.commit entry was found.",
+        })
+
+    if call_sites:
+        blockers.append({
+            "code": "DIRECT_LEARNED_MEMORY_WRITE_OUTSIDE_BOUNDARY",
             "category": "P-CON",
             "evidence": (
-                f"Production source exposes {len(writer_symbols)} memory writer symbols "
-                "across multiple layers without a learning decision boundary."
+                f"Found {len(call_sites)} direct learned-store import/call sites "
+                "outside the boundary."
             ),
         })
-    provenance_complete = all(token in long_term for token in ("evidence_id", "source_ref"))
-    if not provenance_complete:
+
+    provenance_tokens = ("scope", "evidence_id", "source_kind", "source_ref")
+    if not all(token in long_term for token in provenance_tokens):
         blockers.append({
             "code": "MEMORY_PROVENANCE_CONTRACT_MISSING",
             "category": "P-CON",
-            "evidence": "Summary/fact persistence schemas do not carry evidence_id and source_ref.",
+            "evidence": "Fact/summary storage adapters do not expose the complete provenance contract.",
         })
-    retrieval_scope_fallback = (
-        "similarity_search_with_score(query, k=k)" in long_term
-        and "filter={\"user_id\": user_id}" in long_term
+    if not all(token in resolution for token in provenance_tokens):
+        blockers.append({
+            "code": "RESOLUTION_PROVENANCE_CONTRACT_MISSING",
+            "category": "P-CON",
+            "evidence": "Resolution storage adapter does not expose the complete provenance contract.",
+        })
+
+    retrieval_scope_fallback = bool(
+        re.search(
+            r"similarity_search_with_score\(\s*query\s*,\s*k\s*=\s*k\s*\)",
+            long_term,
+            re.DOTALL,
+        )
     )
+    if retrieval_scope_fallback:
+        blockers.append({
+            "code": "RETRIEVAL_SCOPE_FALLBACK_PRESENT",
+            "category": "P-CON",
+            "evidence": "Scoped summary retrieval still contains an unfiltered fallback query.",
+        })
+
+    scoped_view_present = all(
+        token in memory_service
+        for token in ("class ScopedMemoryView", "learning_scope", "_ensure_open")
+    )
+    if not scoped_view_present or "memory_scope" not in runtime_context:
+        blockers.append({
+            "code": "MEMORY_SCOPE_PROJECTION_MISSING",
+            "category": "P-CON",
+            "evidence": "Session-owned memory view is missing an explicit learning scope projection.",
+        })
+
+    preference_direct = any(
+        site["file"] == "agent/memory/preference.py"
+        for site in call_sites
+    )
+
     return {
         "harness_version": HARNESS_VERSION,
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -242,64 +352,44 @@ def build_preflight_report() -> dict[str, Any]:
             "production_writer_symbols": writer_symbols,
             "production_write_call_sites": call_sites,
             "writer_inventory": _writer_inventory(),
-            "scoped_memory_view_present": (
-                "class ScopedMemoryView" in memory_service
-                and "self.namespace" in memory_service
-                and "_ensure_open" in memory_service
-            ),
-            "facts_unique_key": "UNIQUE(user_id, category, key)" in long_term,
+            "learning_policy_present": "InteractionEvidence" in learning,
+            "persistence_boundary_present": "class MemoryPersistenceBoundary" in persistence,
+            "scoped_memory_view_present": scoped_view_present,
+            "facts_unique_key": "UNIQUE(user_id, scope, category, key)" in long_term,
             "facts_overwrite_semantics": "INSERT OR REPLACE" in long_term,
-            "summary_append_semantics": ".add_documents([doc])" in long_term,
+            "summary_append_semantics": ".add_documents([doc], ids=[record_id])" in long_term,
             "short_term_append_semantics": "history.append({" in short_term,
             "resolution_append_semantics": "entries.append({" in resolution,
-            "preference_extractor_directly_persists": "from agent.memory.long_term import save_fact" in preference,
+            "preference_extractor_directly_persists": preference_direct,
             "retrieval_scope_fallback_without_filter": retrieval_scope_fallback,
-            "expiry_is_fact_level": any(token in long_term for token in ("expires_at", "ttl", "expires")),
+            "expiry_is_fact_level": any(
+                token in long_term for token in ("expires_at", "ttl", "expires")
+            ),
             "delete_owner": "MemoryRuntime.reset",
         },
         "blockers": blockers,
         "watchlist": [
             {
-                "code": "MEMORY_NAMESPACE_SCOPE_AMBIGUOUS",
+                "code": "MEMORY_EXPIRY_NOT_IMPLEMENTED",
                 "category": "P-CON",
-                "evidence": "SessionRuntime uses session id or tenant:user as a store namespace; no typed learning scope is projected.",
-            },
-            {
-                "code": "MEMORY_COMMIT_EVIDENCE_MISSING",
-                "category": "P-INT",
-                "evidence": "save_fact/store_summary swallow persistence exceptions and return no durable commit evidence.",
-            },
-            {
-                "code": "RETRIEVAL_SCOPE_FALLBACK_PRESENT",
-                "category": "P-INT",
-                "evidence": "Filtered summary retrieval has an unfiltered fallback path.",
+                "evidence": "Expiry/TTL remains outside D-2 scope; no expiry engine was introduced.",
             },
         ],
         "preserved_boundaries": {
-            "memory_store_modified": False,
-            "runtime_modified": False,
+            "memory_store_modified": True,
+            "store_architecture_rewritten": False,
+            "runtime_modified": True,
             "provider_called": False,
             "conversation_runtime_reclassified": False,
             "run_output_reclassified": False,
         },
-        "case_reports": [
-            {
-                "case_id": f"D{index:03d}",
-                "case_result": "NOT_EVALUABLE",
-                "evaluable": False,
-                "provider_status": "NOT_CALLED",
-                "oracle_result": None,
-                "failure_category": "P-INT",
-                "failure_subcategory": "PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING",
-                "evidence": ["PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING"],
-            }
-            for index in range(1, 25)
-        ] if not learning_entries else [],
+        "case_reports": [],
         "conclusion": (
-            "Production Memory Learning is not evaluable until a canonical learning decision "
-            "entry and one scoped persistence boundary are implemented."
-            if blockers else
-            "Production Memory Learning entry is present; proceed only to a separate deterministic baseline."
+            "Production Memory Learning decision and persistence boundaries are present; "
+            "the deterministic contract baseline may run separately."
+            if not blockers
+            else
+            "Production Memory Learning remains blocked until all boundary preconditions are satisfied."
         ),
     }
 

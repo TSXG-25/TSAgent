@@ -87,10 +87,12 @@ def save_fact(fact: str, user_id: str = "default") -> str:
     try:
         loop = asyncio.get_running_loop()
         loop.create_task(MemoryService.extract_and_save_facts(user_id, fact))
-        return f"事实已调度保存: {fact[:100]}..."
+        return f"事实保存任务已调度，尚未确认提交: {fact[:100]}..."
     except RuntimeError:
-        asyncio.run(MemoryService.extract_and_save_facts(user_id, fact))
-        return f"事实已保存: {fact[:100]}..."
+        result = asyncio.run(MemoryService.extract_and_save_facts(user_id, fact))
+        if getattr(result, "committed", False):
+            return f"事实已保存: {fact[:100]}..."
+        return f"事实未确认保存，未获得持久化提交证据: {fact[:100]}..."
 
 
 def get_session_info(user_id: str = "default") -> str:

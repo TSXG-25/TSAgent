@@ -6,11 +6,35 @@ def _namespace() -> str:
     return f"test-session-{uuid.uuid4().hex}"
 
 
+def _commit_fact(user_id: str, value: str):
+    from agent.memory.learning import InteractionEvidence, MemoryPolicyProjection
+    from agent.memory.learning import decide_memory_learning
+    from agent.memory.persistence import MemoryPersistenceBoundary
+
+    evidence = InteractionEvidence(
+        evidence_id=f"test-fact-{uuid.uuid4().hex}",
+        source_kind="user_statement",
+        source_ref="test:session-runtime",
+        text=f"我住在{value}",
+        memory_type="fact",
+        requested_scope="user",
+        canonical_key="personal.location",
+        value=value,
+        explicit_persist=True,
+        sensitive=False,
+        secret=False,
+        volatile=False,
+    )
+    policy = MemoryPolicyProjection(scope="user", namespace=user_id)
+    decision = decide_memory_learning(evidence, policy)
+    return MemoryPersistenceBoundary.commit(decision, policy)
+
+
 def test_memory_runtime_reset_is_scoped(monkeypatch):
     from agent.conversation import conversation_tracker
     from agent.memory import long_term
-    from agent.memory.long_term import get_facts, save_fact
-    from agent.memory.resolution import get_resolutions, record_resolution
+    from agent.memory.long_term import get_facts
+    from agent.memory.resolution import get_resolutions
     from agent.memory.lifecycle import MemoryRuntime
     from agent.memory.session import get_session_context, add_user_message
     from agent.memory.short_term import add_exchange, get_history
@@ -27,8 +51,12 @@ def test_memory_runtime_reset_is_scoped(monkeypatch):
 
     add_user_message(user_id, "我住在北京")
     add_exchange(user_id, "我住在北京", "已记录")
-    save_fact(user_id, "personal", "location", "北京")
-    record_resolution(user_id, "打开它", "output/a.py", "file")
+    assert _commit_fact(user_id, "北京").committed
+    from agent.services.memory_service import MemoryService
+
+    assert MemoryService.record_resolution(
+        user_id, "打开它", "output/a.py", "file"
+    ).committed
     conversation_tracker.update(
         user_id=user_id,
         user_input="写 output/a.py",
@@ -52,12 +80,12 @@ def test_memory_runtime_reset_is_scoped(monkeypatch):
 
 def test_memory_runtime_can_preserve_facts(monkeypatch):
     from agent.memory import long_term
-    from agent.memory.long_term import get_facts, save_fact
+    from agent.memory.long_term import get_facts
     from agent.memory.lifecycle import MemoryRuntime
 
     user_id = _namespace()
     monkeypatch.setattr(long_term, "clear_summaries", lambda value: None)
-    save_fact(user_id, "personal", "location", "上海")
+    assert _commit_fact(user_id, "上海").committed
 
     MemoryRuntime.reset(user_id, conversation=True, facts=False)
     assert get_facts(user_id)["personal"]["location"] == "上海"

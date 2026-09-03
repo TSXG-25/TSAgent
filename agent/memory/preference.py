@@ -8,9 +8,18 @@ import json
 import os
 import re
 import asyncio
+import uuid
+from typing import Iterable
 from langchain_core.messages import SystemMessage, HumanMessage
 
 from agent.llm import llm
+from agent.memory.learning import (
+    ExistingMemory,
+    InteractionEvidence,
+    MemoryPolicyProjection,
+    decide_memory_learning,
+)
+from agent.memory.persistence import MemoryCommitEvidence, MemoryPersistenceBoundary
 
 # LLM 事实抽取的本地超时：超时后立即走确定性兜底，避免被上层 wait_for 整体取消。
 LLM_EXTRACT_TIMEOUT = float(os.getenv("TSAGENT_LLM_EXTRACT_TIMEOUT", "10"))
@@ -103,6 +112,62 @@ _DETERMINISTIC_PATTERNS = [
     (re.compile(r"我(?:最)?喜欢(?P<hobby>[^，。！？；;\n]{1,12})"), "hobby", "preference"),
 ]
 _INTERROGATIVE_RE = re.compile(r"什么|哪个|哪一|哪儿|哪里|谁|怎么|为什么|吗|呢|？|\?")
+_EXPLICIT_PERSIST_RE = re.compile(
+    r"记住|保存|存下来|长期|以后|默认|优先|偏好|请",
+    re.IGNORECASE,
+)
+_SECRET_FIELD_RE = re.compile(
+    r"api[ _-]?key|access[ _-]?token|refresh[ _-]?token|password|passwd|"
+    r"credential|secret|private[ _-]?key|密钥|密码|口令|令牌|私钥",
+    re.IGNORECASE,
+)
+_SECRET_VALUE_RE = re.compile(
+    r"(?:^|\b)(?:sk-[A-Za-z0-9_-]+|gh[pousr]_[A-Za-z0-9_]+|AKIA[A-Z0-9]{12,})",
+    re.IGNORECASE,
+)
+_SENSITIVE_FIELD_RE = re.compile(
+    r"email|e-mail|phone|mobile|address|身份证|邮箱|手机号|电话|住址|生日",
+    re.IGNORECASE,
+)
+_VOLATILE_FIELD_RE = re.compile(
+    r"price|weather|stock|market|news|exchange|rate|today|current|latest|"
+    r"价格|天气|股票|股市|新闻|汇率|行情|今天|今日|当前|最新|实时|近期|本周",
+    re.IGNORECASE,
+)
+
+
+def _classify_extracted_fact(
+    category: str,
+    key: str,
+    value: str,
+    text: str,
+) -> tuple[bool, bool, bool, bool]:
+    """Project deterministic safety flags before a fact reaches policy.
+
+    Ordinary user statements remain persistable evidence for the existing
+    fact-capture contract. Sensitive statements need an explicit persistence
+    request, while secrets and volatile observations never reach a store.
+    """
+    field = f"{category}.{key}"
+    generic_field = key.lower() in {"fact", "preference", "value"}
+    field_secret = bool(_SECRET_FIELD_RE.search(field))
+    field_sensitive = bool(_SENSITIVE_FIELD_RE.search(field))
+    secret = bool(
+        field_secret
+        or (generic_field and _SECRET_FIELD_RE.search(text))
+        or _SECRET_VALUE_RE.search(value)
+    )
+    sensitive = bool(
+        field_sensitive
+        or (generic_field and _SENSITIVE_FIELD_RE.search(text))
+    )
+    volatile = bool(_VOLATILE_FIELD_RE.search(field))
+    explicit_persist = bool(_EXPLICIT_PERSIST_RE.search(text))
+    if not sensitive:
+        # Existing non-sensitive fact capture treats a direct first-person
+        # statement as durable evidence even without the word "记住".
+        explicit_persist = True
+    return explicit_persist, sensitive, secret, volatile
 
 
 def _deterministic_extract(text: str) -> dict:
@@ -123,10 +188,36 @@ def _deterministic_extract(text: str) -> dict:
     return found
 
 
-async def async_extract_and_save_facts(user_id: str, text: str) -> dict:
-    """Always attempt to extract facts from user input."""
+class FactExtractionResult(dict[str, dict[str, str]]):
+    """Committed fact projection returned by the learning boundary.
+
+    It remains a dict for the existing answer projection, while exposing the
+    durable commit evidence needed for truthful user-facing acknowledgements.
+    Facts rejected or failed by the boundary are intentionally absent.
+    """
+
+    def __init__(
+        self,
+        facts: dict[str, dict[str, str]] | None = None,
+        commits: Iterable[MemoryCommitEvidence] = (),
+    ) -> None:
+        super().__init__(facts or {})
+        self.commit_evidence = tuple(commits)
+
+    @property
+    def committed(self) -> bool:
+        return bool(self)
+
+
+async def async_extract_and_save_facts(
+    user_id: str,
+    text: str,
+    *,
+    scope: str = "user",
+) -> FactExtractionResult:
+    """Extract facts and persist only decisions approved by the boundary."""
     if not text or len(text) < 3:
-        return {}
+        return FactExtractionResult()
 
     try:
         facts = await asyncio.wait_for(
@@ -138,15 +229,78 @@ async def async_extract_and_save_facts(user_id: str, text: str) -> dict:
         # LLM 失败/超时 → 确定性兜底，保证关键事实仍落库
         facts = _deterministic_extract(text)
     if not facts:
-        return {}
+        return FactExtractionResult()
 
-    # Save to long-term facts store
-    from agent.memory.long_term import save_fact
-
+    committed_facts: dict[str, dict[str, str]] = {}
+    commit_evidence: list[MemoryCommitEvidence] = []
     for category, items in facts.items():
         if isinstance(items, dict):
             for key, value in items.items():
                 if value and str(value).strip():
-                    save_fact(user_id, str(category), str(key), str(value).strip())
+                    category_name = str(category).strip()
+                    key_name = str(key).strip()
+                    value_text = str(value).strip()
+                    canonical_key = f"{category_name}.{key_name}"
+                    from agent.memory.long_term import get_fact
 
-    return facts
+                    existing_value = get_fact(
+                        user_id,
+                        category_name,
+                        key_name,
+                        scope=scope,
+                    )
+                    existing = (
+                        ExistingMemory(
+                            scope=scope,
+                            canonical_key=canonical_key,
+                            value=existing_value,
+                        )
+                        if existing_value is not None
+                        else None
+                    )
+                    explicit_persist, sensitive, secret, volatile = (
+                        _classify_extracted_fact(
+                            category_name,
+                            key_name,
+                            value_text,
+                            text,
+                        )
+                    )
+                    evidence_id = f"fact-{uuid.uuid4().hex}"
+                    evidence = InteractionEvidence(
+                        evidence_id=evidence_id,
+                        source_kind="user_statement",
+                        source_ref=f"user-input:{evidence_id}",
+                        text=text,
+                        memory_type=(
+                            "preference"
+                            if key_name in {"preference", "language", "editor", "framework", "os"}
+                            else "fact"
+                        ),
+                        requested_scope=scope,
+                        canonical_key=canonical_key,
+                        value=value_text,
+                        explicit_persist=explicit_persist,
+                        sensitive=sensitive,
+                        secret=secret,
+                        volatile=volatile,
+                        existing=existing,
+                    )
+                    policy = MemoryPolicyProjection(
+                        scope=scope,
+                        namespace=user_id,
+                    )
+                    decision = decide_memory_learning(evidence, policy)
+                    commit = MemoryPersistenceBoundary.commit(decision, policy)
+                    commit_evidence.append(commit)
+                    if commit.committed:
+                        committed_facts.setdefault(category_name, {})[key_name] = value_text
+
+    return FactExtractionResult(committed_facts, commit_evidence)
+
+
+__all__ = [
+    "FactExtractionResult",
+    "async_extract_and_save_facts",
+    "extract_facts_with_llm",
+]

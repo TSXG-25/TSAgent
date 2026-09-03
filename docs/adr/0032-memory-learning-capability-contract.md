@@ -1,15 +1,16 @@
-# ADR-0032: Memory Learning Capability Contract（v2.4D-1）
+# ADR-0032: Memory Learning Capability Contract（v2.4D-2）
 
-- 状态: Proposed — Discovery complete / production precondition blocked
-- 评估基线: `79305fe3`（v2.4C Workflow capability freeze）
-- 范围: Memory learning evidence、资格判断、scope、provenance、去重/冲突边界
-- 非范围: 现有 Memory store 重写、retrieval 排序、Conversation Runtime、RunOutput、Repository index、MemoryLearner 实现
+- 状态: Implemented — deterministic acceptance verified; real Provider baseline pending
+- 评估基线: `5aa814d7`（v2.4D-1 discovery）
+- 范围: Memory learning evidence、资格判断、scope、provenance、去重/冲突边界、commit evidence
+- 非范围: 现有 Memory store 架构重写、retrieval 排序、Conversation Runtime、RunOutput、Repository index、MemoryLearner 实现
 
 ## 1. 背景
 
 v2.4D 先审计生产代码中的真实 Memory 写路径，再决定是否需要新的学习决策能力。
-本次审计不调用 Provider、不修改 Memory store，也不把已有的 Memory facade 误认为统一
-learning boundary。
+本次审计不调用 Provider，也不把已有的 Memory facade 误认为统一 learning boundary。
+D-2 保留现有事实、摘要和 resolution store 作为存储适配器，只在其上增加显式的决策与
+提交边界；session/short-term runtime buffer 仍由各自生命周期 owner 管理。
 
 审计基线发现：生产代码目前有多条独立写入路径，`ScopedMemoryView` 只绑定 namespace，
 并不判断一条 evidence 是否有资格长期保存。当前不存在一个生产入口消费：
@@ -205,13 +206,52 @@ Learning 已实现。
 - 不能把 `MemoryService` facade、`extract_and_save_facts()` 或 `record_full_exchange()`
   当作 Memory Learning Selector。
 
-当前基线预期为 blocked。只有后续明确完成合同 owner、生产入口和单一写入边界后，才能
-进入 real-provider baseline。
+`5aa814d7` 的 D-1 基线预期为 blocked。D-2 完成后，preflight 应只在发现直接绕过
+`MemoryPersistenceBoundary`、缺少 scope/provenance 或存在 unscoped retrieval fallback 时
+保持 blocked；它本身仍不调用 Provider，也不执行 Memory 写入。
 
-## 8. 非目标与后续决策
+## 8. D-2 实现
 
-本 ADR 不实现 `MemoryLearner`，不迁移现有 store，不改变既有 retrieval 行为，也不修复
-本次审计发现的 scope fallback。下一步只有在评审确认本合同后，才单独进入：
+生产边界已经收敛为：
+
+```text
+InteractionEvidence + MemoryPolicyProjection
+        ↓
+decide_memory_learning()
+        ↓
+MemoryLearningDecision
+        ↓
+MemoryPersistenceBoundary.commit()
+        ↓
+MemoryCommitEvidence
+```
+
+具体 owner：
+
+- `agent/memory/learning.py` 只负责确定性的 `STORE / UPDATE / IGNORE`、source/scope/type、
+  sensitive/secret/volatile 和 duplicate/update policy；并在边界复核 canonical key 与 value
+  中的明显敏感模式；不读取或写入存储。
+- `agent/memory/persistence.py` 是唯一 learned-memory durable commit boundary；它调用既有
+  fact、summary、resolution storage adapter，并返回 `committed`、store、scope、key、
+  evidence、record id/revision 或稳定错误。
+- `agent/memory/preference.py` 只提交通过 policy 的事实，并且只将已提交事实暴露给上层；
+  persistence 失败不会再被投影成“已保存”。
+- `MemoryService`/`ScopedMemoryView` 负责把 namespace 与显式 `learning_scope` 投影给边界。
+  session message 和 short-term exchange 是 transient/runtime 写入，不属于 learned-memory
+  decision gate；short-term compression 生成的 durable summary 必须经过同一 boundary。
+- summary/fact/resolution storage metadata 携带 `scope`、`evidence_id`、`source_kind`、
+  `source_ref`；facts 的 canonical uniqueness 包含 scope 和 revision；resolution 的同
+  scope/canonical value 重复提交保持幂等。
+- scoped summary/resolution/fact retrieval 不允许在过滤失败时退化为全局查询。
+- `MemoryRuntime.reset` 仍然是删除/forget 的生命周期 owner，不由 learning decision 模拟 delete。
+
+因此，只有 `MemoryCommitEvidence.committed == true` 才能支持用户层的持久化成功确认。
+`IGNORE`、存储异常和 scope mismatch 都必须保留为非提交结果。
+
+## 9. 非目标与后续决策
+
+本 ADR 不实现 `MemoryLearner` Provider capability，不做 expiry/TTL engine，不改变 retrieval
+ranking，也不启动 real-provider baseline。D-2 deterministic acceptance 已完成，后续仍单独进入：
 
 ```text
 v2.4D-2  production learning boundary bootstrap
@@ -219,5 +259,5 @@ v2.4D-3  deterministic contract acceptance
 v2.4D-4  real Provider baseline / attribution
 ```
 
-如果评审决定不需要独立 learning decision，则应修订本 ADR，明确现有写入路径的统一
-授权 owner，而不是保留“多个写入口但文档称其统一”的状态。
+真实 Provider 的 Memory Learning baseline 与 attribution 仍需要单独的 D-4 evidence；Provider
+准确率不能替代 durable commit truthfulness。

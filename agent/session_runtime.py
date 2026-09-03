@@ -69,6 +69,7 @@ class SessionRuntime:
                 if self._persistent
                 else self._session_id
             ),
+            memory_scope="user" if self._persistent else "session",
         )
         self._agent = self._new_agent()
 

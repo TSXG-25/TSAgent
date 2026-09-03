@@ -358,6 +358,7 @@ def test_runtime_simple_chat_skips_fact_memory_repo_and_skill(monkeypatch) -> No
     agent._wall_total_seconds = 0.0
     agent._session_context = SimpleNamespace(
         conversation_tracker=SimpleNamespace(update=lambda **_kwargs: None),
+        memory_scope="session",
     )
     agent.orchestrator = orchestrator
     agent._print_timing_summary = lambda: {}
@@ -424,6 +425,7 @@ def test_runtime_fact_capture_starts_after_user_answer(monkeypatch) -> None:
     agent._wall_total_seconds = 0.0
     agent._session_context = SimpleNamespace(
         conversation_tracker=SimpleNamespace(update=lambda **_kwargs: None),
+        memory_scope="session",
     )
     agent.orchestrator = Orchestrator()
     agent._print_timing_summary = lambda: {}

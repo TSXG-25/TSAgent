@@ -76,23 +76,22 @@ def test_oracle_rejects_a_false_memory_write() -> None:
     assert report["unprovenanced_write"] == 1
 
 
-def test_preflight_fails_closed_without_production_learning_entry() -> None:
+def test_preflight_unlocks_only_with_production_learning_boundary() -> None:
     report = HARNESS.build_preflight_report()
 
-    assert report["status"] == "BLOCKED_PRECONDITION"
+    assert report["status"] == "READY_FOR_REAL_BASELINE"
     assert report["configuration"] == {
         "provider_calls": 0,
         "memory_writes": 0,
         "store_imports": 0,
         "source_scan_only": True,
     }
-    assert report["case_reports"]
-    assert {item["failure_category"] for item in report["case_reports"]} == {"P-INT"}
-    assert "PRODUCTION_MEMORY_LEARNING_ENTRY_MISSING" in {
-        item["code"] for item in report["blockers"]
-    }
-    assert report["discovery"]["retrieval_scope_fallback_without_filter"] is True
-    assert report["preserved_boundaries"]["memory_store_modified"] is False
+    assert report["case_reports"] == []
+    assert report["blockers"] == []
+    assert report["discovery"]["retrieval_scope_fallback_without_filter"] is False
+    assert report["discovery"]["preference_extractor_directly_persists"] is False
+    assert report["preserved_boundaries"]["memory_store_modified"] is True
+    assert report["preserved_boundaries"]["store_architecture_rewritten"] is False
 
 
 def test_golden_decision_is_contract_data_only() -> None:

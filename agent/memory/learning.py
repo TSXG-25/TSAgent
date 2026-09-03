@@ -316,6 +316,43 @@ def decide_memory_learning(
     )
 
 
+def authorize_memory_learning_proposal(
+    evidence: InteractionEvidence,
+    policy: MemoryPolicyProjection,
+    proposal: MemoryLearningDecision,
+) -> MemoryLearningDecision:
+    """Authorize a Provider proposal without letting it bypass D-2 policy.
+
+    The Provider is only a decision source.  This handoff reuses the existing
+    deterministic policy as the authority for safety, scope, provenance,
+    deduplication, and update eligibility.  A Provider may conservatively
+    propose ``IGNORE`` for otherwise eligible evidence, but it can never turn
+    policy-approved evidence into an unauthorized write.
+    """
+
+    authorized = decide_memory_learning(evidence, policy)
+    if authorized.action == "IGNORE":
+        # Policy vetoes always win, including secret, volatile, sensitive,
+        # source, and scope violations.
+        return authorized
+    if proposal.action == "IGNORE":
+        return MemoryLearningDecision.ignore("PROVIDER_PROPOSED_IGNORE")
+
+    expected = authorized.to_dict()
+    candidate = proposal.to_dict()
+    comparable_fields = (
+        "action",
+        "memory_type",
+        "scope",
+        "canonical_key",
+        "value",
+        "provenance",
+    )
+    if any(candidate[field] != expected[field] for field in comparable_fields):
+        return MemoryLearningDecision.ignore("PROVIDER_PROPOSAL_REJECTED")
+    return authorized
+
+
 __all__ = [
     "DEFAULT_AUTHORIZED_SOURCE_KINDS",
     "ExistingMemory",
@@ -326,5 +363,6 @@ __all__ = [
     "VALID_ACTIONS",
     "VALID_MEMORY_TYPES",
     "VALID_SCOPES",
+    "authorize_memory_learning_proposal",
     "decide_memory_learning",
 ]

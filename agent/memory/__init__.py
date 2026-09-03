@@ -7,9 +7,16 @@ from .learning import (
     MemoryLearningDecision,
     MemoryLearningPolicy,
     MemoryPolicyProjection,
+    authorize_memory_learning_proposal,
     decide_memory_learning,
 )
 from .persistence import MemoryCommitEvidence, MemoryPersistenceBoundary
+from .learning_provider import (
+    MemoryLearningProvider,
+    MemoryLearningSelection,
+    MemoryLearningSelectionError,
+    MemoryLearningSelectionEvidence,
+)
 
 __all__ = [
     "ExistingMemory",
@@ -17,9 +24,14 @@ __all__ = [
     "MemoryCommitEvidence",
     "MemoryLearningDecision",
     "MemoryLearningPolicy",
+    "MemoryLearningProvider",
+    "MemoryLearningSelection",
+    "MemoryLearningSelectionError",
+    "MemoryLearningSelectionEvidence",
     "MemoryPersistenceBoundary",
     "MemoryPolicyProjection",
     "MemoryResetReport",
     "MemoryRuntime",
+    "authorize_memory_learning_proposal",
     "decide_memory_learning",
 ]

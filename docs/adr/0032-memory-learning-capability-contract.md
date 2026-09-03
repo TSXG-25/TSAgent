@@ -1,7 +1,7 @@
 # ADR-0032: Memory Learning Capability Contract（v2.4D-2）
 
-- 状态: Implemented — deterministic acceptance verified; real Provider baseline pending
-- 评估基线: `5aa814d7`（v2.4D-1 discovery）
+- 状态: Implemented — D-2 deterministic boundary and D-3a Provider entry verified; real Provider baseline pending
+- 评估基线: `5aa814d7`（v2.4D-1 discovery）；D-2 实现：`306d5adc`
 - 范围: Memory learning evidence、资格判断、scope、provenance、去重/冲突边界、commit evidence
 - 非范围: 现有 Memory store 架构重写、retrieval 排序、Conversation Runtime、RunOutput、Repository index、MemoryLearner 实现
 
@@ -210,6 +210,11 @@ Learning 已实现。
 `MemoryPersistenceBoundary`、缺少 scope/provenance 或存在 unscoped retrieval fallback 时
 保持 blocked；它本身仍不调用 Provider，也不执行 Memory 写入。
 
+`realtest_reports/harness/v24d_memory_learning_provider_preflight.py` 是 D-3a 独立的
+Provider-entry preflight。它只扫描生产源码；只有发现正式的
+`MemoryLearningProvider` 且 Provider 没有 persistence/store/evaluation import 时，才输出
+`READY_FOR_REAL_BASELINE`。它不把事实抽取器或确定性 policy 当作 Provider，也不调用模型。
+
 ## 8. D-2 实现
 
 生产边界已经收敛为：
@@ -248,16 +253,38 @@ MemoryCommitEvidence
 因此，只有 `MemoryCommitEvidence.committed == true` 才能支持用户层的持久化成功确认。
 `IGNORE`、存储异常和 scope mismatch 都必须保留为非提交结果。
 
-## 9. 非目标与后续决策
+## 9. D-3a Provider 入口
 
-本 ADR 不实现 `MemoryLearner` Provider capability，不做 expiry/TTL engine，不改变 retrieval
-ranking，也不启动 real-provider baseline。D-2 deterministic acceptance 已完成，后续仍单独进入：
+`agent/memory/learning_provider.py` 提供唯一的 Provider-backed decision entry：
 
 ```text
-v2.4D-2  production learning boundary bootstrap
-v2.4D-3  deterministic contract acceptance
-v2.4D-4  real Provider baseline / attribution
+InteractionEvidence + ExistingMemory + MemoryPolicyProjection
+        ↓
+MemoryLearningProvider.select()
+        ↓
+MemoryLearningDecision（未提交 proposal）
 ```
 
-真实 Provider 的 Memory Learning baseline 与 attribution 仍需要单独的 D-4 evidence；Provider
+该 Provider 只负责提出一个 canonical decision。它不导入 Memory store 或
+`MemoryPersistenceBoundary`，不修改 Runtime，不执行重试或跨 Provider fallback，也不返回
+commit 结论。Provider proposal 必须经过
+`authorize_memory_learning_proposal()`，由 D-2 deterministic policy 重新验证 safety、scope、
+provenance、dedup 和 update eligibility，之后才允许交给 persistence boundary。
+
+Provider transport 的 structured/raw path 只用于记录证据；`STRUCTURED_TO_RAW_FALLBACK`
+表示同一 Provider 的格式降级，不表示 Provider 切换。D-3a 离线 contract/preflight 通过后，
+才允许使用固定 Dataset 执行真实 Provider baseline。
+
+## 10. 非目标与后续决策
+
+本阶段不把事实抽取器改造成 Learning Provider，不做 expiry/TTL engine，不改变 retrieval
+ranking，不将 Provider 直接接入 Runtime 主循环，也不在此提交中启动 real-provider baseline。
+后续单独进入：
+
+```text
+v2.4D-3b  real Provider baseline / attribution
+v2.4D-4   persistence-aware integration / freeze
+```
+
+真实 Provider 的 Memory Learning baseline 与 attribution 仍需要单独的 D-3b evidence；Provider
 准确率不能替代 durable commit truthfulness。

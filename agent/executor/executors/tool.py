@@ -55,7 +55,13 @@ class ToolExecutor:
 
         if result.get("_error"):
             error = str(result["_error"])
-            error_code = classify_execution_error(error)
+            structured_error_code = str(result.get("_error_code", "") or "")
+            error_code = structured_error_code or classify_execution_error(error)
+            classification_source = (
+                ClassificationSource.STRUCTURED
+                if structured_error_code
+                else ClassificationSource.LEGACY_FALLBACK
+            )
             return ExecutionResult(
                 success=False,
                 error=error,
@@ -67,7 +73,7 @@ class ToolExecutor:
                 action_result=ActionResult.failure(
                     error_code=error_code or "TOOL_EXECUTION_FAILED",
                     content=error,
-                    classification_source=ClassificationSource.LEGACY_FALLBACK.value,
+                    classification_source=classification_source.value,
                 ),
                 outputs={},
                 metadata={
@@ -75,6 +81,7 @@ class ToolExecutor:
                     "task_id": target.id,
                     "tools_called": list(result.get("_tools_called", []) or []),
                     **({"error_code": error_code} if error_code else {}),
+                    "classification_source": classification_source.value,
                 },
             )
 

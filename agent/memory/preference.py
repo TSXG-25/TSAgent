@@ -1,22 +1,17 @@
 # agent/memory/preference.py
-"""User preference & fact extraction.
+"""Non-authoritative utility for extracting candidate facts from text.
 
-Uses LLM to extract user facts from every input.
-Facts are stored in long_term.py SQLite store for persistence.
+Production durable learning is owned by ``MemoryLearningProvider`` followed
+by deterministic authorization and ``MemoryPersistenceBoundary``. This
+module neither authorizes nor persists learned Memory.
 """
 import json
-import os
-import re
-import asyncio
 from langchain_core.messages import SystemMessage, HumanMessage
 
 from agent.llm import llm
 
-# LLM 事实抽取的本地超时：超时后立即走确定性兜底，避免被上层 wait_for 整体取消。
-LLM_EXTRACT_TIMEOUT = float(os.getenv("TSAGENT_LLM_EXTRACT_TIMEOUT", "10"))
 
-
-# ========== LLM-based fact extraction (always on) ==========
+# ========== Candidate fact extraction utility ==========
 
 FACT_EXTRACTION_PROMPT = """你是一个事实抽取器。从用户输入中提取关于用户自身的客观事实，输出 JSON 对象。
 
@@ -94,59 +89,4 @@ async def extract_facts_with_llm(text: str) -> dict:
         return {"personal": facts} if facts else {}
 
 
-# ── 确定性抽取兜底（LLM 不可用/超时时保证常见事实仍被保存，ADR-0009） ──
-_DETERMINISTIC_PATTERNS = [
-    (re.compile(r"我(?:叫|是)(?P<name>[^，。！？；;\n]{1,12})"), "personal", "name"),
-    (re.compile(r"我(?:住在|居住于|居住在|来自)(?P<location>[^，。！？；;\n]{1,16})"), "personal", "location"),
-    (re.compile(r"(?:记住[:：]?(?:这个)?(?:项目)?|(?:这个)?项目)(?:叫|是|为)(?P<project>[^，。！？；;\n]{1,24})"), "misc", "project"),
-    (re.compile(r"我(?:最)?喜欢(?:的)?(?:编程语言|语言)[是为:：]?(?P<lang>[^，。！？；;\n]{1,12})"), "programming", "language"),
-    (re.compile(r"我(?:最)?喜欢(?P<hobby>[^，。！？；;\n]{1,12})"), "hobby", "preference"),
-]
-_INTERROGATIVE_RE = re.compile(r"什么|哪个|哪一|哪儿|哪里|谁|怎么|为什么|吗|呢|？|\?")
-
-
-def _deterministic_extract(text: str) -> dict:
-    """不依赖 LLM 的常见事实抽取。
-
-    只处理陈述句；含疑问词时返回 {}，避免把"你喜欢什么颜色"误存为事实。
-    """
-    if _INTERROGATIVE_RE.search(text):
-        return {}
-    skip_hobby = ("编程语言" in text) or ("语言" in text)
-    found: dict = {}
-    for pattern, category, key in _DETERMINISTIC_PATTERNS:
-        if key == "preference" and skip_hobby:
-            continue
-        m = pattern.search(text)
-        if m and m.group(1) and m.group(1).strip():
-            found.setdefault(category, {})[key] = m.group(1).strip()
-    return found
-
-
-async def async_extract_and_save_facts(user_id: str, text: str) -> dict:
-    """Always attempt to extract facts from user input."""
-    if not text or len(text) < 3:
-        return {}
-
-    try:
-        facts = await asyncio.wait_for(
-            extract_facts_with_llm(text), timeout=LLM_EXTRACT_TIMEOUT
-        )
-    except Exception:
-        facts = {}
-    if not facts:
-        # LLM 失败/超时 → 确定性兜底，保证关键事实仍落库
-        facts = _deterministic_extract(text)
-    if not facts:
-        return {}
-
-    # Save to long-term facts store
-    from agent.memory.long_term import save_fact
-
-    for category, items in facts.items():
-        if isinstance(items, dict):
-            for key, value in items.items():
-                if value and str(value).strip():
-                    save_fact(user_id, str(category), str(key), str(value).strip())
-
-    return facts
+__all__ = ["extract_facts_with_llm"]

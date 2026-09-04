@@ -68,8 +68,8 @@ class MemoryRuntime:
                 # its observable reset semantics for unscoped callers, while
                 # the production SessionRuntime path always passes its owned
                 # tracker explicitly (see session_runtime.py).
-                from agent.conversation import conversation_tracker
-                tracker = conversation_tracker
+                from agent.conversation import conversation_tracker as legacy_tracker
+                tracker = legacy_tracker
 
             clear_session(namespace)
             clear_history(namespace)

@@ -73,6 +73,7 @@ class ServiceContextFactory:
                 user_id=request.user_id,
                 tenant_id=request.tenant_id,
                 memory_namespace=f"{request.tenant_id}:{request.user_id}",
+                memory_scope="user",
             )
             # ApplicationContext predates tenant-scoped session keys.  Keep
             # the composite key here so equal session IDs in two tenants do

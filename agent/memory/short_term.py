@@ -46,7 +46,13 @@ def _save(user_id: str, data: list[dict]) -> None:
     )
 
 
-def add_exchange(user_id: str, user_input: str, assistant_response: str) -> None:
+def add_exchange(
+    user_id: str,
+    user_input: str,
+    assistant_response: str,
+    *,
+    scope: str = "user",
+) -> None:
     """Add a conversation exchange to short-term memory."""
     from datetime import datetime
     history = _load(user_id)
@@ -62,7 +68,7 @@ def add_exchange(user_id: str, user_input: str, assistant_response: str) -> None
         to_compress = history[:-SHORT_TERM_WINDOW]
         history = history[-SHORT_TERM_WINDOW:]
         # Trigger async compression (fire-and-forget via executor)
-        _trigger_compression(user_id, to_compress)
+        _trigger_compression(user_id, to_compress, scope=scope)
 
     _save(user_id, history)
 
@@ -104,7 +110,12 @@ async def compress_history(user_id: str, entries: list[dict]) -> str:
     return response.content.strip()
 
 
-def _trigger_compression(user_id: str, entries: list[dict]) -> None:
+def _trigger_compression(
+    user_id: str,
+    entries: list[dict],
+    *,
+    scope: str = "user",
+) -> None:
     """Fire-and-forget compression. Stores result in long-term memory."""
     import asyncio
 
@@ -112,9 +123,21 @@ def _trigger_compression(user_id: str, entries: list[dict]) -> None:
         try:
             summary = await compress_history(user_id, entries)
             if summary:
-                # Store in long-term memory
-                from agent.memory.long_term import store_summary
-                store_summary(user_id, summary)
+                # Generated summaries are durable learned memory, so they go
+                # through the same decision/commit boundary as user facts.
+                from agent.services.memory_service import MemoryService
+
+                commit = await MemoryService.learn_summary(
+                    user_id,
+                    summary,
+                    scope=scope,
+                    source_ref=f"short-term-compression:{user_id}",
+                )
+                if not commit.committed:
+                    logger.warning(
+                        "短期记忆摘要未提交: %s",
+                        commit.error or commit.reason_code,
+                    )
         except Exception as exc:
             # Compression is optional; never leak a provider traceback into
             # the CLI or API response.

@@ -33,6 +33,7 @@ class FailureCode(str, Enum):
     PROVIDER_UNAVAILABLE = "PROVIDER_UNAVAILABLE"
     PROVIDER_NETWORK = "PROVIDER_NETWORK"
     PROVIDER_REQUEST_INVALID = "PROVIDER_REQUEST_INVALID"
+    EXECUTION_ENVIRONMENT_UNAVAILABLE = "EXECUTION_ENVIRONMENT_UNAVAILABLE"
     UNKNOWN_TOOL = "UNKNOWN_TOOL"
     TOOL_EXECUTION_FAILED = "TOOL_EXECUTION_FAILED"
     ACTION_EXECUTION_FAILED = "ACTION_EXECUTION_FAILED"
@@ -127,6 +128,7 @@ def failure_fact(
     )
     if retryable is None:
         retryable = kind is FailureKind.ACTION and normalized not in {
+            FailureCode.EXECUTION_ENVIRONMENT_UNAVAILABLE.value,
             FailureCode.UNKNOWN_TOOL.value,
             FailureCode.BINARY_FILE.value,
             FailureCode.FILE_NOT_FOUND.value,

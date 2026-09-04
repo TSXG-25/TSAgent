@@ -81,6 +81,7 @@ class ApplicationContext:
         user_id: Optional[str] = None,
         tenant_id: Optional[str] = None,
         memory_namespace: Optional[str] = None,
+        memory_scope: str = "session",
     ) -> "SessionContext":
         if self._closed:
             raise ContextClosedError("application context is closed")
@@ -96,6 +97,7 @@ class ApplicationContext:
             user_id=uid,
             tenant_id=tid,
             memory_namespace=namespace,
+            memory_scope=memory_scope,
         )
         self._sessions[sid] = session
         return session
@@ -122,13 +124,18 @@ class SessionContext:
         user_id: str,
         tenant_id: str,
         memory_namespace: str,
+        memory_scope: str = "session",
     ) -> None:
         self.application = application
         self.session_id = _identifier(session_id, "session_id")
         self.user_id = _identifier(user_id, "user_id")
         self.tenant_id = _identifier(tenant_id, "tenant_id")
         self.memory_namespace = _identifier(memory_namespace, "memory_namespace")
-        self.memory_view = ScopedMemoryView(self.memory_namespace)
+        self.memory_scope = memory_scope
+        self.memory_view = ScopedMemoryView(
+            self.memory_namespace,
+            learning_scope=self.memory_scope,
+        )
         self.conversation_tracker = ConversationTracker()
         self.conversation_retriever = ConversationRetriever(self.conversation_tracker)
         self._runs: dict[str, RunContext] = {}

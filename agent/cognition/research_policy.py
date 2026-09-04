@@ -28,6 +28,14 @@ _DYNAMIC_TOPIC_TERMS = re.compile(
     r"方法|资料|文档|API|进展|动态|报告|对比|比较|怎么|如何",
     re.IGNORECASE,
 )
+_CURRENT_EVENTS_TERMS = re.compile(
+    r"大事|要闻|新鲜事|今日看点|本周看点|"
+    r"重要(?:消息|新闻|事件|动态)|"
+    r"(?:发生了?|出了)(?:什么|哪些)(?:事|事情)?|"
+    r"有什么(?:事|事情)?(?:值得关注|需要关注)|"
+    r"有什么(?:重要消息|重要事件|新消息)",
+    re.IGNORECASE,
+)
 _LOCAL_SEARCH_TERMS = re.compile(
     r"仓库|代码库|项目中|本地|文件|目录|符号|函数|类|源代码|source",
     re.IGNORECASE,
@@ -66,11 +74,11 @@ def is_source_grounded_request(text: str) -> bool:
     value = str(text or "")
     subject = _research_subject(value)
     temporal_dynamic = bool(
-        (
-            _FRESHNESS_TERMS.search(subject)
-            or _DATE_TERMS.search(subject)
+        (_FRESHNESS_TERMS.search(subject) or _DATE_TERMS.search(subject))
+        and (
+            _DYNAMIC_TOPIC_TERMS.search(subject)
+            or _CURRENT_EVENTS_TERMS.search(subject)
         )
-        and _DYNAMIC_TOPIC_TERMS.search(subject)
     )
     explicit_external = bool(
         _EXPLICIT_SEARCH_TERMS.search(value)
@@ -112,8 +120,11 @@ def is_fresh_research_request(text: str) -> bool:
     value = str(text or "")
     subject = _research_subject(value)
     return bool(
-        _DYNAMIC_TOPIC_TERMS.search(subject)
-        and (_FRESHNESS_TERMS.search(subject) or _DATE_TERMS.search(subject))
+        (_FRESHNESS_TERMS.search(subject) or _DATE_TERMS.search(subject))
+        and (
+            _DYNAMIC_TOPIC_TERMS.search(subject)
+            or _CURRENT_EVENTS_TERMS.search(subject)
+        )
     )
 
 

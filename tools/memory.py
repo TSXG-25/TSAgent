@@ -73,7 +73,7 @@ def get_user_preference(user_id: str = "default") -> str:
 def save_fact(fact: str, user_id: str = "default") -> str:
     """保存一条关于用户的事实信息到记忆系统。
 
-    通过 LLM 提取事实并存储到长期记忆的事实数据库。
+    通过生产 Memory Learning Provider、授权策略和持久化边界保存事实。
 
     Args:
         fact: 要保存的事实文本
@@ -86,11 +86,13 @@ def save_fact(fact: str, user_id: str = "default") -> str:
     import asyncio
     try:
         loop = asyncio.get_running_loop()
-        loop.create_task(MemoryService.extract_and_save_facts(user_id, fact))
-        return f"事实已调度保存: {fact[:100]}..."
+        loop.create_task(MemoryService.learn_from_interaction(user_id, fact))
+        return f"事实保存任务已调度，尚未确认提交: {fact[:100]}..."
     except RuntimeError:
-        asyncio.run(MemoryService.extract_and_save_facts(user_id, fact))
-        return f"事实已保存: {fact[:100]}..."
+        result = asyncio.run(MemoryService.learn_from_interaction(user_id, fact))
+        if result.committed:
+            return f"事实已保存: {fact[:100]}..."
+        return f"事实未确认保存，未获得持久化提交证据: {fact[:100]}..."
 
 
 def get_session_info(user_id: str = "default") -> str:

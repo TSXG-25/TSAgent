@@ -746,6 +746,11 @@ class UniversalAgent:
             return
         run_context.cancellation_view.raise_if_requested(boundary, safety_class)
 
+    def _memory_learning_source_ref(self) -> str:
+        if self._run_context is not None:
+            return f"run:{self._run_context.run_id}"
+        return f"session:{self._memory_namespace}"
+
     def _interrupted_result(self, signal: RunInterruptionRequested) -> str:
         """Publish process-local evidence; Launcher owns durable convergence."""
 
@@ -789,7 +794,10 @@ class UniversalAgent:
         if context_policy.pre_answer_fact_extraction:
             try:
                 await asyncio.wait_for(
-                    self._memory_view.extract_and_save_facts(user_input),
+                    self._memory_view.learn_from_interaction(
+                        user_input,
+                        source_ref=self._memory_learning_source_ref(),
+                    ),
                     timeout=FACT_EXTRACTION_TIMEOUT,
                 )
             except asyncio.TimeoutError:
@@ -800,7 +808,11 @@ class UniversalAgent:
         self._memory_view.record_user_message(user_input)
 
         from agent.query_normalizer import QueryNormalizer
-        normalized_input = QueryNormalizer.process(user_input, self._memory_namespace)
+        normalized_input = QueryNormalizer.process(
+            user_input,
+            self._memory_namespace,
+            scope=self._session_context.memory_scope,
+        )
         if context_policy.memory_retrieval:
             # Chroma/SQLite-backed retrieval is synchronous.  Keep it off the
             # event loop so event delivery, cancellation and watchdogs remain
@@ -1050,7 +1062,10 @@ class UniversalAgent:
             captured_facts: object = {}
             try:
                 captured_facts = await asyncio.wait_for(
-                    self._memory_view.extract_and_save_facts(user_input),
+                    self._memory_view.learn_from_interaction(
+                        user_input,
+                        source_ref=self._memory_learning_source_ref(),
+                    ),
                     timeout=FACT_EXTRACTION_TIMEOUT,
                 )
             except asyncio.TimeoutError:

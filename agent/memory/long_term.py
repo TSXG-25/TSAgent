@@ -5,8 +5,9 @@
 """
 import sqlite3
 import json
+import hashlib
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
@@ -39,27 +40,53 @@ def _get_store() -> Chroma:
 
 # === Summaries (ChromaDB) ===
 
-def store_summary(user_id: str, summary: str) -> None:
-    """Store a conversation summary in long-term memory."""
+def _persist_summary(
+    user_id: str,
+    summary: str,
+    *,
+    scope: str,
+    canonical_key: str,
+    evidence_id: str,
+    source_kind: str,
+    source_ref: str,
+) -> dict[str, Any]:
+    """Persist one authorized summary and return its storage receipt."""
     from datetime import datetime
-    if not summary or len(summary) < 5:
-        return
+
+    if not summary or len(summary.strip()) < 5:
+        raise ValueError("summary must contain at least five non-whitespace characters")
+    record_id = "summary-" + hashlib.sha256(
+        f"{scope}\0{user_id}\0{canonical_key}\0{evidence_id}".encode("utf-8")
+    ).hexdigest()
     doc = Document(
-        page_content=summary,
+        page_content=summary.strip(),
         metadata={
             "user_id": user_id,
+            "scope": scope,
+            "canonical_key": canonical_key,
+            "evidence_id": evidence_id,
+            "source_kind": source_kind,
+            "source_ref": source_ref,
+            "record_id": record_id,
             "type": "summary",
             "timestamp": datetime.now().isoformat(),
         },
     )
-    try:
-        _get_store().add_documents([doc])
-    except Exception:
-        # 语义记忆是可选增强；向量依赖不可用时不阻塞主 Runtime。
-        return
+    store = _get_store()
+    existing = store.get(ids=[record_id])
+    if existing.get("ids"):
+        return {"record_id": record_id, "revision": 1}
+    store.add_documents([doc], ids=[record_id])
+    return {"record_id": record_id, "revision": 1}
 
 
-def retrieve_summaries(user_id: str, query: str, k: int = 5) -> str:
+def retrieve_summaries(
+    user_id: str,
+    query: str,
+    k: int = 5,
+    *,
+    scope: str = "user",
+) -> str:
     """Retrieve semantically relevant long-term summaries."""
     try:
         store = _get_store()
@@ -69,13 +96,11 @@ def retrieve_summaries(user_id: str, query: str, k: int = 5) -> str:
         docs_scores = store.similarity_search_with_score(
             query,
             k=k,
-            filter={"user_id": user_id},
+            filter={"$and": [{"user_id": user_id}, {"scope": scope}]},
         )
     except Exception:
-        try:
-            docs_scores = store.similarity_search_with_score(query, k=k)
-        except Exception:
-            return ""
+        # A failed scoped query must never degrade into a global query.
+        return ""
 
     if not docs_scores:
         return ""
@@ -89,14 +114,14 @@ def retrieve_summaries(user_id: str, query: str, k: int = 5) -> str:
     return "\n".join(texts)
 
 
-def retrieve_all_summaries(user_id: str) -> list[str]:
+def retrieve_all_summaries(user_id: str, *, scope: str = "user") -> list[str]:
     """Get all long-term summaries for a user."""
     try:
         store = _get_store()
     except Exception:
         return []
     try:
-        results = store.get(where={"user_id": user_id})
+        results = store.get(where={"$and": [{"user_id": user_id}, {"scope": scope}]})
     except Exception:
         return []
 
@@ -126,48 +151,197 @@ def _init_facts_db() -> None:
                 category TEXT NOT NULL,
                 key TEXT NOT NULL,
                 value TEXT NOT NULL,
+                scope TEXT NOT NULL DEFAULT 'user',
+                evidence_id TEXT NOT NULL DEFAULT '',
+                source_kind TEXT NOT NULL DEFAULT '',
+                source_ref TEXT NOT NULL DEFAULT '',
+                revision INTEGER NOT NULL DEFAULT 1,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(user_id, category, key)
+                UNIQUE(user_id, scope, category, key)
             )
         """)
+        columns = {
+            str(row[1])
+            for row in conn.execute("PRAGMA table_info(facts)").fetchall()
+        }
+        migrations = {
+            "scope": "TEXT NOT NULL DEFAULT 'user'",
+            "evidence_id": "TEXT NOT NULL DEFAULT ''",
+            "source_kind": "TEXT NOT NULL DEFAULT ''",
+            "source_ref": "TEXT NOT NULL DEFAULT ''",
+            "revision": "INTEGER NOT NULL DEFAULT 1",
+        }
+        for name, definition in migrations.items():
+            if name not in columns:
+                conn.execute(f"ALTER TABLE facts ADD COLUMN {name} {definition}")
+
+        scoped_unique = False
+        for index in conn.execute("PRAGMA index_list('facts')").fetchall():
+            if not int(index[2]):
+                continue
+            index_name = str(index[1]).replace('"', '""')
+            index_columns = tuple(
+                str(row[2])
+                for row in conn.execute(
+                    f'PRAGMA index_info("{index_name}")'
+                ).fetchall()
+            )
+            if index_columns == ("user_id", "scope", "category", "key"):
+                scoped_unique = True
+                break
+
+        if not scoped_unique:
+            conn.execute("""
+                CREATE TABLE facts_scope_migration (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id TEXT NOT NULL,
+                    category TEXT NOT NULL,
+                    key TEXT NOT NULL,
+                    value TEXT NOT NULL,
+                    scope TEXT NOT NULL DEFAULT 'user',
+                    evidence_id TEXT NOT NULL DEFAULT '',
+                    source_kind TEXT NOT NULL DEFAULT '',
+                    source_ref TEXT NOT NULL DEFAULT '',
+                    revision INTEGER NOT NULL DEFAULT 1,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(user_id, scope, category, key)
+                )
+            """)
+            conn.execute("""
+                INSERT INTO facts_scope_migration (
+                    id, user_id, category, key, value, scope, evidence_id,
+                    source_kind, source_ref, revision, created_at
+                )
+                SELECT id, user_id, category, key, value, scope, evidence_id,
+                       source_kind, source_ref, revision, created_at
+                FROM facts
+                ORDER BY id
+            """)
+            conn.execute("DROP TABLE facts")
+            conn.execute("ALTER TABLE facts_scope_migration RENAME TO facts")
 
 
 _init_facts_db()
 
 
-def save_fact(user_id: str, category: str, key: str, value: str) -> None:
-    """Save a user fact."""
-    try:
-        with sqlite3.connect(FACTS_DB_PATH) as conn:
+def _persist_fact(
+    user_id: str,
+    category: str,
+    key: str,
+    value: str,
+    *,
+    scope: str,
+    action: str,
+    evidence_id: str,
+    source_kind: str,
+    source_ref: str,
+) -> dict[str, Any]:
+    """Persist one authorized fact/preference and return its receipt."""
+    normalized_value = str(value).strip()
+    if not normalized_value:
+        raise ValueError("fact value must be non-empty")
+    with sqlite3.connect(FACTS_DB_PATH) as conn:
+        row = conn.execute(
+            """SELECT id, revision, evidence_id, value FROM facts
+               WHERE user_id = ? AND scope = ? AND category = ? AND key = ?""",
+            (user_id, scope, category, key),
+        ).fetchone()
+        if row is not None:
+            record_id, revision, previous_evidence_id, previous_value = row
+            if previous_evidence_id == evidence_id and previous_value == normalized_value:
+                return {"record_id": str(record_id), "revision": int(revision)}
+            if action != "UPDATE":
+                raise ValueError("canonical fact already exists")
+            next_revision = int(revision) + 1
             conn.execute(
-                """INSERT OR REPLACE INTO facts (user_id, category, key, value)
-                   VALUES (?, ?, ?, ?)""",
-                (user_id, category, key, str(value)),
+                """UPDATE facts
+                   SET value = ?, scope = ?, evidence_id = ?, source_kind = ?,
+                       source_ref = ?, revision = ?
+                   WHERE id = ?""",
+                (
+                    normalized_value,
+                    scope,
+                    evidence_id,
+                    source_kind,
+                    source_ref,
+                    next_revision,
+                    record_id,
+                ),
             )
-    except Exception:
-        pass
+            return {"record_id": str(record_id), "revision": next_revision}
+
+        cursor = conn.execute(
+            """INSERT INTO facts (
+                   user_id, category, key, value, scope, evidence_id,
+                   source_kind, source_ref, revision
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)""",
+            (
+                user_id,
+                category,
+                key,
+                normalized_value,
+                scope,
+                evidence_id,
+                source_kind,
+                source_ref,
+            ),
+        )
+        return {"record_id": str(cursor.lastrowid), "revision": 1}
 
 
-def get_facts(user_id: str) -> dict[str, dict[str, str]]:
+def get_facts(user_id: str, *, scope: str | None = None) -> dict[str, dict[str, str]]:
     """Get all facts for a user, organized by category."""
     try:
         with sqlite3.connect(FACTS_DB_PATH) as conn:
-            rows = conn.execute(
-                "SELECT category, key, value FROM facts WHERE user_id = ?",
-                (user_id,),
-            ).fetchall()
+            if scope is None:
+                rows = conn.execute(
+                    "SELECT category, key, value FROM facts WHERE user_id = ?",
+                    (user_id,),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    """SELECT category, key, value FROM facts
+                       WHERE user_id = ? AND scope = ?""",
+                    (user_id, scope),
+                ).fetchall()
     except Exception:
         return {}
 
-    result = {}
+    result: dict[str, dict[str, str]] = {}
     for category, key, value in rows:
         result.setdefault(category, {})[key] = value
     return result
 
 
-def get_facts_text(user_id: str) -> str:
+def get_fact(
+    user_id: str,
+    category: str,
+    key: str,
+    *,
+    scope: str | None = None,
+) -> str | None:
+    """Read one existing fact for decision-time deduplication."""
+    try:
+        with sqlite3.connect(FACTS_DB_PATH) as conn:
+            if scope is None:
+                row = conn.execute(
+                    "SELECT value FROM facts WHERE user_id = ? AND category = ? AND key = ?",
+                    (user_id, category, key),
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    """SELECT value FROM facts
+                       WHERE user_id = ? AND category = ? AND key = ? AND scope = ?""",
+                    (user_id, category, key, scope),
+                ).fetchone()
+    except sqlite3.Error:
+        return None
+    return None if row is None else str(row[0])
+
+
+def get_facts_text(user_id: str, *, scope: str | None = None) -> str:
     """Get facts as readable text for system prompt."""
-    facts = get_facts(user_id)
+    facts = get_facts(user_id, scope=scope)
     if not facts:
         return ""
 
@@ -181,10 +355,15 @@ def get_facts_text(user_id: str) -> str:
 
 # === Clear ===
 
-def clear_summaries(user_id: str) -> None:
+def clear_summaries(user_id: str, *, scope: str | None = None) -> None:
     """Clear semantic summaries for one user namespace."""
     try:
-        _get_store().delete(where={"user_id": user_id})
+        where: dict[str, object] = (
+            {"user_id": user_id}
+            if scope is None
+            else {"$and": [{"user_id": user_id}, {"scope": scope}]}
+        )
+        _get_store().delete(where=where)
     except Exception:
         pass
 

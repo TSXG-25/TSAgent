@@ -22,7 +22,12 @@ class QueryNormalizer:
     ]
 
     @staticmethod
-    def process(user_input: str, user_id: str = "") -> str:
+    def process(
+        user_input: str,
+        user_id: str = "",
+        *,
+        scope: str = "user",
+    ) -> str:
         """Process user input: normalize time references and inject location.
 
         Args:
@@ -38,7 +43,7 @@ class QueryNormalizer:
         result = QueryNormalizer._normalize_time(result)
 
         # Step 2: Inject location for location-sensitive queries
-        result = QueryNormalizer._inject_location(result, user_id)
+        result = QueryNormalizer._inject_location(result, user_id, scope=scope)
 
         return result
 
@@ -77,7 +82,7 @@ class QueryNormalizer:
         return text
 
     @staticmethod
-    def _inject_location(text: str, user_id: str) -> str:
+    def _inject_location(text: str, user_id: str, *, scope: str = "user") -> str:
         """Inject user location into location-sensitive queries."""
         if not user_id:
             return text
@@ -88,7 +93,7 @@ class QueryNormalizer:
         if not needs_location:
             return text
 
-        location = QueryNormalizer._get_user_location(user_id)
+        location = QueryNormalizer._get_user_location(user_id, scope=scope)
         if not location:
             return text
 
@@ -99,11 +104,11 @@ class QueryNormalizer:
         return f"{location} {text}"
 
     @staticmethod
-    def _get_user_location(user_id: str) -> str:
+    def _get_user_location(user_id: str, *, scope: str = "user") -> str:
         """Get user's location from the facts store."""
         try:
             from agent.memory.long_term import get_facts
-            facts = get_facts(user_id)
+            facts = get_facts(user_id, scope=scope)
             if not facts:
                 return ""
 

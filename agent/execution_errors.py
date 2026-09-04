@@ -7,8 +7,11 @@ budget, so they must be visible to Runtime as non-retriable facts.
 
 from __future__ import annotations
 
+from agent.failure.taxonomy import FailureCode
+
 
 NON_RETRIABLE_CODES = frozenset({
+    FailureCode.EXECUTION_ENVIRONMENT_UNAVAILABLE.value,
     "PROTECTED_INTERNAL_PATH",
     "UNSUPPORTED_BINARY",
     "IDENTITY_MISMATCH",

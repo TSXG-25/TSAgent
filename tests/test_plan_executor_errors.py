@@ -2,8 +2,15 @@
 import asyncio
 import pytest
 
+from agent.action_result import ActionResult
 from agent.executor.plan_executor import PlanExecutor
+from agent.executor.executors.tool import ToolExecutor
+from agent.failure import ClassificationSource
+from agent.orchestrator.main import ExecutionOrchestrator
+from agent.sandbox import _run_local
+from agent.services.workspace_service import WorkspaceService
 from agent.task import ExecutionPlan, ExecutionStep, Task
+from agent.workflow import ExecutionContext
 
 
 class _Tool:
@@ -75,3 +82,73 @@ def test_workspace_output_never_becomes_file_content(monkeypatch):
 
     assert not result["_error"]
     assert captured == {"path": "output/example.py", "content": "print('ok')"}
+
+
+def test_sandbox_unavailable_has_stable_non_retryable_code(monkeypatch, tmp_path):
+    monkeypatch.delenv("TSAGENT_ALLOW_LOCAL_EXECUTION", raising=False)
+
+    output = _run_local(
+        "date",
+        timeout=1,
+        cwd=str(tmp_path),
+        allow_external_workspace=True,
+    )
+
+    assert "EXECUTION_ENVIRONMENT_UNAVAILABLE" in output
+
+
+def test_structured_environment_failure_is_not_executed_twice(monkeypatch, tmp_path):
+    from agent import sandbox
+
+    monkeypatch.delenv("TSAGENT_ALLOW_LOCAL_EXECUTION", raising=False)
+    monkeypatch.setattr(sandbox, "_check_docker", lambda: False)
+    run_local = sandbox._run_local
+    calls = 0
+
+    def counted_run_local(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return run_local(*args, **kwargs)
+
+    monkeypatch.setattr(sandbox, "_run_local", counted_run_local)
+    task = Task(id="task-date")
+    plan = ExecutionPlan(
+        task=task,
+        steps=[ExecutionStep(tool="shell", args={"cmd": "date"}, outputs=["output"])],
+        executor="tool",
+    )
+    context = ExecutionContext(task=task, user_input="执行 date")
+    context.set_var("execution_plan", plan)
+    workspace = WorkspaceService.scoped(tmp_path, build_index=False)
+    context.set_var("workspace", workspace)
+
+    try:
+        result = asyncio.run(ToolExecutor().execute(task, context))
+    finally:
+        workspace.close()
+
+    assert calls == 1
+    assert result.action_result == ActionResult.failure(
+        error_code="EXECUTION_ENVIRONMENT_UNAVAILABLE",
+        content=result.error,
+        classification_source=ClassificationSource.STRUCTURED.value,
+    )
+    assert result.action_result.retryable is False
+
+    state, next_state = asyncio.run(ExecutionOrchestrator().observe_failure(
+        {
+            "runtime_failure_retryable": result.action_result.retryable,
+            "runtime_failure": {
+                "error_code": result.action_result.error_code,
+            },
+            "plan": [task.to_dict()],
+            "execution_plans": [plan],
+            "inbox": {},
+        },
+        "执行 date",
+        "human-test",
+    ))
+
+    assert next_state == "FAIL"
+    assert state["runtime_failure_code"] == "EXECUTION_ENVIRONMENT_UNAVAILABLE"
+    assert calls == 1

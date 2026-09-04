@@ -62,6 +62,35 @@ def test_context_policy_selects_only_relevant_context_sources() -> None:
     assert repository.semantic_skill_selection is True
 
 
+def test_current_events_paraphrases_require_research_without_heavy_context() -> None:
+    requests = (
+        "今天有什么大事",
+        "今天发生了什么",
+        "今天有什么值得关注的",
+        "最近有什么新鲜事",
+        "本周有什么重要消息",
+        "今天世界上发生了什么",
+    )
+
+    for request in requests:
+        policy = ContextPolicy.for_request(request)
+        assert policy.mode is ContextMode.RESEARCH, request
+        assert policy.memory_retrieval is False, request
+        assert policy.repository_retrieval is False, request
+        assert policy.semantic_skill_selection is False, request
+
+
+def test_ambiguous_request_starts_with_minimal_context() -> None:
+    policy = ContextPolicy.for_request("请处理这个没有关键词的请求")
+
+    assert policy.mode is ContextMode.MINIMAL
+    assert policy.memory_retrieval is False
+    assert policy.repository_retrieval is False
+    assert policy.pre_answer_fact_extraction is False
+    assert policy.post_answer_fact_extraction is False
+    assert policy.semantic_skill_selection is False
+
+
 def test_explicit_execution_skips_full_context_and_skill_embedding() -> None:
     policy = ContextPolicy.for_request(
         "创建 output/h9_write.txt，内容为 H9-WRITE-OK。"

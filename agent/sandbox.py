@@ -11,6 +11,7 @@ import os
 import platform
 import signal
 from pathlib import Path
+from agent.failure.taxonomy import FailureCode
 from agent.security import is_sensitive_command, redact_sensitive_text
 
 SANDBOX_IMAGE = "agent-sandbox"
@@ -73,7 +74,8 @@ def _run_local(
 
     if not local_execution_allowed():
         return (
-            "错误：没有可用的隔离执行环境；本地执行默认关闭。"
+            f"错误：{FailureCode.EXECUTION_ENVIRONMENT_UNAVAILABLE.value}: "
+            "没有可用的隔离执行环境；本地执行默认关闭。"
             f"请启动 Docker，或仅在受信任的开发环境显式设置 {LOCAL_EXECUTION_ENV}=1。"
         )
 

@@ -2,7 +2,8 @@
 
 The policy runs before the cognitive pipeline and must not call an LLM or an
 embedding model.  It selects only the context sources justified by the
-request; the default remains the existing full path for ambiguous requests.
+request.  Ambiguous requests start without optional context and may be
+classified by the normal intent boundary without loading every index first.
 """
 
 from __future__ import annotations
@@ -20,11 +21,11 @@ from agent.cognition.research_policy import (
 
 class ContextMode(str, Enum):
     SIMPLE_CHAT = "simple_chat"
+    MINIMAL = "minimal"
     MEMORY = "memory"
     RESEARCH = "research"
     REPOSITORY = "repository"
     EXECUTION = "execution"
-    FULL = "full"
 
 
 _SIMPLE_CHAT_PATTERN = re.compile(
@@ -184,12 +185,12 @@ class ContextPolicy:
                 semantic_skill_selection=False,
             )
         return cls(
-            mode=ContextMode.FULL,
-            memory_retrieval=True,
-            repository_retrieval=True,
+            mode=ContextMode.MINIMAL,
+            memory_retrieval=False,
+            repository_retrieval=False,
             pre_answer_fact_extraction=False,
             post_answer_fact_extraction=False,
-            semantic_skill_selection=True,
+            semantic_skill_selection=False,
         )
 
 

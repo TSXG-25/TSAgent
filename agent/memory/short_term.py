@@ -127,7 +127,7 @@ def _trigger_compression(
                 # through the same decision/commit boundary as user facts.
                 from agent.services.memory_service import MemoryService
 
-                commit = MemoryService.store_summary(
+                commit = await MemoryService.learn_summary(
                     user_id,
                     summary,
                     scope=scope,

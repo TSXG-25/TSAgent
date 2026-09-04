@@ -1,6 +1,6 @@
 # ADR-0032: Memory Learning Capability Contract（v2.4D）
 
-- 状态: Implemented — D-2/D-3a/D-3b/D-3c/D-3d/D-3e verified; Human Acceptance #1 next
+- 状态: Implemented — D-2/D-3a/D-3b/D-3c/D-3d/D-3e/D-3f verified; Human Acceptance #1 next
 - 评估基线: `5aa814d7`（v2.4D-1 discovery）；D-2 实现：`306d5adc`
 - 范围: Memory learning evidence、资格判断、scope、provenance、去重/冲突边界、commit evidence
 - 非范围: 现有 Memory store 架构重写、retrieval 排序、Conversation Runtime、RunOutput、Repository index、MemoryLearner 实现
@@ -240,9 +240,11 @@ MemoryCommitEvidence
 - `agent/memory/persistence.py` 是唯一 learned-memory durable commit boundary；它调用既有
   fact、summary、resolution storage adapter，并返回 `committed`、store、scope、key、
   evidence、record id/revision 或稳定错误。
-- `agent/memory/preference.py` 只提交通过 policy 的事实，并且只将已提交事实暴露给上层；
-  persistence 失败不会再被投影成“已保存”。
-- `MemoryService`/`ScopedMemoryView` 负责把 namespace 与显式 `learning_scope` 投影给边界。
+- `agent/memory/preference.py` 只保留非权威 candidate extraction utility；它不再决定或提交
+  durable learned Memory。
+- `MemoryService`/`ScopedMemoryView` 是 production durable-learning owner，负责把 interaction
+  投影成 evidence，并将 namespace 与显式 `learning_scope` 交给 Provider、policy 和 commit
+  boundary；只将已提交事实暴露给上层。
   session message 和 short-term exchange 是 transient/runtime 写入，不属于 learned-memory
   decision gate；short-term compression 生成的 durable summary 必须经过同一 boundary。
 - summary/fact/resolution storage metadata 携带 `scope`、`evidence_id`、`source_kind`、
@@ -377,10 +379,41 @@ D-3e 回放使用不可变的 D-3b Provider proposal、v1.1 evidence 和隔离�
 Provider 调用。D023 的 resolution record 现在逐字段验证通过；D018/D020 仍保持
 `proposal → deterministic veto → 0 durable commit`。
 
-## 13. 非目标与后续决策
+## 13. D-3f Production Memory Wiring
+
+真实 Runtime/CLI 的 durable user-memory 路径已经迁移为单一 canonical chain：
+
+```text
+User interaction
+    → InteractionEvidence projection
+    → MemoryLearningProvider proposal
+    → authorize_memory_learning_proposal()
+    → MemoryPersistenceBoundary.commit()
+    → MemoryCommitEvidence
+```
+
+`UniversalAgent` 的 fact-capture 路径调用 `ScopedMemoryView.learn_from_interaction()`，并将当前
+Run id（无 Run 时为 session namespace）作为 `source_ref`。`MemoryService` 在调用 Provider
+前只投影窄的 candidate evidence 与同 scope/key existing value；Provider 不读取 Store，policy
+不信任 Provider 的 safety/scope/provenance 判断，persistence 只消费授权后的 decision。
+
+summary compression 与 confirmed resolution 也通过同一 Provider → authorization → commit
+链进入既有存储适配器。旧 `extract_facts_with_llm()` 只保留为非权威 utility；production
+durable-learning call site 为零，不存在 extractor → Provider 的双 LLM learning path。
+
+D-3f 离线证据固定：
+
+- `我叫 TS`：production Runtime 调用 Provider 一次、legacy extractor 零次、提交
+  `personal.name=TS`；
+- `我的 API key 是 sk-test-example`：即使 Provider 提议 `STORE`，policy 仍返回
+  `SECRET_NEVER_STORE`，storage adapter 调用为零且无成功确认；
+- production Provider proposal owner 仅位于 `agent/services/memory_service.py`；旧
+  `extract_and_save_facts` public entry 已移除。
+
+## 14. 非目标与后续决策
 
 本阶段不把事实抽取器改造成 Learning Provider，不做 expiry/TTL engine，不改变 retrieval
-ranking，不将 Provider 直接接入 Runtime 主循环，也不在此提交中启动 real-provider baseline。
+ranking，不把 post-answer learning 改成异步投递，也不改变 CLI 生命周期、预算或 identity。
 后续单独进入：
 
 ```text
@@ -388,6 +421,7 @@ v2.4D-3b  real Provider baseline / attribution                 DONE
 v2.4D-3c  semantic measurement calibration                     DONE
 v2.4D-3d  persistence-aware integration replay                  DONE
 v2.4D-3e  resolution evidence contract closeout                 DONE
+v2.4D-3f  production Memory wiring                              DONE
 v2.4D-4   Human Acceptance #1 / final freeze                     NEXT
 ```
 

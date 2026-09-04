@@ -4,8 +4,8 @@
 The D-3 dataset evaluates a Provider-backed learning decision.  This command
 does not call a Provider and does not import Memory modules: it first verifies
 that production exposes the decision entry required by the dataset.  The
-existing fact extractor is deliberately reported as a different capability;
-it extracts candidate facts and then calls the deterministic D-2 policy.
+legacy fact extractor is deliberately reported as a different capability;
+it may extract candidates but does not own production learning or persistence.
 """
 
 from __future__ import annotations
@@ -186,9 +186,8 @@ def build_preflight_report() -> dict[str, Any]:
         })
 
     extractor_note = (
-        "async_extract_and_save_facts/extract_facts_with_llm are present, but "
-        "they extract candidate facts and immediately use the deterministic D-2 "
-        "policy/persistence path; they are not the D-3 decision Provider."
+        "extract_facts_with_llm may be present as a non-authoritative candidate "
+        "utility; it is not the D-3 decision Provider or a persistence owner."
     )
     not_evaluable_reason = (
         "No production Memory Learning Provider entry exists; running the D-1 "

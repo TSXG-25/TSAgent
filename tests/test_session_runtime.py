@@ -30,6 +30,41 @@ def _commit_fact(user_id: str, value: str):
     return MemoryPersistenceBoundary.commit(decision, policy)
 
 
+def _commit_resolution(user_id: str):
+    from agent.memory.learning import (
+        InteractionEvidence,
+        MemoryPolicyProjection,
+        ResolutionEvidence,
+        decide_memory_learning,
+    )
+    from agent.memory.persistence import MemoryPersistenceBoundary
+
+    evidence = InteractionEvidence(
+        evidence_id=f"test-resolution-{uuid.uuid4().hex}",
+        source_kind="user_confirmed_resolution",
+        source_ref="test:session-runtime",
+        text="打开它",
+        memory_type="resolution",
+        requested_scope="user",
+        canonical_key="resolution.file.output/a.py",
+        value="output/a.py",
+        explicit_persist=True,
+        sensitive=False,
+        secret=False,
+        volatile=False,
+        resolution=ResolutionEvidence(utterance="打开它", kind="file"),
+    )
+    policy = MemoryPolicyProjection(
+        scope="user",
+        namespace=user_id,
+        authorized_source_kinds=frozenset({"user_confirmed_resolution"}),
+    )
+    return MemoryPersistenceBoundary.commit(
+        decide_memory_learning(evidence, policy),
+        policy,
+    )
+
+
 def test_memory_runtime_reset_is_scoped(monkeypatch):
     from agent.conversation import conversation_tracker
     from agent.memory import long_term
@@ -52,11 +87,7 @@ def test_memory_runtime_reset_is_scoped(monkeypatch):
     add_user_message(user_id, "我住在北京")
     add_exchange(user_id, "我住在北京", "已记录")
     assert _commit_fact(user_id, "北京").committed
-    from agent.services.memory_service import MemoryService
-
-    assert MemoryService.record_resolution(
-        user_id, "打开它", "output/a.py", "file"
-    ).committed
+    assert _commit_resolution(user_id).committed
     conversation_tracker.update(
         user_id=user_id,
         user_input="写 output/a.py",

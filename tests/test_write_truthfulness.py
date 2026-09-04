@@ -1,10 +1,10 @@
 # tests/test_write_truthfulness.py
-"""回归测试：意图层文件写入兜底 / 追加模式 / 事实抽取兜底 / 假成功校验。
+"""回归测试：意图层文件写入兜底 / 追加模式 / Memory evidence 投影 / 假成功校验。
 
 覆盖第三轮聚焦测试残留的 D00 类 / F04 / H01 / H04 根因：
 - "写一个X函数保存到 output/fib.py" 不再被数学关键词误判为纯聊天（exec=False）
 - "追加到 <path>" 识别为 append
-- LLM 事实抽取失败时确定性兜底仍能保存常见事实（且不吞疑问句）
+- 常见用户事实被确定性投影为 Provider evidence（且不吞疑问句）
 - Finalizer 声称"已写入"但文件不存在时如实纠正
 """
 import os
@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from agent.cognition.intent_engine import engine
 from agent.cognition.cognitive_context import CognitiveContext, ResolvedQuery
 from agent.cognition.intent_schema import DOMAIN_FILE, DOMAIN_MATH
-from agent.memory.preference import _deterministic_extract
+from agent.services.memory_service import _user_memory_candidates
 from agent.orchestrator.finalizer import Finalizer
 from agent.orchestrator.planner import _ensure_explicit_output_write_task
 from agent.compiler.rules.write_rule import WriteRule
@@ -77,20 +77,27 @@ class TestIntentFileWriteOverride:
         assert plan[-1]["inputs"]["use_prior_facts"] is True
 
 
-class TestDeterministicFactExtract:
-    """H01/H04 类：LLM 不可用时确定性兜底仍保存关键事实。"""
+def _candidate_facts(text: str) -> dict[str, dict[str, str]]:
+    facts: dict[str, dict[str, str]] = {}
+    for category, key, _memory_type, value in _user_memory_candidates(text):
+        facts.setdefault(category, {})[key] = value
+    return facts
+
+
+class TestDeterministicFactProjection:
+    """H01/H04 类：常见事实进入 canonical Provider proposal path。"""
 
     def test_extracts_common_facts(self):
-        assert _deterministic_extract("我喜欢蓝色") == {"hobby": {"preference": "蓝色"}}
-        assert _deterministic_extract("我住在北京") == {"personal": {"location": "北京"}}
-        assert _deterministic_extract("记住：这个项目叫 TSAgent") == {"misc": {"project": "TSAgent"}}
-        assert _deterministic_extract("我最喜欢的编程语言是 Rust") == {"programming": {"language": "Rust"}}
-        assert _deterministic_extract("我叫张三") == {"personal": {"name": "张三"}}
+        assert _candidate_facts("我喜欢蓝色") == {"hobby": {"preference": "蓝色"}}
+        assert _candidate_facts("我住在北京") == {"personal": {"location": "北京"}}
+        assert _candidate_facts("记住：这个项目叫 TSAgent") == {"misc": {"project": "TSAgent"}}
+        assert _candidate_facts("我最喜欢的编程语言是 Rust") == {"programming": {"language": "Rust"}}
+        assert _candidate_facts("我叫张三") == {"personal": {"name": "张三"}}
 
     def test_questions_not_extracted(self):
-        assert _deterministic_extract("我喜欢什么颜色？") == {}
-        assert _deterministic_extract("这个项目叫什么名字？") == {}
-        assert _deterministic_extract("我住在哪里") == {}
+        assert _candidate_facts("我喜欢什么颜色？") == {}
+        assert _candidate_facts("这个项目叫什么名字？") == {}
+        assert _candidate_facts("我住在哪里") == {}
 
 
 class TestFinalizerTruthfulness:

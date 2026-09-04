@@ -976,7 +976,7 @@ class PlannerStage:
         else:
             _get_memory_service().record_full_exchange(user_id, user_input, answer)
 
-    def _record_resolution(
+    async def _record_resolution(
         self,
         user_id: str,
         utterance: str,
@@ -985,9 +985,14 @@ class PlannerStage:
     ) -> None:
         memory_view = self._memory_view()
         if memory_view is not None:
-            memory_view.record_resolution(utterance, resolved_target, kind)
+            await memory_view.learn_resolution(utterance, resolved_target, kind)
         else:
-            _get_memory_service().record_resolution(user_id, utterance, resolved_target, kind)
+            await _get_memory_service().learn_resolution(
+                user_id,
+                utterance,
+                resolved_target,
+                kind,
+            )
 
     def _get_user_facts(self, user_id: str) -> str:
         memory_view = self._memory_view()
@@ -1250,7 +1255,7 @@ class PlannerStage:
         # 记录跨会话解析事实（Memory Facts，v1.2C；不依赖 ResolutionResult 内部）
         try:
             if resolved and resolved.target:
-                self._record_resolution(
+                await self._record_resolution(
                     user_id, user_input, resolved.target, resolved.kind,
                 )
         except Exception:

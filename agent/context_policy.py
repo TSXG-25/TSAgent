@@ -59,7 +59,8 @@ _PERSONALIZED_PATTERN = re.compile(
 )
 _FACT_CAPTURE_PATTERN = re.compile(
     r"我(?:叫|是|住在|居住于|居住在|来自|喜欢|最喜欢)|"
-    r"记住(?:我|这个)|我使用的(?:编程语言|语言|编辑器|框架)",
+    r"记住(?:我|这个)|我使用的(?:编程语言|语言|编辑器|框架)|"
+    r"我的(?:\s*API[ _-]?key|密钥|手机号|邮箱)\s*(?:是|为|[:：])",
     re.IGNORECASE,
 )
 _REPOSITORY_PATTERN = re.compile(

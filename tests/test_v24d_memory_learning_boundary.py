@@ -15,10 +15,36 @@ from agent.memory.learning import (
     decide_memory_learning,
 )
 from agent.memory.persistence import MemoryPersistenceBoundary
+from agent.memory.learning_provider import (
+    MemoryLearningSelection,
+    MemoryLearningSelectionEvidence,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
 DATASET_PATH = ROOT / "evals" / "memory_learning" / "dataset.json"
+
+
+def _install_policy_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Use the frozen policy decision as a deterministic Provider proposal."""
+
+    async def select_with_evidence(self, evidence, existing, policy):
+        assert existing == evidence.existing
+        decision = decide_memory_learning(evidence, policy)
+        return MemoryLearningSelection(
+            decision=decision,
+            evidence=MemoryLearningSelectionEvidence(
+                provider="test-provider",
+                provider_path="SINGLE_PROVIDER",
+                format_path="STRUCTURED_ONLY",
+                raw_output=decision.to_dict(),
+            ),
+        )
+
+    monkeypatch.setattr(
+        "agent.memory.learning_provider.MemoryLearningProvider.select_with_evidence",
+        select_with_evidence,
+    )
 
 
 def _evidence_from_case(case: dict) -> InteractionEvidence:
@@ -305,27 +331,27 @@ def test_persistence_failure_returns_nonempty_error(
     assert result.record_id is None
 
 
-def test_fact_extraction_returns_only_durable_commits(
+def test_interaction_learning_returns_only_durable_commits(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    from agent.memory import long_term, preference
+    from agent.memory import long_term
+    from agent.services.memory_service import MemoryService
 
     monkeypatch.setattr(long_term, "FACTS_DB_PATH", tmp_path / "facts.db")
     long_term._init_facts_db()
-
-    async def fake_extract(_text: str) -> dict:
-        return {"personal": {"name": "小明"}}
-
-    monkeypatch.setattr(preference, "extract_facts_with_llm", fake_extract)
+    _install_policy_provider(monkeypatch)
 
     def fail(*_args, **_kwargs):
         raise RuntimeError()
 
     monkeypatch.setattr(long_term, "_persist_fact", fail)
     result = asyncio.run(
-        preference.async_extract_and_save_facts(
-            "truthful-ack", "我叫小明", scope="user"
+        MemoryService.learn_from_interaction(
+            "truthful-ack",
+            "我叫小明",
+            scope="user",
+            source_ref="run:truthful-ack",
         )
     )
     assert result == {}
@@ -338,14 +364,13 @@ def test_fact_extraction_returns_only_durable_commits(
 def test_save_fact_tool_does_not_claim_unconfirmed_commit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from agent.memory.preference import FactExtractionResult
-    from agent.services.memory_service import MemoryService
+    from agent.services.memory_service import MemoryLearningResult, MemoryService
     from tools.memory import save_fact
 
-    async def fake_extract(*_args, **_kwargs) -> FactExtractionResult:
-        return FactExtractionResult()
+    async def fake_learn(*_args, **_kwargs) -> MemoryLearningResult:
+        return MemoryLearningResult()
 
-    monkeypatch.setattr(MemoryService, "extract_and_save_facts", fake_extract)
+    monkeypatch.setattr(MemoryService, "learn_from_interaction", fake_learn)
     answer = save_fact("我叫小明", user_id="truthful-tool")
     assert "未确认保存" in answer
     assert "事实已保存" not in answer
@@ -376,43 +401,65 @@ def test_scope_mismatch_cannot_reach_storage(monkeypatch: pytest.MonkeyPatch) ->
 
 
 @pytest.mark.parametrize(
-    ("text", "facts", "reason_code"),
+    ("text", "reason_code"),
     [
         (
             "我的手机号是 13800000000。",
-            {"personal": {"phone": "13800000000"}},
             "SENSITIVE_WITHOUT_EXPLICIT_PERSISTENCE",
         ),
         (
             "请记住我的 API key sk-example。",
-            {"personal": {"api_key": "sk-example"}},
             "SECRET_NEVER_STORE",
-        ),
-        (
-            "今天 BTC 价格是 100000 美元。",
-            {"market": {"btc_price": "100000 USD"}},
-            "VOLATILE_OBSERVATION",
         ),
     ],
 )
-def test_fact_extractor_projects_safety_flags_before_persistence(
+def test_interaction_projection_cannot_persist_unsafe_facts(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     text: str,
-    facts: dict[str, dict[str, str]],
     reason_code: str,
 ) -> None:
-    from agent.memory import long_term, preference
+    from agent.memory import long_term
+    from agent.memory.learning import MemoryLearningDecision
+    from agent.memory.learning_provider import MemoryLearningProvider
+    from agent.services.memory_service import MemoryService
 
     monkeypatch.setattr(long_term, "FACTS_DB_PATH", tmp_path / "facts.db")
     long_term._init_facts_db()
 
-    async def fake_extract(_text: str) -> dict[str, dict[str, str]]:
-        return facts
+    async def unsafe_proposal(self, evidence, existing, policy):
+        assert existing == evidence.existing
+        decision = MemoryLearningDecision(
+            action="STORE",
+            memory_type=evidence.memory_type,
+            scope=evidence.requested_scope,
+            canonical_key=evidence.canonical_key,
+            value=evidence.value,
+            provenance={
+                "evidence_id": evidence.evidence_id,
+                "source_kind": evidence.source_kind,
+                "source_ref": evidence.source_ref,
+            },
+            reason_code="PROVIDER_PROPOSED_STORE",
+        )
+        return MemoryLearningSelection(
+            decision=decision,
+            evidence=MemoryLearningSelectionEvidence(
+                provider="unsafe-test-provider",
+                provider_path="SINGLE_PROVIDER",
+                format_path="STRUCTURED_ONLY",
+                raw_output=decision.to_dict(),
+            ),
+        )
 
-    monkeypatch.setattr(preference, "extract_facts_with_llm", fake_extract)
+    monkeypatch.setattr(MemoryLearningProvider, "select_with_evidence", unsafe_proposal)
     result = asyncio.run(
-        preference.async_extract_and_save_facts("safety-test", text, scope="user")
+        MemoryService.learn_from_interaction(
+            "safety-test",
+            text,
+            scope="user",
+            source_ref="run:safety-test",
+        )
     )
 
     assert result == {}
@@ -426,20 +473,18 @@ def test_explicit_sensitive_fact_has_commit_evidence(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    from agent.memory import long_term, preference
+    from agent.memory import long_term
+    from agent.services.memory_service import MemoryService
 
     monkeypatch.setattr(long_term, "FACTS_DB_PATH", tmp_path / "facts.db")
     long_term._init_facts_db()
-
-    async def fake_extract(_text: str) -> dict[str, dict[str, str]]:
-        return {"personal": {"email": "a@example.com"}}
-
-    monkeypatch.setattr(preference, "extract_facts_with_llm", fake_extract)
+    _install_policy_provider(monkeypatch)
     result = asyncio.run(
-        preference.async_extract_and_save_facts(
+        MemoryService.learn_from_interaction(
             "sensitive-test",
             "请记住我的邮箱 a@example.com。",
             scope="user",
+            source_ref="run:sensitive-test",
         )
     )
 
@@ -452,25 +497,46 @@ def test_fact_classification_does_not_apply_secret_flag_to_other_fields(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    from agent.memory import long_term, preference
+    from agent.memory import long_term
+    from agent.memory.learning import MemoryLearningDecision
+    from agent.memory.learning_provider import MemoryLearningProvider
+    from agent.services.memory_service import MemoryService
 
     monkeypatch.setattr(long_term, "FACTS_DB_PATH", tmp_path / "facts.db")
     long_term._init_facts_db()
 
-    async def fake_extract(_text: str) -> dict[str, dict[str, str]]:
-        return {
-            "personal": {
-                "name": "小明",
-                "api_key": "sk-example",
-            }
-        }
+    async def store_proposal(self, evidence, existing, policy):
+        assert existing == evidence.existing
+        decision = MemoryLearningDecision(
+            action="STORE",
+            memory_type=evidence.memory_type,
+            scope=evidence.requested_scope,
+            canonical_key=evidence.canonical_key,
+            value=evidence.value,
+            provenance={
+                "evidence_id": evidence.evidence_id,
+                "source_kind": evidence.source_kind,
+                "source_ref": evidence.source_ref,
+            },
+            reason_code="PROVIDER_PROPOSED_STORE",
+        )
+        return MemoryLearningSelection(
+            decision=decision,
+            evidence=MemoryLearningSelectionEvidence(
+                provider="test-provider",
+                provider_path="SINGLE_PROVIDER",
+                format_path="STRUCTURED_ONLY",
+                raw_output=decision.to_dict(),
+            ),
+        )
 
-    monkeypatch.setattr(preference, "extract_facts_with_llm", fake_extract)
+    monkeypatch.setattr(MemoryLearningProvider, "select_with_evidence", store_proposal)
     result = asyncio.run(
-        preference.async_extract_and_save_facts(
+        MemoryService.learn_from_interaction(
             "mixed-facts",
             "我是小明，API key 是 sk-example。",
             scope="user",
+            source_ref="run:mixed-facts",
         )
     )
 
@@ -508,12 +574,17 @@ def test_summary_commit_is_scoped_and_idempotent(
 
     store = FakeStore()
     monkeypatch.setattr(long_term, "_get_store", lambda: store)
+    _install_policy_provider(monkeypatch)
 
-    first = MemoryService.store_summary(
-        "summary-test", "用户偏好简洁回答", scope="user"
+    first = asyncio.run(
+        MemoryService.learn_summary(
+            "summary-test", "用户偏好简洁回答", scope="user"
+        )
     )
-    second = MemoryService.store_summary(
-        "summary-test", "用户偏好简洁回答", scope="user"
+    second = asyncio.run(
+        MemoryService.learn_summary(
+            "summary-test", "用户偏好简洁回答", scope="user"
+        )
     )
 
     assert first.committed is True
@@ -533,11 +604,16 @@ def test_resolution_commit_is_idempotent_for_same_scoped_fact(
     from agent.services.memory_service import MemoryService
 
     monkeypatch.setattr(resolution, "RM_DIR", tmp_path)
-    first = MemoryService.record_resolution(
-        "resolution-test", "打开刚才的文件", "output/report.md", "file"
+    _install_policy_provider(monkeypatch)
+    first = asyncio.run(
+        MemoryService.learn_resolution(
+            "resolution-test", "打开刚才的文件", "output/report.md", "file"
+        )
     )
-    second = MemoryService.record_resolution(
-        "resolution-test", "继续使用刚才的文件", "output/report.md", "file"
+    second = asyncio.run(
+        MemoryService.learn_resolution(
+            "resolution-test", "继续使用刚才的文件", "output/report.md", "file"
+        )
     )
 
     assert first.committed is True

@@ -42,7 +42,6 @@ _WRITE_SYMBOLS = {
     "add_assistant_message",
     "add_exchange",
     "_save",
-    "async_extract_and_save_facts",
     "record_full_exchange",
 }
 _LEARNED_STORAGE_SYMBOLS = {
@@ -180,6 +179,41 @@ def _write_call_sites() -> list[dict[str, Any]]:
     return sites
 
 
+def _learning_proposal_call_sites() -> dict[str, list[dict[str, Any]]]:
+    """Inventory the production proposal owner and retired extractor path."""
+
+    provider_sites: list[dict[str, Any]] = []
+    legacy_sites: list[dict[str, Any]] = []
+    for base in (ROOT / "agent", ROOT / "tools"):
+        for path in sorted(base.rglob("*.py")):
+            relative = path.relative_to(ROOT).as_posix()
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call):
+                    continue
+                function = node.func
+                name = (
+                    function.id
+                    if isinstance(function, ast.Name)
+                    else function.attr
+                    if isinstance(function, ast.Attribute)
+                    else ""
+                )
+                item = {
+                    "file": relative,
+                    "line": node.lineno,
+                    "symbol": name,
+                }
+                if name == "MemoryLearningProvider":
+                    provider_sites.append(item)
+                elif name == "extract_facts_with_llm":
+                    legacy_sites.append(item)
+    return {
+        "provider": provider_sites,
+        "legacy_extractor": legacy_sites,
+    }
+
+
 def _writer_inventory() -> list[dict[str, Any]]:
     return [
         {
@@ -222,11 +256,25 @@ def _writer_inventory() -> list[dict[str, Any]]:
         {
             "layer": "preference_extractor",
             "file": "agent/memory/preference.py",
-            "symbols": ["async_extract_and_save_facts"],
-            "storage": "decision + persistence boundary",
-            "classification": "evidence projection; no direct store call",
-            "scope": "caller-provided scope",
-            "provenance": "generated evidence_id/source_ref",
+            "symbols": ["extract_facts_with_llm"],
+            "storage": "none",
+            "classification": "non-authoritative candidate extraction utility",
+            "scope": "none",
+            "provenance": "none",
+            "delete": "MemoryRuntime.reset",
+        },
+        {
+            "layer": "production_learning_owner",
+            "file": "agent/services/memory_service.py",
+            "symbols": [
+                "learn_from_interaction",
+                "learn_summary",
+                "learn_resolution",
+            ],
+            "storage": "MemoryPersistenceBoundary only",
+            "classification": "Provider proposal + policy authorization + commit",
+            "scope": "ScopedMemoryView.learning_scope",
+            "provenance": "Runtime-projected source_ref",
             "delete": "MemoryRuntime.reset",
         },
         {
@@ -250,6 +298,7 @@ def build_preflight_report() -> dict[str, Any]:
         if item["kind"] in {"transient_or_projection_writer", "learned_storage_adapter"}
     ]
     call_sites = _write_call_sites()
+    proposal_sites = _learning_proposal_call_sites()
     long_term = _source("agent/memory/long_term.py")
     preference = _source("agent/memory/preference.py")
     short_term = _source("agent/memory/short_term.py")
@@ -288,6 +337,27 @@ def build_preflight_report() -> dict[str, Any]:
             "evidence": (
                 f"Found {len(call_sites)} direct learned-store import/call sites "
                 "outside the boundary."
+            ),
+        })
+
+    provider_owner_files = {
+        item["file"] for item in proposal_sites["provider"]
+    }
+    if provider_owner_files != {"agent/services/memory_service.py"}:
+        blockers.append({
+            "code": "PRODUCTION_MEMORY_PROPOSAL_OWNER_INVALID",
+            "category": "P-CON",
+            "evidence": (
+                "MemoryLearningProvider must be instantiated only by "
+                "agent/services/memory_service.py."
+            ),
+        })
+    if proposal_sites["legacy_extractor"]:
+        blockers.append({
+            "code": "LEGACY_FACT_EXTRACTOR_STILL_AUTHORITATIVE",
+            "category": "P-CON",
+            "evidence": (
+                "Production durable learning still calls extract_facts_with_llm()."
             ),
         })
 
@@ -351,6 +421,7 @@ def build_preflight_report() -> dict[str, Any]:
             "production_memory_learning_entries": learning_entries,
             "production_writer_symbols": writer_symbols,
             "production_write_call_sites": call_sites,
+            "production_learning_proposal_call_sites": proposal_sites,
             "writer_inventory": _writer_inventory(),
             "learning_policy_present": "InteractionEvidence" in learning,
             "persistence_boundary_present": "class MemoryPersistenceBoundary" in persistence,

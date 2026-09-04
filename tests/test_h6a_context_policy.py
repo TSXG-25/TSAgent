@@ -280,7 +280,7 @@ def test_simple_chat_policy_bypasses_intent_provider_and_calls_answer_once(
         def record_full_exchange(self, user_input: str, answer: str) -> None:
             self.exchanges.append((user_input, answer))
 
-        def record_resolution(self, *_args: Any, **_kwargs: Any) -> None:
+        async def learn_resolution(self, *_args: Any, **_kwargs: Any) -> None:
             return None
 
         def get_user_facts(self) -> str:
@@ -342,7 +342,11 @@ def test_runtime_simple_chat_skips_fact_memory_repo_and_skill(monkeypatch) -> No
             self.fact_calls = 0
             self.context_calls = 0
 
-        async def extract_and_save_facts(self, _text: str) -> dict[str, Any]:
+        async def learn_from_interaction(
+            self,
+            _text: str,
+            **_kwargs: Any,
+        ) -> dict[str, Any]:
             self.fact_calls += 1
             raise AssertionError("simple chat must not extract facts")
 
@@ -418,7 +422,11 @@ def test_runtime_fact_capture_starts_after_user_answer(monkeypatch) -> None:
     events: list[str] = []
 
     class Memory:
-        async def extract_and_save_facts(self, _text: str) -> dict[str, Any]:
+        async def learn_from_interaction(
+            self,
+            _text: str,
+            **_kwargs: Any,
+        ) -> dict[str, Any]:
             events.append("facts")
             return {"personal": {"name": "小明"}}
 

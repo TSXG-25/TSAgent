@@ -43,14 +43,17 @@ _NON_CHAT_PATTERN = re.compile(
     r"文件|目录|源码|代码|脚本|程序|搜索|查询|研究|调研|"
     r"股票|股市|新闻|天气|最新|今天|今日|最近|当前|实时|"
     r"执行|运行|保存|写入|输出到|修改|删除|复制|移动|"
-    r"记得|记住|我的|上次|之前",
+    r"记得|记住|我的|上次|之前|以后|之后|平时|平常|习惯|偏好|默认|优先|倾向",
     re.IGNORECASE,
 )
 _MEMORY_QUERY_PATTERN = re.compile(
     r"我(?:叫什么|的名字|住在哪里|住哪儿|来自哪里)|"
     r"我(?:最)?喜欢什么|我(?:的)?(?:编程语言|语言|兴趣|偏好)|"
     r"我的(?:偏好|兴趣|事实|信息)|关于我|记不记得|还记得|"
-    r"上一轮|上次|之前的对话",
+    r"上一轮|上次|之前的对话|"
+    r"我(?:平时|平常|一般|通常|一贯|习惯).{0,32}(?:偏好|习惯|用什么|使用什么)|"
+    r"(?:按|按照|根据|结合).{0,32}(?:我|我的).{0,32}(?:偏好|习惯|方式)|"
+    r"我之前.{0,24}(?:偏好|习惯|默认|优先)",
     re.IGNORECASE,
 )
 _PERSONALIZED_PATTERN = re.compile(
@@ -60,7 +63,13 @@ _PERSONALIZED_PATTERN = re.compile(
 _FACT_CAPTURE_PATTERN = re.compile(
     r"我(?:叫|是|住在|居住于|居住在|来自|喜欢|最喜欢)|"
     r"记住(?:我|这个)|我使用的(?:编程语言|语言|编辑器|框架)|"
-    r"我的(?:\s*API[ _-]?key|密钥|手机号|邮箱)\s*(?:是|为|[:：])",
+    r"我的(?:\s*API[ _-]?key|密钥|手机号|邮箱)\s*(?:是|为|[:：])|"
+    r"(?:以后|从今以后|之后).{0,48}(?:优先|默认|用|使用|采用|习惯|偏好)|"
+    r"我(?:平时|平常|一般|通常|一贯|习惯).{0,48}(?:习惯|偏好|用|使用|采用)|"
+    r"(?:Python|python)\s*(?:项目|开发|代码|环境).{0,24}"
+    r"(?:优先|默认|用|使用|采用)|"
+    r"(?:写代码|写程序|编程|技术回答|回答技术问题).{0,48}"
+    r"(?:喜欢|偏好|希望|少加|少做|不要加|别加|优先)",
     re.IGNORECASE,
 )
 _REPOSITORY_PATTERN = re.compile(
@@ -167,15 +176,6 @@ class ContextPolicy:
                 # not required to authorize or verify the effect.
                 semantic_skill_selection=False,
             )
-        if _REPOSITORY_PATTERN.search(value):
-            return cls(
-                mode=ContextMode.REPOSITORY,
-                memory_retrieval=personalized,
-                repository_retrieval=True,
-                pre_answer_fact_extraction=False,
-                post_answer_fact_extraction=fact_capture,
-                semantic_skill_selection=True,
-            )
         if fact_capture:
             return cls(
                 mode=ContextMode.MEMORY,
@@ -184,6 +184,15 @@ class ContextPolicy:
                 pre_answer_fact_extraction=False,
                 post_answer_fact_extraction=True,
                 semantic_skill_selection=False,
+            )
+        if _REPOSITORY_PATTERN.search(value):
+            return cls(
+                mode=ContextMode.REPOSITORY,
+                memory_retrieval=personalized,
+                repository_retrieval=True,
+                pre_answer_fact_extraction=False,
+                post_answer_fact_extraction=fact_capture,
+                semantic_skill_selection=True,
             )
         return cls(
             mode=ContextMode.MINIMAL,

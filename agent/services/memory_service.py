@@ -43,6 +43,65 @@ _USER_MEMORY_PATTERNS = (
         "fact",
     ),
     (
+        re.compile(
+            r"(?:以后|从今以后|之后)?\s*(?:我(?:平时|平常|一般|通常|一贯)?\s*)?"
+            r"(?:Python|python)\s*(?:项目|开发|代码|环境)?"
+            r".{0,20}?(?:优先\s*(?:用|使用)|默认(?:帮我)?\s*(?:用|使用)|"
+            r"(?:都|习惯)?\s*(?:用|使用|采用))\s*"
+            r"(uv|poetry|pipenv|pip|conda)(?![A-Za-z0-9_-])",
+            re.IGNORECASE,
+        ),
+        "programming",
+        "python_environment",
+        "preference",
+    ),
+    (
+        re.compile(
+            r"(?:我(?:平时|平常|一般|通常)|我习惯).{0,12}?"
+            r"(?:用|使用|采用)\s*(uv|poetry|pipenv|pip|conda)(?![A-Za-z0-9_-])"
+            r"\s*(?:管|管理|用于|给).{0,8}(?:Python|python)"
+            r"(?:项目|开发|代码|环境)?",
+            re.IGNORECASE,
+        ),
+        "programming",
+        "python_environment",
+        "preference",
+    ),
+    (
+        re.compile(
+            r"(?:以后|从今以后|之后).{0,20}(?:别用|不要用|不使用)\s*"
+            r"(?:pip|poetry|pipenv|conda).{0,12}?优先\s*(?:用|使用)?\s*"
+            r"(uv|poetry|pipenv|pip|conda)(?![A-Za-z0-9_-])",
+            re.IGNORECASE,
+        ),
+        "programming",
+        "python_environment",
+        "preference",
+    ),
+    (
+        re.compile(
+            r"(?:写代码|写程序|编程)(?:时|的时候)?\s*(?:我)?"
+            r"(?:希望|偏好|习惯)?\s*"
+            r"((?:少加|少做|不要加|别加)(?:太多)?"
+            r"(?:没必要的|不必要的)?\s*"
+            r"(?:defensive\s+checks?|防御性检查|防御性校验|检查))",
+            re.IGNORECASE,
+        ),
+        "programming",
+        "code_style",
+        "preference",
+    ),
+    (
+        re.compile(
+            r"(?:技术回答|回答技术问题).{0,12}(?:喜欢|偏好|希望|更喜欢)\s*"
+            r"(先给(?:出)?结论(?:再|然后)?解释|先说结论(?:再|然后)?解释)",
+            re.IGNORECASE,
+        ),
+        "response",
+        "answer_style",
+        "preference",
+    ),
+    (
         re.compile(r"我(?:最)?喜欢(?:的)?(?:编程语言|语言)[是为:：]?\s*([^，。！？；;\n]{1,12})"),
         "programming",
         "language",
@@ -83,7 +142,13 @@ class MemoryLearningResult(dict[str, dict[str, str]]):
 
     @property
     def committed(self) -> bool:
-        return bool(self)
+        return self.has_committed_evidence
+
+    @property
+    def has_committed_evidence(self) -> bool:
+        """Whether at least one durable write was confirmed by the boundary."""
+
+        return any(commit.committed for commit in self.commit_evidence)
 
 
 def _user_memory_candidates(text: str) -> list[tuple[str, str, str, str]]:
@@ -91,7 +156,12 @@ def _user_memory_candidates(text: str) -> list[tuple[str, str, str, str]]:
         return []
     candidates: list[tuple[str, str, str, str]] = []
     seen: set[str] = set()
-    skip_hobby = "编程语言" in text or "语言" in text
+    skip_hobby = (
+        "编程语言" in text
+        or "语言" in text
+        or "技术回答" in text
+        or "回答技术问题" in text
+    )
     for pattern, category, key, memory_type in _USER_MEMORY_PATTERNS:
         if category == "hobby" and skip_hobby:
             continue

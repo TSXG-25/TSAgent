@@ -66,24 +66,48 @@ _FACT_CAPTURE_DENIAL_RE = re.compile(
     r"(?:无法|不能|未能|没法|没有办法).{0,12}(?:事实|信息|偏好)",
     re.IGNORECASE,
 )
+_FACT_CAPTURE_ACK_RE = re.compile(
+    r"(?:已|已经|成功|确认)(?:记录|记住|保存|存下|记下)(?:了|好|完成)?|"
+    r"(?:记录|记住|保存|存下|记下)好了|"
+    r"(?:我会|我将|之后会|以后会)记住",
+    re.IGNORECASE,
+)
+
+
+def _has_committed_memory_evidence(result: object) -> bool:
+    """Return whether the learning boundary produced a durable commit."""
+
+    commit_evidence = getattr(result, "commit_evidence", None)
+    if commit_evidence is not None:
+        return any(
+            bool(getattr(receipt, "committed", False))
+            for receipt in commit_evidence
+        )
+    # A small dict fallback keeps the helper usable by existing test doubles;
+    # production MemoryLearningResult always exposes commit_evidence.
+    return isinstance(result, dict) and bool(result)
 
 
 def _normalize_fact_capture_answer(answer: str, facts: object) -> str:
     """Keep the user-visible claim aligned with the persisted fact result.
 
     Fact extraction runs after the main answer so it cannot delay the turn.
-    If the extractor nevertheless persisted facts while the model claimed it
-    could not remember/save them, replace only that contradictory claim.  The
-    function deliberately does not infer success from prose: a non-empty
-    structured extraction result is the required evidence.
+    If the learning boundary committed a fact while the model claimed it
+    could not remember/save it, replace only that contradictory claim.  If the
+    model claims that it recorded a fact without a durable commit, replace the
+    claim with a truthful non-commit acknowledgement.  Prose never establishes
+    a successful memory write.
     """
 
-    if not isinstance(facts, dict) or not facts:
-        return answer
     text = str(answer or "")
-    if not _FACT_CAPTURE_DENIAL_RE.search(text):
+    committed = _has_committed_memory_evidence(facts)
+    if committed:
+        if _FACT_CAPTURE_DENIAL_RE.search(text):
+            return "已记录你刚才提供的信息，之后可以继续询问我。"
         return text
-    return "已记录你刚才提供的信息，之后可以继续询问我。"
+    if _FACT_CAPTURE_ACK_RE.search(text):
+        return "我理解了这项信息，但本次没有确认写入长期记忆。"
+    return text
 
 
 def _runtime_has_unfinished_work(state: AgentState) -> bool:

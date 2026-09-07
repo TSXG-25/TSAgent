@@ -110,9 +110,37 @@ class ServiceCLI:
 
     @staticmethod
     def _print_event(event) -> None:
-        """Render cancellation/terminal facts without invoking a Finalizer."""
+        """Render durable progress and lifecycle facts without re-planning."""
 
-        if event.event_type is EventType.RUN_CANCELLING:
+        payload = event.payload or {}
+
+        if event.event_type is EventType.STAGE_STARTED:
+            phase = str(payload.get("phase", event.stage_id or "stage"))
+            labels = {
+                "planning": "正在规划任务...",
+                "execution": "正在执行任务...",
+                "finalization": "正在整理结果...",
+            }
+            print(f"  ↳ {labels.get(phase, f'开始 {phase}...')}")
+        elif event.event_type is EventType.STAGE_COMPLETED:
+            phase = str(payload.get("phase", event.stage_id or "stage"))
+            labels = {
+                "planning": "任务规划完成",
+                "execution": "任务执行阶段完成",
+                "finalization": "结果整理完成",
+            }
+            print(f"  ↳ {labels.get(phase, f'{phase} 完成')}")
+        elif event.event_type is EventType.TASK_STARTED:
+            task_id = str(payload.get("task_id", event.task_id or "task"))
+            executor = str(payload.get("executor", ""))
+            suffix = f" ({executor})" if executor else ""
+            print(f"  ↳ 开始任务 {task_id}{suffix}")
+        elif event.event_type is EventType.TASK_COMPLETED:
+            task_id = str(payload.get("task_id", event.task_id or "task"))
+            status = str(payload.get("status", "completed"))
+            print(f"  ↳ 任务 {task_id}: {status}")
+
+        elif event.event_type is EventType.RUN_CANCELLING:
             print("🛑 已接受取消请求，等待安全边界...")
         elif event.event_type is EventType.RUN_CANCELLED:
             print("🛑 Run 已取消")
@@ -247,11 +275,12 @@ async def main() -> None:
     )
     print("🤖 TSAgent AgentService CLI 启动（输入 exit 退出）")
     active_task: asyncio.Task[None] | None = None
+    active_notice_shown = False
 
     async def _finish_active_task() -> None:
         """Wait for the current Run and then stop accepting CLI input."""
 
-        nonlocal active_task
+        nonlocal active_task, active_notice_shown
         if active_task is None:
             return
         try:
@@ -260,6 +289,7 @@ async def main() -> None:
             print(f"❌ Run 监视失败: {error}")
         finally:
             active_task = None
+            active_notice_shown = False
 
     try:
         while True:
@@ -279,7 +309,9 @@ async def main() -> None:
                 break
             if user_input.strip().lower() in {"exit", "quit"}:
                 if active_task is not None and not active_task.done():
-                    print("当前 Run 仍在执行，请先输入 /cancel。")
+                    if not active_notice_shown:
+                        print("当前 Run 仍在执行，请先输入 /cancel。")
+                        active_notice_shown = True
                     continue
                 break
             if not user_input.strip():
@@ -294,7 +326,9 @@ async def main() -> None:
                 continue
 
             if active_task is not None and not active_task.done():
-                print("已有 Run 正在执行；请先等待完成或输入 /cancel。")
+                if not active_notice_shown:
+                    print("已有 Run 正在执行；请先等待完成或输入 /cancel。")
+                    active_notice_shown = True
                 continue
             if ContextPolicy.for_request(user_input).repository_retrieval:
                 await _ensure_repository_ready()

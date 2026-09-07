@@ -55,6 +55,14 @@ class ExecutionStage:
     def __init__(self, orchestrator):
         self._orch = orchestrator
 
+    def _emit_progress(self, event_type: str, payload: dict[str, Any]) -> None:
+        """Publish a scoped execution progress fact when a Run owns a bus."""
+
+        run_context = getattr(self._orch, "run_context", None)
+        event_bus = getattr(run_context, "event_bus", None)
+        if event_bus is not None:
+            event_bus.emit(event_type, payload)
+
     async def run(self, state: AgentState) -> Tuple[AgentState, str]:
         """EXECUTE 阶段：通过 ExecutorFactory 分发执行。
 
@@ -267,6 +275,14 @@ class ExecutionStage:
                     f"  🔀 Compiler: {task_dict.get('id', '?')} "
                     f"→ {plan.executor}_executor"
                 )
+            self._emit_progress(
+                "task_started",
+                {
+                    "task_id": str(task_dict.get("id", "")),
+                    "verb": str(task_dict.get("verb", "")),
+                    "executor": plan.executor,
+                },
+            )
             context = ExecutionContext(
                 task=task_obj,
                 user_input=user_input,
@@ -313,6 +329,24 @@ class ExecutionStage:
                             "retryable": False,
                         },
                     )
+
+            completed_action_result = getattr(exec_result, "action_result", None)
+            self._emit_progress(
+                "task_completed",
+                {
+                    "task_id": str(task_dict.get("id", "")),
+                    "verb": str(task_dict.get("verb", "")),
+                    "executor": plan.executor,
+                    "status": "succeeded" if exec_result.success else "failed",
+                    "verified": bool(
+                        completed_action_result is not None
+                        and completed_action_result.verified is True
+                    ),
+                    "error_code": str(
+                        (exec_result.metadata or {}).get("error_code", "")
+                    ),
+                },
+            )
 
             action_result = getattr(exec_result, "action_result", None)
             if action_result is not None and not action_result.ok:

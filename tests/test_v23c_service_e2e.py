@@ -59,6 +59,39 @@ class SuccessfulRuntime:
         return None
 
 
+class ProgressRuntime(SuccessfulRuntime):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.run_context = kwargs["run_context"]
+
+    async def run(self, request_text: str) -> str:
+        bus = self.run_context.event_bus
+        bus.emit(
+            "stage_started",
+            {"stage_id": "planning", "phase": "planning"},
+        )
+        bus.emit(
+            "task_started",
+            {"task_id": "task-1", "verb": "read", "executor": "tool"},
+        )
+        bus.emit(
+            "task_completed",
+            {
+                "task_id": "task-1",
+                "verb": "read",
+                "executor": "tool",
+                "status": "succeeded",
+                "verified": True,
+                "error_code": "",
+            },
+        )
+        bus.emit(
+            "stage_completed",
+            {"stage_id": "planning", "phase": "planning", "task_count": 1},
+        )
+        return "ok"
+
+
 class FailedRuntime(SuccessfulRuntime):
     async def run(self, request_text: str) -> str:
         raise RuntimeError("provider failure must be sanitized")
@@ -116,6 +149,43 @@ def test_service_runtime_success_has_consistent_terminal_snapshot_and_events(
             assert snapshot.status is RunStatus.COMPLETED
             assert events[-1].run_revision == snapshot.revision
             assert SuccessfulRuntime.calls == 1
+        finally:
+            await service.close()
+            if not store.closed:
+                store.close()
+
+    asyncio.run(scenario())
+
+
+def test_service_runtime_progress_events_are_durable_and_ordered(
+    tmp_path: Path,
+) -> None:
+    async def scenario() -> None:
+        store = SqliteRuntimeStore.open(tmp_path / "progress.sqlite")
+        service = AgentService(
+            runtime_store=store,
+            launcher=RuntimeExecutionLauncher(runtime_factory=ProgressRuntime),
+        )
+        try:
+            handle = await service.start_run(_start("service-progress"))
+            events = await asyncio.wait_for(
+                _collect_events(service, handle.run_id),
+                timeout=2,
+            )
+            assert [event.event_type for event in events] == [
+                EventType.RUN_CREATED,
+                EventType.RUN_STARTED,
+                EventType.STAGE_STARTED,
+                EventType.TASK_STARTED,
+                EventType.TASK_COMPLETED,
+                EventType.STAGE_COMPLETED,
+                EventType.RUN_COMPLETED,
+            ]
+            assert events[2].payload["phase"] == "planning"
+            assert events[3].task_id == "task-1"
+            assert events[3].payload["task_id"] == "task-1"
+            assert events[4].payload["verified"] is True
+            assert events[-1].is_terminal is True
         finally:
             await service.close()
             if not store.closed:

@@ -122,6 +122,59 @@ def test_cli_event_rendering_is_deterministic(capsys) -> None:
     assert "Run 完成" in rendered
 
 
+def test_cli_renders_progress_events(capsys) -> None:
+    ServiceCLI._print_event(
+        RunEvent(
+            event_id="event-stage-start",
+            sequence_number=1,
+            tenant_id="tenant-a",
+            session_id="session-a",
+            run_id="run-active",
+            workflow_id=None,
+            stage_id="planning",
+            task_id=None,
+            event_type=EventType.STAGE_STARTED,
+            timestamp="2026-08-11T00:00:00Z",
+            payload={"phase": "planning"},
+        )
+    )
+    ServiceCLI._print_event(
+        RunEvent(
+            event_id="event-task-start",
+            sequence_number=2,
+            tenant_id="tenant-a",
+            session_id="session-a",
+            run_id="run-active",
+            workflow_id=None,
+            stage_id=None,
+            task_id=None,
+            event_type=EventType.TASK_STARTED,
+            timestamp="2026-08-11T00:00:00Z",
+            payload={"task_id": "task-1", "executor": "tool"},
+        )
+    )
+    ServiceCLI._print_event(
+        RunEvent(
+            event_id="event-stage-complete",
+            sequence_number=3,
+            tenant_id="tenant-a",
+            session_id="session-a",
+            run_id="run-active",
+            workflow_id=None,
+            stage_id=None,
+            task_id=None,
+            event_type=EventType.STAGE_COMPLETED,
+            timestamp="2026-08-11T00:00:00Z",
+            payload={"phase": "planning"},
+        )
+    )
+
+    rendered = capsys.readouterr().out
+    assert "正在规划任务" in rendered
+    assert "开始任务 task-1 (tool)" in rendered
+    assert "任务规划完成" in rendered
+
+
 def test_cli_renders_preserved_artifacts_after_cancellation(capsys) -> None:
     ServiceCLI._print_snapshot(
         _snapshot(
@@ -204,3 +257,35 @@ def test_cli_eof_waits_for_active_run_and_exits(monkeypatch) -> None:
     asyncio.run(asyncio.wait_for(main_module.main(), timeout=1.0))
 
     assert finished == ["hello"]
+
+
+def test_cli_does_not_repeat_active_run_notice(monkeypatch, capsys) -> None:
+    inputs = iter(["first", "second", "third"])
+
+    def fake_input(_prompt: str) -> str:
+        try:
+            return next(inputs)
+        except StopIteration as exc:
+            raise EOFError from exc
+
+    class _Service:
+        async def close(self) -> None:
+            return None
+
+    async def fake_run_request(_self, _request_text: str) -> None:
+        await asyncio.sleep(0.05)
+
+    monkeypatch.setattr(builtins, "input", fake_input)
+    monkeypatch.setattr(main_module, "load_all", lambda **_kwargs: None)
+    monkeypatch.setattr(sys, "argv", ["main.py"])
+    monkeypatch.setattr(
+        main_module,
+        "create_default_agent_service",
+        lambda *_args, **_kwargs: _Service(),
+    )
+    monkeypatch.setattr(main_module.ServiceCLI, "run_request", fake_run_request)
+
+    asyncio.run(asyncio.wait_for(main_module.main(), timeout=1.0))
+
+    rendered = capsys.readouterr().out
+    assert rendered.count("已有 Run 正在执行") == 1

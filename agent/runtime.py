@@ -527,6 +527,14 @@ class UniversalAgent:
             raise RuntimeError("agent has no active RunContext")
         self._run_context.event_bus.emit(event_type, data)
 
+    def _emit_progress(self, event_type: str, data: object) -> None:
+        """Emit optional UI progress only when a scoped Run bus is present."""
+
+        run_context = self._run_context
+        event_bus = getattr(run_context, "event_bus", None)
+        if event_bus is not None:
+            event_bus.emit(event_type, data)
+
     async def _on_task_end(self, data):
         print(f"[EVENT] Task {data['task']} ended with {data['status']}")
 
@@ -931,6 +939,10 @@ class UniversalAgent:
                     rt_state = RuntimeState.PLAN
 
                 elif rt_state == RuntimeState.PLAN:
+                    self._emit_progress("stage_started", {
+                        "stage_id": "planning",
+                        "phase": "planning",
+                    })
                     if not _advance_goal_round(state, "plan/reason"):
                         rt_state = RuntimeState.FINISH
                         continue
@@ -952,9 +964,18 @@ class UniversalAgent:
                     self._interruption_boundary(
                         SafeCancellationBoundary.AFTER_PLANNER
                     )
+                    self._emit_progress("stage_completed", {
+                        "stage_id": "planning",
+                        "phase": "planning",
+                        "task_count": len(state.get("plan", []) or []),
+                    })
                     rt_state = RuntimeState[next_state] if isinstance(next_state, str) else next_state
 
                 elif rt_state == RuntimeState.EXECUTE:
+                    self._emit_progress("stage_started", {
+                        "stage_id": "execution",
+                        "phase": "execution",
+                    })
                     self._interruption_boundary(
                         SafeCancellationBoundary.BEFORE_TOOL
                     )
@@ -962,6 +983,10 @@ class UniversalAgent:
                     self._interruption_boundary(
                         SafeCancellationBoundary.AFTER_TOOL
                     )
+                    self._emit_progress("stage_completed", {
+                        "stage_id": "execution",
+                        "phase": "execution",
+                    })
                     rt_state = RuntimeState[next_state] if isinstance(next_state, str) else next_state
 
                 elif rt_state == RuntimeState.NEXT_ACTION:
@@ -1022,11 +1047,19 @@ class UniversalAgent:
                     self._interruption_boundary(
                         SafeCancellationBoundary.AFTER_TOOL
                     )
+                    self._emit_progress("stage_started", {
+                        "stage_id": "finalization",
+                        "phase": "finalization",
+                    })
                     best_answer = await self.orchestrator.finalize(
                         state=state,
                         user_input=user_input,
                         user_id=self._memory_namespace,
                     )
+                    self._emit_progress("stage_completed", {
+                        "stage_id": "finalization",
+                        "phase": "finalization",
+                    })
                     rt_state = RuntimeState.FINISH
 
                 elif rt_state == RuntimeState.REPLAN:

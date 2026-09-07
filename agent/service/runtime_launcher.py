@@ -8,8 +8,10 @@ the SQLite transaction owned by ``DurableRuntimeStoreView``.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import os
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Callable
 
@@ -25,6 +27,13 @@ def _timestamp() -> str:
 
 class RuntimeExecutionLauncher:
     """Launch the established UniversalAgent behind the Service Protocol."""
+
+    _PROGRESS_EVENT_TYPES = (
+        "stage_started",
+        "stage_completed",
+        "task_started",
+        "task_completed",
+    )
 
     def __init__(
         self,
@@ -68,8 +77,6 @@ class RuntimeExecutionLauncher:
         request: StartRunRequest | ResumeRunRequest,
         resumed: bool,
     ) -> None:
-        import asyncio
-
         durable_view = run_context.durable_store_view
         if durable_view is None:
             raise RuntimeError("RuntimeExecutionLauncher requires a durable Run view")
@@ -97,6 +104,10 @@ class RuntimeExecutionLauncher:
             run_context,
         )
         watchdog = self._start_timeout_watchdog(run_context, request)
+        progress_subscriptions = self._bind_progress_events(
+            run_context=run_context,
+            request=request,
+        )
         try:
             runtime_answer = ""
             try:
@@ -158,7 +169,70 @@ class RuntimeExecutionLauncher:
                 finally:
                     self._close_runtime(runtime)
         finally:
+            for subscription in progress_subscriptions:
+                subscription.close()
             await self._stop_timeout_watchdog(watchdog)
+
+    def _bind_progress_events(
+        self,
+        *,
+        run_context: Any,
+        request: StartRunRequest | ResumeRunRequest,
+    ) -> tuple[Any, ...]:
+        """Persist scoped Runtime progress into the Service event stream.
+
+        Runtime owns the in-process EventBus and emits progress facts there.
+        The Service adapter is the only bridge to the durable public event
+        repository, so CLI/desktop consumers observe the same ordered facts
+        without importing Runtime internals.
+        """
+
+        event_bus = getattr(run_context, "event_bus", None)
+        durable_view = getattr(run_context, "durable_store_view", None)
+        if event_bus is None or durable_view is None:
+            return ()
+
+        sequence = 0
+        subscriptions: list[Any] = []
+
+        def persist(event_type: str, data: object) -> None:
+            nonlocal sequence
+            sequence += 1
+            payload = (
+                dict(data)
+                if isinstance(data, Mapping)
+                else {"detail": str(data)}
+            )
+            payload["source"] = "runtime"
+            workflow_id = str(payload.get("workflow_id", "") or "").strip() or None
+            stage_id = str(payload.get("stage_id", "") or "").strip() or None
+            task_id = str(payload.get("task_id", "") or "").strip() or None
+            durable_view.store.append_event(
+                durable_view.tenant_id,
+                durable_view.session_id,
+                durable_view.run_id,
+                event_id=(
+                    f"runtime-progress:{durable_view.run_id}:"
+                    f"{request.request_id}:{sequence}"
+                ),
+                event_type=event_type,
+                timestamp=_timestamp(),
+                payload=payload,
+                workflow_id=workflow_id,
+                stage_id=stage_id,
+                task_id=task_id,
+                run_revision=durable_view.head().current_revision,
+                expected_store_generation=durable_view.store_generation,
+            )
+
+        for event_type in self._PROGRESS_EVENT_TYPES:
+            subscriptions.append(
+                event_bus.subscribe(
+                    event_type,
+                    lambda data, event_type=event_type: persist(event_type, data),
+                )
+            )
+        return tuple(subscriptions)
 
     def _build_runtime(
         self,
@@ -197,8 +271,6 @@ class RuntimeExecutionLauncher:
         run_context: Any,
         request: StartRunRequest | ResumeRunRequest,
     ) -> asyncio.Task[None] | None:
-        import asyncio
-
         seconds = self._run_timeout_seconds(request)
         if seconds == 0:
             return None
@@ -213,8 +285,6 @@ class RuntimeExecutionLauncher:
         request: StartRunRequest | ResumeRunRequest,
         seconds: float,
     ) -> None:
-        import asyncio
-
         await asyncio.sleep(seconds)
         durable_view = run_context.durable_store_view
         if durable_view is None:
@@ -234,8 +304,6 @@ class RuntimeExecutionLauncher:
     async def _stop_timeout_watchdog(
         watchdog: asyncio.Task[None] | None,
     ) -> None:
-        import asyncio
-
         if watchdog is None:
             return
         if not watchdog.done():

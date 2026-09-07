@@ -54,6 +54,7 @@ from agent.failure import (
     FailurePolicy,
     failure_fact,
 )
+from agent.execution_errors import stable_error_message
 
 logger = logging.getLogger(__name__)
 
@@ -573,19 +574,25 @@ class UniversalAgent:
         返回最终答案；Traceback 永不暴露到 CLI。
         """
         layer, code, friendly = self._classify(e)
+        error_message = stable_error_message(e, fallback="runtime failure")
         failure = failure_fact(
             code,
-            message=str(e) or type(e).__name__,
+            message=error_message,
             component=layer,
             classification_source=ClassificationSource.LEGACY_FALLBACK,
         )
         directive = self._failure_policy.resolve(failure, {})
-        logger.error("Runtime recovered: layer=%s code=%s error=%s", layer, code, e)
+        logger.error(
+            "Runtime recovered: layer=%s code=%s error=%s",
+            layer,
+            code,
+            error_message,
+        )
         # 结构化记录（供 Recovery Dataset / Metrics）
         self._emit("runtime_recovered", {
             "layer": layer,
             "error_code": code,
-            "error": str(e)[:300],
+            "error": error_message[:300],
             "recovery_directive": directive.to_dict(),
         })
         answer = f"抱歉，刚才在处理「{user_input[:30]}」时遇到了一点问题（{friendly}），请换一种说法再试试。"
@@ -826,7 +833,10 @@ class UniversalAgent:
                 logger.warning("事实抽取超时，继续执行主任务")
             except Exception as exc:
                 # Do not emit a traceback from an optional memory enhancement.
-                logger.warning("事实抽取失败，继续执行主任务: %s", str(exc)[:200])
+                logger.warning(
+                    "事实抽取失败，继续执行主任务: %s",
+                    stable_error_message(exc, fallback="fact learning failed")[:200],
+                )
         self._memory_view.record_user_message(user_input)
 
         from agent.query_normalizer import QueryNormalizer
@@ -1093,7 +1103,10 @@ class UniversalAgent:
             except asyncio.TimeoutError:
                 logger.warning("回答后的事实抽取超时，不影响当前回答")
             except Exception as exc:
-                logger.warning("回答后的事实抽取失败，不影响当前回答: %s", str(exc)[:200])
+                logger.warning(
+                    "回答后的事实抽取失败，不影响当前回答: %s",
+                    stable_error_message(exc, fallback="fact learning failed")[:200],
+                )
             self._timings["fact_extraction_post"] = round(
                 time.perf_counter() - fact_started, 3
             )

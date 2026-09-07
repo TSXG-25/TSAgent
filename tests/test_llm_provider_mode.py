@@ -22,6 +22,25 @@ class _Provider:
         return f"{self.name}-result"
 
 
+class _EmptyError(Exception):
+    def __str__(self) -> str:
+        return ""
+
+
+def test_empty_provider_errors_have_a_non_empty_diagnostic() -> None:
+    router = LLMRouter(provider_mode="ollama")
+    provider = _Provider("ollama", error=_EmptyError())
+    router._ollama = provider  # type: ignore[assignment]
+
+    with pytest.raises(RuntimeError) as caught:
+        asyncio.run(router.ainvoke([]))
+
+    message = str(caught.value)
+    assert "指定的 LLM Provider 不可用 (ollama)" in message
+    assert "EmptyError: ollama request failed" in message
+    assert router.status["last_error"] == "_EmptyError: ollama request failed"
+
+
 def test_strict_ollama_mode_does_not_fallback_to_deepseek() -> None:
     router = LLMRouter(provider_mode="ollama")
     ollama = _Provider("ollama", error=ConnectionError("ollama unavailable"))

@@ -12,7 +12,11 @@ from agent.workflow import ExecutionContext
 from agent.task import Task, ExecutionPlan, Verb
 from agent.compiler.context import CompilerContext
 from agent.registry.tool_registry import registry as _tool_registry
-from agent.execution_errors import classify_execution_error, is_non_retriable
+from agent.execution_errors import (
+    classify_execution_error,
+    is_non_retriable,
+    stable_error_message,
+)
 from agent.failure import (
     ClassificationSource,
     FailureKind,
@@ -536,18 +540,19 @@ class ExecutionStage:
 
         error_code = classify_execution_error(exc)
         normalized_code = error_code or "ACTION_EXECUTION_FAILED"
+        error_message = stable_error_message(exc, fallback="executor failed")
         failure = failure_fact(
             normalized_code,
-            message=str(exc) or type(exc).__name__,
+            message=error_message,
             component=f"{plan.executor}_executor",
             classification_source=ClassificationSource.LEGACY_FALLBACK,
         )
         return ExecutionResult(
             success=False,
-            error=f"{plan.executor} executor failed: {exc}",
+            error=f"{plan.executor} executor failed: {error_message}",
             action_result=ActionResult.failure(
                 error_code=normalized_code,
-                content=str(exc) or type(exc).__name__,
+                content=error_message,
                 failure=failure,
             ),
             metadata={

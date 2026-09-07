@@ -275,11 +275,11 @@ def test_memory_acknowledgement_requires_commit_evidence() -> None:
     ) == "我无法确认或保存这条信息。"
 
 
-def test_legacy_dict_acknowledgement_remains_compatible_for_test_doubles() -> None:
+def test_noncanonical_result_cannot_prove_a_memory_commit() -> None:
     assert _normalize_fact_capture_answer(
         "我无法确认或保存这条信息。",
         {"personal": {"name": "小明"}},
-    ) == "已记录你刚才提供的信息，之后可以继续询问我。"
+    ) == "我无法确认或保存这条信息。"
 
 
 def test_no_candidate_cannot_be_presented_as_durable_memory() -> None:

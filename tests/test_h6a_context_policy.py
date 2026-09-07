@@ -122,11 +122,13 @@ def test_fact_capture_is_post_turn_only() -> None:
 
 
 def test_fact_capture_cannot_leave_a_contradictory_save_claim() -> None:
-    facts = {"personal": {"name": "小刚"}}
+    from agent.services.memory_service import MemoryLearningResult
+
+    facts = MemoryLearningResult()
 
     assert _normalize_fact_capture_answer(
         "我无法确认或保存这条信息。", facts,
-    ) == "已记录你刚才提供的信息，之后可以继续询问我。"
+    ) == "我无法确认或保存这条信息。"
     assert _normalize_fact_capture_answer("好的。", facts) == "好的。"
     assert _normalize_fact_capture_answer(
         "我无法确认或保存这条信息。", {},

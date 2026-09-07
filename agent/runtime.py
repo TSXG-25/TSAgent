@@ -78,14 +78,12 @@ def _has_committed_memory_evidence(result: object) -> bool:
     """Return whether the learning boundary produced a durable commit."""
 
     commit_evidence = getattr(result, "commit_evidence", None)
-    if commit_evidence is not None:
-        return any(
-            bool(getattr(receipt, "committed", False))
-            for receipt in commit_evidence
-        )
-    # A small dict fallback keeps the helper usable by existing test doubles;
-    # production MemoryLearningResult always exposes commit_evidence.
-    return isinstance(result, dict) and bool(result)
+    if commit_evidence is None:
+        return False
+    return any(
+        bool(getattr(receipt, "committed", False))
+        for receipt in commit_evidence
+    )
 
 
 def _normalize_fact_capture_answer(answer: str, facts: object) -> str:

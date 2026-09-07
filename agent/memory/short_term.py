@@ -10,6 +10,7 @@ from typing import Optional, Any
 
 from langchain_core.messages import SystemMessage, HumanMessage
 from agent.llm import llm
+from agent.security import redact_sensitive_text
 
 logger = logging.getLogger(__name__)
 
@@ -53,12 +54,17 @@ def add_exchange(
     *,
     scope: str = "user",
 ) -> None:
-    """Add a conversation exchange to short-term memory."""
+    """Add a redacted conversation exchange to short-term memory.
+
+    Short-term history is persistent runtime state, not the current request
+    buffer.  Credential-shaped values therefore must not cross this storage
+    boundary, even when learned-memory policy separately vetoes them.
+    """
     from datetime import datetime
     history = _load(user_id)
     history.append({
-        "user": user_input,
-        "assistant": assistant_response,
+        "user": redact_sensitive_text(user_input),
+        "assistant": redact_sensitive_text(assistant_response),
         "timestamp": datetime.now().isoformat(),
     })
 

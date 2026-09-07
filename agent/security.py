@@ -72,7 +72,7 @@ def is_internal_storage_path(path: str | Path) -> bool:
 
 _SENSITIVE_VALUE_PATTERNS = (
     re.compile(
-        r"(?i)(\b(?:openai|deepseek|anthropic|google)?[_-]?api[_-]?key\s*[:=]\s*)([^\s,;\"']+)"
+        r"(?i)(\b(?:openai|deepseek|anthropic|google)?[_-]?api[_-]?key\s*(?:[:=]|is|是|为)\s*)([^\s,;\"']+)"
     ),
     re.compile(
         r"(?i)(\b(?:secret|access[_-]?token|password|auth[_-]?token)\s*[:=]\s*)([^\s,;\"']+)"

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import builtins
 import inspect
+import sys
 
+import main as main_module
 from agent.interruption import CancelRunRequest
 from agent.service import (
     ArtifactSummary,
@@ -168,3 +171,36 @@ def test_cli_main_uses_background_task_and_never_cancels_it() -> None:
     # Cleaning up the optional repository-enrichment task is unrelated to
     # Run cancellation.  The CLI must not cancel the active Run task itself.
     assert "active_task.cancel()" not in source
+
+
+def test_cli_eof_waits_for_active_run_and_exits(monkeypatch) -> None:
+    inputs = iter(["hello"])
+    finished: list[str] = []
+
+    def fake_input(_prompt: str) -> str:
+        try:
+            return next(inputs)
+        except StopIteration as exc:
+            raise EOFError from exc
+
+    class _Service:
+        async def close(self) -> None:
+            return None
+
+    async def fake_run_request(_self, request_text: str) -> None:
+        await asyncio.sleep(0.01)
+        finished.append(request_text)
+
+    monkeypatch.setattr(builtins, "input", fake_input)
+    monkeypatch.setattr(main_module, "load_all", lambda **_kwargs: None)
+    monkeypatch.setattr(sys, "argv", ["main.py"])
+    monkeypatch.setattr(
+        main_module,
+        "create_default_agent_service",
+        lambda *_args, **_kwargs: _Service(),
+    )
+    monkeypatch.setattr(main_module.ServiceCLI, "run_request", fake_run_request)
+
+    asyncio.run(asyncio.wait_for(main_module.main(), timeout=1.0))
+
+    assert finished == ["hello"]

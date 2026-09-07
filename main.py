@@ -247,19 +247,36 @@ async def main() -> None:
     )
     print("🤖 TSAgent AgentService CLI 启动（输入 exit 退出）")
     active_task: asyncio.Task[None] | None = None
+
+    async def _finish_active_task() -> None:
+        """Wait for the current Run and then stop accepting CLI input."""
+
+        nonlocal active_task
+        if active_task is None:
+            return
+        try:
+            await active_task
+        except Exception as error:
+            print(f"❌ Run 监视失败: {error}")
+        finally:
+            active_task = None
+
     try:
         while True:
             if active_task is not None and active_task.done():
-                try:
-                    await active_task
-                except Exception as error:
-                    print(f"❌ Run 监视失败: {error}")
-                active_task = None
+                await _finish_active_task()
 
             try:
                 user_input = await asyncio.to_thread(input, "\n你: ")
             except EOFError:
-                user_input = "exit"
+                # EOF means the input stream is closed, not that the user
+                # requested cancellation.  Drain one active Run and exit;
+                # feeding EOF back through the normal ``exit`` branch would
+                # loop forever while that Run is still active.
+                if active_task is not None and not active_task.done():
+                    print("输入已结束，等待当前 Run 完成后退出。")
+                await _finish_active_task()
+                break
             if user_input.strip().lower() in {"exit", "quit"}:
                 if active_task is not None and not active_task.done():
                     print("当前 Run 仍在执行，请先输入 /cancel。")
@@ -286,8 +303,7 @@ async def main() -> None:
                 name="tsagent-cli-run",
             )
     finally:
-        if active_task is not None:
-            await active_task
+        await _finish_active_task()
         if repository_task is not None:
             if not repository_task.done():
                 repository_task.cancel()

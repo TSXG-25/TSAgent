@@ -10,10 +10,19 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 
 class _Provider:
-    def __init__(self, name: str, *, error: Exception | None = None) -> None:
+    def __init__(
+        self,
+        name: str,
+        *,
+        error: Exception | None = None,
+        model: str = "",
+        base_url: str = "",
+    ) -> None:
         self.name = name
         self.error = error
         self.calls = 0
+        self.model = model
+        self.base_url = base_url
 
     async def ainvoke(self, _messages, **_kwargs):
         self.calls += 1
@@ -93,6 +102,31 @@ def test_auto_mode_cools_down_after_both_providers_fail() -> None:
 def test_provider_mode_rejects_unknown_value() -> None:
     with pytest.raises(ValueError, match="TSAGENT_LLM_PROVIDER"):
         LLMRouter(provider_mode="qwen")
+
+
+def test_structured_output_disable_is_scoped_to_provider_endpoint(monkeypatch) -> None:
+    router = LLMRouter(provider_mode="auto")
+
+    first = _Provider(
+        "first",
+        model="model-a",
+        base_url="https://provider-a.example/v1",
+    )
+    second = _Provider(
+        "second",
+        model="model-b",
+        base_url="https://provider-b.example/v1",
+    )
+    active = [first, "provider-a"]
+
+    monkeypatch.setattr(router, "_get_active_provider", lambda: tuple(active))
+
+    assert router.supports_structured_output is True
+    router.disable_structured_output()
+    assert router.supports_structured_output is False
+
+    active[:] = [second, "provider-b"]
+    assert router.supports_structured_output is True
 
 
 def test_ollama_http_provider_builds_openai_compatible_messages() -> None:

@@ -198,30 +198,48 @@ class LLMRouter:
         self._fallback_count = 0
         self._last_error = ""
         self._providers_unavailable_until = 0.0
-        self._structured_output_available = True  # 缓存 structured output 可用性
-        self._structured_output_tested = False
+        # Structured-output support belongs to a concrete provider endpoint.
+        # A DeepSeek response-format rejection must not poison a later model
+        # or endpoint selected by the same router.
+        self._structured_output_capabilities: dict[tuple[str, str, str], bool] = {}
 
     @property
     def supports_structured_output(self) -> bool:
-        """检测当前 provider 是否支持 structured output。
-        
-        第一次调用会测试，失败后永久关闭。
-        """
-        if self._structured_output_tested:
-            return self._structured_output_available
-        self._structured_output_tested = True
+        """Return structured-output support for the active provider endpoint."""
         provider, name = self._get_active_provider()
-        if name == "ollama":
-            self._structured_output_available = False
-            return False
-        # 对于 DeepSeek，with_structured_output 可能返回 400 错误
-        # 我们在 Planner 中会 catch 这个错误并标记为不可用
-        return True
+        key = self._structured_output_key(provider, name)
+        if key not in self._structured_output_capabilities:
+            # The local adapter intentionally uses the raw JSON path. Other
+            # providers are probed by the caller and cached only on failure.
+            self._structured_output_capabilities[key] = name != "ollama"
+        return self._structured_output_capabilities[key]
 
     def disable_structured_output(self):
-        """永久关闭 structured output（例如第一次调用失败后）。"""
-        self._structured_output_available = False
-        self._structured_output_tested = True
+        """Disable structured output for the currently active endpoint."""
+        provider, name = self._get_active_provider()
+        self._structured_output_capabilities[
+            self._structured_output_key(provider, name)
+        ] = False
+
+    @staticmethod
+    def _structured_output_key(
+        provider: _Provider,
+        provider_name: str,
+    ) -> tuple[str, str, str]:
+        """Identify the endpoint whose structured capability was observed."""
+        model = getattr(provider, "model", None) or getattr(
+            provider, "model_name", ""
+        )
+        base_url = getattr(provider, "base_url", None) or getattr(
+            provider, "openai_api_base", ""
+        )
+        if provider_name == "deepseek":
+            model = model or DEEPSEEK_MODEL
+            base_url = base_url or DEEPSEEK_BASE_URL
+        elif provider_name == "ollama":
+            model = model or OLLAMA_MODEL
+            base_url = base_url or OLLAMA_BASE_URL
+        return (provider_name, str(model), str(base_url).rstrip("/"))
 
     @property
     def _provider_deepseek(self):

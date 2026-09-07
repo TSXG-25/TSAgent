@@ -88,28 +88,39 @@ _KEYWORD_MAP: list[tuple[re.Pattern, str, str, bool]] = [
     (re.compile(r'^(那个呢|这个呢|上一个呢|前面那个|继续那个|继续这个)$'),
      DOMAIN_MEMORY, "reference", False),
 
-    # Natural user preferences are Memory turns, not code-generation tasks.
-    # Keep this before the broad "写代码/编程" rules so a preference such as
-    # "写代码时少加没必要的检查" opens the post-turn learning seam without
-    # creating an execution plan.
-    (re.compile(
-        r"(?:以后|从今以后|之后).{0,48}(?:优先|默认|用|使用|采用|习惯|偏好)|"
-        r"我(?:平时|平常|一般|通常|一贯|习惯).{0,48}(?:习惯|偏好|用|使用|采用)|"
-        r"(?:Python|python)\s*(?:项目|开发|代码|环境).{0,24}"
-        r"(?:优先|默认|用|使用|采用)|"
-        r"(?:写代码|写程序|编程|技术回答|回答技术问题).{0,48}"
-        r"(?:喜欢|偏好|希望|少加|少做|不要加|别加|优先)"
-    ), DOMAIN_MEMORY, "preference", False),
-
     # Implicit memory-dependent requests should retrieve scoped facts even
     # when they do not use an explicit "remember/recall" verb.
     (re.compile(
         r"我(?:平时|平常|一般|通常|一贯|习惯).{0,32}"
         r"(?:偏好|习惯|用什么|使用什么)|"
+        r"我.{0,24}(?:平时|平常|一般|通常|一贯|习惯).{0,32}"
+        r"(?:偏好|习惯|用什么|使用什么)|"
+        r"我的.{0,24}(?:偏好|习惯|默认|优先).{0,16}"
+        r"(?:是什么|有哪些|哪种|哪个|怎么)|"
+        r"我.{0,48}(?:偏好|习惯|更喜欢|倾向于).{0,24}"
+        r"(?:什么|哪种|哪个|哪些|怎么)|"
         r"(?:按|按照|根据|结合).{0,32}(?:我|我的).{0,32}"
         r"(?:偏好|习惯|方式)|"
         r"我之前.{0,24}(?:偏好|习惯|默认|优先)"
     ), DOMAIN_MEMORY, "query", False),
+
+    # Natural user preferences are Memory turns, not code-generation tasks.
+    # Keep this before the broad "写代码/编程" rules so a preference such as
+    # "写代码时少加没必要的检查" opens the post-turn learning seam without
+    # creating an execution plan.  The query rule above deliberately wins for
+    # interrogative forms such as "我平时用什么工具？".
+    (re.compile(
+        r"(?:以后|从今以后|之后).{0,48}(?:优先|默认|用|使用|采用|习惯|偏好)|"
+        r"我(?:平时|平常|一般|通常|一贯|习惯).{0,48}(?:习惯|偏好|用|使用|采用|更喜欢|倾向于)|"
+        r"我.{0,48}(?:更喜欢|偏好|倾向于|习惯).{0,48}"
+        r"(?:用|使用|采用|优先|默认|先|少加|少做|不要加|别加)|"
+        r"(?:Python|python)\s*(?:项目|开发|代码|环境).{0,24}"
+        r"(?:优先|默认|用|使用|采用|更喜欢|倾向于)|"
+        r"(?:项目开发|开发项目|做项目|项目中).{0,48}"
+        r"(?:先|再|然后|优先|习惯|偏好)|"
+        r"(?:写代码|写程序|编程|技术回答|回答技术问题).{0,48}"
+        r"(?:喜欢|偏好|希望|更喜欢|倾向于|少加|少做|不要加|别加|优先)"
+    ), DOMAIN_MEMORY, "preference", False),
 
     # 代码生成（先于数学"函数"，避免"写一个判断素数的函数"被判成 math）
     (re.compile(r'写.{0,14}[代码程序函数脚本类]|写.{0,12}(排序|快排|查找|遍历|递归|接口|模块)'), DOMAIN_DEVELOPMENT, "code", True),

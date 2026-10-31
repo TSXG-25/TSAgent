@@ -1,0 +1,61 @@
+🤖 TSAgent AgentService CLI 启动（输入 exit 退出）
+
+你: 
+你: PlanExecutor: step 0 (shell) 失败: 错误：EXECUTION_ENVIRONMENT_UNAVAILABLE: 没有可用的隔离执行环境；本地执行默认关闭。请启动 Docker，或仅在受信任的开发环境显式设置 TSAGENT_ALLOW_LOCAL_EXECUTION=1。
+
+📌 Run: run-9ed244ce683e4104aae2bbb8e68aa60f
+📡 处理中...
+  • 1: run_created
+输入已结束，等待当前 Run 完成后退出。
+  • 2: run_started
+  🧠 规划上下文: 无上下文
+  🔍 引用消歧: 无需消歧
+  🧠 意图: Intent(domain=operation, action=execute, target='date', entities=[], current_file='', conf=0.99, exec=True)
+
+============================================================
+📋 执行计划（Task 分解）
+============================================================
+  task-1: execute date
+============================================================
+
+  🔀 Compiler: task-1 → tool_executor
+  • 3: stage_started
+  ↳ 正在规划任务...
+  • 4: stage_completed
+  ↳ 任务规划完成
+  • 5: stage_started
+  ↳ 正在执行任务...
+  • 6: task_started
+  ↳ 开始任务 task-1 (tool)
+
+==================================================
+⏱️  启动耗时 Profile
+==================================================
+  tools_import           0.04s  ████████████████░░░░ 81%
+  skills_import          0.01s  ███░░░░░░░░░░░░░░░░░ 19%
+  capabilities_register   0.00s  ░░░░░░░░░░░░░░░░░░░░ 0%
+  TOTAL                  0.04s
+==================================================
+
+==================================================
+⚡ 执行耗时 Profile
+==================================================
+  executor               1.84s  ███████████████████░ 99%
+  intent_route           0.01s  ░░░░░░░░░░░░░░░░░░░░ 0%
+  init                   0.00s  ░░░░░░░░░░░░░░░░░░░░ 0%
+  EXCLUSIVE TOTAL        1.85s
+  WALL TOTAL             1.86s
+==================================================
+
+  • 7: task_completed
+  ↳ 任务 task-1: failed
+  • 8: stage_completed
+  ↳ 任务执行阶段完成
+  • 9: run_failed
+❌ Run 失败
+🤖 状态: FAILED_TERMINAL
+
+📝 输出:
+目标尚未完成，缺少可验证证据：failed task evidence、outcome:COMMAND_EXECUTION。本次不会报告为成功。
+
+⚠️ EXECUTION_EVIDENCE_MISSING: The Run did not complete successfully

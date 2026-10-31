@@ -16,7 +16,7 @@ from agent.task import Task
 from agent.action_result import ActionResult
 from agent.workflow import ExecutionContext, ExecutionResult, ToolResult
 from agent.executor.plan_executor import plan_executor
-from agent.executor.verifier import ExecutionArtifacts, execution_verifier
+from agent.executor.verifier import ExecutionArtifacts, execution_verifier, snapshot_outputs, verified_file_effects, verified_consumed_files
 from agent.execution_errors import classify_execution_error
 from agent.failure import ClassificationSource
 
@@ -46,12 +46,35 @@ class ToolExecutor:
 
         workspace = context.get_var("workspace")
         cancellation_view = context.get_var("cancellation_view")
+        repository_indexer = context.get_var("repository_indexer")
         t0 = time.time()
+        before = snapshot_outputs(target.output_paths, workspace) if target.output_paths else {}
         result = await plan_executor.execute(
             plan,
             workspace=workspace,
             cancellation_view=cancellation_view,
+            repository_indexer=repository_indexer,
         )
+        after = snapshot_outputs(target.output_paths, workspace) if target.output_paths else {}
+        changed = [path for path, digest in after.items() if before.get(path) != digest]
+        artifacts = ExecutionArtifacts(
+            files_written=[*result.get('_files_written', []), *changed],
+            file_operations=list(result.get('_file_operations', [])),
+        )
+        verified_files = verified_file_effects(artifacts, workspace)
+        consumed_files = verified_consumed_files(artifacts, workspace)
+        # Declared outputs must actually be produced/changed during this call.
+        # A successful command plus a stale existing file is not completion.
+        if target.output_paths and not result.get('_error'):
+            declared = [workspace.relative_path(workspace.resolve_path(path)) for path in target.output_paths]
+            missing = [path for path in declared if not any(
+                item['path'] == path or item['path'].startswith(path.rstrip('/') + '/')
+                for item in verified_files
+            )]
+            if missing:
+                result['_error'] = 'ARTIFACT_OUTPUT_UNVERIFIED: ' + ', '.join(missing)
+                result['_error_code'] = 'ARTIFACT_OUTPUT_UNVERIFIED'
+                result['_side_effect_state'] = 'UNKNOWN'
 
         if result.get("_error"):
             error = str(result["_error"])
@@ -61,6 +84,9 @@ class ToolExecutor:
                 ClassificationSource.STRUCTURED
                 if structured_error_code
                 else ClassificationSource.LEGACY_FALLBACK
+            )
+            side_effect_state = str(
+                result.get("_side_effect_state", "UNKNOWN")
             )
             return ExecutionResult(
                 success=False,
@@ -74,22 +100,22 @@ class ToolExecutor:
                     error_code=error_code or "TOOL_EXECUTION_FAILED",
                     content=error,
                     classification_source=classification_source.value,
+                    side_effect_state=side_effect_state,
                 ),
                 outputs={},
                 metadata={
+                    "verified_files": verified_files,
+                    "consumed_files": consumed_files,
                     "executor": "tool",
                     "task_id": target.id,
                     "tools_called": list(result.get("_tools_called", []) or []),
                     **({"error_code": error_code} if error_code else {}),
                     "classification_source": classification_source.value,
+                    "side_effect_state": side_effect_state,
                 },
             )
 
         # ── Verifier 阶段（ADR-0012）：success 只能由 ExecutionVerifier 产生 ──
-        artifacts = ExecutionArtifacts(
-            files_written=list(result.get("_files_written", []) or []),
-            file_operations=list(result.get("_file_operations", []) or []),
-        )
         verification = execution_verifier.verify(
             plan,
             artifacts,
@@ -111,14 +137,18 @@ class ToolExecutor:
                     verified=False,
                     classification_source=ClassificationSource.STRUCTURED.value,
                     retryable=False,
+                    side_effect_state="UNKNOWN",
                 ),
                 outputs={},
                 metadata={
+                    "verified_files": verified_files,
+                    "consumed_files": consumed_files,
                     "executor": "tool",
                     "task_id": target.id,
                     "tools_called": list(result.get("_tools_called", []) or []),
                     "verifier": verification.verifier,
                     "verifier_checks": verification.checks,
+                    "side_effect_state": "UNKNOWN",
                 },
             )
 
@@ -144,6 +174,8 @@ class ToolExecutor:
                 verified=True,
             ),
             metadata={
+                "verified_files": verified_files,
+                "consumed_files": consumed_files,
                 "executor": "tool",
                 "task_id": target.id,
                 "tools_called": list(result.get("_tools_called", []) or []),
@@ -152,7 +184,7 @@ class ToolExecutor:
                 "verifier_checks": verification.checks,
                 # 中间变量（供上层提取 facts）
                 "variables": {
-                    k: str(v)[:300]
+                    k: str(v)
                     for k, v in result.items()
                     if not k.startswith("_")
                 },

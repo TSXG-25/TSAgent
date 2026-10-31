@@ -12,6 +12,7 @@ from typing import cast
 import pytest
 
 from agent.runtime_store import SCHEMA_VERSION, SqliteRuntimeStore
+from agent.runtime_store.view import DurableRuntimeStoreView
 from agent.service import (
     AgentService,
     AgentServiceError,
@@ -292,6 +293,73 @@ def test_terminal_stream_yields_terminal_event_then_finishes(tmp_path: Path) -> 
             EventType.RUN_COMPLETED,
         ]
     finally:
+        repository.close()
+        store.close()
+
+
+def test_blocked_attempt_can_resume_and_event_stream_tracks_latest_attempt(
+    tmp_path: Path,
+) -> None:
+    store = _store(tmp_path / "blocked-resume-events.sqlite")
+    repository = SqliteEventRepository(store, poll_interval=0.001)
+    view = DurableRuntimeStoreView(
+        store,
+        tenant_id=TENANT,
+        session_id=SESSION,
+        run_id=RUN,
+        request_id="resume-request",
+        writer_id="resume-writer",
+        ensure_run=False,
+    )
+
+    async def collect(after_sequence: int = 0) -> list[RunEvent]:
+        return [
+            event
+            async for event in repository.stream(
+                _request(after_sequence=after_sequence)
+            )
+        ]
+
+    try:
+        blocked = view.transition_run_with_event(
+            run_status="BLOCKED",
+            event_id="run-blocked:attempt-1",
+            event_type="run_blocked",
+            timestamp="2026-08-07T00:00:01Z",
+            payload={"reason": "capability unavailable"},
+        )
+        assert blocked.run_status == "BLOCKED"
+        assert [event.event_type for event in asyncio.run(collect())] == [
+            EventType.RUN_BLOCKED,
+        ]
+
+        view.transition_run_with_event(
+            run_status="RUNNING",
+            event_id="run-resumed:attempt-2",
+            event_type="run_resumed",
+            timestamp="2026-08-07T00:00:02Z",
+            payload={},
+        )
+        view.transition_run_with_event(
+            run_status="COMPLETED",
+            event_id="run-completed:attempt-2",
+            event_type="run_completed",
+            timestamp="2026-08-07T00:00:03Z",
+            payload={},
+        )
+
+        events = asyncio.run(collect())
+        assert [event.event_type for event in events] == [
+            EventType.RUN_BLOCKED,
+            EventType.RUN_RESUMED,
+            EventType.RUN_COMPLETED,
+        ]
+        read = store.read_run_snapshot(TENANT, RUN, session_id=SESSION)
+        assert read.head.run_status == "COMPLETED"
+        assert read.terminal_event is not None
+        assert read.terminal_event.event_type == "run_completed"
+    finally:
+        view.close()
         repository.close()
         store.close()
 

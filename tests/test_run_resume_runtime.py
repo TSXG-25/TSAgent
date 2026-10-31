@@ -31,6 +31,7 @@ from agent.run_resume import (
     WorkflowSummary,
     run_index_digest,
 )
+from agent.run_resume.execution_context import new_single_workflow_index
 from agent.workflow import (
     ExecutionContext,
     ExecutionResult,
@@ -307,6 +308,40 @@ def test_run_index_round_trip_and_strict_revision_store(tmp_path):
     assert restored.to_dict() == index.to_dict()
 
 
+def test_run_index_persists_json_workflow_target_and_bindings():
+    workflow = _one_stage_workflow("wf-code", "write", output_type="solution")
+    index = new_single_workflow_index(
+        workflow,
+        run_id="run-bindings",
+        session_id="session-bindings",
+        conversation_id="session-bindings",
+        user_scope="tenant:user",
+        target_summary="solve the question and save the file",
+        input_bindings={
+            "question_path": "input/question.docx",
+            "output_path": "output/answer.py",
+            "options": {"strict": True, "items": ["a", "b"]},
+        },
+    )
+
+    restored = RunResumeIndex.from_dict(index.to_dict())
+
+    assert restored.to_dict() == index.to_dict()
+    summary = restored.workflow("wf-code")
+    assert summary is not None
+    assert summary.target_summary == "solve the question and save the file"
+    assert summary.input_bindings["options"]["items"] == ("a", "b")
+    with pytest.raises(TypeError):
+        summary.input_bindings["options"]["new"] = "not mutable"
+    with pytest.raises(TypeError, match="JSON values"):
+        WorkflowSummary(
+            workflow_id="wf-code",
+            workflow_version="1.0",
+            status=RunWorkflowStatus.PENDING,
+            input_bindings={"live": object()},
+        )
+
+
 def test_resolver_selects_active_workflow_and_never_completed_workflow():
     decision = RunResumeResolver.resolve(
         _index(),
@@ -408,6 +443,45 @@ def test_coordinator_rejects_missing_active_checkpoint(fake_executor):
     assert result.execution_result is None
     assert result.decision.reason_code is RunResumeReasonCode.CHECKPOINT_NOT_FOUND
     assert fake_executor.calls == []
+
+
+def test_unverified_workflow_completion_does_not_complete_run_index(fake_executor):
+    workflow = _one_stage_workflow("wf.b", "stage-1", output_type="")
+    checkpoint_store = InMemoryCheckpointStore()
+    checkpoint_ids = count()
+    result = asyncio.run(
+        WorkflowExecutor().execute(
+            workflow,
+            ExecutionContext(workflow_id=workflow.id),
+            checkpoint_request=_checkpoint_request(
+                checkpoint_store,
+                lambda prefix: f"{prefix}-{next(checkpoint_ids)}",
+            ),
+        )
+    )
+    assert result.success
+    metadata = dict(result.metadata or {})
+    assert metadata.pop("terminal_outputs_verified") is True
+    unverified = ExecutionResult(
+        success=True,
+        outputs=result.outputs,
+        metadata=metadata,
+    )
+
+    coordinator = RunResumeCoordinator(
+        run_store=InMemoryRunResumeStore(),
+        checkpoint_store=checkpoint_store,
+        workflows={workflow.id: workflow},
+    )
+    updated = coordinator._record_result(
+        _index(result.metadata["checkpoint_id"]),
+        unverified,
+        checkpoint_store=checkpoint_store,
+    )
+
+    assert updated.completed_workflow_ids == ("wf.a",)
+    assert updated.active_workflow_id == workflow.id
+    assert updated.workflow(workflow.id).status is RunWorkflowStatus.FAILED_RECOVERABLE
 
 
 def test_pending_activation_is_atomic_idempotent_and_revision_safe():

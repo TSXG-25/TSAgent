@@ -442,6 +442,8 @@ def _common_gates(
     post = samples[-1]
     memory_scope = all(
         context.session.memory_view.namespace
+        == f"{context.tenant_id}:{context.session_id}"
+        and context.session.memory_view.learning_namespace
         == f"{context.tenant_id}:{context.user_id}"
         for context in environment.launcher.contexts
     )

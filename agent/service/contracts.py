@@ -139,6 +139,79 @@ class ResumeAction(str, Enum):
     ABANDON_AND_RESTART = "ABANDON_AND_RESTART"
 
 
+@dataclass(frozen=True)
+class ExternalStateEvidence:
+    """Caller-supplied observation for one checkpoint-bound external guard."""
+
+    resource_id: str
+    guard_type: str
+    expected_value: str = ""
+    observed_value: str = ""
+    checked_at: str = ""
+    status: str = "VERIFIED"
+
+    def __post_init__(self) -> None:
+        _required_identifier(self.resource_id, "resource_id")
+        _required_identifier(self.guard_type, "guard_type")
+        for name in ("expected_value", "observed_value", "checked_at"):
+            if not isinstance(getattr(self, name), str):
+                raise ValueError(f"{name} must be a string")
+        if self.status not in {"VERIFIED", "UNKNOWN", "MISMATCH", "MISSING"}:
+            raise ValueError("status must be a known external guard status")
+
+    def to_dict(self) -> dict[str, str]:
+        return {
+            "resource_id": self.resource_id,
+            "guard_type": self.guard_type,
+            "expected_value": self.expected_value,
+            "observed_value": self.observed_value,
+            "checked_at": self.checked_at,
+            "status": self.status,
+        }
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "ExternalStateEvidence":
+        return cls(
+            resource_id=str(value.get("resource_id", "")),
+            guard_type=str(value.get("guard_type", "")),
+            expected_value=str(value.get("expected_value", "")),
+            observed_value=str(value.get("observed_value", "")),
+            checked_at=str(value.get("checked_at", "")),
+            status=str(value.get("status", "VERIFIED")),
+        )
+
+
+@dataclass(frozen=True)
+class NoEffectConfirmation:
+    """User attestation that one identified external effect did not occur."""
+
+    task_id: str
+    idempotency_key: str
+    external_reference: str
+    checked_at: str
+
+    def __post_init__(self) -> None:
+        for name in ("task_id", "idempotency_key", "external_reference", "checked_at"):
+            object.__setattr__(self, name, _required_identifier(getattr(self, name), name))
+
+    def to_dict(self) -> dict[str, str]:
+        return {
+            "task_id": self.task_id,
+            "idempotency_key": self.idempotency_key,
+            "external_reference": self.external_reference,
+            "checked_at": self.checked_at,
+        }
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "NoEffectConfirmation":
+        return cls(
+            task_id=str(value.get("task_id", "")),
+            idempotency_key=str(value.get("idempotency_key", "")),
+            external_reference=str(value.get("external_reference", "")),
+            checked_at=str(value.get("checked_at", "")),
+        )
+
+
 class EventType(str, Enum):
     RUN_CREATED = "run_created"
     RUN_STARTED = "run_started"
@@ -157,6 +230,7 @@ class EventType(str, Enum):
     RUN_COMPLETED = "run_completed"
     RUN_FAILED = "run_failed"
     RUN_BLOCKED = "run_blocked"
+    RUN_WAITING_USER = "run_waiting_user"
     RUN_CANCELLED = "run_cancelled"
     RUN_TIMED_OUT = "run_timed_out"
 
@@ -250,6 +324,8 @@ class ResumeRunRequest:
     request_text: str = ""
     checkpoint_id: str | None = None
     action: ResumeAction | None = None
+    external_state_evidence: tuple[ExternalStateEvidence, ...] = ()
+    no_effect_confirmation: NoEffectConfirmation | None = None
 
     def __post_init__(self) -> None:
         _validate_identity(
@@ -264,6 +340,25 @@ class ResumeRunRequest:
         _optional_identifier(self.checkpoint_id, "checkpoint_id")
         if self.action is not None:
             object.__setattr__(self, "action", ResumeAction(self.action))
+        object.__setattr__(
+            self,
+            "external_state_evidence",
+            tuple(
+                item if isinstance(item, ExternalStateEvidence)
+                else ExternalStateEvidence.from_dict(cast(Mapping[str, Any], item))
+                for item in (self.external_state_evidence or ())
+            ),
+        )
+        if self.no_effect_confirmation is not None and not isinstance(
+            self.no_effect_confirmation, NoEffectConfirmation
+        ):
+            object.__setattr__(
+                self,
+                "no_effect_confirmation",
+                NoEffectConfirmation.from_dict(
+                    cast(Mapping[str, Any], self.no_effect_confirmation)
+                ),
+            )
 
     @property
     def resume_request_id(self) -> str:
@@ -279,6 +374,14 @@ class ResumeRunRequest:
             "request_text": self.request_text,
             "checkpoint_id": self.checkpoint_id,
             "action": self.action.value if self.action else None,
+            "external_state_evidence": [
+                item.to_dict() for item in self.external_state_evidence
+            ],
+            "no_effect_confirmation": (
+                self.no_effect_confirmation.to_dict()
+                if self.no_effect_confirmation is not None
+                else None
+            ),
         }
 
     @classmethod
@@ -297,6 +400,17 @@ class ResumeRunRequest:
                 None
                 if value.get("action") is None
                 else ResumeAction(str(value.get("action")))
+            ),
+            external_state_evidence=tuple(
+                ExternalStateEvidence.from_dict(item)
+                for item in value.get("external_state_evidence", []) or ()
+            ),
+            no_effect_confirmation=(
+                None
+                if value.get("no_effect_confirmation") is None
+                else NoEffectConfirmation.from_dict(
+                    cast(Mapping[str, Any], value["no_effect_confirmation"])
+                )
             ),
         )
 
@@ -894,6 +1008,7 @@ __all__ = [
     "ArtifactView",
     "EventStreamRequest",
     "EventType",
+    "ExternalStateEvidence",
     "FailureSummary",
     "JSONValue",
     "ResumeAction",

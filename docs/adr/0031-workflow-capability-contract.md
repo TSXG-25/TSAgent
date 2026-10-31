@@ -124,9 +124,9 @@ RunResumeCoordinator/ResumeValidator 决定。completed Stage 不得由 Selector
 
 ```text
 evals/workflow_capability/dataset.json
-version = v2.4C-workflow-capability-v1
+version = v2.4C-workflow-capability-v2
 cases   = 24
-hash    = 43338803cbe9192c19a2957887a8013c17058a6dbea9e7bb6cb66c06d60fbd69
+hash    = a92160b47efd7ce863bb1f675bcb294d73bc4038bcf2506837f41f4bba67d197
 ```
 
 | Family | 目的 | Cases |
@@ -153,6 +153,15 @@ Unsafe Reuse
 ```
 
 Golden `24/24` 只证明 Dataset、合同和 Oracle 自洽，不代表生产能力。
+
+## 5. v2 safety amendment（2026-09-27）
+
+专用 `code_generation` Workflow 从 3.0 升到 3.1：生成的 Python 文件使用 AST 静态语法
+校验，不再为“语法检查”调用 `run_python`。该 Workflow 的必需 capability 因此只包含
+`filesystem.read` 与 `filesystem.write`。新增/修订的 Dataset 版本为
+`v2.4C-workflow-capability-v2`，首个明确匹配 case 不提供 `run_python` 仍要求正确实例化。
+该版本 hash 为 `a92160b47efd7ce863bb1f675bcb294d73bc4038bcf2506837f41f4bba67d197`；24 个
+case 仍是 Oracle 自检，真实 Provider 选择行为未由此证明。
 
 ## 4. Real baseline rules
 

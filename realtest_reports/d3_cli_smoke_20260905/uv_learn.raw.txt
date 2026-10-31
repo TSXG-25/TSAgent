@@ -1,0 +1,39 @@
+🤖 TSAgent AgentService CLI 启动（输入 exit 退出）
+
+你: 以后 Python 项目优先用 uv
+
+你: 
+📌 Run: run-09eaa7b8a4ce4d2bb4eecc2a04ac9505
+📡 处理中...
+  • 1: run_created
+  • 2: run_started
+  🧠 规划上下文: 无上下文
+  🔍 引用消歧: 无需消歧
+  🧠 意图: Intent(domain=memory, action=remember, target='Python', entities=['Python', 'uv'], current_file='', conf=0.98, exec=False)
+
+==================================================
+⏱️  启动耗时 Profile
+==================================================
+  tools_import           0.02s  █████████████████░░░ 87%
+  skills_import          0.00s  ██░░░░░░░░░░░░░░░░░░ 13%
+  capabilities_register   0.00s  ░░░░░░░░░░░░░░░░░░░░ 0%
+  TOTAL                  0.02s
+==================================================
+
+==================================================
+⚡ 执行耗时 Profile
+==================================================
+  intent_route           9.23s  █████████████████░░░ 87%
+  answer_llm             0.97s  █░░░░░░░░░░░░░░░░░░░ 9%
+  init                   0.00s  ░░░░░░░░░░░░░░░░░░░░ 0%
+  EXCLUSIVE TOTAL       10.20s
+  WALL TOTAL            10.61s
+==================================================
+
+  • 3: run_completed
+✅ Run 完成
+🤖 状态: COMPLETED
+
+📝 输出:
+好的，已记录：以后 Python 项目优先使用 uv 进行依赖管理和环境管理。有需要时我也会同步说明相关命令。
+exit

@@ -1,0 +1,118 @@
+{
+  "manifest_version": "h9-runtime-spine-v3",
+  "manifest_hash": "73542bbc53099e63a7220e70b3375938cf012b2d1567b2b84e52ca7657916974",
+  "mode": "real",
+  "provider": "ollama",
+  "records": [
+    {
+      "case_id": "H904",
+      "category": "code_execution",
+      "capability_outcome": "PASS",
+      "runtime_correctness": "PASS",
+      "case_result": "PASS",
+      "terminal_status": "COMPLETED",
+      "duration_ms": 11241.9,
+      "llm_calls": 1,
+      "tool_calls": [
+        "llm",
+        "run_python"
+      ],
+      "plan_calls": 1,
+      "replan_calls": 0,
+      "failure_code": "",
+      "answer": "已执行 python-source，运行输出：5050。",
+      "evidence": {
+        "conversation_intent": "new_request",
+        "requires_execution": true,
+        "execution_progress": 1,
+        "verified_success": true,
+        "resolved_target": "",
+        "resolved_symbol": "",
+        "pending_target": "",
+        "previous_answer": "",
+        "answer": "已执行 python-source，运行输出：5050。",
+        "answer_required": true,
+        "user_visible_output_verified": true,
+        "freshness_required": false,
+        "source_grounding_required": false,
+        "fresh_evidence": false,
+        "transitions": 4,
+        "runtime_pending": false,
+        "terminal_status": "COMPLETED",
+        "terminal_outputs_verified": true,
+        "effect_truth_ok": true,
+        "requested_outcomes": [
+          "USER_VISIBLE_OUTPUT",
+          "CODE_EXECUTION"
+        ],
+        "execution_evidence": [
+          {
+            "outcome": "CODE_EXECUTION",
+            "status": "VERIFIED",
+            "source": "ExecutionVerifier:none",
+            "target": "$code"
+          }
+        ],
+        "unresolved_requested_outcomes": [],
+        "required_effects": [],
+        "verified_effects": [],
+        "unsupported_effects": [],
+        "failed_effects": [],
+        "unresolved_required_effects": [],
+        "verified_artifacts": [],
+        "task_failures": [],
+        "failure_code": "",
+        "failure_class": "execution",
+        "failed_component": "runtime",
+        "retryable": false,
+        "budget_exhausted": false,
+        "goal_status": "COMPLETE",
+        "goal_round": 1,
+        "goal_max_rounds": 10,
+        "goal_missing": [],
+        "goal_evidence": [
+          {
+            "source": "execution_evidence",
+            "detail": "execution evidence present",
+            "verified": true
+          },
+          {
+            "source": "task_set",
+            "detail": "all planned tasks reached a terminal success state",
+            "verified": true
+          },
+          {
+            "source": "completion_gate",
+            "detail": "all required goal evidence present",
+            "verified": true
+          }
+        ],
+        "timing": {
+          "wall_total": 11.233,
+          "exclusive_total": 10.324,
+          "spans": {
+            "init": 0.012,
+            "executor": 10.312
+          },
+          "llm_calls": 0,
+          "replan_count": 0
+        }
+      },
+      "detail": ""
+    }
+  ],
+  "metrics": {
+    "cases": 1,
+    "case_pass": 1,
+    "goal_completion_rate": 1.0,
+    "false_completion_rate": 0.0,
+    "recoverable_error_survival": null,
+    "structural_recovery_success": null,
+    "llm_calls_per_completed_goal": 1.0,
+    "unnecessary_replan_rate": 0.0,
+    "median_completion_latency_ms": 11241.9,
+    "runtime_failures": 0,
+    "provider_errors": 0
+  },
+  "status": "PASS"
+}

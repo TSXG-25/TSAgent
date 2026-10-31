@@ -115,12 +115,11 @@ def _run_local(
         if returncode != 0:
             stderr = stderr.strip()
             stdout = stdout.strip()
-            if stderr:
-                return redact_sensitive_text(f"命令执行失败 (code {returncode}):\n{stderr}")
-            if stdout:
-                return redact_sensitive_text(f"命令执行失败 (code {returncode}):\n{stdout}")
-            return f"命令执行失败（返回码 {returncode}）"
-        return redact_sensitive_text(stdout.strip())
+            detail = "\n".join(part for part in (stdout, stderr) if part)
+            return redact_sensitive_text(
+                f"错误：COMMAND_NONZERO_EXIT: 命令执行失败 (code {returncode}):\n{detail}"
+            )
+        return redact_sensitive_text(stdout)
     except subprocess.TimeoutExpired:
         if process is not None:
             try:
@@ -172,7 +171,7 @@ def _run_docker(
         if result.returncode != 0:
             # Docker failed — likely image not found. Return None to trigger fallback.
             return None
-        return redact_sensitive_text(result.stdout.strip())
+        return redact_sensitive_text(result.stdout)
     except subprocess.TimeoutExpired:
         return None  # fallback
     except FileNotFoundError:

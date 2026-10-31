@@ -1,0 +1,6 @@
+Provider: deepseek
+Database: /private/tmp/tsagent-human-20260908-130213.sqlite
+本次人工验收允许在本机执行任务命令。
+🤖 TSAgent AgentService CLI 启动（输入 exit 退出）
+
+你: 

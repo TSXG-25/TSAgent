@@ -231,12 +231,12 @@ run_revision
 2. `event_id` 在同一 Run 内唯一；
 3. `run_revision` 不得倒退；
 4. tenant/session/run identity 必须与读取请求一致；
-5. `run_completed`、`run_failed` 或 `run_blocked` 是明确终态事件；
-6. 终态事件之后不得追加事件；
+5. `run_completed`、`run_failed`、`run_blocked` 等事件结束当前执行尝试；
+6. `run_blocked` 后允许按生命周期合同追加 `run_resumed`，其余终态事件之后不得追加事件；
 7. `after_sequence = N` 只返回 `sequence_number > N` 的事件；
 8. `event_id` 是稳定身份，客户端按 `event_id` 去重；
 9. 读取语义是 at-least-once readable，不承诺 exactly-once delivery；
-10. terminal event 在保留窗口内可 replay；
+10. 当前尝试的 terminal event 在保留窗口内可 replay；恢复后的活动尝试不把历史 `run_blocked` 当作当前终态；
 11. cursor 超出保留范围返回稳定的 `EVENT_CURSOR_EXPIRED`，不能静默从最新事件开始；
 12. 客户端断开、停止读取或重连不会取消、暂停或重启 Run；
 13. 客户端通过 `after_sequence` 重连时只读取后续事件，不重新执行 Workflow。

@@ -368,11 +368,17 @@ def clear_summaries(user_id: str, *, scope: str | None = None) -> None:
         pass
 
 
-def clear_facts(user_id: str) -> None:
-    """Clear extracted facts for one user namespace."""
+def clear_facts(user_id: str, *, scope: str | None = None) -> None:
+    """Clear extracted facts for one namespace and optional learning scope."""
     try:
         with sqlite3.connect(FACTS_DB_PATH) as conn:
-            conn.execute("DELETE FROM facts WHERE user_id = ?", (user_id,))
+            if scope is None:
+                conn.execute("DELETE FROM facts WHERE user_id = ?", (user_id,))
+            else:
+                conn.execute(
+                    "DELETE FROM facts WHERE user_id = ? AND scope = ?",
+                    (user_id, scope),
+                )
     except Exception:
         pass
 

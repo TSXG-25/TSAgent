@@ -7,6 +7,7 @@ ResumeValidator 确定性决策。
 import hashlib
 import os
 import time
+from dataclasses import replace
 
 import httpx
 import pytest
@@ -55,7 +56,8 @@ def _mk_checkpoint(guard: ExternalStateGuard) -> RunCheckpoint:
         user_scope="u1", workflow_id="wf-1", workflow_version="1.0",
         plan_version="1.0", active_stage_id="stage-1", active_task_id="task-1",
         status=CheckpointStatus.SUSPENDED, execution_plan={"step": "read"},
-        target_summary="read remote object", external_state_guards=(guard,),
+        target_summary="read remote object",
+        external_state_guards=(replace(guard, checked_at=""),),
     )
 
 

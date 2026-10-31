@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Protocol
+from typing import Any, Mapping, Protocol, Sequence
 
 from .contracts import CancellationIntent, InterruptionPhase
 
@@ -84,6 +84,9 @@ class CancellationStore(Protocol):
         request_id: str,
         writer_id: str,
         fence_token: int,
+        terminal_payload: Mapping[str, Any] | None = None,
+        run_output: Mapping[str, Any] | None = None,
+        artifacts: Sequence[Any] = (),
         failure_point: InterruptionFailurePoint | None = None,
     ) -> DurableInterruptionRecord: ...
 

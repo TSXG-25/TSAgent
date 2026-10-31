@@ -53,6 +53,7 @@ def test_cli_renders_failure_when_no_output_exists(capsys) -> None:
                 code="MISSING_USER_OUTPUT",
                 message="没有可展示的用户输出",
                 retryable=False,
+                details={"failure_detail": "provider had no user-visible result"},
             )
         )
     )
@@ -61,3 +62,4 @@ def test_cli_renders_failure_when_no_output_exists(capsys) -> None:
     assert "BLOCKED" in rendered
     assert "MISSING_USER_OUTPUT" in rendered
     assert "没有可展示的用户输出" in rendered
+    assert "详情: provider had no user-visible result" in rendered

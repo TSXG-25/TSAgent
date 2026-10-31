@@ -72,12 +72,13 @@ class ServiceContextFactory:
                 session_id=request.session_id,
                 user_id=request.user_id,
                 tenant_id=request.tenant_id,
-                memory_namespace=f"{request.tenant_id}:{request.user_id}",
+                memory_namespace=f"{request.tenant_id}:{request.session_id}",
+                learning_namespace=f"{request.tenant_id}:{request.user_id}",
                 memory_scope="user",
             )
-            # ApplicationContext predates tenant-scoped session keys.  Keep
+            # ApplicationContext predates tenant-scoped session keys. Keep
             # the composite key here so equal session IDs in two tenants do
-            # not collide while the underlying durable identity stays exact.
+            # not collide.
             self.application._sessions[key] = session  # type: ignore[attr-defined,index]
             self._sessions[key] = session
         elif session.user_id != request.user_id:
@@ -108,6 +109,7 @@ class ServiceContextFactory:
             request_id=request.request_id,
             writer_id=self.writer_id,
             takeover_writer=takeover_writer,
+            worker_lease=True,
         )
 
     def release_run(self, run: RunContext) -> None:

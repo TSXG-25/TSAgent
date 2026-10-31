@@ -12,7 +12,7 @@ from agent.context import (
 )
 from agent.orchestrator.context_builder import ContextBuilder
 from agent.cognition import CognitiveContext
-from agent.cognition.cognitive_context import ConversationState
+from agent.cognition.cognitive_context import CognitiveContext
 from agent.decision import DecisionInput
 from agent.executor.contract import executor_factory
 from agent.orchestrator.executor import ExecutionStage
@@ -90,14 +90,17 @@ def test_execution_stage_rejects_unverified_file_write(monkeypatch):
             "status": "pending",
             "observations": [],
         }],
+        "requested_outcomes": ["USER_VISIBLE_OUTPUT", "FILE_MUTATION"],
         "execution_plans": [],
     }
 
     updated, next_state = asyncio.run(ExecutionStage(_Orchestrator()).run(state))
 
-    assert next_state == "RECOVER"
+    assert next_state == "FAIL"
     assert updated["plan"][0]["status"] == "failed"
     assert "UNVERIFIED" in updated["plan"][0]["error"]
+    assert updated["runtime_failure_code"] == "UNVERIFIED_EFFECT"
+    assert updated["runtime_terminal_status"] == "FAILED_TERMINAL"
 
 
 def test_context_views_are_frozen_snapshots():
@@ -132,9 +135,12 @@ def test_planner_context_is_the_named_compatible_planning_view():
 
 def test_context_builder_projects_resume_state_without_runtime_payloads():
     orchestrator = SimpleNamespace(
-        run_context=SimpleNamespace(workspace=None),
+        run_context=SimpleNamespace(
+            workspace=None,
+            durable_store_view=None,
+            repository_indexer=None,
+        ),
         session_context=SimpleNamespace(memory_view=None),
-        _conversation_state=ConversationState(),
     )
     state = {
         "plan": [

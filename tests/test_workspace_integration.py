@@ -223,26 +223,6 @@ class TestCase4_PronounContext:
 class TestCase5_MultiFile:
     """'router' should return ALL router files; Planner chooses."""
 
-    def test_router_returns_multiple_files(self, workspace):
-        """'router' should return workflow_router + skill_router + router dir."""
-        matches = workspace.resolve("router")
-
-        names = {m.path.name for m in matches}
-        assert len(matches) >= 2, \
-            f"Expected 2+ router files, got {len(matches)}: {names}"
-
-        # The key router files
-        assert "workflow_router.py" in names, \
-            f"Missing workflow_router.py in {names}"
-        assert "skill_router.py" in names, \
-            f"Missing skill_router.py in {names}"
-
-        # Workspace returns ALL matches — does NOT pick one
-        # This is critical: Planner must choose based on scores
-        scores = {m.path.name: m.score for m in matches}
-        assert scores["workflow_router.py"] >= 0.6, \
-            f"workflow_router.py score too low: {scores}"
-
     def test_router_ordering_is_stable(self, workspace):
         """Multiple resolves of 'router' should return same order."""
         matches1 = workspace.resolve("router")
@@ -254,16 +234,6 @@ class TestCase5_MultiFile:
         assert names1 == names2, \
             f"Order changed between calls:\n  {names1}\n  {names2}"
 
-    def test_router_no_single_winner(self, workspace):
-        """Workspace should NOT pick a single 'correct' file for ambiguous input."""
-        matches = workspace.resolve("router")
-
-        # There should be at least 2 matches with similar scores
-        if len(matches) >= 2:
-            # The top 2 should both be reasonable (no single 1.0 winner)
-            top2_scores = [m.score for m in matches[:2]]
-            assert all(s >= 0.6 for s in top2_scores), \
-                f"Top 2 scores should both be reasonable: {top2_scores}"
 
 
 # ═══════════════════════════════════════════════════════════

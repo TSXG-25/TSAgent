@@ -20,6 +20,7 @@ _EXPORTS = {
     "EventStreamRequest": ("agent.service.contracts", "EventStreamRequest"),
     "EventType": ("agent.service.contracts", "EventType"),
     "FailureSummary": ("agent.service.contracts", "FailureSummary"),
+    "NoEffectConfirmation": ("agent.service.contracts", "NoEffectConfirmation"),
     "ResumeAction": ("agent.service.contracts", "ResumeAction"),
     "ResumeDisposition": ("agent.service.contracts", "ResumeDisposition"),
     "ResumeRunRequest": ("agent.service.contracts", "ResumeRunRequest"),
@@ -39,6 +40,7 @@ _EXPORTS = {
     "SqliteEventRepository": ("agent.service.event_repository", "SqliteEventRepository"),
     "ExecutionLauncher": ("agent.service.execution_launcher", "ExecutionLauncher"),
     "EventOrderingOracle": ("agent.service.events", "EventOrderingOracle"),
+    "ExternalStateEvidence": ("agent.service.contracts", "ExternalStateEvidence"),
     "create_default_agent_service": ("agent.service.factory", "create_default_agent_service"),
 }
 

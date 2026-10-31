@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from agent.runtime_store.errors import DurableStoreError, StoreErrorCode
+from agent.runtime_store import WORKER_LEASE_SECONDS
 
 from .context_factory import ServiceContextFactory
 from .contracts import (
@@ -108,6 +109,7 @@ class AgentService:
             ),
             StoreErrorCode.IDEMPOTENCY_CONFLICT: ServiceErrorCode.REQUEST_ID_CONFLICT,
             StoreErrorCode.FENCE_CONFLICT: ServiceErrorCode.RUN_ALREADY_ACTIVE,
+            StoreErrorCode.SESSION_RUN_ACTIVE: ServiceErrorCode.RUN_ALREADY_ACTIVE,
             StoreErrorCode.STORE_BUSY: getattr(
                 ServiceErrorCode, "STORE_BUSY", ServiceErrorCode.INVALID_REQUEST
             ),
@@ -123,8 +125,19 @@ class AgentService:
         ))
         return AgentServiceError(
             code,
-            "durable Runtime operation failed",
-            details={"store_code": error.code.value},
+            (
+                "another Run is already active in this session"
+                if error.code is StoreErrorCode.SESSION_RUN_ACTIVE
+                else "durable Runtime operation failed"
+            ),
+            details={
+                "store_code": error.code.value,
+                **(
+                    error.details
+                    if error.code is StoreErrorCode.SESSION_RUN_ACTIVE
+                    else {}
+                ),
+            },
         )
 
     @staticmethod
@@ -140,6 +153,30 @@ class AgentService:
         from .run_projector import handle_from_head
 
         return handle_from_head(head, request_id=request_id)
+
+    @staticmethod
+    async def _run_with_worker_lease(context: Any, operation: Any) -> Any:
+        import asyncio
+
+        view = context.durable_store_view
+        if view is None:
+            return await operation
+        task = asyncio.create_task(operation)
+        heartbeat_seconds = WORKER_LEASE_SECONDS / 3
+        while not task.done():
+            done, _pending = await asyncio.wait(
+                {task},
+                timeout=heartbeat_seconds,
+            )
+            if done:
+                break
+            try:
+                view.renew_worker_lease()
+            except Exception:
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+                raise
+        return await task
 
     async def start_run(self, request: StartRunRequest) -> RunHandle:
         import asyncio
@@ -220,10 +257,13 @@ class AgentService:
             managed = self._runs.get(run_id)
             if managed is not None:
                 self._runs[run_id] = _ManagedRun(context, managed.task)
-            await self._launcher.start(
-                session_context=context.session,
-                run_context=context,
-                request=request,
+            await self._run_with_worker_lease(
+                context,
+                self._launcher.start(
+                    session_context=context.session,
+                    run_context=context,
+                    request=request,
+                ),
             )
         except asyncio.CancelledError:
             raise
@@ -262,6 +302,8 @@ class AgentService:
 
         self._ensure_open()
         async with self._operation_lock:
+            context = None
+            scheduled = False
             try:
                 head = self._store.get_run_head(
                     request.tenant_id,
@@ -274,7 +316,13 @@ class AgentService:
                         "run not found",
                     )
                 status = str(head.run_status).upper()
-                if status in {"COMPLETED", "CANCELLED", "TIMED_OUT", "CANCELLING"}:
+                if status in {
+                    "COMPLETED",
+                    "FAILED_TERMINAL",
+                    "CANCELLED",
+                    "TIMED_OUT",
+                    "CANCELLING",
+                }:
                     code = (
                         ServiceErrorCode.RUN_ALREADY_CANCELLING
                         if status == "CANCELLING"
@@ -315,16 +363,23 @@ class AgentService:
                     name=f"tsagent-resume:{request.run_id}",
                 )
                 self._runs[request.run_id] = _ManagedRun(context, task)
+                scheduled = True
                 return self._handle(head, request.request_id)
             except AgentServiceError:
+                if context is not None and not scheduled:
+                    self._contexts.release_run(context)
                 raise
             except DurableStoreError as error:
+                if context is not None and not scheduled:
+                    self._contexts.release_run(context)
                 raise self._store_error(
                     error,
                     run_id=request.run_id,
                     request_id=request.request_id,
                 ) from error
             except Exception as error:
+                if context is not None and not scheduled:
+                    self._contexts.release_run(context)
                 raise self._runtime_error(error, run_id=request.run_id) from error
 
     async def _run_resume(self, request: ResumeRunRequest, context: Any) -> None:
@@ -332,7 +387,10 @@ class AgentService:
 
         run_id = context.run_id
         try:
-            await self._launcher.resume(run_context=context, request=request)
+            await self._run_with_worker_lease(
+                context,
+                self._launcher.resume(run_context=context, request=request),
+            )
         except asyncio.CancelledError:
             raise
         except Exception as error:

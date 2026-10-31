@@ -14,9 +14,9 @@ import sqlite3
 import threading
 import uuid
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Iterator, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Iterator, Mapping, Sequence
 
 from .contracts import (
     ArtifactCommitFact,
@@ -36,20 +36,33 @@ from .contracts import (
 from .errors import DurableStoreError, StoreErrorCode
 
 
-SCHEMA_VERSION = "v2.3H3"
+if TYPE_CHECKING:
+    from agent.interruption.contracts import CancellationIntent, InterruptionPhase
+    from agent.interruption.store import DurableInterruptionRecord, InterruptionFailurePoint
+
+
+SCHEMA_VERSION = "v2.3H4"
 _MIGRATABLE_SCHEMA_VERSIONS = frozenset({
     "v2.3B-3",
     "v2.3C-3",
     "v2.3D-2",
+    "v2.3H3",
 })
 DEFAULT_BUSY_TIMEOUT_MS = 5_000
 DEFAULT_WAL_AUTOCHECKPOINT = 1_000
+WORKER_LEASE_SECONDS = 45
 _MAX_BUSY_TIMEOUT_MS = 60_000
 _MAX_WAL_AUTOCHECKPOINT = 100_000
 
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _worker_lease_expiry() -> str:
+    return (
+        datetime.now(timezone.utc) + timedelta(seconds=WORKER_LEASE_SECONDS)
+    ).isoformat().replace("+00:00", "Z")
 
 
 def _digest_text(value: str) -> str:
@@ -429,6 +442,19 @@ class SqliteRuntimeStore:
                         REFERENCES run_heads (tenant_id, run_id)
                 );
 
+                CREATE TABLE IF NOT EXISTS run_worker_leases (
+                    tenant_id TEXT NOT NULL,
+                    session_id TEXT NOT NULL,
+                    run_id TEXT NOT NULL,
+                    writer_id TEXT NOT NULL,
+                    fence_token INTEGER NOT NULL CHECK (fence_token > 0),
+                    heartbeat_at TEXT NOT NULL,
+                    expires_at TEXT NOT NULL,
+                    PRIMARY KEY (tenant_id, run_id),
+                    FOREIGN KEY (tenant_id, run_id)
+                        REFERENCES run_heads (tenant_id, run_id)
+                );
+
                 CREATE TABLE IF NOT EXISTS run_event_heads (
                     tenant_id TEXT NOT NULL,
                     session_id TEXT NOT NULL,
@@ -543,9 +569,8 @@ class SqliteRuntimeStore:
                         stored_schema in _MIGRATABLE_SCHEMA_VERSIONS
                         and schema_version == SCHEMA_VERSION
                     ):
-                        # D2 only adds interruption facts and indexes.  DDL
-                        # above is idempotent, so updating metadata preserves
-                        # all prior B/C durable facts.
+                        # Later versions add idempotent tables/indexes only;
+                        # existing durable Run facts remain unchanged.
                         stored_schema = schema_version
                         connection.execute(
                             """
@@ -869,6 +894,12 @@ class SqliteRuntimeStore:
                     "requested run_id is already occupied",
                 )
 
+            self._assert_session_run_available_tx(
+                connection,
+                tenant_id,
+                session_id,
+            )
+
             now = _now()
             connection.execute(
                 """
@@ -896,6 +927,14 @@ class SqliteRuntimeStore:
                 VALUES (?, ?, ?, ?, 1, 1, ?, NULL)
                 """,
                 (tenant_id, session_id, run_id, writer_id, now),
+            )
+            self._put_worker_lease_tx(
+                connection,
+                tenant_id,
+                session_id,
+                run_id,
+                writer_id,
+                1,
             )
 
             operation_id = uuid.uuid4().hex
@@ -1570,6 +1609,9 @@ class SqliteRuntimeStore:
         request_id: str,
         writer_id: str,
         fence_token: int,
+        terminal_payload: Mapping[str, Any] | None = None,
+        run_output: Mapping[str, Any] | None = None,
+        artifacts: Sequence[ArtifactCommitFact] = (),
         failure_point: InterruptionFailurePoint | None = None,
     ) -> DurableInterruptionRecord:
         """Atomically finalize an observed cancellation or Run timeout."""
@@ -1667,6 +1709,25 @@ class SqliteRuntimeStore:
                 InterruptionFailurePoint.AFTER_PHASE_UPDATE,
             )
 
+            if run_output is not None:
+                self._insert_run_output_tx(
+                    connection,
+                    tenant_id=tenant_id,
+                    session_id=session_id,
+                    run_id=run_id,
+                    revision=revision,
+                    output=run_output,
+                )
+            self._insert_artifact_facts_tx(
+                connection,
+                tenant_id=tenant_id,
+                session_id=session_id,
+                run_id=run_id,
+                revision=revision,
+                request_id=request_id,
+                artifacts=artifacts,
+            )
+
             revision_payload = {
                 "interruption_phase": "FINALIZED",
                 "reason": reason.value,
@@ -1703,6 +1764,7 @@ class SqliteRuntimeStore:
             )
 
             event_payload = {
+                **dict(terminal_payload or {}),
                 "request_id": request_id,
                 "reason": reason.value,
             }
@@ -1845,6 +1907,7 @@ class SqliteRuntimeStore:
         expected_fence_token: int | None = None,
         request_id: str = "",
         expected_store_generation: str | None = None,
+        worker_lease: bool = False,
     ) -> FenceGrant:
         tenant_id = _require_text(tenant_id, "tenant_id")
         session_id = _require_text(session_id, "session_id")
@@ -1853,6 +1916,13 @@ class SqliteRuntimeStore:
         self._check_generation(expected_store_generation)
         with self._write_transaction() as connection:
             row = self._fetch_head_tx(connection, tenant_id, run_id, session_id=session_id)
+            if worker_lease:
+                self._assert_session_run_available_tx(
+                    connection,
+                    tenant_id,
+                    session_id,
+                    current_run_id=run_id,
+                )
             current_token = int(row["current_fence_token"])
             current_writer = str(row["current_writer_id"])
             if current_writer == writer_id and current_token > 0:
@@ -1860,6 +1930,15 @@ class SqliteRuntimeStore:
                     raise DurableStoreError(
                         StoreErrorCode.STALE_WRITER,
                         "idempotent acquire used a different fence token",
+                    )
+                if worker_lease:
+                    self._renew_worker_lease_tx(
+                        connection,
+                        tenant_id,
+                        session_id,
+                        run_id,
+                        writer_id,
+                        current_token,
                     )
                 return FenceGrant(
                     tenant_id=tenant_id,
@@ -1877,6 +1956,20 @@ class SqliteRuntimeStore:
                     StoreErrorCode.FENCE_CONFLICT,
                     f"Run is already owned by writer {current_writer}",
                 )
+            now = _now()
+            if worker_lease:
+                lease = connection.execute(
+                    """
+                    SELECT writer_id, expires_at FROM run_worker_leases
+                    WHERE tenant_id = ? AND run_id = ?
+                    """,
+                    (tenant_id, run_id),
+                ).fetchone()
+                if lease is not None and str(lease["expires_at"]) > now:
+                    raise DurableStoreError(
+                        StoreErrorCode.FENCE_CONFLICT,
+                        f"Run worker lease is held by writer {lease['writer_id']}",
+                    )
             if expected_fence_token is not None and expected_fence_token != current_token:
                 raise DurableStoreError(
                     StoreErrorCode.STALE_WRITER,
@@ -1904,12 +1997,21 @@ class SqliteRuntimeStore:
                     writer_id,
                     token,
                     str(request_id),
-                    _now(),
+                    now,
                     tenant_id,
                     run_id,
                     current_token,
                 ),
             )
+            if worker_lease:
+                self._put_worker_lease_tx(
+                    connection,
+                    tenant_id,
+                    session_id,
+                    run_id,
+                    writer_id,
+                    token,
+                )
             return FenceGrant(
                 tenant_id=tenant_id,
                 session_id=session_id,
@@ -1931,6 +2033,7 @@ class SqliteRuntimeStore:
         expected_fence_token: int,
         request_id: str = "",
         expected_store_generation: str | None = None,
+        worker_lease: bool = False,
     ) -> FenceGrant:
         tenant_id = _require_text(tenant_id, "tenant_id")
         session_id = _require_text(session_id, "session_id")
@@ -1939,6 +2042,13 @@ class SqliteRuntimeStore:
         self._check_generation(expected_store_generation)
         with self._write_transaction() as connection:
             row = self._fetch_head_tx(connection, tenant_id, run_id, session_id=session_id)
+            if worker_lease:
+                self._assert_session_run_available_tx(
+                    connection,
+                    tenant_id,
+                    session_id,
+                    current_run_id=run_id,
+                )
             current_token = int(row["current_fence_token"])
             current_writer = str(row["current_writer_id"])
             if current_token != expected_fence_token:
@@ -1946,7 +2056,55 @@ class SqliteRuntimeStore:
                     StoreErrorCode.STALE_WRITER,
                     "takeover expected token is not current",
                 )
-            if current_writer == writer_id and current_token > 0:
+            now = _now()
+            if worker_lease:
+                lease = connection.execute(
+                    """
+                    SELECT writer_id, fence_token, expires_at
+                    FROM run_worker_leases
+                    WHERE tenant_id = ? AND run_id = ?
+                    """,
+                    (tenant_id, run_id),
+                ).fetchone()
+                if lease is not None and str(lease["expires_at"]) > now:
+                    if (
+                        str(lease["writer_id"]) == writer_id
+                        and int(lease["fence_token"]) == current_token
+                        and current_writer == writer_id
+                    ):
+                        self._renew_worker_lease_tx(
+                            connection,
+                            tenant_id,
+                            session_id,
+                            run_id,
+                            writer_id,
+                            current_token,
+                        )
+                        return FenceGrant(
+                            tenant_id=tenant_id,
+                            session_id=session_id,
+                            run_id=run_id,
+                            writer_id=writer_id,
+                            fence_token=current_token,
+                            fence_epoch=current_token,
+                            run_revision=int(row["current_revision"]),
+                            store_generation=self.store_generation,
+                            idempotent=True,
+                        )
+                    raise DurableStoreError(
+                        StoreErrorCode.FENCE_CONFLICT,
+                        f"Run worker lease is held by writer {lease['writer_id']}",
+                    )
+                if (
+                    lease is None
+                    and current_writer
+                    and str(row["run_status"]).upper() == "RUNNING"
+                ):
+                    raise DurableStoreError(
+                        StoreErrorCode.FENCE_CONFLICT,
+                        "a running Run has no worker lease evidence",
+                    )
+            elif current_writer == writer_id and current_token > 0:
                 return FenceGrant(
                     tenant_id=tenant_id,
                     session_id=session_id,
@@ -1959,6 +2117,15 @@ class SqliteRuntimeStore:
                     idempotent=True,
                 )
             token = current_token + 1
+            if current_token > 0:
+                connection.execute(
+                    """
+                    UPDATE run_fences
+                    SET released_at = COALESCE(released_at, ?)
+                    WHERE tenant_id = ? AND run_id = ? AND fence_token = ?
+                    """,
+                    (now, tenant_id, run_id, current_token),
+                )
             self._insert_fence_tx(
                 connection,
                 tenant_id,
@@ -1980,12 +2147,21 @@ class SqliteRuntimeStore:
                     writer_id,
                     token,
                     str(request_id),
-                    _now(),
+                    now,
                     tenant_id,
                     run_id,
                     current_token,
                 ),
             )
+            if worker_lease:
+                self._put_worker_lease_tx(
+                    connection,
+                    tenant_id,
+                    session_id,
+                    run_id,
+                    writer_id,
+                    token,
+                )
             return FenceGrant(
                 tenant_id=tenant_id,
                 session_id=session_id,
@@ -2025,6 +2201,169 @@ class SqliteRuntimeStore:
             ),
         )
 
+    @staticmethod
+    def _put_worker_lease_tx(
+        connection: sqlite3.Connection,
+        tenant_id: str,
+        session_id: str,
+        run_id: str,
+        writer_id: str,
+        fence_token: int,
+    ) -> None:
+        now = _now()
+        connection.execute(
+            """
+            INSERT INTO run_worker_leases
+                (tenant_id, session_id, run_id, writer_id, fence_token,
+                 heartbeat_at, expires_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(tenant_id, run_id) DO UPDATE SET
+                session_id = excluded.session_id,
+                writer_id = excluded.writer_id,
+                fence_token = excluded.fence_token,
+                heartbeat_at = excluded.heartbeat_at,
+                expires_at = excluded.expires_at
+            """,
+            (
+                tenant_id,
+                session_id,
+                run_id,
+                writer_id,
+                fence_token,
+                now,
+                _worker_lease_expiry(),
+            ),
+        )
+
+    @staticmethod
+    def _assert_session_run_available_tx(
+        connection: sqlite3.Connection,
+        tenant_id: str,
+        session_id: str,
+        *,
+        current_run_id: str = "",
+    ) -> None:
+        active_run = connection.execute(
+            """
+            SELECT run_id FROM run_heads
+            WHERE tenant_id = ? AND session_id = ? AND run_id <> ?
+              AND run_status IN ('CREATED', 'RUNNING', 'CANCELLING')
+            ORDER BY updated_at, run_id
+            LIMIT 1
+            """,
+            (tenant_id, session_id, current_run_id),
+        ).fetchone()
+        if active_run is None:
+            now = _now()
+            active_lease = connection.execute(
+                """
+                SELECT run_id FROM run_worker_leases
+                WHERE tenant_id = ? AND session_id = ? AND run_id <> ?
+                  AND expires_at > ?
+                ORDER BY expires_at DESC, run_id
+                LIMIT 1
+                """,
+                (tenant_id, session_id, current_run_id, now),
+            ).fetchone()
+            active_run = active_lease
+        if active_run is not None:
+            run_id = str(active_run["run_id"])
+            raise DurableStoreError(
+                StoreErrorCode.SESSION_RUN_ACTIVE,
+                f"Run {run_id} is already active in this session",
+                details={"active_run_id": run_id},
+            )
+
+    @staticmethod
+    def _renew_worker_lease_tx(
+        connection: sqlite3.Connection,
+        tenant_id: str,
+        session_id: str,
+        run_id: str,
+        writer_id: str,
+        fence_token: int,
+    ) -> None:
+        lease = connection.execute(
+            """
+            SELECT writer_id, fence_token, expires_at FROM run_worker_leases
+            WHERE tenant_id = ? AND run_id = ? AND session_id = ?
+            """,
+            (tenant_id, run_id, session_id),
+        ).fetchone()
+        now = _now()
+        if (
+            lease is None
+            or str(lease["writer_id"]) != writer_id
+            or int(lease["fence_token"]) != fence_token
+            or str(lease["expires_at"]) <= now
+        ):
+            raise DurableStoreError(
+                StoreErrorCode.STALE_WRITER,
+                "worker lease is absent, expired, or owned by another fence",
+            )
+        connection.execute(
+            """
+            UPDATE run_worker_leases
+            SET heartbeat_at = ?, expires_at = ?
+            WHERE tenant_id = ? AND run_id = ? AND session_id = ?
+              AND writer_id = ? AND fence_token = ? AND expires_at > ?
+            """,
+            (
+                now,
+                _worker_lease_expiry(),
+                tenant_id,
+                run_id,
+                session_id,
+                writer_id,
+                fence_token,
+                now,
+            ),
+        )
+
+    def renew_worker_lease(
+        self,
+        tenant_id: str,
+        session_id: str,
+        run_id: str,
+        writer_id: str,
+        fence_token: int,
+        *,
+        expected_store_generation: str | None = None,
+    ) -> None:
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        session_id = _require_text(session_id, "session_id")
+        run_id = _require_text(run_id, "run_id")
+        writer_id = _require_text(writer_id, "writer_id")
+        if fence_token <= 0:
+            raise DurableStoreError(
+                StoreErrorCode.INVALID_ARGUMENT,
+                "fence_token must be positive",
+            )
+        self._check_generation(expected_store_generation)
+        with self._write_transaction() as connection:
+            head = self._fetch_head_tx(
+                connection,
+                tenant_id,
+                run_id,
+                session_id=session_id,
+            )
+            if (
+                str(head["current_writer_id"]) != writer_id
+                or int(head["current_fence_token"]) != fence_token
+            ):
+                raise DurableStoreError(
+                    StoreErrorCode.STALE_WRITER,
+                    "worker no longer owns the current Run fence",
+                )
+            self._renew_worker_lease_tx(
+                connection,
+                tenant_id,
+                session_id,
+                run_id,
+                writer_id,
+                fence_token,
+            )
+
     def release_fence(
         self,
         tenant_id: str,
@@ -2054,6 +2393,14 @@ class SqliteRuntimeStore:
                     (tenant_id, run_id, fence_token),
                 ).fetchone()
                 if history is not None and str(history["writer_id"]) == writer_id and history["released_at"] is not None:
+                    connection.execute(
+                        """
+                        DELETE FROM run_worker_leases
+                        WHERE tenant_id = ? AND run_id = ? AND session_id = ?
+                          AND writer_id = ? AND fence_token = ?
+                        """,
+                        (tenant_id, run_id, session_id, writer_id, fence_token),
+                    )
                     return
             if current_writer != writer_id or current_token != fence_token:
                 raise DurableStoreError(
@@ -2083,6 +2430,14 @@ class SqliteRuntimeStore:
                 WHERE tenant_id = ? AND run_id = ? AND fence_token = ?
                 """,
                 (_now(), tenant_id, run_id, fence_token),
+            )
+            connection.execute(
+                """
+                DELETE FROM run_worker_leases
+                WHERE tenant_id = ? AND run_id = ? AND session_id = ?
+                  AND writer_id = ? AND fence_token = ?
+                """,
+                (tenant_id, run_id, session_id, writer_id, fence_token),
             )
 
     def append_revision(
@@ -3121,7 +3476,10 @@ class SqliteRuntimeStore:
             )
             self._maybe_inject_finalization_failure(point, FinalizationFailurePoint.AFTER_INDEX_INSERT)
 
-            run_status = "COMPLETED" if not index.active_workflow_id and not index.pending_workflow_ids else "RUNNING"
+            # Workflow finalization is not Run finalization.  Runtime still
+            # owns the goal/effect gate and the user-visible RunOutput; the
+            # Service writes the single terminal event after those checks.
+            run_status = "RUNNING"
             cursor = connection.execute(
                 """
                 UPDATE run_heads
@@ -3203,29 +3561,6 @@ class SqliteRuntimeStore:
                     },
                     payload_json=workflow_payload_json,
                     payload_digest=_digest_text(workflow_payload_json),
-                    run_revision=revision,
-                )
-            if run_status == "COMPLETED":
-                completed_payload = {
-                    "completed_workflow_ids": list(index.completed_workflow_ids),
-                    "artifact_ids": [artifact.artifact_id for artifact in bundle.artifacts],
-                }
-                completed_payload_json = _canonical_json(completed_payload)
-                self._append_event_tx(
-                    connection,
-                    tenant_id=tenant_id,
-                    session_id=session_id,
-                    run_id=run_id,
-                    event_id=f"run-completed:{run_id}:{request_id}",
-                    event_type_value="run_completed",
-                    timestamp=now,
-                    optional_ids={
-                        "workflow_id": None,
-                        "stage_id": None,
-                        "task_id": None,
-                    },
-                    payload_json=completed_payload_json,
-                    payload_digest=_digest_text(completed_payload_json),
                     run_revision=revision,
                 )
             self._maybe_inject_finalization_failure(point, FinalizationFailurePoint.BEFORE_COMMIT)
@@ -3609,13 +3944,21 @@ class SqliteRuntimeStore:
                 terminal_row = self._connection.execute(
                     f"""
                     SELECT {self._event_columns()}
-                    FROM run_events
-                    WHERE tenant_id = ? AND run_id = ?
-                      AND event_type IN (
+                    FROM run_events AS terminal
+                    WHERE terminal.tenant_id = ? AND terminal.run_id = ?
+                      AND terminal.sequence_number > COALESCE(
+                          (SELECT MAX(resumed.sequence_number)
+                           FROM run_events AS resumed
+                           WHERE resumed.tenant_id = terminal.tenant_id
+                             AND resumed.run_id = terminal.run_id
+                             AND resumed.event_type = 'run_resumed'),
+                          0
+                      )
+                      AND terminal.event_type IN (
                           'run_completed', 'run_failed', 'run_blocked',
                           'run_cancelled', 'run_timed_out'
                       )
-                    ORDER BY sequence_number DESC
+                    ORDER BY terminal.sequence_number DESC
                     LIMIT 1
                     """,
                     (tenant_id, run_id),
@@ -3684,6 +4027,21 @@ class SqliteRuntimeStore:
                     self._connection.execute("ROLLBACK")
                 raise
 
+    def recent_terminal_run_ids(
+        self, tenant_id: str, session_id: str, *, exclude_run_id: str, limit: int = 10,
+    ) -> tuple[str, ...]:
+        """Bounded conversation read, strictly inside the owning session."""
+        with self._lock:
+            self._ensure_open()
+            rows = self._connection.execute(
+                "SELECT run_id FROM run_heads WHERE tenant_id = ? AND session_id = ? "
+                "AND run_id <> ? AND run_status IN "
+                "('COMPLETED', 'FAILED_TERMINAL', 'BLOCKED', 'CANCELLED', 'TIMED_OUT') "
+                "ORDER BY updated_at DESC, run_id DESC LIMIT ?",
+                (tenant_id, session_id, exclude_run_id, limit),
+            ).fetchall()
+            return tuple(str(row["run_id"]) for row in reversed(rows))
+
     def latest_run_id(
         self,
         tenant_id: str,
@@ -3741,6 +4099,97 @@ class SqliteRuntimeStore:
             artifact_ids=tuple(str(item) for item in artifacts),
             created_at=str(row["created_at"]),
         )
+
+    @staticmethod
+    def _insert_artifact_facts_tx(
+        connection: sqlite3.Connection,
+        *,
+        tenant_id: str,
+        session_id: str,
+        run_id: str,
+        revision: int,
+        request_id: str,
+        artifacts: Sequence[ArtifactCommitFact],
+    ) -> None:
+        for artifact in artifacts:
+            if not isinstance(artifact, ArtifactCommitFact):
+                raise DurableStoreError(
+                    StoreErrorCode.INVALID_ARGUMENT,
+                    "transition artifacts must be ArtifactCommitFact values",
+                )
+            existing = connection.execute(
+                """
+                SELECT digest, reference
+                FROM artifact_metadata
+                WHERE tenant_id = ? AND run_id = ? AND artifact_id = ?
+                """,
+                (tenant_id, run_id, artifact.artifact_id),
+            ).fetchone()
+            if existing is not None and (
+                str(existing["digest"]) != artifact.digest
+                or str(existing["reference"]) != artifact.reference
+            ):
+                raise DurableStoreError(
+                    StoreErrorCode.ARTIFACT_DIGEST_MISMATCH,
+                    f"artifact already has a different digest/reference: {artifact.artifact_id}",
+                )
+            if existing is None:
+                connection.execute(
+                    """
+                    INSERT INTO artifact_metadata
+                        (tenant_id, session_id, run_id, artifact_id,
+                         artifact_type, digest, reference, exists_flag, verified,
+                         verification_evidence_digest, producer_workflow_id,
+                         producer_stage_id, producer_task_id, created_revision,
+                         last_updated_revision, request_id, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        tenant_id,
+                        session_id,
+                        run_id,
+                        artifact.artifact_id,
+                        artifact.artifact_type,
+                        artifact.digest,
+                        artifact.reference,
+                        int(artifact.exists),
+                        int(artifact.verified),
+                        artifact.verification_evidence_digest,
+                        artifact.producer_workflow_id,
+                        artifact.producer_stage_id,
+                        artifact.producer_task_id,
+                        revision,
+                        revision,
+                        request_id,
+                        _now(),
+                    ),
+                )
+            else:
+                connection.execute(
+                    """
+                    UPDATE artifact_metadata
+                    SET artifact_type = ?, exists_flag = ?, verified = ?,
+                        verification_evidence_digest = ?, producer_workflow_id = ?,
+                        producer_stage_id = ?, producer_task_id = ?,
+                        last_updated_revision = ?, request_id = ?, updated_at = ?
+                    WHERE tenant_id = ? AND run_id = ? AND artifact_id = ?
+                    """,
+                    (
+                        artifact.artifact_type,
+                        int(artifact.exists),
+                        int(artifact.verified),
+                        artifact.verification_evidence_digest,
+                        artifact.producer_workflow_id,
+                        artifact.producer_stage_id,
+                        artifact.producer_task_id,
+                        revision,
+                        request_id,
+                        _now(),
+                        tenant_id,
+                        run_id,
+                        artifact.artifact_id,
+                    ),
+                )
 
     @staticmethod
     def _insert_run_output_tx(
@@ -3878,10 +4327,13 @@ class SqliteRuntimeStore:
             "run_blocked",
             "run_cancelled",
             "run_timed_out",
-        }:
+        } and not (
+            str(latest["event_type"]) == "run_blocked"
+            and event_type_value == "run_resumed"
+        ):
             raise DurableStoreError(
                 StoreErrorCode.INVALID_ARGUMENT,
-                "a terminal Run event cannot be followed by another event",
+                "a terminal Run event cannot be followed by another event unless a blocked Run resumes",
             )
 
         now = _now()
@@ -4089,7 +4541,6 @@ class SqliteRuntimeStore:
             terminal_statuses = {
                 "COMPLETED",
                 "FAILED_TERMINAL",
-                "BLOCKED",
                 "CANCELLED",
                 "TIMED_OUT",
             }
@@ -4104,6 +4555,7 @@ class SqliteRuntimeStore:
                 "COMPLETED": {"run_completed"},
                 "FAILED_TERMINAL": {"run_failed"},
                 "BLOCKED": {"run_blocked"},
+                "WAITING_USER": {"run_waiting_user"},
                 "CANCELLED": {"run_cancelled"},
                 "TIMED_OUT": {"run_timed_out"},
             }
@@ -4115,6 +4567,7 @@ class SqliteRuntimeStore:
                     "COMPLETED",
                     "FAILED_TERMINAL",
                     "BLOCKED",
+                    "WAITING_USER",
                 },
                 "SUSPENDED": {"RUNNING", "CANCELLING"},
                 "WAITING_USER": {"RUNNING", "CANCELLING"},
@@ -4122,7 +4575,10 @@ class SqliteRuntimeStore:
                 "CANCELLING": {"CANCELLED", "TIMED_OUT"},
                 "COMPLETED": {"COMPLETED"},
                 "FAILED_TERMINAL": {"FAILED_TERMINAL"},
-                "BLOCKED": {"BLOCKED"},
+                # BLOCKED is the current attempt's outcome, not an immutable
+                # terminal state for the logical Run. A later resume may
+                # proceed after the external blocker changes.
+                "BLOCKED": {"RUNNING", "BLOCKED"},
                 "CANCELLED": {"CANCELLED"},
                 "TIMED_OUT": {"TIMED_OUT"},
             }
@@ -4150,86 +4606,15 @@ class SqliteRuntimeStore:
                     revision=int(row["current_revision"]),
                     output=run_output,
                 )
-            for artifact in artifacts or ():
-                if not isinstance(artifact, ArtifactCommitFact):
-                    raise DurableStoreError(
-                        StoreErrorCode.INVALID_ARGUMENT,
-                        "transition artifacts must be ArtifactCommitFact values",
-                    )
-                existing_artifact = connection.execute(
-                    """
-                    SELECT digest, reference
-                    FROM artifact_metadata
-                    WHERE tenant_id = ? AND run_id = ? AND artifact_id = ?
-                    """,
-                    (tenant_id, run_id, artifact.artifact_id),
-                ).fetchone()
-                if existing_artifact is not None and (
-                    str(existing_artifact["digest"]) != artifact.digest
-                    or str(existing_artifact["reference"]) != artifact.reference
-                ):
-                    raise DurableStoreError(
-                        StoreErrorCode.ARTIFACT_DIGEST_MISMATCH,
-                        f"artifact already has a different digest/reference: {artifact.artifact_id}",
-                    )
-                if existing_artifact is None:
-                    connection.execute(
-                        """
-                        INSERT INTO artifact_metadata
-                            (tenant_id, session_id, run_id, artifact_id,
-                             artifact_type, digest, reference, exists_flag, verified,
-                             verification_evidence_digest, producer_workflow_id,
-                             producer_stage_id, producer_task_id, created_revision,
-                             last_updated_revision, request_id, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        """,
-                        (
-                            tenant_id,
-                            session_id,
-                            run_id,
-                            artifact.artifact_id,
-                            artifact.artifact_type,
-                            artifact.digest,
-                            artifact.reference,
-                            int(artifact.exists),
-                            int(artifact.verified),
-                            artifact.verification_evidence_digest,
-                            artifact.producer_workflow_id,
-                            artifact.producer_stage_id,
-                            artifact.producer_task_id,
-                            int(row["current_revision"]),
-                            int(row["current_revision"]),
-                            request_id,
-                            _now(),
-                        ),
-                    )
-                else:
-                    connection.execute(
-                        """
-                        UPDATE artifact_metadata
-                        SET artifact_type = ?, exists_flag = ?, verified = ?,
-                            verification_evidence_digest = ?,
-                            producer_workflow_id = ?, producer_stage_id = ?,
-                            producer_task_id = ?, last_updated_revision = ?,
-                            request_id = ?, updated_at = ?
-                        WHERE tenant_id = ? AND run_id = ? AND artifact_id = ?
-                        """,
-                        (
-                            artifact.artifact_type,
-                            int(artifact.exists),
-                            int(artifact.verified),
-                            artifact.verification_evidence_digest,
-                            artifact.producer_workflow_id,
-                            artifact.producer_stage_id,
-                            artifact.producer_task_id,
-                            int(row["current_revision"]),
-                            request_id,
-                            _now(),
-                            tenant_id,
-                            run_id,
-                            artifact.artifact_id,
-                        ),
-                    )
+            self._insert_artifact_facts_tx(
+                connection,
+                tenant_id=tenant_id,
+                session_id=session_id,
+                run_id=run_id,
+                revision=int(row["current_revision"]),
+                request_id=request_id,
+                artifacts=artifacts or (),
+            )
             self._append_event_tx(
                 connection,
                 tenant_id=tenant_id,
@@ -4271,6 +4656,21 @@ class SqliteRuntimeStore:
                 raise DurableStoreError(
                     StoreErrorCode.REVISION_CONFLICT,
                     "Run status CAS did not update exactly one row",
+                )
+            if run_status in {
+                "COMPLETED",
+                "FAILED_TERMINAL",
+                "BLOCKED",
+                "CANCELLED",
+                "TIMED_OUT",
+            }:
+                connection.execute(
+                    """
+                    DELETE FROM run_worker_leases
+                    WHERE tenant_id = ? AND session_id = ? AND run_id = ?
+                      AND writer_id = ? AND fence_token = ?
+                    """,
+                    (tenant_id, session_id, run_id, writer_id, fence_token),
                 )
             return self._head_contract(
                 self._fetch_head_tx(
@@ -4316,14 +4716,22 @@ class SqliteRuntimeStore:
                 retained_from_sequence = int(row["retained_from_sequence"]) if row is not None else 0
                 terminal = self._connection.execute(
                     """
-                    SELECT sequence_number
-                    FROM run_events
-                    WHERE tenant_id = ? AND run_id = ?
-                      AND event_type IN (
+                    SELECT terminal.sequence_number
+                    FROM run_events AS terminal
+                    WHERE terminal.tenant_id = ? AND terminal.run_id = ?
+                      AND terminal.sequence_number > COALESCE(
+                          (SELECT MAX(resumed.sequence_number)
+                           FROM run_events AS resumed
+                           WHERE resumed.tenant_id = terminal.tenant_id
+                             AND resumed.run_id = terminal.run_id
+                             AND resumed.event_type = 'run_resumed'),
+                          0
+                      )
+                      AND terminal.event_type IN (
                           'run_completed', 'run_failed', 'run_blocked',
                           'run_cancelled', 'run_timed_out'
                       )
-                    ORDER BY sequence_number ASC
+                    ORDER BY terminal.sequence_number DESC
                     LIMIT 1
                     """,
                     (tenant_id, run_id),

@@ -292,3 +292,15 @@ Artifact Integrity 和 Process-Restart Recovery 全部硬门槛。C09–C12 不�
 1. C03：Artifact 未水合导致零执行假成功；
 2. C07：Checkpoint lineage 缺失导致重复 Provider 调用与重复副作用；
 3. P0 统一运行的 C03 初次误报来自 Harness stale field，而不是 Runtime 回归。
+
+## 十一、AgentService checkpoint resume 接线（2026-09-27）
+
+Service 恢复现在遵循本 ADR 的 Run index → active Workflow → WorkflowExecutor 路径：
+
+- `RuntimeExecutionLauncher.resume` 不构造 `UniversalAgent`，也不把原始请求重新交给 Planner；
+- Run index 持久化原始目标和 Workflow 输入绑定，重启后按相同 Workflow 定义重建执行上下文；
+- Coordinator 原子提交 Workflow checkpoint、Artifact 和 index，但不提前提交 `run_completed`；Service 在验证终态证据并投影 RunOutput 后写入 Run 唯一终态；
+- 若进程在 Workflow 原子提交后、Service 终态提交前退出，恢复入口读取已完成 checkpoint 的已验证摘要，不重复执行 Workflow；
+- `BLOCKED` 表示当前尝试阻塞，可追加 `run_resumed` 开始下一次尝试；事件回放和 RunSnapshot 只把最近一次恢复之后的 terminal event 当作当前尝试终态。`FAILED_TERMINAL`、`COMPLETED`、取消与超时仍不可恢复。
+
+`tests/test_v23c_service_e2e.py::test_service_restart_resumes_checkpoint_without_relaunching_runtime` 使用真实 SQLite、Service 重建和 WorkflowExecutor，并以本地临时 workspace/受控 stage 结果验证。该证据是离线生产接线回归，不代表真实 Provider 或真实 DuckDuckGo MCP 验收。

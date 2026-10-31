@@ -15,7 +15,7 @@ load_dotenv()
 
 from langchain_core.messages import SystemMessage, BaseMessage
 from agent.interruption import RunInterruptionRequested, await_interruptibly
-from agent.execution_errors import stable_error_message
+from agent.execution_errors import ProviderError, stable_error_message
 
 logger = logging.getLogger(__name__)
 
@@ -328,9 +328,9 @@ class LLMRouter:
         except Exception as e:
             self._on_failure(name, e)
             if self._provider_mode != "auto":
-                raise RuntimeError(
+                raise ProviderError(
                     "指定的 LLM Provider 不可用 "
-                    f"({name}): {stable_error_message(e, fallback=f'{name} request failed')}"
+                    f"({name}): {stable_error_message(e, fallback=f'{name} request failed')}", e,
                 ) from e
             attempted = {name}
             last_error: Exception = e
@@ -355,9 +355,9 @@ class LLMRouter:
                 except Exception as e3:
                     self._on_failure("deepseek", e3)
                     last_error = e3
-            raise RuntimeError(
+            raise ProviderError(
                 "所有 LLM 提供商均不可用。最后一次错误: "
-                f"{stable_error_message(last_error, fallback='all provider requests failed')}"
+                f"{stable_error_message(last_error, fallback='all provider requests failed')}", last_error,
             ) from last_error
 
     async def ainvoke(self, messages: list[BaseMessage], **kwargs):
@@ -375,9 +375,9 @@ class LLMRouter:
         except Exception as e:
             self._on_failure(name, e)
             if self._provider_mode != "auto":
-                raise RuntimeError(
+                raise ProviderError(
                     "指定的 LLM Provider 不可用 "
-                    f"({name}): {stable_error_message(e, fallback=f'{name} request failed')}"
+                    f"({name}): {stable_error_message(e, fallback=f'{name} request failed')}", e,
                 ) from e
             attempted = {name}
             last_error: Exception = e
@@ -409,9 +409,9 @@ class LLMRouter:
                 except Exception as e3:
                     self._on_failure("deepseek", e3)
                     last_error = e3
-            raise RuntimeError(
+            raise ProviderError(
                 "所有 LLM 提供商均不可用。最后一次错误: "
-                f"{stable_error_message(last_error, fallback='all provider requests failed')}"
+                f"{stable_error_message(last_error, fallback='all provider requests failed')}", last_error,
             ) from last_error
 
     @property

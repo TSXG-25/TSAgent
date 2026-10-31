@@ -172,65 +172,62 @@ class TestConversationRetrieverAndReplay:
         assert not t.runtime_pending("u")
 
 
-class TestDomainUpgrade:
-    """v2.1B-3：代码生成请求不再被判为 math（domain upgrade + 代码生成模式）。"""
+class TestSemanticContractPropagation:
+    """Semantic responses are fixtures; runtime facts cannot be removed by domain labels."""
 
-    def _intent(self, text):
-        from agent.cognition.intent_engine import engine
-        from agent.cognition.cognitive_context import CognitiveContext, ResolvedQuery
-        return engine.analyze(CognitiveContext(query=text, resolved_query=ResolvedQuery(raw=text)))
+    def _intent(self, text, *, domain, outcomes=(), relation="new_request", action="answer"):
+        import json
+        from types import SimpleNamespace
+        from agent.cognition.intent_engine import IntentEngine
+        from agent.cognition.cognitive_context import CognitiveContext
+        response = dict(domain=domain, action=action, target="", entities=[], confidence=.95,
+                        requires_execution=False, requested_outcomes=["USER_VISIBLE_OUTPUT", *outcomes],
+                        resolved_request=text, conversation_relation=relation,
+                        artifact_required="FILE_MUTATION" in outcomes,
+                        delivery_requirements=(
+                            [{"id": "deliverable", "kind": "file", "quantity": 1,
+                              "target": "", "acceptance_criteria": []}]
+                            if "FILE_MUTATION" in outcomes else []
+                        ),
+                        prohibited_effects=[], acceptance_criteria=[],
+                        freshness_required=False, source_grounding_required=False)
+        engine = IntentEngine()
+        engine._llm = SimpleNamespace(invoke=lambda messages: SimpleNamespace(content=json.dumps(response)))
+        return engine.analyze(CognitiveContext(query=text))
 
-    def test_code_requests_are_development(self):
-        for u in ["帮我写一个判断素数的函数。", "帮我写一个 Python 快排。",
-                  "帮我写一个二分查找函数。", "帮我写一个读取 CSV 的脚本。",
-                  "帮我写一个反转链表的函数。"]:
-            r = self._intent(u)
-            assert r.domain == "development", f"{u} -> {r.domain}"
-            assert r.requires_execution, f"{u} 应进入执行链"
+    @pytest.mark.parametrize("text", ["帮我写一个判断素数的函数。", "帮我写一个 Python 快排。",
+                                    "帮我写一个二分查找函数。", "帮我写一个读取 CSV 的脚本。"])
+    def test_artifact_outcome_requires_execution(self, text):
+        result = self._intent(text, domain="开发", outcomes=["FILE_MUTATION"])
+        assert result.domain == "development"
+        assert result.requires_execution and result.artifact_required
 
-    def test_non_code_requests_unchanged(self):
-        assert self._intent("写一首诗").domain == "creation"
-        assert self._intent("1+1等于几").domain == "math"
-        weather = self._intent("今天天气怎么样")
-        assert weather.domain == "web"
-        assert weather.action == "fresh_research"
-        assert weather.source_grounding_required is True
-        assert self._intent("把 hello 保存到 output/x.py").domain == "file"
+    def test_topic_alone_does_not_require_execution(self):
+        assert not self._intent("解释一个函数", domain="开发").requires_execution
+        assert not self._intent("写一首诗", domain="创作").requires_execution
+        assert not self._intent("1+1等于几", domain="数学").requires_execution
 
-    def test_explicit_continuation_is_deterministic(self):
-        plan = self._intent("继续执行未完成的任务")
-        assert plan.domain == "development"
-        assert plan.action == "continue_plan"
-        assert plan.requires_execution is True
-
-        chat = self._intent("继续讲")
-        assert chat.domain == "chat"
-        assert chat.action == "continue_chat"
-        assert chat.requires_execution is False
-
-        ref = self._intent("那个呢")
-        assert ref.domain == "memory"
-        assert ref.action == "reference"
-        assert ref.requires_execution is False
+    def test_semantic_continuation_preserves_relationship(self):
+        result = self._intent("这不够大呀，你总结一下", domain="知识", relation="reference", action="summarize")
+        assert result.conversation_relation == "reference"
+        assert not result.requires_execution
 
 
 class TestConversationReferenceResolver:
     """v2.1B-2：REFERENCE → ReferenceType → 只注入对应字段（无 prompt hack）。"""
 
-    def _intent(self, reference_kind=""):
+    def _intent(self, conversation_relation=""):
+        kind = conversation_relation
         class I:
-            def __init__(self, kind):
-                self.reference_kind = kind
-        return I(reference_kind)
+            def __init__(self, k): self.conversation_relation = k
+        return I(kind)
 
     def test_resolve_reference_type(self):
         from agent.conversation import resolve_reference_type, ReferenceType
-        assert resolve_reference_type(self._intent("answer")) is ReferenceType.LAST_ANSWER
-        assert resolve_reference_type(self._intent("instruction")) is ReferenceType.LAST_INSTRUCTION
-        assert resolve_reference_type(self._intent("goal")) is ReferenceType.LAST_GOAL
-        assert resolve_reference_type(self._intent("runtime")) is ReferenceType.LAST_RUNTIME
+        assert resolve_reference_type(self._intent("reference")) is ReferenceType.LAST_INSTRUCTION
+        assert resolve_reference_type(self._intent("correction")) is ReferenceType.LAST_INSTRUCTION
+        assert resolve_reference_type(self._intent("new_request")) is ReferenceType.UNKNOWN
         assert resolve_reference_type(self._intent("")) is ReferenceType.UNKNOWN
-        assert resolve_reference_type(None) is ReferenceType.UNKNOWN
 
     def test_render_reference_only_selected_field(self):
         from agent.conversation import ConversationSnapshot, ReferenceType, render_reference
@@ -242,15 +239,6 @@ class TestConversationReferenceResolver:
         assert "最近目标" in goal and "写快排" in goal
         assert "8" not in goal
         assert render_reference(snap, ReferenceType.UNKNOWN) == ""
-
-    def test_intent_engine_detects_reference_kind(self):
-        from agent.cognition.intent_engine import _detect_reference_kind
-        assert _detect_reference_kind("刚才答案是多少？") == "answer"
-        assert _detect_reference_kind("刚才让我做什么？") == "instruction"
-        assert _detect_reference_kind("上一条指令是什么") == "instruction"
-        assert _detect_reference_kind("继续") == "runtime"
-        assert _detect_reference_kind("继续刚才那个函数") == "instruction"
-        assert _detect_reference_kind("帮我写快排") == ""
 
     def test_runtime_continuation_helper(self):
         from agent.orchestrator.planner import _render_runtime_continuation
@@ -271,7 +259,7 @@ class TestContinuationContractIntegration:
         from agent.cognition.intent_schema import IntentResult
         it = IntentResult(domain="chat", action="continue", requires_execution=False)
         _apply_conversation_contract(it, "probe-x", "继续")  # 不得抛异常
-        assert it.reference_kind in ("runtime", "answer", "")
+        assert it.action in ("continue_plan", "continue_chat", "clarify", "reference", "continue")
 
     def test_retriever_runtime_pending(self):
         from agent.conversation import conversation_retriever, conversation_tracker

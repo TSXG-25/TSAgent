@@ -154,3 +154,53 @@ def test_terminal_run_cannot_reopen_through_state_event_transition(
     finally:
         view.close()
         store.close()
+
+
+def test_blocked_run_can_resume_after_its_blocker_changes(tmp_path: Path) -> None:
+    store = SqliteRuntimeStore.open(tmp_path / "blocked-resume.sqlite")
+    view = DurableRuntimeStoreView(
+        store,
+        tenant_id="tenant-blocked",
+        session_id="session-blocked",
+        run_id="run-blocked",
+        request_id="request-blocked",
+        writer_id="writer-blocked",
+    )
+    try:
+        view.transition_run_with_event(
+            run_status="RUNNING",
+            event_id="run-started:run-blocked",
+            event_type="run_started",
+            timestamp="2026-08-07T00:00:00Z",
+            payload={},
+        )
+        view.transition_run_with_event(
+            run_status="BLOCKED",
+            event_id="run-blocked:run-blocked:attempt-1",
+            event_type="run_blocked",
+            timestamp="2026-08-07T00:00:01Z",
+            payload={"reason": "capability unavailable"},
+        )
+        view.transition_run_with_event(
+            run_status="RUNNING",
+            event_id="run-resumed:run-blocked:attempt-2",
+            event_type="run_resumed",
+            timestamp="2026-08-07T00:00:02Z",
+            payload={},
+        )
+
+        head = view.head()
+        events = store.read_events(
+            "tenant-blocked",
+            "run-blocked",
+            session_id="session-blocked",
+        )
+        assert head.run_status == "RUNNING"
+        assert [event.event_type for event in events] == [
+            "run_started",
+            "run_blocked",
+            "run_resumed",
+        ]
+    finally:
+        view.close()
+        store.close()

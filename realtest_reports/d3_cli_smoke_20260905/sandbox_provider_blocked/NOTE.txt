@@ -1,0 +1,1 @@
+Initial sandbox run: name/learn returned PROVIDER_UNAVAILABLE; name/recall was interrupted by the harness operator before completion to retry with network access. No D-3 capability verdict.

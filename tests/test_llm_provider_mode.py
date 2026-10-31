@@ -6,6 +6,7 @@ import time
 import pytest
 
 from agent.llm import LLMRouter, _OllamaHTTPProvider
+from agent.execution_errors import ProviderError
 from langchain_core.messages import HumanMessage, SystemMessage
 
 
@@ -34,6 +35,15 @@ class _Provider:
 class _EmptyError(Exception):
     def __str__(self) -> str:
         return ""
+
+
+def test_provider_timeout_preserves_structured_category() -> None:
+    router = LLMRouter(provider_mode="deepseek")
+    router._deepseek = _Provider("deepseek", error=TimeoutError())
+    with pytest.raises(ProviderError) as caught:
+        asyncio.run(router.ainvoke([]))
+    assert caught.value.code == "PROVIDER_TIMEOUT"
+    assert isinstance(caught.value.__cause__, TimeoutError)
 
 
 def test_empty_provider_errors_have_a_non_empty_diagnostic() -> None:

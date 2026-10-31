@@ -23,6 +23,7 @@ _EXPORTS: dict[str, tuple[str, str]] = {
     "CompatibilityRegistry": ("compatibility", "CompatibilityRegistry"),
     "ExternalStateGuard": ("contracts", "ExternalStateGuard"),
     "FailureEventSnapshot": ("contracts", "FailureEventSnapshot"),
+    "NoEffectConfirmation": ("contracts", "NoEffectConfirmation"),
     "GuardStatus": ("reason_codes", "GuardStatus"),
     "InvalidCheckpointTransition": ("lifecycle", "InvalidCheckpointTransition"),
     "InMemoryCheckpointStore": ("store", "InMemoryCheckpointStore"),

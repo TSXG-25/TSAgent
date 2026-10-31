@@ -116,6 +116,7 @@ class Task(BaseModel):
     dependencies: list[str] = Field(default_factory=list)
     children: List["Task"] = Field(default_factory=list)
     inputs: Dict[str, Any] = Field(default_factory=dict)
+    output_paths: List[str] = Field(default_factory=list)
     status: str = "pending"            # runtime state, not part of plan
     observations: List[Observation] = Field(default_factory=list)
     error: str = ""

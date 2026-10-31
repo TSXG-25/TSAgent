@@ -58,18 +58,22 @@ def resolve_execution_ownership(
     state: dict[str, Any],
     tasks: Sequence[Mapping[str, Any]],
 ) -> dict[str, TaskExecutionOwnership]:
-    """Resolve exactly one owner per Task and freeze it in Runtime state."""
+    """Resolve one immutable owner per Task ID, including replanned Tasks."""
 
     configured = dict(state.get("execution_ownership") or {})
+    history = dict(state.get("resolved_execution_ownership") or {})
     resolved: dict[str, TaskExecutionOwnership] = {}
     for task in tasks:
         task_id = str(task.get("id", ""))
         if not task_id:
             raise ValueError("EXECUTION_OWNER_TASK_ID_MISSING")
-        payload = configured.get(task_id, {"owner": ExecutionOwner.COMPILED.value})
+        payload = configured.get(
+            task_id,
+            history.get(task_id, {"owner": ExecutionOwner.COMPILED.value}),
+        )
         resolved[task_id] = TaskExecutionOwnership.model_validate(payload)
 
-    unknown = set(configured) - set(resolved)
+    unknown = set(configured) - set(resolved) - set(history)
     if unknown:
         raise ValueError(
             "EXECUTION_OWNER_UNKNOWN_TASK: " + ", ".join(sorted(unknown))
@@ -79,14 +83,16 @@ def resolve_execution_ownership(
         task_id: ownership.model_dump(mode="json")
         for task_id, ownership in resolved.items()
     }
-    snapshot = state.get("resolved_execution_ownership")
-    if snapshot is not None and snapshot != serialized:
-        raise ValueError("EXECUTION_OWNER_IMMUTABLE")
+    for task_id, payload in serialized.items():
+        previous = history.get(task_id)
+        if previous is not None and previous != payload:
+            raise ValueError("EXECUTION_OWNER_IMMUTABLE")
+    history.update(serialized)
     state["execution_ownership"] = {
-        task_id: dict(payload) for task_id, payload in serialized.items()
+        task_id: dict(payload) for task_id, payload in history.items()
     }
     state["resolved_execution_ownership"] = {
-        task_id: dict(payload) for task_id, payload in serialized.items()
+        task_id: dict(payload) for task_id, payload in history.items()
     }
     return resolved
 

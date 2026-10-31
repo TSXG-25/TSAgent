@@ -134,11 +134,17 @@ class WorkflowExecutor:
                     external_state_evidence=(
                         checkpoint_request.external_state_evidence or None
                     ),
+                    no_effect_confirmation=checkpoint_request.no_effect_confirmation,
                     compatibility_registry=checkpoint_request.compatibility_registry,
                 )
                 if resume_decision.disposition is not ResumeDisposition.ALLOW:
+                    blocked_checkpoint = checkpoint_request.checkpoint
+                    if resume_decision.disposition is ResumeDisposition.REQUIRE_CLARIFICATION:
+                        blocked_checkpoint = recorder.require_clarification(
+                            resume_decision
+                        )
                     return self._checkpoint_blocked_result(
-                        checkpoint_request.checkpoint,
+                        blocked_checkpoint,
                         f"恢复未获准：{resume_decision.reason_code.value}",
                         resume_decision,
                     )
@@ -376,12 +382,10 @@ class WorkflowExecutor:
                 if stage.validators:
                     for validator_obj in stage.validators:
                         if hasattr(validator_obj, 'validate'):
-                            sol_art = context.get_artifact("solution_file")
-                            sol_path = sol_art.content if sol_art else ""
                             v, r = validator_obj.validate(
                                 {},
                                 {
-                                    "path": sol_path,
+                                    "path": str(resolved_inputs["path"]),
                                     "_workspace": context.get_var("workspace"),
                                 },
                             )
@@ -424,7 +428,7 @@ class WorkflowExecutor:
                     task_verb=task.verb.value,
                     next_stage_id=next_stage.id if next_stage else "",
                     next_task_id=next_stage.id if next_stage else "",
-                    artifacts=context.artifacts.values(),
+                    artifacts=self._checkpoint_artifacts(context),
                     target_summary=(
                         checkpoint_request.target_summary
                         if checkpoint_request else ""
@@ -493,12 +497,12 @@ class WorkflowExecutor:
         summary = self._build_summary(context)
         if recorder is not None and current_checkpoint is not None:
             current_checkpoint = recorder.complete(
-                artifacts=context.artifacts.values(),
+                artifacts=self._checkpoint_artifacts(context),
                 summary=summary,
             )
         metadata = checkpoint_result_metadata(current_checkpoint, resume_decision)
         metadata.update({
-            "terminal_outputs_verified": True,
+            "terminal_outputs_verified": not errors and not hydration_diagnostics,
             "unresolved_resume_diagnostics": hydration_diagnostics,
         })
         result = ExecutionResult(
@@ -533,6 +537,15 @@ class WorkflowExecutor:
                 for stage in workflow.stages
             ],
         }
+
+    @staticmethod
+    def _checkpoint_artifacts(context: ExecutionContext) -> tuple[Artifact, ...]:
+        """Checkpoint produced artifacts, not inputs reconstructed from the Run index."""
+        return tuple(
+            artifact
+            for artifact in context.artifacts.values()
+            if not artifact.id.startswith("workflow-binding-")
+        )
 
     @staticmethod
     def _terminal_output_types(workflow: Workflow, sorted_stages) -> tuple[str, ...]:
@@ -619,7 +632,7 @@ class WorkflowExecutor:
             task_verb=task.verb.value,
             next_stage_id=stage.id,
             next_task_id=stage.id,
-            artifacts=context.artifacts.values(),
+            artifacts=self._checkpoint_artifacts(context),
             target_summary=current_checkpoint.target_summary,
         )
         diagnostics = list(dict.fromkeys((*hydration_diagnostics, diagnostic)))
@@ -704,7 +717,7 @@ class WorkflowExecutor:
             task_verb=task.verb.value,
             next_stage_id=stage.id,
             next_task_id=stage.id,
-            artifacts=context.artifacts.values(),
+            artifacts=self._checkpoint_artifacts(context),
             target_summary=current_checkpoint.target_summary,
         )
         diagnostics = list(dict.fromkeys((*hydration_diagnostics, diagnostic)))
@@ -743,11 +756,12 @@ class WorkflowExecutor:
 
     def _build_summary(self, context: ExecutionContext) -> str:
         sol = context.get_artifact("solution_file")
-        if sol and sol.content:
-            return f"已生成解题程序 → {sol.content}"
-        code = context.get_artifact("verified_code")
-        if code:
-            return f"代码已验证通过"
+        if sol:
+            return (
+                f"已生成解题程序 → {sol.storage_uri}"
+                if sol.storage_uri
+                else "已生成解题程序"
+            )
         code2 = context.get_artifact("python_code")
         if code2:
             return f"代码已生成"

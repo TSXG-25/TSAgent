@@ -14,7 +14,7 @@ from agent.workflow_decision import WorkflowDecision, WorkflowDecisionKind
 
 
 DATASET_PATH = Path(__file__).with_name("dataset.json")
-DATASET_VERSION = "v2.4C-workflow-capability-v1"
+DATASET_VERSION = "v2.4C-workflow-capability-v2"
 VALID_FAMILIES = {
     "CLEAR_MATCH",
     "FALSE_MATCH_GUARD",

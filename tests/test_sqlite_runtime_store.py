@@ -5,6 +5,7 @@ from __future__ import annotations
 import concurrent.futures
 import io
 import json
+import sqlite3
 import subprocess
 import sys
 from pathlib import Path
@@ -175,6 +176,124 @@ def test_takeover_invalidates_old_writer_and_release_cannot_cross_fence(
         store.close()
 
 
+def test_service_worker_lease_blocks_active_takeover_and_expires_fail_closed(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "worker-lease.sqlite"
+    store_a = _store(path)
+    store_b = _store(path)
+    try:
+        reservation = store_a.reserve_service_start(
+            "tenant-a",
+            "session-a",
+            requested_run_id="run-worker-lease",
+            request_id="service-start-worker-lease",
+            request_digest="request-digest",
+            writer_id="writer-a",
+            external_reference="service-start",
+        )
+        assert reservation.created is True
+        lease = store_a._connection.execute(
+            "SELECT writer_id, fence_token, expires_at FROM run_worker_leases"
+        ).fetchone()
+        assert tuple(lease[:2]) == ("writer-a", 1)
+        assert lease["expires_at"]
+
+        with pytest.raises(DurableStoreError) as active:
+            store_b.takeover_fence(
+                "tenant-a",
+                "session-a",
+                "run-worker-lease",
+                "writer-b",
+                expected_fence_token=1,
+                worker_lease=True,
+            )
+        assert active.value.code is StoreErrorCode.FENCE_CONFLICT
+
+        store_a._connection.execute(
+            "UPDATE run_worker_leases SET expires_at = '2000-01-01T00:00:00Z'"
+        )
+        takeover = store_b.takeover_fence(
+            "tenant-a",
+            "session-a",
+            "run-worker-lease",
+            "writer-b",
+            expected_fence_token=1,
+            worker_lease=True,
+        )
+        assert takeover.fence_token == 2
+
+        with pytest.raises(DurableStoreError) as stale_heartbeat:
+            store_a.renew_worker_lease(
+                "tenant-a", "session-a", "run-worker-lease", "writer-a", 1
+            )
+        assert stale_heartbeat.value.code is StoreErrorCode.STALE_WRITER
+        store_b.renew_worker_lease(
+            "tenant-a", "session-a", "run-worker-lease", "writer-b", 2
+        )
+        store_b.release_fence(
+            "tenant-a", "session-a", "run-worker-lease", "writer-b", 2
+        )
+        assert store_b._connection.execute(
+            "SELECT 1 FROM run_worker_leases WHERE tenant_id = ? AND run_id = ?",
+            ("tenant-a", "run-worker-lease"),
+        ).fetchone() is None
+    finally:
+        store_a.close()
+        store_b.close()
+
+
+def test_running_legacy_fence_without_lease_cannot_be_taken_over(
+    tmp_path: Path,
+) -> None:
+    store = _store(tmp_path / "missing-worker-lease.sqlite")
+    try:
+        _run_with_fence(store)
+        store._connection.execute(
+            "UPDATE run_heads SET run_status = 'RUNNING' WHERE run_id = 'run-1'"
+        )
+        with pytest.raises(DurableStoreError) as missing_lease:
+            store.takeover_fence(
+                "tenant-a",
+                "session-a",
+                "run-1",
+                "writer-b",
+                expected_fence_token=1,
+                worker_lease=True,
+            )
+        assert missing_lease.value.code is StoreErrorCode.FENCE_CONFLICT
+    finally:
+        store.close()
+
+
+def test_h3_schema_migrates_worker_lease_table_without_losing_run(tmp_path: Path) -> None:
+    path = tmp_path / "worker-lease-migration.sqlite"
+    old_store = SqliteRuntimeStore.open(path, schema_version="v2.3H3")
+    old_store.initialize_run("tenant-a", "session-a", "run-migration")
+    old_store.close()
+
+    connection = sqlite3.connect(path)
+    try:
+        connection.execute("DROP TABLE run_worker_leases")
+        connection.execute(
+            "UPDATE runtime_meta SET schema_version = 'v2.3H3' WHERE meta_id = 1"
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    store = SqliteRuntimeStore.open(path)
+    try:
+        assert store.schema_version == SCHEMA_VERSION
+        assert store.get_run_head("tenant-a", "run-migration") is not None
+        assert store._connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+            ("run_worker_leases",),
+        ).fetchone() is not None
+    finally:
+        store.close()
+
+
 def test_revision_cas_with_two_independent_connections_has_one_winner(
     tmp_path: Path,
 ) -> None:
@@ -210,6 +329,129 @@ def test_revision_cas_with_two_independent_connections_has_one_winner(
         assert latest.revision == 1
     finally:
         check.close()
+
+
+def test_concurrent_service_starts_serialize_one_tenant_session(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "session-starts.sqlite"
+
+    def reserve(index: int) -> tuple[str, str]:
+        store = _store(path)
+        try:
+            try:
+                result = store.reserve_service_start(
+                    "tenant-a",
+                    "session-a",
+                    requested_run_id=f"run-{index}",
+                    request_id=f"request-{index}",
+                    request_digest=f"digest-{index}",
+                    writer_id=f"writer-{index}",
+                    external_reference=f"service-start:run-{index}",
+                )
+                return "reserved", result.head.run_id
+            except DurableStoreError as error:
+                return "error", error.code.value
+        finally:
+            store.close()
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(reserve, (1, 2)))
+
+    assert [result[0] for result in results].count("reserved") == 1
+    assert [result[1] for result in results].count(
+        StoreErrorCode.SESSION_RUN_ACTIVE.value
+    ) == 1
+
+    other_tenant = _store(path)
+    try:
+        independent = other_tenant.reserve_service_start(
+            "tenant-b",
+            "session-a",
+            requested_run_id="run-other-tenant",
+            request_id="request-other-tenant",
+            request_digest="digest-other-tenant",
+            writer_id="writer-other-tenant",
+            external_reference="service-start:run-other-tenant",
+        )
+        assert independent.created is True
+    finally:
+        other_tenant.close()
+
+
+def test_resume_fence_cannot_overlap_another_run_in_the_session(
+    tmp_path: Path,
+) -> None:
+    store = _store(tmp_path / "session-resume.sqlite")
+    try:
+        blocked = store.reserve_service_start(
+            "tenant-a",
+            "session-a",
+            requested_run_id="run-blocked",
+            request_id="request-blocked",
+            request_digest="digest-blocked",
+            writer_id="writer-blocked",
+            external_reference="service-start:run-blocked",
+        )
+        store.transition_run_with_event(
+            "tenant-a",
+            "session-a",
+            "run-blocked",
+            run_status="RUNNING",
+            event_id="run-started:blocked",
+            event_type="run_started",
+            timestamp="2026-09-27T00:00:00Z",
+            payload={"request_id": "request-blocked"},
+            writer_id="writer-blocked",
+            fence_token=blocked.head.current_fence_token,
+            request_id="request-blocked",
+            expected_status="CREATED",
+        )
+        store.transition_run_with_event(
+            "tenant-a",
+            "session-a",
+            "run-blocked",
+            run_status="BLOCKED",
+            event_id="run-blocked:blocked",
+            event_type="run_blocked",
+            timestamp="2026-09-27T00:00:01Z",
+            payload={"failure_code": "NEEDS_REVIEW"},
+            writer_id="writer-blocked",
+            fence_token=blocked.head.current_fence_token,
+            request_id="request-blocked",
+        )
+        store.release_fence(
+            "tenant-a",
+            "session-a",
+            "run-blocked",
+            "writer-blocked",
+            blocked.head.current_fence_token,
+            request_id="request-blocked",
+        )
+
+        active = store.reserve_service_start(
+            "tenant-a",
+            "session-a",
+            requested_run_id="run-active",
+            request_id="request-active",
+            request_digest="digest-active",
+            writer_id="writer-active",
+            external_reference="service-start:run-active",
+        )
+        with pytest.raises(DurableStoreError) as conflict:
+            store.takeover_fence(
+                "tenant-a",
+                "session-a",
+                "run-blocked",
+                "writer-resume",
+                expected_fence_token=blocked.head.current_fence_token,
+                request_id="request-resume",
+                worker_lease=True,
+            )
+        assert conflict.value.code is StoreErrorCode.SESSION_RUN_ACTIVE
+        assert conflict.value.details["active_run_id"] == active.head.run_id
+    finally:
+        store.close()
 
 
 def test_parent_digest_is_part_of_revision_cas(tmp_path: Path) -> None:

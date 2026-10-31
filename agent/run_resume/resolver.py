@@ -82,6 +82,8 @@ class RunResumeResolver:
     def resolve(
         index: RunResumeIndex,
         request: RunResumeRequest,
+        *,
+        defer_effect_validation: bool = False,
     ) -> RunResumeDecision:
         if request.requested_run_id and request.requested_run_id != index.run_id:
             return RunResumeResolver._reject(
@@ -215,7 +217,10 @@ class RunResumeResolver:
         unsafe_effects = {
             "UNKNOWN", "STARTED", "FAILED_AFTER_COMMIT", "COMMITTED",
         }
-        if active.active_side_effect_state in unsafe_effects:
+        if active.active_side_effect_state in unsafe_effects and not (
+            defer_effect_validation
+            and active.active_side_effect_state != "COMMITTED"
+        ):
             reason = (
                 RunResumeReasonCode.DUPLICATE_SIDE_EFFECT
                 if active.active_side_effect_state == "COMMITTED"

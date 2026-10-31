@@ -1,0 +1,106 @@
+{
+  "round": 4,
+  "suite": "complex-combined-intent-20",
+  "date": "2026-08-07",
+  "provider": "deepseek-v4-flash + DDGS web search",
+  "snapshot": "/private/tmp/tsagent-complex20 (isolated)",
+  "harness": "realtest_reports/harness/tsagent_harness_complex20.py",
+  "elapsed_min_main_run": 18.6,
+  "categories": {
+    "fin_research": 6,
+    "program": 5,
+    "program_search": 4,
+    "research": 3,
+    "mixed": 2
+  },
+  "summary_main_run": {
+    "total": 20,
+    "pass": 8,
+    "warn": 10,
+    "bug": 2,
+    "provider": 0,
+    "raw_e2e_rate": 0.4,
+    "capability_rate": 0.4,
+    "provider_rate": 0.0
+  },
+  "summary_reclassified": {
+    "total": 20,
+    "genuine_bug": 1,
+    "flaky_failure": 2,
+    "warn_policy_or_context": 3,
+    "pass_with_short_reply": 7,
+    "pass": 7,
+    "note": "复验含文件地面真相与 P01/P02/C01 定向复跑"
+  },
+  "findings": [
+    {
+      "id": "C01",
+      "severity": "HIGH",
+      "reproducible": true,
+      "type": "intent_execution_gap_and_hallucinated_success",
+      "detail": "搜索+编程结合意图：主跑声称'已保存到 output/fetch_stock.py'但文件不存在；复跑给出代码却让用户自行保存。文件始终未生成 (2/2)。"
+    },
+    {
+      "id": "P01",
+      "severity": "MEDIUM",
+      "reproducible": false,
+      "type": "flaky_internal_error",
+      "detail": "DeepSeek response_format=400 降级路径偶发转成'内部错误'，主跑未写文件；复跑成功 (9081B)。"
+    },
+    {
+      "id": "P02",
+      "severity": "MEDIUM",
+      "reproducible": false,
+      "type": "provider_timeout_step_limit",
+      "detail": "主跑 Provider 多次超时→'达到步骤上限'未写 ma.py；复跑 8.2s 成功 (1998B)。"
+    },
+    {
+      "id": "F05",
+      "severity": "LOW",
+      "reproducible": false,
+      "type": "provider_timeout_step_limit",
+      "detail": "加密货币行情在主跑 Provider 超时下放弃，未给出实质内容。"
+    },
+    {
+      "id": "F01",
+      "severity": "LOW",
+      "reproducible": true,
+      "type": "safety_refusal_policy",
+      "detail": "拒绝股票推荐/投资建议（合规护栏）。是否保留由产品策略决定。"
+    },
+    {
+      "id": "F03",
+      "severity": "LOW",
+      "reproducible": false,
+      "type": "conversation_context_misread",
+      "detail": "用户仅提问'今天有哪些财经新闻'，agent 却认为用户已提供新闻，疑似 Conversation 引用注入问题。"
+    }
+  ],
+  "cases": [
+    {"id": "F01", "cat": "fin_research", "input": "推荐些今天的股票", "main": "WARN", "verdict": "WARN_policy", "detail": "安全拒答投资建议"},
+    {"id": "F02", "cat": "fin_research", "input": "最近一周 A 股有哪些热门板块", "main": "PASS", "verdict": "PASS", "detail": "基于搜索的板块分析"},
+    {"id": "F03", "cat": "fin_research", "input": "今天有哪些值得关注的财经新闻", "main": "PASS", "verdict": "WARN_context", "detail": "误读对话上下文（当成用户已提供新闻）"},
+    {"id": "F04", "cat": "fin_research", "input": "美股最近的表现怎么样", "main": "PASS", "verdict": "PASS", "detail": "长文搜索答案，130.7s 多次重试"},
+    {"id": "F05", "cat": "fin_research", "input": "最近的加密货币行情如何", "main": "WARN", "verdict": "WARN_provider_flaky", "detail": "步骤上限，未给出内容"},
+    {"id": "F06", "cat": "fin_research", "input": "帮我分析一下最近新能源板块的投资机会", "main": "PASS", "verdict": "PASS", "detail": "搜索+分析"},
+    {"id": "P01", "cat": "program", "input": "写一个股票分析程序，保存到 output/stock_analyzer.py", "main": "WARN", "verdict": "FLAKY_PASS", "detail": "主跑内部错误；复跑成功 stock_analyzer.py 9081B 有效"},
+    {"id": "P02", "cat": "program", "input": "写一个计算移动平均线的 Python 脚本，保存到 output/ma.py", "main": "BUG", "verdict": "FLAKY_PASS", "detail": "主跑超时未写；复跑成功 ma.py 1998B 有效"},
+    {"id": "P03", "cat": "program", "input": "写一个简单的基金收益计算器，保存到 output/fund_return.py", "main": "PASS", "verdict": "PASS", "detail": "fund_return.py 814B 有效"},
+    {"id": "P04", "cat": "program", "input": "写一个读取 CSV 并做股票日收益统计的程序，保存到 output/return_stats.py", "main": "PASS", "verdict": "PASS", "detail": "return_stats.py 4352B 有效"},
+    {"id": "P05", "cat": "program", "input": "写一个 K 线数据生成与简单展示程序，保存到 output/kline.py", "main": "PASS", "verdict": "PASS", "detail": "kline.py 5616B 有效"},
+    {"id": "C01", "cat": "program_search", "input": "搜索 Python 怎么抓取股票行情数据，然后写一个示例程序保存到 output/fetch_stock.py", "main": "BUG", "verdict": "BUG", "detail": "假成功声称已保存但文件不存在；复跑仍失败 (2/2)"},
+    {"id": "C02", "cat": "program_search", "input": "搜索 asyncio 并发教程，写一个并发下载示例保存到 output/async_download.py", "main": "WARN", "verdict": "PASS", "detail": "async_download.py 1862B 有效；回复简短"},
+    {"id": "C03", "cat": "program_search", "input": "搜索 pandas 数据处理常用方法，写一个数据清洗示例保存到 output/data_clean.py", "main": "WARN", "verdict": "PASS", "detail": "data_clean.py 2697B 有效；无 def 属 oracle 过严"},
+    {"id": "C04", "cat": "program_search", "input": "搜索 matplotlib 画股票 K 线图的方法，写一个示例保存到 output/kline_plot.py", "main": "WARN", "verdict": "PASS", "detail": "kline_plot.py 2197B 有效；回复简短"},
+    {"id": "R01", "cat": "research", "input": "搜索量子计算最新进展，写一篇 200 字左右的报告保存到 output/quantum.md", "main": "WARN", "verdict": "PASS", "detail": "quantum.md 781B 有实质内容"},
+    {"id": "R02", "cat": "research", "input": "搜索大语言模型最新动态，写一篇总结保存到 output/llm_news.md", "main": "WARN", "verdict": "PASS", "detail": "llm_news.md 3911B"},
+    {"id": "R03", "cat": "research", "input": "搜索 Python 和 Rust 在数据处理上的差异，写一篇对比保存到 output/lang_compare.md", "main": "PASS", "verdict": "PASS", "detail": "lang_compare.md 14032B"},
+    {"id": "M01", "cat": "mixed", "input": "搜索今天北京的天气，然后写一个根据温度给穿衣建议的 Python 脚本保存到 output/weather_advice.py", "main": "WARN", "verdict": "PASS", "detail": "weather_advice.py 913B 有效"},
+    {"id": "M02", "cat": "mixed", "input": "搜索免费的股票数据 API，写一个调用示例保存到 output/stock_api_demo.py", "main": "WARN", "verdict": "PASS", "detail": "stock_api_demo.py 3358B 有效"}
+  ],
+  "artifact_ground_truth": {
+    "py_valid": ["stock_analyzer.py", "ma.py", "fund_return.py", "return_stats.py", "kline.py", "async_download.py", "data_clean.py", "kline_plot.py", "weather_advice.py", "stock_api_demo.py"],
+    "md_present": ["quantum.md", "llm_news.md", "lang_compare.md"],
+    "never_created": ["fetch_stock.py"]
+  }
+}

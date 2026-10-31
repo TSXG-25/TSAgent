@@ -73,8 +73,33 @@ tools/              受 Workspace/RunContext 约束的工具实现
 ```bash
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements-lock.txt
-.venv/bin/python -m pytest -q
+.venv/bin/python -m pytest -q \
+  --ignore=tests/test_tools_execution.py \
+  --ignore=tests/test_checkpoint_real_guard.py \
+  --ignore=tests/test_checkpoint_real_errors.py \
+  --ignore=tests/test_checkpoint_real_serialization.py \
+  --ignore=tests/test_checkpoint_no_live_objects.py
 ```
+
+该命令运行离线回归；被排除的工具执行/真实 Provider 测试可能访问公网、使用本机执行环境
+或调用真实 API，不属于默认离线验证。
+
+启动交互式 AgentService CLI：
+
+```bash
+source .venv/bin/activate
+TSAGENT_LLM_PROVIDER=ollama python main.py
+```
+
+此模式要求本机 Ollama 已启动，且配置模型（默认 `qwen3:8b`）可用；如使用默认
+`auto` 模式，可配置 `OPENAI_API_KEY` 使用 DeepSeek。CLI 每轮结束后会继续显示输入提示；
+`/cancel` 可请求取消当前 Run，`/resume <run_id> [JSON 证据对象]` 可续接等待用户的 Run，
+`exit` 退出。
+
+联网检索通过本地 DuckDuckGo MCP stdio server 提供，不需要搜索 API key；上面的依赖安装会
+安装 server，启动前需激活该虚拟环境以让其命令位于 `PATH`，首次检索时由 TSAgent 自动启动。
+检索仍需要网络连接。搜索免 API key 不等于整个 Agent 不需要模型：可使用本地 Ollama，或
+单独配置远程 LLM Provider。
 
 只运行 v2.4A Planner Dataset 的确定性自检：
 

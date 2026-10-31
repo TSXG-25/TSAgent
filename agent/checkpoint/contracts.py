@@ -133,6 +133,33 @@ class ExternalStateGuard:
 
 
 @dataclass(frozen=True)
+class NoEffectConfirmation:
+    """Caller attestation bound to one uncertain checkpoint side effect."""
+
+    task_id: str
+    idempotency_key: str
+    external_reference: str
+    checked_at: str
+
+    def to_dict(self) -> dict[str, str]:
+        return {
+            "task_id": self.task_id,
+            "idempotency_key": self.idempotency_key,
+            "external_reference": self.external_reference,
+            "checked_at": self.checked_at,
+        }
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "NoEffectConfirmation":
+        return cls(
+            task_id=str(value.get("task_id", "")),
+            idempotency_key=str(value.get("idempotency_key", "")),
+            external_reference=str(value.get("external_reference", "")),
+            checked_at=str(value.get("checked_at", "")),
+        )
+
+
+@dataclass(frozen=True)
 class TaskEffectRecord:
     """Per-task side-effect fact used to prevent unsafe replay."""
 
@@ -636,6 +663,7 @@ __all__ = [
     "ArtifactSnapshot",
     "ExternalStateGuard",
     "FailureEventSnapshot",
+    "NoEffectConfirmation",
     "ResumeContext",
     "ResumeDecision",
     "RunCheckpoint",

@@ -239,6 +239,25 @@ def test_execution_owner_cannot_change_after_resolution() -> None:
         resolve_execution_ownership(state, tasks)
 
 
+def test_replanned_task_ids_extend_immutable_execution_owner_history() -> None:
+    state = _state(dynamic=False)
+    original = state["plan"]
+    resolve_execution_ownership(state, original)
+
+    replacement = [{
+        "id": "replan-1-1",
+        "verb": "modify",
+        "target": "output/report.md",
+    }]
+    resolved = resolve_execution_ownership(state, replacement)
+
+    assert resolved["replan-1-1"].owner is ExecutionOwner.COMPILED
+    assert state["resolved_execution_ownership"] == {
+        "task-1": {"owner": "compiled", "available_tools": []},
+        "replan-1-1": {"owner": "compiled", "available_tools": []},
+    }
+
+
 def test_dynamic_ask_blocks_without_entering_tool_execution(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

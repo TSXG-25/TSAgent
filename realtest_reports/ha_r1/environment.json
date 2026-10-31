@@ -1,0 +1,18 @@
+{
+  "python": "/Users/tsxg/Desktop/TSAgent/.venv/bin/python",
+  "version": "3.12.7 | packaged by Anaconda, Inc. | (main, Oct  4 2024, 08:22:19) [Clang 14.0.6 ]",
+  "system_site_packages": true,
+  "packages": {
+    "numpy": "1.26.4",
+    "pandas": "2.2.2",
+    "scipy": "1.13.1",
+    "scikit-learn": "1.5.2",
+    "sentence-transformers": "5.5.1",
+    "chromadb": "1.5.9"
+  },
+  "verified": [
+    "numpy/pandas/scipy/sklearn/sentence_transformers imports",
+    "local all-MiniLM-L6-v2 embedding initialization",
+    "temporary Chroma summary write and read"
+  ]
+}

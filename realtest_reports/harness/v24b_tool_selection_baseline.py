@@ -42,6 +42,7 @@ from agent.next_action_selector import (
     NEXT_ACTION_PROMPT,
     NextActionSelectionError,
     NextActionSelector,
+    TaskProjection,
 )
 from evals.tool_selection.oracle import (
     aggregate_metrics,
@@ -210,6 +211,27 @@ def _current_task(state: ExecutionStateProjection):
     )
 
 
+def _project_frozen_case_state(state: Mapping[str, Any]) -> ExecutionStateProjection:
+    """Bind the frozen v1 benchmark envelope to the current selector input."""
+
+    from agent.bootstrap import load_tool_modules
+    from agent.registry.tool_registry import registry
+    from agent.tool_action_projection import project_available_actions
+
+    load_tool_modules()
+    return ExecutionStateProjection(
+        goal=str(state["goal"]),
+        current_task_id=str(state["current_task_id"]),
+        tasks=tuple(TaskProjection.model_validate(task) for task in state["tasks"]),
+        required_outcomes=tuple(state["required_outcomes"]),
+        completed_outcomes=tuple(state["completed_outcomes"]),
+        answer_ready=bool(state["answer_ready"]),
+        available_actions=project_available_actions(state["available_tools"], registry),
+        completion_evidence=tuple(state["completion_evidence"]),
+        history=tuple(state["history"]),
+    )
+
+
 def _format_path(recorder: _CallRecorder) -> str:
     kinds = {str(call.get("call_kind", "")) for call in recorder.calls}
     has_structured = bool(kinds & {"structured_bind", "structured_ainvoke"})
@@ -291,7 +313,7 @@ async def _run_case(
     state = None
     observation = None
     try:
-        state = ExecutionStateProjection.model_validate(case["state"])
+        state = _project_frozen_case_state(case["state"])
         observation = ActionObservation.model_validate(case["observation"])
         selection = await asyncio.wait_for(
             selector.select_with_evidence(

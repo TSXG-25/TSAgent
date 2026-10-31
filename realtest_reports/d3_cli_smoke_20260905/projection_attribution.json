@@ -1,0 +1,140 @@
+{
+  "method": "Read-only post-run evaluation of deterministic policy and candidate projection on the exact executed prompts; no LLM calls and no production patch. These are diagnostic projections, not captured live call traces.",
+  "projections": [
+    {
+      "case": "name",
+      "phase": "learn",
+      "prompt": "我叫 TS",
+      "policy": {
+        "mode": "memory",
+        "memory_retrieval": false,
+        "repository_retrieval": false,
+        "pre_answer_fact_extraction": false,
+        "post_answer_fact_extraction": true,
+        "semantic_skill_selection": false
+      },
+      "candidates": [
+        [
+          "personal",
+          "name",
+          "fact",
+          "TS"
+        ]
+      ]
+    },
+    {
+      "case": "name",
+      "phase": "recall",
+      "prompt": "我叫什么？",
+      "policy": {
+        "mode": "memory",
+        "memory_retrieval": true,
+        "repository_retrieval": false,
+        "pre_answer_fact_extraction": false,
+        "post_answer_fact_extraction": false,
+        "semantic_skill_selection": false
+      },
+      "candidates": []
+    },
+    {
+      "case": "secret",
+      "phase": "learn",
+      "prompt": "我的 API key 是 sk-test-human-acceptance-123",
+      "policy": {
+        "mode": "memory",
+        "memory_retrieval": false,
+        "repository_retrieval": false,
+        "pre_answer_fact_extraction": false,
+        "post_answer_fact_extraction": true,
+        "semantic_skill_selection": false
+      },
+      "candidates": [
+        [
+          "secret",
+          "api_key",
+          "fact",
+          "sk-test-human-acceptance-123"
+        ]
+      ]
+    },
+    {
+      "case": "secret",
+      "phase": "recall",
+      "prompt": "你记得我的 API key 吗？",
+      "policy": {
+        "mode": "minimal",
+        "memory_retrieval": false,
+        "repository_retrieval": false,
+        "pre_answer_fact_extraction": false,
+        "post_answer_fact_extraction": false,
+        "semantic_skill_selection": false
+      },
+      "candidates": []
+    },
+    {
+      "case": "language",
+      "phase": "learn",
+      "prompt": "我最喜欢的编程语言是 Python",
+      "policy": {
+        "mode": "memory",
+        "memory_retrieval": false,
+        "repository_retrieval": false,
+        "pre_answer_fact_extraction": false,
+        "post_answer_fact_extraction": true,
+        "semantic_skill_selection": false
+      },
+      "candidates": [
+        [
+          "programming",
+          "language",
+          "preference",
+          "Python"
+        ]
+      ]
+    },
+    {
+      "case": "language",
+      "phase": "recall",
+      "prompt": "我喜欢什么编程语言？",
+      "policy": {
+        "mode": "memory",
+        "memory_retrieval": true,
+        "repository_retrieval": false,
+        "pre_answer_fact_extraction": false,
+        "post_answer_fact_extraction": false,
+        "semantic_skill_selection": false
+      },
+      "candidates": []
+    },
+    {
+      "case": "uv",
+      "phase": "learn",
+      "prompt": "以后 Python 项目优先用 uv",
+      "policy": {
+        "mode": "minimal",
+        "memory_retrieval": false,
+        "repository_retrieval": false,
+        "pre_answer_fact_extraction": false,
+        "post_answer_fact_extraction": false,
+        "semantic_skill_selection": false
+      },
+      "candidates": []
+    },
+    {
+      "case": "uv",
+      "phase": "recall",
+      "prompt": "我平时 Python 项目偏好用什么？",
+      "policy": {
+        "mode": "minimal",
+        "memory_retrieval": false,
+        "repository_retrieval": false,
+        "pre_answer_fact_extraction": false,
+        "post_answer_fact_extraction": false,
+        "semantic_skill_selection": false
+      },
+      "candidates": []
+    }
+  ],
+  "secret_short_term_contains_test_value": true,
+  "uv_short_term_contains_learning_statement": true
+}

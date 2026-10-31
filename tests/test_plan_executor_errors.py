@@ -1,6 +1,7 @@
 """ExecutionPlan error normalization tests."""
 import asyncio
 import pytest
+from pydantic import ValidationError
 
 from agent.action_result import ActionResult
 from agent.executor.plan_executor import PlanExecutor
@@ -49,6 +50,67 @@ def test_empty_timeout_exception_gets_non_empty_diagnostic(monkeypatch):
 
     assert "TimeoutError: tool step failed" in result["_error"]
     assert result["_error_code"] == "PROVIDER_TIMEOUT"
+
+
+def test_first_step_argument_validation_proves_no_effect(monkeypatch):
+    from agent.executor import plan_executor as module
+
+    invalid_arguments = ValidationError.from_exception_data(
+        "ToolArguments",
+        [{"type": "missing", "loc": ("cmd",), "input": {}}],
+    )
+
+    class _InvalidTool:
+        async def ainvoke(self, _args):
+            raise invalid_arguments
+
+    monkeypatch.setattr(module.tool_registry, "get", lambda _name: _InvalidTool())
+    plan = ExecutionPlan(
+        task=Task(id="task-invalid-arguments", verb="execute"),
+        steps=[ExecutionStep(
+            tool="shell",
+            args={"cmd": "date"},
+            outputs=["output"],
+        )],
+    )
+
+    result = asyncio.run(PlanExecutor().execute(plan))
+
+    assert result["_error_code"] == "INVALID_TOOL_ARGUMENT"
+    assert result["_side_effect_state"] == "NONE"
+
+
+def test_argument_validation_after_an_earlier_step_is_unknown(monkeypatch):
+    from agent.executor import plan_executor as module
+
+    invalid_arguments = ValidationError.from_exception_data(
+        "ToolArguments",
+        [{"type": "missing", "loc": ("cmd",), "input": {}}],
+    )
+
+    class _InvalidTool:
+        async def ainvoke(self, _args):
+            raise invalid_arguments
+
+    monkeypatch.setattr(module.tool_registry, "get", lambda _name: _InvalidTool())
+    executor = PlanExecutor()
+
+    async def previous_step(_step, _args, _workspace, _variables):
+        return {"content": "observed"}
+
+    monkeypatch.setattr(executor, "_exec_workspace", previous_step)
+    plan = ExecutionPlan(
+        task=Task(id="task-later-invalid-arguments", verb="execute"),
+        steps=[
+            ExecutionStep(tool="workspace", args={"spec": "."}, outputs=["path"]),
+            ExecutionStep(tool="shell", args={"cmd": "date"}, outputs=["output"]),
+        ],
+    )
+
+    result = asyncio.run(executor.execute(plan))
+
+    assert result["_error_code"] == "INVALID_TOOL_ARGUMENT"
+    assert result["_side_effect_state"] == "UNKNOWN"
 
 
 def test_workspace_output_never_becomes_file_content(monkeypatch):
@@ -132,6 +194,7 @@ def test_structured_environment_failure_is_not_executed_twice(monkeypatch, tmp_p
         error_code="EXECUTION_ENVIRONMENT_UNAVAILABLE",
         content=result.error,
         classification_source=ClassificationSource.STRUCTURED.value,
+        side_effect_state="NONE",
     )
     assert result.action_result.retryable is False
 

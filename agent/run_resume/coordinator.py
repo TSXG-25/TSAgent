@@ -12,8 +12,11 @@ from typing import Any, Callable, Mapping
 from agent.checkpoint import (
     CheckpointStatus,
     CheckpointStore,
+    ResumeAction,
     RunCheckpoint,
     ResumeContext,
+    ResumeDisposition as CheckpointResumeDisposition,
+    RuntimeEvidence,
     WorkflowCheckpointRequest,
 )
 from agent.checkpoint.recorder import fact_digest
@@ -116,7 +119,25 @@ class RunResumeCoordinator:
             )
         else:
             resume_request = request
-        decision = RunResumeResolver.resolve(index, resume_request)
+        candidate_checkpoint_id = (
+            resume_request.requested_checkpoint_id or index.active_checkpoint_id
+        )
+        candidate_checkpoint = (
+            self._checkpoint_store.get(candidate_checkpoint_id)
+            if candidate_checkpoint_id
+            else None
+        )
+        defer_effect_validation = bool(
+            resume_request.no_effect_confirmation is not None
+            and resume_request.requested_action is ResumeAction.RESUME_EXACT
+            and candidate_checkpoint is not None
+            and candidate_checkpoint.checkpoint_id == index.active_checkpoint_id
+        )
+        decision = RunResumeResolver.resolve(
+            index,
+            resume_request,
+            defer_effect_validation=defer_effect_validation,
+        )
         if decision.disposition is not RunResumeDisposition.ALLOW:
             return RunResumeExecution(decision, None, index)
 
@@ -159,7 +180,14 @@ class RunResumeCoordinator:
             )
             return RunResumeExecution(blocked, None, index)
 
-        checkpoint = self._checkpoint_store.get(checkpoint_id or "") if checkpoint_id else None
+        checkpoint = (
+            candidate_checkpoint
+            if candidate_checkpoint is not None
+            and candidate_checkpoint.checkpoint_id == checkpoint_id
+            else self._checkpoint_store.get(checkpoint_id or "")
+            if checkpoint_id
+            else None
+        )
         if checkpoint is None and not checkpoint_id:
             latest_for_workflow = getattr(
                 self._checkpoint_store,
@@ -185,6 +213,13 @@ class RunResumeCoordinator:
                         self._lineage_evidence(str(checkpoint_id)),
                     ),
                 )
+        if resume_request.no_effect_confirmation is not None and checkpoint is None:
+            blocked = self._blocked(
+                index,
+                RunResumeReasonCode.CHECKPOINT_NOT_FOUND,
+                "无副作用确认必须绑定到一个当前持久化的 Checkpoint",
+            )
+            return RunResumeExecution(blocked, None, index)
         if checkpoint_id and checkpoint is None:
             blocked = self._blocked(
                 index,
@@ -228,7 +263,7 @@ class RunResumeCoordinator:
         target_summary = (
             checkpoint.target_summary
             if checkpoint is not None
-            else workflow.description or workflow.id
+            else summary.target_summary or workflow.description or workflow.id
         )
         resume_context = None
         if checkpoint is not None:
@@ -278,12 +313,62 @@ class RunResumeCoordinator:
             checkpoint=checkpoint,
             resume_context=resume_context,
             external_state_evidence=resume_request.external_state_evidence,
+            no_effect_confirmation=resume_request.no_effect_confirmation,
         )
         result = await self._workflow_executor.execute(
             workflow,
             context,
             checkpoint_request=checkpoint_request,
         )
+        checkpoint_decision = (result.metadata or {}).get("resume_decision")
+        if (
+            decision.disposition is RunResumeDisposition.ALLOW
+            and isinstance(checkpoint_decision, Mapping)
+            and checkpoint_decision.get("disposition")
+            in {
+                CheckpointResumeDisposition.REQUIRE_CLARIFICATION.value,
+                CheckpointResumeDisposition.REJECT.value,
+            }
+        ):
+            checkpoint_reason = str(checkpoint_decision.get("reason_code", ""))
+            reason_map = {
+                reason.value: reason for reason in RunResumeReasonCode
+            }
+            reason = reason_map.get(
+                checkpoint_reason,
+                RunResumeReasonCode.CHECKPOINT_RESUME_REJECTED,
+            )
+            checkpoint_evidence = tuple(
+                RuntimeEvidence.from_dict(item)
+                for item in checkpoint_decision.get("evidence", ())
+            )
+            requires_clarification = (
+                checkpoint_decision["disposition"]
+                == CheckpointResumeDisposition.REQUIRE_CLARIFICATION.value
+            )
+            decision = RunResumeDecision(
+                disposition=(
+                    RunResumeDisposition.REQUIRE_CLARIFICATION
+                    if requires_clarification
+                    else RunResumeDisposition.REJECT
+                ),
+                run_id=index.run_id,
+                workflow_action=None,
+                selected_workflow_id=None,
+                selected_checkpoint_id=None,
+                skipped_workflow_ids=index.completed_workflow_ids,
+                remaining_workflow_ids=index.pending_workflow_ids,
+                resulting_status=(
+                    "WAITING_USER" if requires_clarification else "REJECTED"
+                ),
+                reason_code=reason,
+                evidence=checkpoint_evidence,
+                clarification_question=(
+                    str(checkpoint_decision.get("clarification_question", ""))
+                    if requires_clarification
+                    else None
+                ),
+            )
         updated_index = self._record_result(
             index,
             result,
@@ -414,7 +499,11 @@ class RunResumeCoordinator:
             active_task_id=first_stage.id if first_stage else "",
             status=CheckpointStatus.RUNNING,
             execution_plan=WorkflowExecutor._workflow_plan_fact(workflow),
-            target_summary=workflow.description or workflow.id,
+            target_summary=(
+                index.workflow(workflow.id).target_summary
+                or workflow.description
+                or workflow.id
+            ),
             activation_attempt_id=attempt_id,
             verifier_status="VERIFIED",
             created_at=now,
@@ -580,7 +669,7 @@ class RunResumeCoordinator:
         if not checkpoint_id:
             return index
         checkpoint_status = str(metadata.get("checkpoint_status", ""))
-        completion_gate_ok = bool(metadata.get("terminal_outputs_verified", True))
+        completion_gate_ok = bool(metadata.get("terminal_outputs_verified", False))
         unresolved = tuple(metadata.get("unresolved_resume_diagnostics", ()) or ())
         if (
             checkpoint_status == CheckpointStatus.COMPLETED.value

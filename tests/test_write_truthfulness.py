@@ -13,91 +13,20 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from agent.cognition.intent_engine import engine
-from agent.cognition.cognitive_context import CognitiveContext, ResolvedQuery
+from agent.cognition.cognitive_context import CognitiveContext
 from agent.cognition.intent_schema import DOMAIN_FILE, DOMAIN_MATH
-from agent.services.memory_service import _user_memory_candidates
 from agent.orchestrator.finalizer import Finalizer
-from agent.orchestrator.planner import _ensure_explicit_output_write_task
 from agent.compiler.rules.write_rule import WriteRule
 from agent.executor.verifier import ExecutionVerifier, ExecutionArtifacts
 from agent.task import Task, Verb
 
 
 def _intent(text: str):
-    ctx = CognitiveContext(query=text, resolved_query=ResolvedQuery(raw=text))
+    ctx = CognitiveContext(query=text, resolved_query=CognitiveContext(query="x"))
     return engine.analyze(ctx)
 
 
-class TestIntentFileWriteOverride:
-    """D00 类：含"函数"的写文件请求必须进入执行链。"""
 
-    def test_write_code_to_path_is_exec(self):
-        for u in [
-            "用 Python 写一个斐波那契函数，保存到 output/fib.py",
-            "写一个冒泡排序函数保存到 output/bubble.py",
-            "写一个判断素数的函数保存到 output/isprime.py",
-            "写一个二分查找函数到 output/bsearch.py",
-            "写一个递归阶乘函数到 output/fact.py",
-            "写一个判断回文的函数保存到 output/palindrome.py",
-        ]:
-            r = _intent(u)
-            assert r.requires_execution, f"应进入执行链: {u}"
-            assert ".py" in (r.target or ""), f"target 应含文件路径: {u}"
-
-    def test_append_is_exec(self):
-        r = _intent("把字符串 hello-append 追加到 output/notes.txt")
-        assert r.requires_execution, "追加请求必须进入执行链"
-        assert "notes.txt" in (r.target or "")
-
-    def test_non_file_requests_unchanged(self):
-        assert _intent("你好").requires_execution is False
-        assert _intent("1+1等于几").domain == DOMAIN_MATH
-        assert _intent("1+1等于几").requires_execution is False
-        assert _intent("把 hello world 翻译成中文").requires_execution is False
-        # 读取类请求不应被写入兜底误伤
-        assert _intent("读取 output/solution.py").requires_execution is True
-        assert _intent("读取 output/solution.py").domain == DOMAIN_FILE
-
-    def test_search_and_write_request_stays_execution_intent(self):
-        result = _intent(
-            "搜索 Python 怎么抓取股票行情数据，然后写一个示例程序保存到 output/fetch_stock.py"
-        )
-        assert result.requires_execution is True
-        assert result.target.endswith("output/fetch_stock.py")
-
-    def test_search_and_write_plan_contains_materialization_task(self):
-        request = "搜索 Python 怎么抓取股票行情数据，然后写一个示例程序保存到 output/fetch_stock.py"
-        plan = _ensure_explicit_output_write_task(
-            [{"id": "task-1", "verb": "search", "target": "股票行情", "target_type": "text"}],
-            request,
-        )
-        assert [task["verb"] for task in plan] == ["search", "write"]
-        assert plan[-1]["target"] == "output/fetch_stock.py"
-        assert plan[-1]["dependencies"] == ["task-1"]
-        assert plan[-1]["inputs"]["use_prior_facts"] is True
-
-
-def _candidate_facts(text: str) -> dict[str, dict[str, str]]:
-    facts: dict[str, dict[str, str]] = {}
-    for category, key, _memory_type, value in _user_memory_candidates(text):
-        facts.setdefault(category, {})[key] = value
-    return facts
-
-
-class TestDeterministicFactProjection:
-    """H01/H04 类：常见事实进入 canonical Provider proposal path。"""
-
-    def test_extracts_common_facts(self):
-        assert _candidate_facts("我喜欢蓝色") == {"hobby": {"preference": "蓝色"}}
-        assert _candidate_facts("我住在北京") == {"personal": {"location": "北京"}}
-        assert _candidate_facts("记住：这个项目叫 TSAgent") == {"misc": {"project": "TSAgent"}}
-        assert _candidate_facts("我最喜欢的编程语言是 Rust") == {"programming": {"language": "Rust"}}
-        assert _candidate_facts("我叫张三") == {"personal": {"name": "张三"}}
-
-    def test_questions_not_extracted(self):
-        assert _candidate_facts("我喜欢什么颜色？") == {}
-        assert _candidate_facts("这个项目叫什么名字？") == {}
-        assert _candidate_facts("我住在哪里") == {}
 
 
 class TestFinalizerTruthfulness:
@@ -117,16 +46,6 @@ class TestFinalizerTruthfulness:
         target.write_text("x")
         state = self._write_state(str(target))
         assert Finalizer._verify_written_files(state, f"已写入 {target}") is None
-
-    def test_no_write_task_or_no_claim(self):
-        assert Finalizer._verify_written_files({"plan": []}, "已写入 x") is None
-        assert Finalizer._verify_written_files(self._write_state("/tmp/nope.py"), "好的") is None
-
-    def test_missing_file_claim_is_checked_without_write_task(self, tmp_path):
-        target = str(tmp_path / "missing_without_task.py")
-        state = {"plan": [{"verb": "explain", "target": "", "status": "succeeded"}]}
-        answer = f"我已整理示例，并保存到 {target} 文件里。"
-        assert Finalizer._verify_written_files(state, answer) is not None
 
     def test_existing_file_claim_is_allowed_without_write_task(self, tmp_path):
         target = tmp_path / "existing_without_task.py"

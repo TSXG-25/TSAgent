@@ -1,0 +1,82 @@
+{
+  "suite": "Real API Acceptance Suite v0.1 - P0",
+  "round": 1,
+  "date": "2026-08-07",
+  "provider": "deepseek-v4-flash",
+  "layers": ["Provider API (DeepSeek)", "AgentService API (SQLite/events/terminal)"],
+  "harness": "realtest_reports/harness/acceptance_p0.py",
+  "summary": {
+    "total": 24,
+    "pass": 20,
+    "fail": 4,
+    "pass_rate": 0.833,
+    "groups": {
+      "A_terminal": "4/4",
+      "B_routing": "4/4",
+      "C_multi_goal": "1/4",
+      "D_agent_service": "4/4",
+      "E_resume": "4/4",
+      "F_provider_perf": "3/4"
+    }
+  },
+  "findings": [
+    {
+      "id": "FND-1",
+      "severity": "HIGH",
+      "type": "RUNTIME_CONTRACT_FAILURE",
+      "title": "LLM 步骤 coroutine 内抛 StopIteration → 任务中途崩溃 + '内部错误'回复",
+      "evidence": "C02: 'Runtime recovered: layer=runtime code=RUNTIMEERROR error=coroutine raised StopIteration'。合并文件 merged.txt 实际已写入，但最后的 explain 步骤崩溃，最终回复'内部错误'。C03 同样命中。",
+      "impact": "多目标任务在最后一步崩溃；文件已生成但用户看到失败。与复杂结合意图轮（complex20）反复出现的'内部错误'同源（DeepSeek response_format=400 降级路径中的异步 bug）。"
+    },
+    {
+      "id": "FND-2",
+      "severity": "MEDIUM",
+      "type": "MODEL_QUALITY_FAILURE",
+      "title": "Planner 偶发幻觉不存在的工具名 copy_file（未在 ToolRegistry 注册）",
+      "evidence": "多轮运行中 plan 出现 copy_file 步骤 → '未找到工具: copy_file' RuntimeError。同一 case 其它轮次正常 → LLM 规划不接地到真实工具清单。",
+      "impact": "计划执行失败风险；需要把可用工具清单强制注入 planner 或对未注册工具做确定性降级。"
+    },
+    {
+      "id": "FND-3",
+      "severity": "MEDIUM",
+      "type": "PERFORMANCE_REGRESSION",
+      "title": "简单单 Tool 任务 LLM 调用 4 次（门槛 ≤2）",
+      "evidence": "F04 创建 output/hello.txt：llm=4, plan=1。意图+规划+执行决策+回答生成共 4 次 Provider 调用。",
+      "impact": "简单任务延迟与成本偏高；满足'LLM calls ≤ 2'的简单任务路径未优化。"
+    },
+    {
+      "id": "FND-4",
+      "severity": "LOW",
+      "type": "RUNTIME_CONTRACT_FAILURE",
+      "title": "Provider 异常未在 durable snapshot 留下结构化 failure_code",
+      "evidence": "F01 Provider 超时 → FAILED_TERMINAL + run_failed 事件，但 RunSnapshot.failure_summary=None（launcher except 分支只提交 run_failed，不带 failure_code）。",
+      "impact": "Provider Error 无法从 durable snapshot 单列，仅事件流可观测。"
+    }
+  ],
+  "cases": {
+    "A01": {"passed": true, "terminal": "FAILED_TERMINAL", "event": "run_failed", "note": "读取内部存储路径被拒，chroma.sqlite3 未读"},
+    "A02": {"passed": true, "terminal": "FAILED_TERMINAL", "event": "run_failed", "note": "预算耗尽，无 run_completed"},
+    "A03": {"passed": true, "terminal": "FAILED_TERMINAL", "note": "Verifier 探针拦截假成功 (verifier_catches=True)"},
+    "A04": {"passed": true, "terminal": "FAILED_TERMINAL", "event": "run_failed", "note": "必需文件缺失 → 不 COMPLETED"},
+    "B01": {"passed": true, "note": "解释快速排序：tool_calls=[]"},
+    "B02": {"passed": true, "note": "快速排序→output/q.py 创建+语法有效+write tool"},
+    "B03": {"passed": true, "note": "搜索 AI/半导体 → web_search 真实调用"},
+    "B04": {"passed": true, "note": "偏好+搜索 → web_search，未读 chroma"},
+    "C01": {"passed": true, "note": "Memory+Search+Write → market.md 4107B 带来源"},
+    "C02": {"passed": false, "type": "RUNTIME_CONTRACT_FAILURE", "note": "merged.txt 已写但最后 explain 步骤 StopIteration 崩溃→内部错误"},
+    "C03": {"passed": false, "type": "RUNTIME_CONTRACT_FAILURE", "note": "calc.py 未生成，writes=2 但文件缺失 + StopIteration"},
+    "C04": {"passed": false, "type": "RUNTIME_CONTRACT_FAILURE", "note": "summary+sources 未生成，无工具调用，'暂时无法回答'"},
+    "D01": {"passed": true, "note": "同 request_id 同内容 → 同 run_id，run_started=1"},
+    "D02": {"passed": true, "note": "同 request_id 异内容 → IDEMPOTENCY_CONFLICT"},
+    "D03": {"passed": true, "note": "事件 after_sequence 重连无缺失"},
+    "D04": {"passed": true, "note": "Service 关闭重建 → 同一 durable COMPLETED snapshot"},
+    "E01": {"passed": true, "note": "Workflow B 恢复：resume 中 A exec=0，B/C 完成"},
+    "E02": {"passed": true, "note": "写后崩溃：文件不重复写、Provider 不重复调用"},
+    "E03": {"passed": true, "note": "resume COMPLETED → ALREADY_COMPLETED"},
+    "E04": {"passed": true, "note": "错 tenant → RUN_NOT_FOUND，不泄漏 owner"},
+    "F01": {"passed": true, "note": "Provider 超时 → FAILED，无副作用；failure_code 未入 snapshot (FND-4)"},
+    "F02": {"passed": true, "note": "durable prepare+超时 → 重试不创建第二条 intent"},
+    "F03": {"passed": true, "note": "非法 Planner → 有限重试(1)，FAILED_TERMINAL"},
+    "F04": {"passed": false, "type": "PERFORMANCE_REGRESSION", "note": "hello.txt 成功但 llm=4 > 2 门槛"}
+  }
+}

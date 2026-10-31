@@ -5,11 +5,13 @@ in ``agent.checkpoint.RunCheckpoint`` and is validated by the v2.2B runtime.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from enum import Enum
+from math import isfinite
+from types import MappingProxyType
 from typing import Any, Mapping, Optional, cast
 
-from agent.checkpoint import ExternalStateGuard, ResumeAction
+from agent.checkpoint import ExternalStateGuard, NoEffectConfirmation, ResumeAction
 
 
 class RunWorkflowStatus(str, Enum):
@@ -41,7 +43,9 @@ class RunResumeReasonCode(str, Enum):
     WORKFLOW_VERSION_INCOMPATIBLE = "WORKFLOW_VERSION_INCOMPATIBLE"
     ACTIVE_CHECKPOINT_MISMATCH = "ACTIVE_CHECKPOINT_MISMATCH"
     CHECKPOINT_NOT_FOUND = "CHECKPOINT_NOT_FOUND"
+    CHECKPOINT_RESUME_REJECTED = "CHECKPOINT_RESUME_REJECTED"
     UNKNOWN_SIDE_EFFECT = "UNKNOWN_SIDE_EFFECT"
+    SIDE_EFFECT_IN_PROGRESS = "SIDE_EFFECT_IN_PROGRESS"
     DUPLICATE_SIDE_EFFECT = "DUPLICATE_SIDE_EFFECT"
     NON_IDEMPOTENT_STAGE = "NON_IDEMPOTENT_STAGE"
     NO_ACTIVE_WORKFLOW = "NO_ACTIVE_WORKFLOW"
@@ -53,6 +57,36 @@ def _unique(values: tuple[str, ...], label: str) -> tuple[str, ...]:
     if len(set(normalized)) != len(normalized):
         raise ValueError(f"{label} 不得重复")
     return normalized
+
+
+def _freeze_json(value: Any) -> Any:
+    if value is None or isinstance(value, (str, int, bool)):
+        return value
+    if isinstance(value, float):
+        if not isfinite(value):
+            raise ValueError("Workflow input bindings must contain finite JSON numbers")
+        return value
+    if isinstance(value, Mapping):
+        frozen: dict[str, Any] = {}
+        for key, item in value.items():
+            if not isinstance(key, str):
+                raise TypeError("Workflow input binding keys must be strings")
+            frozen[key] = _freeze_json(item)
+        return MappingProxyType(frozen)
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze_json(item) for item in value)
+    raise TypeError(
+        "Workflow input bindings must be JSON values; "
+        f"got {type(value).__name__}"
+    )
+
+
+def _thaw_json(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {str(key): _thaw_json(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_thaw_json(item) for item in value]
+    return value
 
 
 @dataclass(frozen=True)
@@ -161,6 +195,8 @@ class WorkflowSummary:
     active_stage_idempotent: bool = False
     verifier_status: str = "UNKNOWN"
     activation_attempt_id: str = ""
+    target_summary: str = ""
+    input_bindings: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not self.workflow_id.strip() or not self.workflow_version.strip():
@@ -176,6 +212,10 @@ class WorkflowSummary:
                 for item in (self.required_artifacts or ())
             ),
         )
+        frozen_bindings = _freeze_json(self.input_bindings)
+        if not isinstance(frozen_bindings, Mapping):
+            raise TypeError("WorkflowSummary.input_bindings must be an object")
+        object.__setattr__(self, "input_bindings", frozen_bindings)
         if (
             self.status is not RunWorkflowStatus.PENDING
             and not self.checkpoint_id.strip()
@@ -198,6 +238,8 @@ class WorkflowSummary:
             "active_stage_idempotent": self.active_stage_idempotent,
             "verifier_status": self.verifier_status,
             "activation_attempt_id": self.activation_attempt_id,
+            "target_summary": self.target_summary,
+            "input_bindings": _thaw_json(self.input_bindings),
         }
 
     @classmethod
@@ -216,6 +258,8 @@ class WorkflowSummary:
             active_stage_idempotent=bool(value.get("active_stage_idempotent", False)),
             verifier_status=str(value.get("verifier_status", "UNKNOWN")),
             activation_attempt_id=str(value.get("activation_attempt_id", "")),
+            target_summary=str(value.get("target_summary", "")),
+            input_bindings=value.get("input_bindings", {}) or {},
         )
 
 
@@ -488,6 +532,7 @@ class RunResumeRequest:
     current_workflow_versions: tuple[tuple[str, str], ...] = ()
     observed_artifacts: tuple[RunArtifactFact, ...] = ()
     external_state_evidence: tuple[ExternalStateGuard, ...] = ()
+    no_effect_confirmation: NoEffectConfirmation | None = None
     rehydrated_from_store: bool = False
 
     def __post_init__(self) -> None:
@@ -516,6 +561,16 @@ class RunResumeRequest:
                 for item in (self.external_state_evidence or ())
             ),
         )
+        if self.no_effect_confirmation is not None and not isinstance(
+            self.no_effect_confirmation, NoEffectConfirmation
+        ):
+            object.__setattr__(
+                self,
+                "no_effect_confirmation",
+                NoEffectConfirmation.from_dict(
+                    cast(Mapping[str, Any], self.no_effect_confirmation)
+                ),
+            )
 
     def version_for(self, workflow_id: str) -> str:
         return dict(self.current_workflow_versions).get(workflow_id, "")
@@ -538,6 +593,11 @@ class RunResumeRequest:
             },
             "observed_artifacts": [item.to_dict() for item in self.observed_artifacts],
             "external_state_evidence": [item.to_dict() for item in self.external_state_evidence],
+            "no_effect_confirmation": (
+                self.no_effect_confirmation.to_dict()
+                if self.no_effect_confirmation is not None
+                else None
+            ),
             "rehydrated_from_store": self.rehydrated_from_store,
         }
 
@@ -560,6 +620,13 @@ class RunResumeRequest:
             external_state_evidence=tuple(
                 ExternalStateGuard.from_dict(item)
                 for item in value.get("external_state_evidence", []) or ()
+            ),
+            no_effect_confirmation=(
+                None
+                if value.get("no_effect_confirmation") is None
+                else NoEffectConfirmation.from_dict(
+                    cast(Mapping[str, Any], value["no_effect_confirmation"])
+                )
             ),
             rehydrated_from_store=bool(value.get("rehydrated_from_store", False)),
         )

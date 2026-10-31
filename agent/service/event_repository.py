@@ -268,7 +268,16 @@ class SqliteEventRepository(EventRepository):
                         yielded += 1
                         yield event
                         if event.is_terminal:
-                            return
+                            try:
+                                event_head = self._store.get_event_head(
+                                    request.tenant_id,
+                                    request.run_id,
+                                    session_id=request.session_id,
+                                )
+                            except DurableStoreError as error:
+                                raise _map_store_error(error) from error
+                            if event_head.terminal_sequence == event.sequence_number:
+                                return
                         if request.limit is not None and yielded >= request.limit:
                             return
                     continue

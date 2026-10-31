@@ -1,15 +1,15 @@
 {
-  "version": "v2.4C-workflow-capability-v1",
+  "version": "v2.4C-workflow-capability-v2",
   "scope": "workflow_decision",
   "contract": "Goal + Context + AvailableWorkflows -> WorkflowDecision",
   "workflow_catalog": {
     "code_generation": {
-      "version": "3.0",
+      "version": "3.1",
       "description": "从题目文件生成 Python 解题代码",
       "required_bindings": ["question_path", "output_path"],
       "defaults": {"output_path": "output/solution.py"},
       "required_artifacts": [],
-      "required_capabilities": ["filesystem.read", "filesystem.write", "run_python"],
+      "required_capabilities": ["filesystem.read", "filesystem.write"],
       "output_types": ["solution_file"]
     },
     "research_report": {
@@ -44,7 +44,7 @@
     {
       "id": "C001", "family": "CLEAR_MATCH",
       "goal": "根据 input/question.docx 解题并保存为 output/answer.py。",
-      "state": {"available_workflows": ["code_generation"], "artifacts": {}, "capabilities": ["filesystem.read", "filesystem.write", "run_python"], "facts": {}, "active_workflow": null},
+      "state": {"available_workflows": ["code_generation"], "artifacts": {}, "capabilities": ["filesystem.read", "filesystem.write"], "facts": {}, "active_workflow": null},
       "expected": {"kind": "instantiate", "workflow_id": "code_generation", "bindings": {"question_path": "input/question.docx", "output_path": "output/answer.py"}}
     },
     {
@@ -94,13 +94,13 @@
     {
       "id": "C009", "family": "PARAMETER_BINDING",
       "goal": "读取 input/two_sum.md 解题，输出到 output/two_sum.py。",
-      "state": {"available_workflows": ["code_generation"], "artifacts": {}, "capabilities": ["filesystem.read", "filesystem.write", "run_python"], "facts": {"language": "python"}, "active_workflow": null},
+      "state": {"available_workflows": ["code_generation"], "artifacts": {}, "capabilities": ["filesystem.read", "filesystem.write"], "facts": {"language": "python"}, "active_workflow": null},
       "expected": {"kind": "instantiate", "workflow_id": "code_generation", "bindings": {"question_path": "input/two_sum.md", "output_path": "output/two_sum.py"}}
     },
     {
       "id": "C010", "family": "PARAMETER_BINDING",
       "goal": "根据 input/question.docx 解题。",
-      "state": {"available_workflows": ["code_generation"], "artifacts": {}, "capabilities": ["filesystem.read", "filesystem.write", "run_python"], "facts": {}, "active_workflow": null},
+      "state": {"available_workflows": ["code_generation"], "artifacts": {}, "capabilities": ["filesystem.read", "filesystem.write"], "facts": {}, "active_workflow": null},
       "expected": {"kind": "instantiate", "workflow_id": "code_generation", "bindings": {"question_path": "input/question.docx", "output_path": "output/solution.py"}}
     },
     {
@@ -144,7 +144,7 @@
     {
       "id": "C017", "family": "CONTINUATION",
       "goal": "继续刚才的解题流程。",
-      "state": {"available_workflows": ["code_generation"], "artifacts": {"question_text": "artifact:q", "algorithm_design": "artifact:a"}, "capabilities": ["filesystem.read", "filesystem.write", "run_python"], "facts": {}, "active_workflow": {"workflow_id": "code_generation", "status": "active", "completed_stages": ["read_question", "design_algorithm"], "active_stage": "generate_code", "reuse_allowed": true}},
+      "state": {"available_workflows": ["code_generation"], "artifacts": {"question_text": "artifact:q", "algorithm_design": "artifact:a"}, "capabilities": ["filesystem.read", "filesystem.write"], "facts": {}, "active_workflow": {"workflow_id": "code_generation", "status": "active", "completed_stages": ["read_question", "design_algorithm"], "active_stage": "generate_code", "reuse_allowed": true}},
       "expected": {"kind": "reuse", "workflow_id": "code_generation", "bindings": {}}
     },
     {

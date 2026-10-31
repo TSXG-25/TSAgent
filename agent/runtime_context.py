@@ -3,7 +3,7 @@
 The context hierarchy is intentionally small:
 
 ``ApplicationContext``
-    Configuration and shared immutable resources.
+    Configuration and per-workspace shared resources.
 ``SessionContext``
     User/session identity and session-owned conversation views.
 ``RunContext``
@@ -68,6 +68,7 @@ class ApplicationContext:
             "runtime_writer_id",
         )
         self._sessions: dict[str, SessionContext] = {}
+        self._repository_indexers: dict[Path, Any] = {}
         self._closed = False
 
     @property
@@ -81,6 +82,7 @@ class ApplicationContext:
         user_id: Optional[str] = None,
         tenant_id: Optional[str] = None,
         memory_namespace: Optional[str] = None,
+        learning_namespace: Optional[str] = None,
         memory_scope: str = "session",
     ) -> "SessionContext":
         if self._closed:
@@ -91,16 +93,39 @@ class ApplicationContext:
             raise ValueError(f"session already exists: {sid}")
         tid = _identifier(tenant_id or "default", "tenant_id")
         namespace = _identifier(memory_namespace or sid, "memory_namespace")
+        learned_namespace = _identifier(
+            learning_namespace
+            or (
+                f"{tid}:{uid}"
+                if memory_scope == "user"
+                else namespace
+            ),
+            "learning_namespace",
+        )
         session = SessionContext(
             self,
             session_id=sid,
             user_id=uid,
             tenant_id=tid,
             memory_namespace=namespace,
+            learning_namespace=learned_namespace,
             memory_scope=memory_scope,
         )
         self._sessions[sid] = session
         return session
+
+    def repository_indexer_for(self, workspace_root: Path) -> Any:
+        """Return the application-owned repository index for one workspace."""
+        if self._closed:
+            raise ContextClosedError("application context is closed")
+        root = Path(workspace_root).resolve()
+        indexer = self._repository_indexers.get(root)
+        if indexer is None:
+            from agent.repository.indexer import RepositoryIndexer
+
+            indexer = RepositoryIndexer(root)
+            self._repository_indexers[root] = indexer
+        return indexer
 
     def close(self) -> None:
         if self._closed:
@@ -108,6 +133,7 @@ class ApplicationContext:
         for session in list(self._sessions.values()):
             session.close()
         self._sessions.clear()
+        self._repository_indexers.clear()
         if self.runtime_store is not None:
             self.runtime_store.close()
         self._closed = True
@@ -124,6 +150,7 @@ class SessionContext:
         user_id: str,
         tenant_id: str,
         memory_namespace: str,
+        learning_namespace: str,
         memory_scope: str = "session",
     ) -> None:
         self.application = application
@@ -131,9 +158,14 @@ class SessionContext:
         self.user_id = _identifier(user_id, "user_id")
         self.tenant_id = _identifier(tenant_id, "tenant_id")
         self.memory_namespace = _identifier(memory_namespace, "memory_namespace")
+        self.learning_namespace = _identifier(
+            learning_namespace,
+            "learning_namespace",
+        )
         self.memory_scope = memory_scope
         self.memory_view = ScopedMemoryView(
             self.memory_namespace,
+            learning_namespace=self.learning_namespace,
             learning_scope=self.memory_scope,
         )
         self.conversation_tracker = ConversationTracker()
@@ -173,6 +205,7 @@ class SessionContext:
         run_resume_store: Any = None,
         writer_id: Optional[str] = None,
         takeover_writer: bool = False,
+        worker_lease: bool = False,
     ) -> "RunContext":
         if self._closed:
             raise ContextClosedError("session context is closed")
@@ -189,6 +222,7 @@ class SessionContext:
             run_resume_store=run_resume_store,
             writer_id=writer_id,
             takeover_writer=takeover_writer,
+            worker_lease=worker_lease,
         )
         self._runs[rid] = run
         self._current_run_id = rid
@@ -245,6 +279,7 @@ class RunContext:
         run_resume_store: Any = None,
         writer_id: Optional[str] = None,
         takeover_writer: bool = False,
+        worker_lease: bool = False,
     ) -> None:
         self.session = session
         self.application = session.application
@@ -272,6 +307,7 @@ class RunContext:
                 request_id=self.request_id,
                 writer_id=writer_id or self.application.runtime_writer_id,
                 takeover_fence=takeover_writer,
+                worker_lease=worker_lease,
             )
             self.checkpoint_store = self.durable_store_view.checkpoint_store
             self.run_resume_store = self.durable_store_view.run_resume_store
@@ -298,6 +334,11 @@ class RunContext:
                 lazy_index=True,
             )
             self._owns_workspace = True
+        self.repository_indexer: Any | None = (
+            self.application.repository_indexer_for(self.workspace.root)
+            if self.workspace is not None
+            else None
+        )
         self.clock = time.time
         self.created_at = self.clock()
         self.diagnostics = RunDiagnosticsSink(scope_id=self.scope_id)

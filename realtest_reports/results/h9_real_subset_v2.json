@@ -1,0 +1,425 @@
+{
+  "manifest_version": "h9-runtime-spine-v1",
+  "manifest_hash": "13d4a1366e9054c6c1137ff243d62c8fbc5d97fbfaf73bf743a2493b8d6f9068",
+  "mode": "real",
+  "provider": "auto",
+  "records": [
+    {
+      "case_id": "H903",
+      "category": "command",
+      "capability_outcome": "PASS",
+      "runtime_correctness": "PASS",
+      "case_result": "PASS",
+      "terminal_status": "COMPLETED",
+      "duration_ms": 16857.4,
+      "llm_calls": 1,
+      "tool_calls": [
+        "shell"
+      ],
+      "plan_calls": 1,
+      "replan_calls": 0,
+      "failure_code": "",
+      "answer": "已创建并运行 date，运行输出：Fri Aug 14 13:16:57 UTC 2026。",
+      "evidence": {
+        "conversation_intent": "new_request",
+        "requires_execution": false,
+        "execution_progress": 1,
+        "verified_success": true,
+        "resolved_target": "",
+        "resolved_symbol": "",
+        "pending_target": "",
+        "previous_answer": "",
+        "answer": "已创建并运行 date，运行输出：Fri Aug 14 13:16:57 UTC 2026。",
+        "answer_required": true,
+        "user_visible_output_verified": true,
+        "freshness_required": false,
+        "source_grounding_required": false,
+        "fresh_evidence": false,
+        "transitions": 4,
+        "runtime_pending": false,
+        "terminal_status": "COMPLETED",
+        "terminal_outputs_verified": true,
+        "effect_truth_ok": true,
+        "requested_outcomes": [
+          "USER_VISIBLE_OUTPUT",
+          "COMMAND_EXECUTION"
+        ],
+        "execution_evidence": [
+          {
+            "outcome": "COMMAND_EXECUTION",
+            "status": "VERIFIED",
+            "source": "ExecutionVerifier:none",
+            "target": "date"
+          }
+        ],
+        "unresolved_requested_outcomes": [],
+        "required_effects": [],
+        "verified_effects": [],
+        "unsupported_effects": [],
+        "failed_effects": [],
+        "unresolved_required_effects": [],
+        "verified_artifacts": [],
+        "task_failures": [],
+        "failure_code": "",
+        "failure_class": "execution",
+        "failed_component": "runtime",
+        "retryable": false,
+        "budget_exhausted": false,
+        "goal_status": "COMPLETE",
+        "goal_round": 1,
+        "goal_max_rounds": 10,
+        "goal_missing": [],
+        "goal_evidence": [
+          {
+            "source": "execution_evidence",
+            "detail": "execution evidence present",
+            "verified": true
+          },
+          {
+            "source": "task_set",
+            "detail": "all planned tasks reached a terminal success state",
+            "verified": true
+          },
+          {
+            "source": "completion_gate",
+            "detail": "all required goal evidence present",
+            "verified": true
+          }
+        ],
+        "timing": {
+          "wall_total": 16.857,
+          "exclusive_total": 16.85,
+          "spans": {
+            "init": 3.399,
+            "plan_llm": 9.966,
+            "executor": 3.485
+          },
+          "llm_calls": 1,
+          "replan_count": 0
+        }
+      },
+      "detail": ""
+    },
+    {
+      "case_id": "H904",
+      "category": "code_execution",
+      "capability_outcome": "PASS",
+      "runtime_correctness": "PASS",
+      "case_result": "PASS",
+      "terminal_status": "COMPLETED",
+      "duration_ms": 3755.5,
+      "llm_calls": 1,
+      "tool_calls": [
+        "llm",
+        "run_python"
+      ],
+      "plan_calls": 1,
+      "replan_calls": 0,
+      "failure_code": "",
+      "answer": "已创建并运行 python-source，运行输出：5050。",
+      "evidence": {
+        "conversation_intent": "new_request",
+        "requires_execution": false,
+        "execution_progress": 1,
+        "verified_success": true,
+        "resolved_target": "",
+        "resolved_symbol": "",
+        "pending_target": "",
+        "previous_answer": "",
+        "answer": "已创建并运行 python-source，运行输出：5050。",
+        "answer_required": true,
+        "user_visible_output_verified": true,
+        "freshness_required": false,
+        "source_grounding_required": false,
+        "fresh_evidence": false,
+        "transitions": 4,
+        "runtime_pending": false,
+        "terminal_status": "COMPLETED",
+        "terminal_outputs_verified": true,
+        "effect_truth_ok": true,
+        "requested_outcomes": [
+          "USER_VISIBLE_OUTPUT",
+          "CODE_EXECUTION"
+        ],
+        "execution_evidence": [
+          {
+            "outcome": "CODE_EXECUTION",
+            "status": "VERIFIED",
+            "source": "ExecutionVerifier:none",
+            "target": "$code"
+          }
+        ],
+        "unresolved_requested_outcomes": [],
+        "required_effects": [],
+        "verified_effects": [],
+        "unsupported_effects": [],
+        "failed_effects": [],
+        "unresolved_required_effects": [],
+        "verified_artifacts": [],
+        "task_failures": [],
+        "failure_code": "",
+        "failure_class": "execution",
+        "failed_component": "runtime",
+        "retryable": false,
+        "budget_exhausted": false,
+        "goal_status": "COMPLETE",
+        "goal_round": 1,
+        "goal_max_rounds": 10,
+        "goal_missing": [],
+        "goal_evidence": [
+          {
+            "source": "execution_evidence",
+            "detail": "execution evidence present",
+            "verified": true
+          },
+          {
+            "source": "task_set",
+            "detail": "all planned tasks reached a terminal success state",
+            "verified": true
+          },
+          {
+            "source": "completion_gate",
+            "detail": "all required goal evidence present",
+            "verified": true
+          }
+        ],
+        "timing": {
+          "wall_total": 3.755,
+          "exclusive_total": 3.727,
+          "spans": {
+            "init": 0.028,
+            "executor": 3.699
+          },
+          "llm_calls": 0,
+          "replan_count": 0
+        }
+      },
+      "detail": ""
+    },
+    {
+      "case_id": "H905",
+      "category": "file_write",
+      "capability_outcome": "PASS",
+      "runtime_correctness": "PASS",
+      "case_result": "PASS",
+      "terminal_status": "COMPLETED",
+      "duration_ms": 95.8,
+      "llm_calls": 0,
+      "tool_calls": [
+        "filesystem.write"
+      ],
+      "plan_calls": 1,
+      "replan_calls": 0,
+      "failure_code": "",
+      "answer": "已成功写入：output/h9_write.txt",
+      "evidence": {
+        "conversation_intent": "new_request",
+        "requires_execution": false,
+        "execution_progress": 1,
+        "verified_success": true,
+        "resolved_target": "",
+        "resolved_symbol": "",
+        "pending_target": "",
+        "previous_answer": "",
+        "answer": "已成功写入：output/h9_write.txt",
+        "answer_required": true,
+        "user_visible_output_verified": true,
+        "freshness_required": false,
+        "source_grounding_required": false,
+        "fresh_evidence": false,
+        "transitions": 4,
+        "runtime_pending": false,
+        "terminal_status": "COMPLETED",
+        "terminal_outputs_verified": true,
+        "effect_truth_ok": true,
+        "requested_outcomes": [
+          "USER_VISIBLE_OUTPUT",
+          "FILE_MUTATION"
+        ],
+        "execution_evidence": [
+          {
+            "outcome": "FILE_MUTATION",
+            "status": "VERIFIED",
+            "source": "ExecutionVerifier:write",
+            "target": "$path"
+          }
+        ],
+        "unresolved_requested_outcomes": [],
+        "required_effects": [],
+        "verified_effects": [],
+        "unsupported_effects": [],
+        "failed_effects": [],
+        "unresolved_required_effects": [],
+        "verified_artifacts": [
+          {
+            "reference": "output/h9_write.txt",
+            "artifact_type": "file",
+            "producer_workflow_id": "runtime-execution",
+            "producer_stage_id": "task:task-1",
+            "producer_task_id": "task-1"
+          }
+        ],
+        "task_failures": [],
+        "failure_code": "",
+        "failure_class": "execution",
+        "failed_component": "runtime",
+        "retryable": false,
+        "budget_exhausted": false,
+        "goal_status": "COMPLETE",
+        "goal_round": 1,
+        "goal_max_rounds": 10,
+        "goal_missing": [],
+        "goal_evidence": [
+          {
+            "source": "execution_evidence",
+            "detail": "execution evidence present",
+            "verified": true
+          },
+          {
+            "source": "task_set",
+            "detail": "all planned tasks reached a terminal success state",
+            "verified": true
+          },
+          {
+            "source": "completion_gate",
+            "detail": "all required goal evidence present",
+            "verified": true
+          }
+        ],
+        "timing": {
+          "wall_total": 0.094,
+          "exclusive_total": 0.044,
+          "spans": {
+            "init": 0.042,
+            "executor": 0.002
+          },
+          "llm_calls": 0,
+          "replan_count": 0
+        }
+      },
+      "detail": ""
+    },
+    {
+      "case_id": "H906",
+      "category": "file_and_execution",
+      "capability_outcome": "PARTIAL",
+      "runtime_correctness": "PASS",
+      "case_result": "FAIL",
+      "terminal_status": "FAILED_TERMINAL",
+      "duration_ms": 9105.3,
+      "llm_calls": 1,
+      "tool_calls": [
+        "llm",
+        "filesystem.write",
+        "run_python_file",
+        "run_python_file"
+      ],
+      "plan_calls": 1,
+      "replan_calls": 0,
+      "failure_code": "EXECUTION_EVIDENCE_MISSING",
+      "answer": "目标尚未完成，缺少可验证证据：failed task evidence、outcome:CODE_EXECUTION。本次不会报告为成功。",
+      "evidence": {
+        "conversation_intent": "new_request",
+        "requires_execution": true,
+        "execution_progress": 3,
+        "verified_success": true,
+        "resolved_target": "",
+        "resolved_symbol": "",
+        "pending_target": "output/h9_probe.py",
+        "previous_answer": "",
+        "answer": "目标尚未完成，缺少可验证证据：failed task evidence、outcome:CODE_EXECUTION。本次不会报告为成功。",
+        "answer_required": true,
+        "user_visible_output_verified": true,
+        "freshness_required": false,
+        "source_grounding_required": false,
+        "fresh_evidence": false,
+        "transitions": 9,
+        "runtime_pending": true,
+        "terminal_status": "FAILED_TERMINAL",
+        "terminal_outputs_verified": false,
+        "effect_truth_ok": false,
+        "requested_outcomes": [
+          "USER_VISIBLE_OUTPUT",
+          "FILE_MUTATION",
+          "CODE_EXECUTION"
+        ],
+        "execution_evidence": [
+          {
+            "outcome": "FILE_MUTATION",
+            "status": "VERIFIED",
+            "source": "ExecutionVerifier:write",
+            "target": "$path"
+          }
+        ],
+        "unresolved_requested_outcomes": [
+          "CODE_EXECUTION"
+        ],
+        "required_effects": [],
+        "verified_effects": [],
+        "unsupported_effects": [],
+        "failed_effects": [],
+        "unresolved_required_effects": [],
+        "verified_artifacts": [
+          {
+            "reference": "output/h9_probe.py",
+            "artifact_type": "file",
+            "producer_workflow_id": "runtime-execution",
+            "producer_stage_id": "task:task-1",
+            "producer_task_id": "task-1"
+          }
+        ],
+        "task_failures": [
+          {
+            "id": "task-2",
+            "error": "PlanExecutor: step 0 (run_python_file) 失败: 错误：文件不存在 output/h9_probe.py",
+            "error_code": "TOOL_EXECUTION_FAILED"
+          }
+        ],
+        "failure_code": "EXECUTION_EVIDENCE_MISSING",
+        "failure_class": "execution",
+        "failed_component": "runtime",
+        "retryable": true,
+        "budget_exhausted": false,
+        "goal_status": "FAILED",
+        "goal_round": 3,
+        "goal_max_rounds": 10,
+        "goal_missing": [
+          "failed task evidence",
+          "outcome:CODE_EXECUTION"
+        ],
+        "goal_evidence": [
+          {
+            "source": "execution_evidence",
+            "detail": "execution evidence present",
+            "verified": true
+          }
+        ],
+        "timing": {
+          "wall_total": 9.105,
+          "exclusive_total": 0.042,
+          "spans": {
+            "init": 0.041,
+            "executor": 0.001
+          },
+          "llm_calls": 0,
+          "replan_count": 0
+        }
+      },
+      "detail": ""
+    }
+  ],
+  "metrics": {
+    "cases": 4,
+    "case_pass": 3,
+    "goal_completion_rate": 0.75,
+    "false_completion_rate": 0.0,
+    "recoverable_error_survival": 1.0,
+    "structural_recovery_success": null,
+    "llm_calls_per_completed_goal": 0.667,
+    "unnecessary_replan_rate": 0.0,
+    "median_completion_latency_ms": 6430.4,
+    "runtime_failures": 0,
+    "provider_errors": 0
+  },
+  "status": "PASS"
+}

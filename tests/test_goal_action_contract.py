@@ -29,11 +29,13 @@ def test_failed_action_cannot_carry_success_value() -> None:
     result = ActionResult.failure(
         error_code="BINARY_FILE",
         content="二进制文件不能按文本读取",
+        side_effect_state="NONE",
     )
 
     assert result.ok is False
     assert result.value is None
     assert result.error_code == "BINARY_FILE"
+    assert ActionResult.from_dict(result.to_dict()) == result
 
 
 def test_goal_requires_evidence_beyond_finished_plan() -> None:
@@ -72,6 +74,62 @@ def test_goal_completes_with_action_and_answer_evidence() -> None:
     decision = GoalVerifier.verify(state, "执行输出为 42")
 
     assert decision.status is GoalStatus.COMPLETE
+    assert decision.can_complete is True
+
+
+def test_goal_requires_every_declared_deliverable_instance() -> None:
+    state = {
+        "goal_state": {
+            "objective": "交付两份报告",
+            "goal_version": 1,
+            "delivery_requirements": [
+                {
+                    "id": "reports",
+                    "kind": "file",
+                    "quantity": 2,
+                    "target": "",
+                    "acceptance_criteria": [],
+                }
+            ],
+        },
+        "artifact_required": True,
+        "file_artifact_evidence": [{"path": "output/report-a.md", "digest": "a"}],
+        "verified_artifact_paths": ["output/report-a.md"],
+        "answer_required": True,
+    }
+
+    decision = GoalVerifier.verify(state, "已完成")
+
+    assert decision.status is GoalStatus.FAILED
+    assert "deliverable:reports:2" in decision.missing
+
+
+def test_goal_counts_distinct_verified_files_for_deliverable_quantity() -> None:
+    state = {
+        "goal_state": {
+            "objective": "交付两份报告",
+            "goal_version": 1,
+            "delivery_requirements": [
+                {
+                    "id": "reports",
+                    "kind": "file",
+                    "quantity": 2,
+                    "target": "",
+                    "acceptance_criteria": [],
+                }
+            ],
+        },
+        "artifact_required": True,
+        "file_artifact_evidence": [
+            {"path": "output/report-a.md", "digest": "a"},
+            {"path": "output/report-b.md", "digest": "b"},
+        ],
+        "verified_artifact_paths": ["output/report-a.md", "output/report-b.md"],
+        "answer_required": True,
+    }
+
+    decision = GoalVerifier.verify(state, "两份报告已交付")
+
     assert decision.can_complete is True
 
 
@@ -160,6 +218,7 @@ def test_result_driven_normal_action_failure_is_an_observation(monkeypatch) -> N
                 action_result=ActionResult.failure(
                     error_code="FILE_NOT_FOUND",
                     content="file not found",
+                    side_effect_state="NONE",
                 ),
                 metadata={"executor": "fake"},
             )
@@ -202,4 +261,5 @@ def test_result_driven_normal_action_failure_is_an_observation(monkeypatch) -> N
     updated, next_state = asyncio.run(ExecutionStage(Orchestrator()).run(state))
     assert next_state == "OBSERVE"
     assert not updated.get("runtime_failure_code")
+    assert updated["runtime_failure_side_effect_state"] == "NONE"
     assert updated["inbox"]["next_step"][0]["result"]["error_code"] == "FILE_NOT_FOUND"

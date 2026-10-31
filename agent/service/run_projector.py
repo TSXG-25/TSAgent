@@ -143,10 +143,15 @@ def _failure_summary(read: RunReadSnapshot) -> FailureSummary | None:
     if not code:
         code = "RUN_BLOCKED" if event.event_type == "run_blocked" else "RUNTIME_EXECUTION_FAILED"
     details: dict[str, Any] = {}
-    for key in ("failure_class", "failed_component", "diagnostic_event_id"):
+    for key in (
+        "failure_class",
+        "failed_component",
+        "diagnostic_event_id",
+        "failure_detail",
+    ):
         value = payload.get(key)
         if isinstance(value, str) and value.strip():
-            details[key] = value.strip()[:120]
+            details[key] = value.strip()[:300 if key == "failure_detail" else 120]
     return FailureSummary(
         code=code,
         message=_FAILURE_MESSAGES.get(code, "The Run did not complete successfully"),

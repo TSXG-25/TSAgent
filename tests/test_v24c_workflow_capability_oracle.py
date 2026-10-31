@@ -16,7 +16,7 @@ from evals.workflow_capability.oracle import (
 )
 
 
-DATASET_HASH = "43338803cbe9192c19a2957887a8013c17058a6dbea9e7bb6cb66c06d60fbd69"
+DATASET_HASH = "a92160b47efd7ce863bb1f675bcb294d73bc4038bcf2506837f41f4bba67d197"
 
 
 def test_workflow_decision_envelopes_are_mutually_exclusive() -> None:

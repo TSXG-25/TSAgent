@@ -13,7 +13,12 @@ from agent.interruption import (
     InterruptionPhase,
     InterruptionReason,
 )
-from agent.runtime_store import DurableStoreError, SqliteRuntimeStore, StoreErrorCode
+from agent.runtime_store import (
+    ArtifactCommitFact,
+    DurableStoreError,
+    SqliteRuntimeStore,
+    StoreErrorCode,
+)
 from agent.service import (
     AgentService,
     AgentServiceError,
@@ -273,6 +278,9 @@ def test_terminalization_fault_never_tears_snapshot_and_event(tmp_path, failure_
         fence_token=fence.fence_token,
     )
     before_head = store.get_run_head("tenant-a", "run-1")
+    before_snapshot = store.read_run_snapshot(
+        "tenant-a", "run-1", session_id="session-a"
+    )
     before_events = store.read_events(
         "tenant-a", "run-1", session_id="session-a"
     )
@@ -284,10 +292,30 @@ def test_terminalization_fault_never_tears_snapshot_and_event(tmp_path, failure_
             request_id="cancel-1",
             writer_id=fence.writer_id,
             fence_token=fence.fence_token,
+            terminal_payload={"partial_execution": {"verified": True}},
+            run_output={
+                "text": "已核验并保留 output/partial.txt",
+                "artifact_ids": ["artifact-partial"],
+            },
+            artifacts=(
+                ArtifactCommitFact(
+                    artifact_id="artifact-partial",
+                    artifact_type="file",
+                    reference="output/partial.txt",
+                    digest="sha256:partial",
+                    producer_workflow_id="runtime-execution",
+                    producer_stage_id="task:write-partial",
+                ),
+            ),
             failure_point=failure_point,
         )
     assert caught.value.code is StoreErrorCode.INTERRUPTION_INJECTED_FAILURE
     assert store.get_run_head("tenant-a", "run-1") == before_head
+    after_snapshot = store.read_run_snapshot(
+        "tenant-a", "run-1", session_id="session-a"
+    )
+    assert after_snapshot.output == before_snapshot.output
+    assert after_snapshot.artifacts == before_snapshot.artifacts
     assert store.read_events(
         "tenant-a", "run-1", session_id="session-a"
     ) == before_events

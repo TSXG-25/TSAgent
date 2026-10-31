@@ -224,8 +224,122 @@ def test_historical_guard_requires_fresh_current_evidence():
         resource_id="output/test.txt",
         guard_type="FILE_CONTENT_HASH",
         expected_value="sha256:old",
+        checked_at="2026-09-26T10:00:00Z",
     ),))
     decision = validate_resume(checkpoint, _context())
+    assert decision.disposition is ResumeDisposition.REQUIRE_CLARIFICATION
+    assert decision.reason_code is ResumeReasonCode.EXTERNAL_STATE_UNKNOWN
+
+
+def test_unrelated_external_guard_does_not_satisfy_checkpoint_guard():
+    checkpoint = _checkpoint(external_state_guards=(ExternalStateGuard(
+        resource_id="output/test.txt",
+        guard_type="FILE_CONTENT_HASH",
+        expected_value="sha256:old",
+        checked_at="2026-09-26T10:00:00Z",
+    ),))
+    unrelated = ExternalStateGuard(
+        resource_id="output/other.txt",
+        guard_type="FILE_CONTENT_HASH",
+        expected_value="sha256:old",
+        observed_value="sha256:old",
+        checked_at="2026-09-27T10:00:00Z",
+        status=GuardStatus.VERIFIED,
+    )
+
+    decision = validate_resume(
+        checkpoint,
+        _context(external_state_evidence=(unrelated,)),
+    )
+
+    assert decision.disposition is ResumeDisposition.REJECT
+    assert decision.reason_code is ResumeReasonCode.EXTERNAL_STATE_MISMATCH
+
+
+def test_checkpoint_guard_accepts_only_matching_fresh_verified_observation():
+    checkpoint = _checkpoint(external_state_guards=(ExternalStateGuard(
+        resource_id="output/test.txt",
+        guard_type="FILE_CONTENT_HASH",
+        expected_value="sha256:old",
+        checked_at="2026-09-26T10:00:00Z",
+    ),))
+    current = ExternalStateGuard(
+        resource_id="output/test.txt",
+        guard_type="FILE_CONTENT_HASH",
+        expected_value="sha256:old",
+        observed_value="sha256:old",
+        checked_at="2026-09-27T10:00:00Z",
+        status=GuardStatus.VERIFIED,
+    )
+
+    decision = validate_resume(
+        checkpoint,
+        _context(external_state_evidence=(current,)),
+    )
+
+    assert decision.disposition is ResumeDisposition.ALLOW
+
+
+def test_checkpoint_guard_rejects_duplicate_or_internally_inconsistent_evidence():
+    checkpoint = _checkpoint(external_state_guards=(ExternalStateGuard(
+        resource_id="output/test.txt",
+        guard_type="FILE_CONTENT_HASH",
+        expected_value="sha256:old",
+        checked_at="2026-09-26T10:00:00Z",
+    ),))
+    current = ExternalStateGuard(
+        resource_id="output/test.txt",
+        guard_type="FILE_CONTENT_HASH",
+        expected_value="sha256:old",
+        observed_value="sha256:old",
+        checked_at="2026-09-27T10:00:00Z",
+        status=GuardStatus.VERIFIED,
+    )
+
+    duplicate = validate_resume(
+        checkpoint,
+        _context(external_state_evidence=(current, current)),
+    )
+    inconsistent = validate_resume(
+        checkpoint,
+        _context(external_state_evidence=(ExternalStateGuard(
+            resource_id=current.resource_id,
+            guard_type=current.guard_type,
+            expected_value=current.expected_value,
+            observed_value="sha256:different",
+            checked_at="2026-09-27T10:00:00Z",
+            status=GuardStatus.VERIFIED,
+        ),)),
+    )
+
+    assert duplicate.disposition is ResumeDisposition.REJECT
+    assert duplicate.reason_code is ResumeReasonCode.EXTERNAL_STATE_MISMATCH
+    assert inconsistent.disposition is ResumeDisposition.REJECT
+    assert inconsistent.reason_code is ResumeReasonCode.EXTERNAL_STATE_MISMATCH
+
+
+def test_checkpoint_guard_rejects_replayed_observation_timestamp():
+    timestamp = "2026-09-26T10:00:00Z"
+    checkpoint = _checkpoint(external_state_guards=(ExternalStateGuard(
+        resource_id="output/test.txt",
+        guard_type="FILE_CONTENT_HASH",
+        expected_value="sha256:old",
+        checked_at=timestamp,
+    ),))
+    replayed = ExternalStateGuard(
+        resource_id="output/test.txt",
+        guard_type="FILE_CONTENT_HASH",
+        expected_value="sha256:old",
+        observed_value="sha256:old",
+        checked_at=timestamp,
+        status=GuardStatus.VERIFIED,
+    )
+
+    decision = validate_resume(
+        checkpoint,
+        _context(external_state_evidence=(replayed,)),
+    )
+
     assert decision.disposition is ResumeDisposition.REQUIRE_CLARIFICATION
     assert decision.reason_code is ResumeReasonCode.EXTERNAL_STATE_UNKNOWN
 

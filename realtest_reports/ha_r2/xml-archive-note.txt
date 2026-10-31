@@ -1,0 +1,1 @@
+HA-R3 首次回归误复用 HA-R2 runner，覆盖了原 JUnit XML。新结果已移到 ../ha_r3/initial-offline-results.xml。HA-R2 原始 341 passed 控制台日志已从 /private/tmp/tsagent-ha-r2-final-suite.log 恢复；不将新 XML 冒充旧结果。

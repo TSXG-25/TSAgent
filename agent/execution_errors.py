@@ -10,6 +10,14 @@ from __future__ import annotations
 from agent.failure.taxonomy import FailureCode
 
 
+class ProviderError(RuntimeError):
+    """A failure originating at the LLM boundary, preserving its category."""
+
+    def __init__(self, message: str, cause: Exception) -> None:
+        super().__init__(message)
+        self.code = classify_execution_error(cause) or "PROVIDER_UNAVAILABLE"
+
+
 NON_RETRIABLE_CODES = frozenset({
     FailureCode.EXECUTION_ENVIRONMENT_UNAVAILABLE.value,
     "PROTECTED_INTERNAL_PATH",
@@ -32,11 +40,15 @@ NON_RETRIABLE_CODES = frozenset({
 
 def classify_execution_error(error: object) -> str:
     """Map tool/compiler text to a stable non-retriable error code."""
+    if isinstance(error, ProviderError):
+        return error.code
     text = str(error or "")
     upper = text.upper()
     for code in NON_RETRIABLE_CODES:
         if code in upper:
             return code
+    if "COMMAND_NONZERO_EXIT" in upper:
+        return "COMMAND_NONZERO_EXIT"
     if "网络搜索功能不可用" in text or "未找到关于" in text:
         return "RESEARCH_TOOL_UNAVAILABLE"
     if "无法解码文件" in text or "请确保文件是文本格式" in text:

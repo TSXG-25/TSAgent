@@ -1,0 +1,47 @@
+  📂 ProjectIndex: scanned 498 files in 0.147s
+  📁 Workspace ready: tsagent-run2 (498 files)
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]Loading weights: 100%|██████████| 103/103 [00:00<00:00, 7004.45it/s]
+Structured output 失败，永久关闭: Error code: 400 - {'error': {'message': 'This response_format type is unavailable now', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}
+  🧠 规划上下文: 对话轮次: 最近1轮
+  🔍 引用消歧: 无需消歧
+  🧠 意图: Intent(domain=unknown, action=, target='notes.txt', entities=[], current_file='', conf=0.30, exec=True)
+
+📋 无匹配 Workflow（无匹配路由 (domain=unknown, action=)），使用 Planner 生成计划。
+
+============================================================
+📋 执行计划（Task 分解）
+============================================================
+  task-1: write output/notes.txt
+============================================================
+
+[DBG-COMPILE] verb=Verb.WRITE target='output/notes.txt' type=file inputs={} policy_exec=tool tool_policy=None -> exec=tool steps=[{'tool': 'workspace', 'args': {'spec': 'output/notes.txt'}}, {'tool': 'llm', 'args': {'verb': 'write', 'target': 'output/notes.txt', 'prompt': '你是文件生成器。只输出目标文件的完整内容，不要解释，不要 markdown 代码围栏。', 'user': "目标文件: output/notes.txt\n任务: 创建 output/notes.txt 并写入 2026年08月04日是星期二\n说明: 在 output/ 目录下创建 notes.txt 文件，内容为 '2026年08月04日是星期二'。"}}, {'tool': 'filesystem.write', 'args': {'path': '$path', 'content': '$content'}}]
+  🔀 Compiler: task-1 → tool_executor
+[DEBUG-PLAN] executor=tool steps=[{"tool": "workspace", "args": {"spec": "output/notes.txt"}}, {"tool": "llm", "args": {"verb": "write", "target": "output/notes.txt", "prompt": "你是文件生成器。只输出目标文件的完整内容，不要解释，不要 markdown 代码围栏。", "user": "目标文件: output/notes.txt\n任务: 创建 output/notes.txt 并写入 2026年08月04日是星期二\n说明: 在 output/ 目录下创建 notes.txt 文件，内容为 '2026年08月04日是星期二'。"}}, {"tool": "filesystem.write", "args": {"path": "$path", "content": "$content"}}]
+[DEBUG-STEP] 0 tool=workspace args={'spec': 'output/notes.txt'} resolved={'spec': 'output/notes.txt'}
+[DEBUG-STEP] 1 tool=llm args={'verb': 'write', 'target': 'output/notes.txt', 'prompt': '你是文件生成器。只输出目标文件的完整内容，不要解释，不要 markdown 代码围栏。', 'user': "目标文件: output/notes.txt\n任务: 创建 output/notes.txt 并写入 2026年08月04日是星期二\n说明: 在 output/ 目录下创建 notes.txt 文件，内容为 '2026年08月04日是星期二'。"} resolved={'verb': 'write', 'target': 'output/notes.txt', 'prompt': '你是文件生成器。只输出目标文件的完整内容，不要解释，不要 markdown 代码围栏。', 'user': "目标文件: output/notes.txt\n任务: 创建 output/notes.txt 并写入 2026年08月04日是星期二\n说明: 在 output/ 目录下创建 notes.txt 文件，内容为 '2026年08月04日是星期二'。"}
+[DEBUG-STEP] 2 tool=filesystem.write args={'path': '$path', 'content': '$content'} resolved={'path': 'output/notes.txt', 'content': '2026年08月04日是星期二'}
+
+==================================================
+⏱️  启动耗时 Profile
+==================================================
+  workspace_init         0.15s  ███████████████░░░░░ 77%
+  tools_import           0.04s  ████░░░░░░░░░░░░░░░░ 21%
+  workflows_import       0.00s  ░░░░░░░░░░░░░░░░░░░░ 1%
+  skills_import          0.00s  ░░░░░░░░░░░░░░░░░░░░ 1%
+  knowledge_build        0.00s  ░░░░░░░░░░░░░░░░░░░░ 1%
+  capabilities_register   0.00s  ░░░░░░░░░░░░░░░░░░░░ 0%
+  TOTAL                  0.19s
+==================================================
+
+==================================================
+⚡ 执行耗时 Profile
+==================================================
+  plan                  15.15s  ███████░░░░░░░░░░░░░ 36%
+  plan_llm              15.15s  ███████░░░░░░░░░░░░░ 36%
+  init                  10.11s  ████░░░░░░░░░░░░░░░░ 24%
+  executor               1.10s  ░░░░░░░░░░░░░░░░░░░░ 3%
+  answer_gen             0.00s  ░░░░░░░░░░░░░░░░░░░░ 0%
+  TOTAL                 41.52s
+==================================================
+
+FINAL: '已写入 output/notes.txt'

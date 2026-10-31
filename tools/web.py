@@ -3,11 +3,119 @@
 import asyncio
 import re
 from datetime import date, timedelta
-from typing import Annotated, Literal
+from typing import Annotated, Any, Iterable, Literal, Mapping
 
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from agent.registry.tool_registry import ToolAvailability, registry
+
+
+class SearchResult(BaseModel):
+    """Canonical structured web-search result item.
+
+    Fields the provider cannot supply stay empty; nothing is fabricated.
+    """
+
+    title: str = ""
+    url: str = ""
+    snippet: str = ""
+    source: str = ""
+    published: str = ""
+
+
+SEARCH_RESULT_SCHEMA: dict = {
+    "type": "array",
+    "items": SearchResult.model_json_schema(),
+}
+
+
+def parse_search_results(text: str, *, source: str = "duckduckgo") -> list[SearchResult]:
+    """Parse the DuckDuckGo MCP text output into canonical result items.
+
+    The MCP server renders one block per result: a numbered title line
+    followed by indented ``URL:``/``Summary:`` fields.  Bare ``Title:`` /
+    ``URL:`` key lines are accepted as well.  Prose such as the server's
+    "no results" message yields an empty list.
+    """
+    results: list[SearchResult] = []
+    current: dict[str, str] | None = None
+
+    def flush() -> None:
+        nonlocal current
+        if current is not None and (current.get("title") or current.get("url")):
+            results.append(SearchResult(source=source, **current))
+        current = None
+
+    for raw_line in str(text or "").splitlines():
+        line = raw_line.strip()
+        if not line:
+            flush()
+            continue
+        numbered = re.match(r"^\d+[.)]\s+(.*\S)\s*$", line)
+        if numbered:
+            flush()
+            current = {"title": numbered.group(1).strip()}
+            continue
+        field = re.match(
+            r"^(title|url|summary|snippet|description|published|date)\s*:\s*(.*)$",
+            line,
+            flags=re.IGNORECASE,
+        )
+        if field:
+            key, value = field.group(1).lower(), field.group(2).strip()
+            if key == "title":
+                flush()
+                current = {"title": value}
+                continue
+            if current is None:
+                current = {}
+            if key == "url":
+                current["url"] = value
+            elif key in {"summary", "snippet", "description"}:
+                current["snippet"] = value
+            else:
+                current["published"] = value
+            continue
+        # Unstructured lines (e.g. "Found N search results:") are skipped.
+    flush()
+    return results
+
+
+def render_search_results(
+    results: Iterable[SearchResult | Mapping[str, Any]],
+    *,
+    notice: str = "",
+) -> str:
+    """Canonical text projection of structured search results.
+
+    This is the single place where the structured contract becomes prose
+    for consumers that only need text (LLM prompts, action summaries).
+    """
+    lines: list[str] = [notice.rstrip("\n")] if notice else []
+    for index, item in enumerate(results, 1):
+        fields = item.model_dump() if isinstance(item, SearchResult) else dict(item)
+        title = str(fields.get("title", "")).strip()
+        url = str(fields.get("url", "")).strip()
+        snippet = str(fields.get("snippet", "")).strip()
+        source = str(fields.get("source", "")).strip()
+        published = str(fields.get("published", "")).strip()
+        entry = f"{index}. {title or url}"
+        if url:
+            entry += f"\n   URL: {url}"
+        if snippet:
+            entry += f"\n   Summary: {snippet}"
+        meta = " · ".join(
+            part
+            for part in (
+                f"Source: {source}" if source else "",
+                f"Published: {published}" if published else "",
+            )
+            if part
+        )
+        if meta:
+            entry += f"\n   {meta}"
+        lines.append(entry)
+    return "\n".join(lines)
 
 
 def _duckduckgo_availability() -> ToolAvailability:
@@ -60,27 +168,25 @@ async def web_search(
     search: str = "",
     max_results: Annotated[int, Field(ge=5, le=20)] = 5,
     timeliness: Literal["today", "yesterday", "week", "month", "any"] = "any",
-) -> str:
-    """Search DuckDuckGo through MCP and return titles, URLs, and snippets."""
+) -> list[SearchResult]:
+    """Search DuckDuckGo through MCP and return structured results."""
 
     query = query or q or keyword or search or url
     if not query:
-        return "错误：web_search 缺少 query 参数"
+        raise ValueError("web_search 缺少 query 参数")
 
     result = await _call_duckduckgo_tool(
         "search",
         {"query": _time_aware_query(query, timeliness), "max_results": max_results},
     )
-    if timeliness != "any":
-        return TIME_FILTER_NOTICE + result
-    return result
+    return parse_search_results(result)
 
 
 async def web_news_search(
     query: str,
     max_results: Annotated[int, Field(ge=5, le=20)] = 5,
     days: Annotated[int, Field(gt=0)] = 7,
-) -> str:
+) -> list[SearchResult]:
     """Search for news; explicitly disclose that DuckDuckGo MCP cannot date-filter."""
 
     cutoff = date.today() - timedelta(days=days)
@@ -91,7 +197,7 @@ async def web_news_search(
             "max_results": max_results,
         },
     )
-    return TIME_FILTER_NOTICE + result
+    return parse_search_results(result)
 
 
 async def web_deep_search(
@@ -112,7 +218,7 @@ async def web_deep_search(
             },
         )
         urls = list(dict.fromkeys(
-            re.findall(r"^\s*URL:\s*(\S+)\s*$", search_result, flags=re.MULTILINE)
+            item.url for item in parse_search_results(search_result) if item.url
         ))[:fetch_top_n]
         pages = await asyncio.gather(*(
             call_tool(

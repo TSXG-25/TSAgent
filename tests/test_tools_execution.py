@@ -163,12 +163,15 @@ def test_web_search():
     from tools.web import web_search
     import asyncio
 
-    result = asyncio.run(web_search("Python programming language", max_results=2))
-    # Should get some result text back
-    assert len(result) > 20, f"Search result too short: {result[:100] if result else 'empty'}"
+    results = asyncio.run(web_search("Python programming language", max_results=2))
+    # Should get structured result items back
+    assert results, "expected non-empty structured search results"
+    for item in results:
+        assert item.title or item.url
     # Should mention Python or programming
-    has_relevant = any(term in result.lower() for term in ["python", "programming", "language"])
-    print(f"[PASS] test_web_search (relevant={has_relevant}, len={len(result)} chars)")
+    haystack = " ".join(f"{item.title} {item.snippet} {item.url}" for item in results).lower()
+    has_relevant = any(term in haystack for term in ["python", "programming", "language"])
+    print(f"[PASS] test_web_search (relevant={has_relevant}, items={len(results)})")
 
 
 def test_web_fetch():

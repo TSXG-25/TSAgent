@@ -52,6 +52,8 @@ class Observation(BaseModel):
     summary: str = ""
     artifact_ids: List[str] = Field(default_factory=list)
     tool_used: str = ""
+    tools: List[str] = Field(default_factory=list)
+    sources: List[str] = Field(default_factory=list)
     time_s: float = 0.0
 
 

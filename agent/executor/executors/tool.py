@@ -179,6 +179,7 @@ class ToolExecutor:
                 "executor": "tool",
                 "task_id": target.id,
                 "tools_called": list(result.get("_tools_called", []) or []),
+                "sources": list(result.get("_sources", []) or []),
                 "time_s": round(time.time() - t0, 2),
                 "verifier": verification.verifier,
                 "verifier_checks": verification.checks,

@@ -197,25 +197,45 @@ class ContextService:
         """Fix: Scope Boundary — 明确标记可用/不可用资源。"""
         facts = task.get("facts", {})
         lines = ["## 可用资源"]
-        
+
         # The physical cwd is not a Runtime fact and must not leak into the
         # planner prompt.  Filesystem tools resolve relative paths through the
         # current RunContext.workspace instead.
         lines.append("  📂 当前 Run workspace 由运行时作用域管理（不暴露物理路径）")
         lines.append("  📁 可用相对路径范围由用户授权和 RunContext.workspace 决定")
-        
+
+        from agent.registry.tool_registry import registry
+
+        def available_names(category: str) -> list[str]:
+            return [
+                name
+                for name in registry._categories.get(category, [])
+                if registry.get_availability(name).available
+            ]
+
+        filesystem_names = available_names("filesystem")
+        code_names = available_names("code") + available_names("shell")
+
         if facts.get("question_loaded"):
             lines.append("  ✓ 题目文本（已加载，无需重新读取）")
         else:
-            lines.append("  · 文件系统（read_file, write_file, list_directory）")
-        
-        lines.append("  ✓ Python 运行环境（run_python, run_python_file）")
+            lines.append(
+                f"  · 文件系统（{', '.join(filesystem_names)}）"
+                if filesystem_names
+                else "  ✗ 文件系统（不可用）"
+            )
+
         lines.append(
-            "  ✓ 文件系统（read_file, write_file, copy_file, move_file, "
-            "delete_file, list_directory）"
+            f"  ✓ Python 运行环境（{', '.join(code_names)}）"
+            if code_names
+            else "  ✗ Python 运行环境（不可用）"
         )
-        
-        from agent.registry.tool_registry import registry
+        lines.append(
+            f"  ✓ 文件系统（{', '.join(filesystem_names)}）"
+            if filesystem_names
+            else "  ✗ 文件系统（不可用）"
+        )
+
         web_tool = registry.get("web_search")
         if web_tool is None:
             lines.append("  ✗ 网络搜索（未注册）")
@@ -230,12 +250,12 @@ class ContextService:
                 lines.append("  ✗ 网络搜索（不必要，题目已加载）")
             else:
                 lines.append("  · 网络搜索（可用但仅在必要时使用）")
-        
+
         lines.append("  ✗ 外部安装（禁止 pip/brew/apt）")
-        
+
         if facts.get("question_loaded"):
             lines.append("\n⚠️ 直接解题，无需联网。")
-        
+
         return "\n".join(lines)
 
     @classmethod
@@ -338,9 +358,11 @@ class ContextService:
         # Take top 5
         top_tools = ranked[:5]
         
-        # Build tool details
+        # Build tool details from generated registry schemas — the model
+        # sees exactly the contracts of tools callable in this process.
         from agent.registry.tool_registry import registry
         tag_map = registry.tags if hasattr(registry, 'tags') else {}
+        schema_by_name = {entry["name"]: entry for entry in registry.schemas()}
 
         tool_caps: Dict[str, List[str]] = {}
         for tag, names in tag_map.items():
@@ -354,54 +376,32 @@ class ContextService:
             tool = tools.get(name)
             if not tool:
                 continue
-            desc = (tool.description or "").split("\n")[0][:80]
             caps = tool_caps.get(name, ["general"])
             cap_str = ", ".join(f"[{c}]" for c in caps)
             lines.append(f"  {cap_str} {name}")
+            entry = schema_by_name.get(name)
+            desc = (
+                entry["description"]
+                if entry
+                else (tool.description or "").split("\n")[0][:80]
+            )
             lines.append(f"    {desc}")
 
-            # Show parameter schema
-            if hasattr(tool, 'args_schema') and tool.args_schema is not None:
-                try:
-                    schema = tool.args_schema.model_json_schema()
-                    props = schema.get("properties", {})
-                    required = schema.get("required", [])
-                    if props:
-                        param_lines = []
-                        for pname, pinfo in props.items():
-                            ptype = pinfo.get("type", "string")
-                            pdesc = pinfo.get("description", "")
-                            is_required = "必填" if pname in required else "可选"
-                            param_lines.append(f"      {pname} ({ptype}, {is_required}) — {pdesc}")
-                        if param_lines:
-                            lines.append("    参数:")
-                            lines.extend(param_lines)
-                except Exception:
-                    pass
-            else:
-                schema_hint = cls._get_known_tool_schema(name)
-                if schema_hint:
-                    lines.append(f"    参数: {schema_hint}")
+            # Show the generated parameter schema.
+            parameters = (entry or {}).get("parameters") or {}
+            props = parameters.get("properties", {})
+            required = set(parameters.get("required", []))
+            param_lines = [
+                f"      {pname} ({pinfo.get('type', 'string')}, "
+                f"{'必填' if pname in required else '可选'})"
+                for pname, pinfo in props.items()
+            ]
+            if param_lines:
+                lines.append("    参数:")
+                lines.extend(param_lines)
 
         lines.append("\n选择工具时：根据工具的参数名和类型填写正确的值。")
         return "\n".join(lines)
-
-    @classmethod
-    def _get_known_tool_schema(cls, name: str) -> str:
-        schemas = {
-            "read_file": "path (string, 必填) — 文件路径，如 'output/solution.py'",
-            "write_file": "path (string, 必填), content (string, 必填), mode (string, 可选, 默认overwrite)",
-            "copy_file": "source (string, 必填), destination (string, 必填), exact (bool, 可选)",
-            "move_file": "source (string, 必填), destination (string, 必填), exact (bool, 可选)",
-            "delete_file": "path (string, 必填), exact (bool, 可选)",
-            "list_directory": "path (string, 可选, 默认'.') — 目录路径，如 'output'",
-            "set_working_directory": "path (string, 必填) — 切换工作目录，如 'output'、'src'、'.'",
-            "find_file": "name (string, 必填) — 按文件名搜索，如 'solution.py'、'question.docx'",
-            "shell": "cmd (string, 必填) — shell 命令, timeout (int, 可选, 默认30)",
-            "run_python": "code (string, 必填) — Python 代码",
-            "run_python_file": "path (string, 必填) — Python 文件路径",
-        }
-        return schemas.get(name, "")
 
     @classmethod
     def _build_output_format_section(cls) -> str:

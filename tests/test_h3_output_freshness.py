@@ -132,6 +132,7 @@ def test_h301_h302_h303_freshness_gate() -> None:
                     "status": "succeeded",
                     "tools": ["web_search"],
                     "summary": "source-backed result",
+                    "sources": ["https://example.org/market"],
                 }],
             }],
         ),

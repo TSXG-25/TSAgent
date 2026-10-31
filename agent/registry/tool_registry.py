@@ -6,8 +6,75 @@
 - LLM 不直接知道工具名，通过 capability 发现
 """
 import inspect
+import types
 from dataclasses import dataclass
-from typing import Any, Dict, Callable, List, Optional
+from typing import Annotated, Any, Dict, Callable, List, Literal, Optional, Union, get_args, get_origin, get_type_hints
+
+
+_JSON_SCHEMA_TYPES = {
+    str: "string",
+    int: "integer",
+    float: "number",
+    bool: "boolean",
+    list: "array",
+    dict: "object",
+}
+
+_BUILTIN_ANNOTATION_NAMES = {
+    "str": str,
+    "int": int,
+    "float": float,
+    "bool": bool,
+    "list": list,
+    "dict": dict,
+}
+
+
+def _parameter_json_schema(annotation: Any) -> Dict[str, Any]:
+    """Map one parameter annotation to a JSON-schema fragment."""
+    if annotation is inspect.Parameter.empty or annotation is Any:
+        return {"type": "string"}
+    if isinstance(annotation, str):
+        # Unresolved string annotation (e.g. ``from __future__ import
+        # annotations`` where get_type_hints could not evaluate).
+        annotation = _BUILTIN_ANNOTATION_NAMES.get(annotation.strip(), str)
+    origin = get_origin(annotation)
+    if origin is Annotated:
+        return _parameter_json_schema(get_args(annotation)[0])
+    if origin is Literal:
+        values = list(get_args(annotation))
+        schema = _parameter_json_schema(type(values[0]) if values else str)
+        schema["enum"] = values
+        return schema
+    if origin is Union or origin is types.UnionType:
+        options = [arg for arg in get_args(annotation) if arg is not type(None)]
+        return _parameter_json_schema(options[0] if options else str)
+    if origin is not None:
+        return {"type": _JSON_SCHEMA_TYPES.get(origin, "string")}
+    return {"type": _JSON_SCHEMA_TYPES.get(annotation, "string")}
+
+
+def _signature_json_schema(func: Callable) -> Dict[str, Any]:
+    """Build a JSON-schema object from a tool function signature."""
+    try:
+        hints = get_type_hints(func, include_extras=True)
+    except Exception:
+        hints = {}
+    properties: Dict[str, Any] = {}
+    required: List[str] = []
+    for param in inspect.signature(func).parameters.values():
+        if param.kind in (param.VAR_POSITIONAL, param.VAR_KEYWORD):
+            continue
+        properties[param.name] = _parameter_json_schema(
+            hints.get(param.name, param.annotation)
+        )
+        if param.default is inspect.Parameter.empty:
+            required.append(param.name)
+    return {
+        "type": "object",
+        "properties": properties,
+        "required": required,
+    }
 
 
 @dataclass(frozen=True)
@@ -165,6 +232,26 @@ class ToolRegistry:
         # Sort by match count descending
         scored.sort(key=lambda x: -x[0])
         return [tool for _, tool in scored]
+
+    def schemas(self) -> List[Dict[str, Any]]:
+        """Model-facing tool contracts generated from registered signatures.
+
+        One entry per available tool: ``name``, ``description`` (docstring
+        first line) and ``parameters`` (JSON-schema object).  Tools that are
+        unavailable in this process are excluded so the model never sees a
+        tool it cannot call.  No execution internals are exposed.
+        """
+        entries: List[Dict[str, Any]] = []
+        for name, tool in self._tools.items():
+            if not tool.availability().available:
+                continue
+            doc = (tool.description or "").strip().splitlines()
+            entries.append({
+                "name": name,
+                "description": doc[0] if doc else "",
+                "parameters": _signature_json_schema(tool._func),
+            })
+        return entries
 
     def get_all_capabilities(self) -> List[str]:
         """获取所有已注册的 capability tags。"""

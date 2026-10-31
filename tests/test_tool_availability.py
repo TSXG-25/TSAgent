@@ -83,6 +83,47 @@ def test_compiler_rejects_registered_but_unavailable_tool() -> None:
         Compiler._tool_exists("web_search", registry)
 
 
+def test_tool_schemas_are_generated_and_availability_gated() -> None:
+    registry = _unavailable_web_registry()
+
+    def read_file(path: str, encoding: str = "utf-8") -> str:
+        """Read one workspace file.
+
+        Longer description the model does not need.
+        """
+        return path
+
+    def run_python(code: str, timeout: int = 10) -> str:
+        """Run Python code."""
+        return code
+
+    registry.register(read_file)
+    registry.register(run_python)
+
+    schemas = {entry["name"]: entry for entry in registry.schemas()}
+
+    # Unavailable tools are excluded from the model-facing list.
+    assert "web_search" not in schemas
+    assert set(schemas) == {"read_file", "run_python"}
+
+    read = schemas["read_file"]
+    assert read["description"] == "Read one workspace file."
+    assert read["parameters"] == {
+        "type": "object",
+        "properties": {
+            "path": {"type": "string"},
+            "encoding": {"type": "string"},
+        },
+        "required": ["path"],
+    }
+
+    run = schemas["run_python"]
+    assert run["parameters"]["properties"]["timeout"] == {"type": "integer"}
+    assert run["parameters"]["required"] == ["code"]
+    # Only the model-facing contract is exposed.
+    assert set(read) == {"name", "description", "parameters"}
+
+
 def test_fresh_research_blocks_before_planning_when_mcp_server_is_missing(
     monkeypatch,
 ) -> None:

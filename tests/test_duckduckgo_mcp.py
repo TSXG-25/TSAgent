@@ -221,40 +221,173 @@ def test_duckduckgo_mcp_surfaces_server_tool_error(monkeypatch: pytest.MonkeyPat
         asyncio.run(duckduckgo.call_duckduckgo_tool("search", {"query": "MCP"}))
 
 
-def test_web_search_uses_mcp_and_discloses_time_hint(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_web_search_returns_structured_results(monkeypatch: pytest.MonkeyPatch) -> None:
     import tools.web as web
 
     calls: list[tuple[str, dict[str, object]]] = []
 
     async def fake_call(name: str, arguments: dict[str, object]) -> str:
         calls.append((name, arguments))
-        return "search results"
+        return (
+            "Found 2 search results:\n\n"
+            "1. TSAgent docs\n"
+            "   URL: https://example.com/docs\n"
+            "   Summary: project documentation\n\n"
+            "2. TSAgent release\n"
+            "   URL: https://example.com/release\n"
+            "   Summary: release notes\n"
+        )
 
     monkeypatch.setattr(web, "_call_duckduckgo_tool", fake_call)
-    result = asyncio.run(web.web_search(query="TSAgent", max_results=5, timeliness="week"))
+    results = asyncio.run(
+        web.web_search(query="TSAgent", max_results=5, timeliness="week")
+    )
 
     assert calls[0][0] == "search"
     assert "TSAgent" in calls[0][1]["query"]
     assert calls[0][1]["max_results"] == 5
-    assert "不提供精确时间过滤" in result
-    assert result.endswith("search results")
+    assert results == [
+        web.SearchResult(
+            title="TSAgent docs",
+            url="https://example.com/docs",
+            snippet="project documentation",
+            source="duckduckgo",
+        ),
+        web.SearchResult(
+            title="TSAgent release",
+            url="https://example.com/release",
+            snippet="release notes",
+            source="duckduckgo",
+        ),
+    ]
 
 
-def test_web_news_search_discloses_no_exact_date_filter(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_parse_and_render_search_results_are_canonical() -> None:
+    from tools.web import (
+        TIME_FILTER_NOTICE,
+        SearchResult,
+        parse_search_results,
+        render_search_results,
+    )
+
+    results = parse_search_results(
+        "Found 1 search results:\n\n"
+        "1. Example\n"
+        "   URL: https://example.com/a\n"
+        "   Summary: an example page\n"
+    )
+    assert len(results) == 1
+    item = results[0]
+    assert item.title == "Example"
+    assert item.url == "https://example.com/a"
+    assert item.snippet == "an example page"
+    assert item.source == "duckduckgo"
+
+    # Bare Title:/URL: key lines parse the same way; prose yields nothing.
+    bare = parse_search_results(
+        "Title: Fixture\nURL: https://example.test/offline\nSummary: synthetic"
+    )
+    assert [result.url for result in bare] == ["https://example.test/offline"]
+    assert parse_search_results("No results were found for your query.") == []
+
+    rendered = render_search_results(
+        [
+            SearchResult(
+                title="Example",
+                url="https://example.com/a",
+                snippet="an example page",
+                source="duckduckgo",
+            )
+        ],
+        notice=TIME_FILTER_NOTICE,
+    )
+    assert "不提供精确时间过滤" in rendered
+    assert "1. Example" in rendered
+    assert "URL: https://example.com/a" in rendered
+    assert "an example page" in rendered
+
+
+def test_web_news_search_returns_structured_results(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     import tools.web as web
 
     calls: list[tuple[str, dict[str, object]]] = []
 
     async def fake_call(name: str, arguments: dict[str, object]) -> str:
         calls.append((name, arguments))
-        return "news results"
+        return (
+            "1. Tech news\n"
+            "   URL: https://example.com/news\n"
+            "   Summary: news results"
+        )
 
     monkeypatch.setattr(web, "_call_duckduckgo_tool", fake_call)
-    result = asyncio.run(web.web_news_search("technology", days=7))
+    results = asyncio.run(web.web_news_search("technology", days=7))
 
     assert calls[0][0] == "search"
     assert "technology news since " in calls[0][1]["query"]
-    assert "不提供精确时间过滤" in result
+    assert [item.url for item in results] == ["https://example.com/news"]
+    assert all(item.source == "duckduckgo" for item in results)
+
+
+def test_plan_executor_projects_structured_search_sources(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import tools.web as web
+    from agent.executor.plan_executor import plan_executor
+    from agent.runtime_gates import has_fresh_evidence
+    from agent.task import ExecutionPlan, ExecutionStep, Task
+
+    results = [
+        web.SearchResult(
+            title="Offline source",
+            url="https://example.test/offline",
+            snippet="synthetic",
+            source="duckduckgo",
+        )
+    ]
+
+    async def fake_search(query: str, timeliness: str = "any"):
+        return results
+
+    previous = web.registry.get("web_search")
+    web.registry.register(fake_search, name="web_search")
+    try:
+        plan = ExecutionPlan(
+            task=Task(id="task-1", verb="search", target="news"),
+            steps=[ExecutionStep(
+                tool="web_search",
+                args={"query": "news", "timeliness": "week"},
+                outputs=["results"],
+            )],
+        )
+        output = asyncio.run(plan_executor.execute(plan))
+    finally:
+        if previous is None:
+            web.registry._tools.pop("web_search", None)
+        else:
+            web.registry._tools["web_search"] = previous
+
+    # The rendered text carries the date-filter disclosure and the source
+    # URL is exposed as structured evidence, not inferred from prose.
+    assert "不提供精确时间过滤" in output["_last_output"]
+    assert "https://example.test/offline" in output["results"]
+    assert output["_sources"] == ["https://example.test/offline"]
+
+    task_dict = {
+        "id": "task-1",
+        "observations": [{
+            "status": "succeeded",
+            "tools": ["web_search"],
+            "summary": output["_last_output"][:300],
+            "sources": output["_sources"],
+        }],
+    }
+    assert has_fresh_evidence({"plan": [task_dict]})
+
+    task_dict["observations"][0]["sources"] = []
+    assert not has_fresh_evidence({"plan": [task_dict]})
 
 
 def test_web_deep_search_fetches_urls_from_mcp_results(monkeypatch: pytest.MonkeyPatch) -> None:

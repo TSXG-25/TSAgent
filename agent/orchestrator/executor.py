@@ -705,10 +705,13 @@ class ExecutionStage:
             metadata.get("failed_component", "")
         )
         task_dict["retryable"] = bool(metadata.get("retryable", False))
+        tools = list(metadata.get("tools_called", []) or [])
         task_dict["observations"].append({
             "action": f"{plan.executor}_executor",
             "tool": metadata.get("executor", plan.executor),
-            "tools": list(metadata.get("tools_called", []) or []),
+            "tools": tools,
+            "tool_used": str(tools[0]) if tools else "",
+            "sources": list(metadata.get("sources") or []),
             "status": "succeeded" if result.success else "failed",
             "summary": summary,
             "artifact_ids": [a.id for a in result.artifacts],
@@ -741,7 +744,9 @@ class ExecutionStage:
         task_dict.setdefault("observations", []).append({
             "action": "dynamic_tool_action",
             "tool": plan.steps[0].tool,
+            "tool_used": str(plan.steps[0].tool),
             "tools": list(metadata.get("tools_called", []) or []),
+            "sources": list(metadata.get("sources") or []),
             "status": "succeeded" if result.success else "failed",
             "summary": (result.text or result.error or "")[:300],
             "artifact_ids": [artifact.id for artifact in result.artifacts],

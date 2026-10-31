@@ -38,7 +38,7 @@ def _observation_tools(observation: Mapping[str, Any]) -> set[str]:
     value = observation.get("tools")
     if isinstance(value, (list, tuple, set)):
         tools.update(str(item) for item in value)
-    for key in ("tool", "executor"):
+    for key in ("tool", "tool_used", "executor"):
         item = observation.get(key)
         if item:
             tools.add(str(item))
@@ -46,7 +46,12 @@ def _observation_tools(observation: Mapping[str, Any]) -> set[str]:
 
 
 def has_fresh_evidence(state: Mapping[str, Any]) -> bool:
-    """Return true only for a successful, source-tool-backed observation."""
+    """Return true only for a successful observation with verifiable sources.
+
+    Fresh evidence is a structured fact: the observation of a source tool
+    must carry non-empty ``sources`` URLs produced by the tool result, never
+    inferred from prose.
+    """
 
     if bool(state.get("fresh_evidence")):
         return True
@@ -59,7 +64,11 @@ def has_fresh_evidence(state: Mapping[str, Any]) -> bool:
             if str(observation.get("status", "")) != "succeeded":
                 continue
             if _observation_tools(observation) & _FRESH_TOOLS:
-                return bool(str(observation.get("summary", "")).strip())
+                sources = observation.get("sources")
+                return bool(
+                    isinstance(sources, (list, tuple, set))
+                    and any(str(url).strip() for url in sources)
+                )
     return False
 
 

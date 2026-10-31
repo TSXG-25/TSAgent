@@ -35,6 +35,15 @@ from agent.interruption import (
 logger = logging.getLogger(__name__)
 LLM_STEP_TIMEOUT = float(os.getenv("TSAGENT_LLM_TIMEOUT", "45"))
 
+_RESEARCH_TOOLS = frozenset({
+    "web_search",
+    "web_news_search",
+    "web_deep_search",
+    "web_fetch",
+})
+
+_SOURCE_URL_PATTERN = re.compile(r"https?://[^\s\]\[<>()\"']+")
+
 
 class PlanExecutor:
     """ExecutionPlan 执行器。
@@ -87,6 +96,7 @@ class PlanExecutor:
         files_written: list = []
         file_operations: list[dict[str, str]] = []
         tools_called: list[str] = []
+        research_sources: list[str] = []
 
         for step_idx, step in enumerate(plan.steps):
             tool_name = step.tool
@@ -145,6 +155,12 @@ class PlanExecutor:
                                 workspace=workspace,
                                 cancellation_view=cancellation_view,
                             )
+
+                # Structured research results carry their source URLs so the
+                # fresh-evidence gate can verify them without reading prose.
+                for source in result.get("_sources") or ():
+                    if source not in research_sources:
+                        research_sources.append(source)
 
                 # ── 收集世界状态痕迹（Verifier 的唯一输入，ADR-0012）──
                 # 写入是否真正生效由 ExecutionVerifier 在 Pipeline 末端判定，
@@ -223,6 +239,7 @@ class PlanExecutor:
                     "_files_written": files_written,
                     "_file_operations": file_operations,
                     "_tools_called": tools_called,
+                    "_sources": research_sources,
                     "_side_effect_state": "NONE" if no_tool_effect else "UNKNOWN",
                     **variables,
                 }
@@ -233,6 +250,7 @@ class PlanExecutor:
             "_files_written": files_written,
             "_file_operations": file_operations,
             "_tools_called": tools_called,
+            "_sources": research_sources,
             **variables,
         }
 
@@ -585,7 +603,25 @@ class PlanExecutor:
             result = await asyncio.to_thread(tool_obj.invoke, str_args)
 
         # 统一返回格式
-        if hasattr(result, 'content'):
+        research = tool_name in _RESEARCH_TOOLS
+        structured_items: Optional[list[dict]] = None
+        if research and isinstance(result, list):
+            # tools.web returns canonical SearchResult items; the rendered
+            # text projection happens once, here at the text-consumer edge.
+            from tools.web import TIME_FILTER_NOTICE, render_search_results
+
+            structured_items = [
+                item.model_dump() if hasattr(item, "model_dump") else dict(item)
+                for item in result
+            ]
+            notice = (
+                TIME_FILTER_NOTICE
+                if tool_name == "web_news_search"
+                or str(args.get("timeliness", "any")) != "any"
+                else ""
+            )
+            content = render_search_results(structured_items, notice=notice)
+        elif hasattr(result, 'content'):
             content = str(result.content)
         else:
             content = str(result)
@@ -602,7 +638,21 @@ class PlanExecutor:
         # cannot be true for an operation that actually failed.
         if content.lstrip().startswith(("错误:", "错误：", "Error:", "ERROR:")):
             raise RuntimeError(content)
-        return {"content": content}
+
+        if not research:
+            return {"content": content}
+        if structured_items is not None:
+            sources = [
+                url
+                for item in structured_items
+                if (url := str(item.get("url", "")).strip())
+            ]
+        elif tool_name == "web_fetch":
+            fetched = str(args.get("url", "")).strip()
+            sources = [fetched] if fetched else []
+        else:
+            sources = list(dict.fromkeys(_SOURCE_URL_PATTERN.findall(content)))
+        return {"content": content, "_sources": sources}
 
     @staticmethod
     async def _exec_scoped_filesystem(

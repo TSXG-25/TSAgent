@@ -6,11 +6,10 @@ no global "clear everything" operation here.
 
 The layers have different lifetimes:
 
-* conversation=True clears session messages, short-term history, semantic
-  summaries, resolution memory, and the calling Session's Conversation Runtime
-  snapshot;
+* conversation=True clears semantic summaries, resolution memory, and the
+  calling Session's Conversation Runtime snapshot;
 * facts=True additionally clears extracted user facts;
-* execution artifacts are owned by ``SessionRuntime`` and are not handled here.
+* execution artifacts are owned by the Run/Session context and are not handled here.
 """
 from __future__ import annotations
 
@@ -44,43 +43,42 @@ class MemoryRuntime:
         *,
         conversation: bool = True,
         facts: bool = False,
+        facts_namespace: str | None = None,
+        facts_scope: str | None = None,
         conversation_tracker=None,
     ) -> MemoryResetReport:
         """Reset memory for exactly one user/session namespace.
 
-        ``conversation`` is intentionally broader than the in-process message
-        buffer: persistent short-term/summary/resolution data can otherwise
-        leak into a repeated benchmark case. ``conversation_tracker`` is an
-        explicit Session-owned tracker; omitted callers use the legacy global
-        tracker for compatibility. Facts are independent and are opt-in
-        because they normally represent user-level persistence.
+        ``conversation`` covers persistent summary/resolution data plus the
+        Conversation Runtime tracker, which can otherwise leak into a repeated
+        benchmark case. ``conversation_tracker`` is an explicit Session-owned
+        tracker; omitted callers use the legacy global tracker for
+        compatibility. Facts are independent and are opt-in because they
+        normally represent user-level persistence.
         """
         namespace = _validate_namespace(user_id)
 
         if conversation:
-            from agent.memory.session import clear_session
-            from agent.memory.short_term import clear_history
             from agent.memory.long_term import clear_summaries
-            from agent.memory.resolution import clear_resolutions
             tracker = conversation_tracker
             if tracker is None:
                 # The public legacy reset API predates SessionContext. Keep
                 # its observable reset semantics for unscoped callers, while
-                # the production SessionRuntime path always passes its owned
-                # tracker explicitly (see session_runtime.py).
+                # session owners always pass their owned tracker explicitly.
                 from agent.conversation import conversation_tracker as legacy_tracker
                 tracker = legacy_tracker
 
-            clear_session(namespace)
-            clear_history(namespace)
             clear_summaries(namespace)
-            clear_resolutions(namespace)
             tracker.reset(namespace)
 
         if facts:
             from agent.memory.long_term import clear_facts
 
-            clear_facts(namespace)
+            fact_namespace = _validate_namespace(facts_namespace or namespace)
+            if facts_scope is None:
+                clear_facts(fact_namespace)
+            else:
+                clear_facts(fact_namespace, scope=facts_scope)
 
         return MemoryResetReport(
             user_id=namespace,

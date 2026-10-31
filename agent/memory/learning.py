@@ -102,6 +102,7 @@ class InteractionEvidence:
     sensitive: bool
     secret: bool
     volatile: bool
+    memory_action: str = ""
     existing: ExistingMemory | None = None
     resolution: ResolutionEvidence | None = field(
         default=None,
@@ -232,7 +233,7 @@ MemoryLearningPolicy = MemoryPolicyProjection
 
 def _source_rejection(evidence: InteractionEvidence) -> str | None:
     if evidence.source_kind == "user_request":
-        if re.search(r"忘记|删除|清除|不要记", evidence.text):
+        if getattr(evidence, "memory_action", "") == "forget":
             return "DELETE_OWNED_BY_LIFECYCLE"
         return "NO_PERSISTABLE_EVIDENCE"
     if evidence.source_kind == "assistant_output":
@@ -332,7 +333,7 @@ def decide_memory_learning(
             reason_code = "EXPLICIT_SESSION_PREFERENCE"
         elif (
             evidence.memory_type == "preference"
-            and not re.search(r"记住|以后|默认|优先|偏好|请", evidence.text)
+            and evidence.memory_action != "remember"
         ):
             reason_code = "NEW_CANONICAL_FACT"
         elif evidence.memory_type == "preference":

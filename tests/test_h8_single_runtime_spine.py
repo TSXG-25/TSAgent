@@ -149,32 +149,181 @@ def test_production_agent_code_does_not_import_compat_modules() -> None:
     assert offenders == []
 
 
-def test_runtime_does_not_own_direct_replan_transition() -> None:
+def test_runtime_owns_replan_transition_in_the_single_state_loop() -> None:
     source = (ROOT / "agent/runtime.py").read_text(encoding="utf-8")
-    assert ".replan(" not in source
+    assert "elif rt_state == RuntimeState.REPLAN:" in source
+    assert "await self.orchestrator.replan(" in source
 
 
-def test_action_observation_does_not_call_planner_replan(monkeypatch) -> None:
+def test_read_only_failure_enters_bounded_replan() -> None:
     orchestrator = ExecutionOrchestrator()
-
-    async def forbidden(*_args, **_kwargs):
-        raise AssertionError("ordinary action observation must not replan")
-
-    monkeypatch.setattr(orchestrator._planner, "replan", forbidden)
     state, next_state = asyncio.run(orchestrator.observe_failure(
         {
             "runtime_failure_retryable": False,
             "runtime_failure": {"error_code": "FILE_NOT_FOUND"},
-            "plan": [],
+            "plan": [{
+                "id": "read-missing",
+                "verb": "read",
+                "status": "failed",
+            }],
             "inbox": {},
         },
         "read missing",
         "h8",
     ))
 
+    assert next_state == "REPLAN"
+    assert state["runtime_terminal_status"] == ""
+    assert state["runtime_failure_code"] == "FILE_NOT_FOUND"
+
+
+def test_failure_with_uncertain_write_effect_never_enters_replan() -> None:
+    orchestrator = ExecutionOrchestrator()
+    state, next_state = asyncio.run(orchestrator.observe_failure(
+        {
+            "runtime_failure_retryable": False,
+            "runtime_failure": {"error_code": "FILE_NOT_FOUND"},
+            "plan": [{
+                "id": "write-task",
+                "verb": "write",
+                "status": "failed",
+            }],
+            "inbox": {},
+        },
+        "write missing",
+        "h8",
+    ))
+
     assert next_state == "FAIL"
     assert state["runtime_terminal_status"] == "FAILED_TERMINAL"
     assert state["runtime_failure_code"] == "FILE_NOT_FOUND"
+
+
+def test_write_argument_failure_with_proven_no_effect_enters_replan() -> None:
+    orchestrator = ExecutionOrchestrator()
+    state, next_state = asyncio.run(orchestrator.observe_failure(
+        {
+            "runtime_failure_retryable": True,
+            "runtime_failure_side_effect_state": "NONE",
+            "runtime_failure": {"error_code": "INVALID_TOOL_ARGUMENT"},
+            "plan": [{
+                "id": "write-task",
+                "verb": "write",
+                "status": "failed",
+            }],
+            "inbox": {},
+        },
+        "write output/example.txt",
+        "h8",
+    ))
+
+    assert next_state == "REPLAN"
+    assert state["runtime_terminal_status"] == ""
+
+
+def test_uncertain_retryable_write_is_not_replayed() -> None:
+    orchestrator = ExecutionOrchestrator()
+    state, next_state = asyncio.run(orchestrator.observe_failure(
+        {
+            "runtime_failure_retryable": True,
+            "runtime_failure_side_effect_state": "UNKNOWN",
+            "runtime_failure": {"error_code": "TOOL_EXECUTION_FAILED"},
+            "plan": [{
+                "id": "write-task",
+                "verb": "write",
+                "status": "failed",
+            }],
+            "inbox": {},
+        },
+        "write output/example.txt",
+        "h8",
+    ))
+
+    assert next_state == "FAIL"
+    assert state["runtime_terminal_status"] == "FAILED_TERMINAL"
+
+
+def test_runtime_dispatches_replan_from_observed_action_failure(monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    import agent.runtime as runtime_module
+    from agent.runtime import UniversalAgent
+
+    calls: list[str] = []
+
+    class MemoryView:
+        def get_retrieved_memory(self, _value):
+            return {"long_term": "", "facts": ""}
+
+    class Tracker:
+        def update(self, **_kwargs):
+            pass
+
+    class Orchestrator:
+        replan_count = 0
+        run_budget = None
+
+        def reset_timings(self):
+            pass
+
+        def bind_run_budget(self, budget):
+            self.run_budget = budget
+
+        def get_timings(self):
+            return {}
+
+        async def plan(self, **kwargs):
+            calls.append("plan")
+            return kwargs["runtime_state"], "EXECUTE", None
+
+        async def execute(self, state):
+            calls.append("execute")
+            state["plan"] = [{"id": "read-1", "verb": "read", "status": "failed"}]
+            state["runtime_failure"] = {"error_code": "FILE_NOT_FOUND"}
+            state["runtime_failure_retryable"] = False
+            state["current_task_index"] = 0
+            return state, "OBSERVE"
+
+        async def observe_failure(self, state, *_args):
+            calls.append("observe")
+            return state, "REPLAN"
+
+        async def replan(self, state, *_args):
+            calls.append("replan")
+            state["runtime_failure_code"] = "REPLAN_NO_PROGRESS"
+            state["runtime_failure_class"] = "planning"
+            state["runtime_terminal_status"] = "FAILED_TERMINAL"
+            return state, "FAIL"
+
+        async def finalize(self, **_kwargs):
+            return "partial result"
+
+    agent = UniversalAgent.__new__(UniversalAgent)
+    agent._timings = {}
+    agent.orchestrator = Orchestrator()
+    agent._memory_view = MemoryView()
+    agent._memory_namespace = "h8"
+    agent._session_context = SimpleNamespace(
+        memory_scope="session",
+        conversation_tracker=Tracker(),
+    )
+    agent._pending_execution_target = ""
+    agent._run_context = None
+    agent.last_run_evidence = {}
+    agent._wall_total_seconds = 0.0
+    agent._print_timing_summary = lambda: {}
+
+    monkeypatch.setattr(
+        runtime_module.skill_registry,
+        "select",
+        lambda _value: SimpleNamespace(planner_hint=""),
+    )
+
+    answer = asyncio.run(agent._run_in_context("读取 missing.txt"))
+
+    assert answer == "partial result"
+    assert calls == ["plan", "execute", "observe", "replan"]
+    assert agent.last_run_evidence["failure_code"] == "REPLAN_NO_PROGRESS"
 
 
 def test_structural_retry_requeues_action_without_planner(monkeypatch) -> None:

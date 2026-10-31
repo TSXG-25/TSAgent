@@ -31,7 +31,6 @@ def test_code_generation_declares_generic_workflow_capability_metadata() -> None
     assert projection.required_capabilities == (
         "filesystem.read",
         "filesystem.write",
-        "run_python",
     )
 
 
@@ -63,7 +62,7 @@ def test_planner_consumes_generic_decision_bindings_without_path_literals() -> N
     )
 
     assert "_workflow_selector.select_with_evidence(" in source
-    assert "for binding_name, binding_value in workflow_decision.bindings.items()" in source
+    assert "input_bindings=workflow_decision.bindings" in source
     assert 'type="question_path"' not in source
     assert 'id="output-path"' not in source
     assert "_extract_workflow_output_path(user_input)" not in source
@@ -76,12 +75,78 @@ def test_workflow_selector_constructor_is_optional_injection_only() -> None:
     assert parameters["workflow_selector"].default is None
 
 
-class _MemoryView:
-    def __init__(self) -> None:
-        self.exchanges: list[tuple[str, str]] = []
+@pytest.mark.parametrize(
+    ("source", "expected_verified"),
+    (
+        (
+            "from pathlib import Path\n"
+            "Path('generated-code-ran.txt').write_text('ran')\n",
+            True,
+        ),
+        ("def broken(:\n    pass\n", False),
+    ),
+)
+def test_code_generation_checks_syntax_without_running_source(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    source: str,
+    expected_verified: bool,
+) -> None:
+    from agent.event_bus import EventBus
+    from agent.executor.executors.workflow import WorkflowExecutor
+    from agent.services.workspace_service import WorkspaceService
+    from agent.workflow import Artifact, ExecutionContext, ExecutionResult
 
-    def record_full_exchange(self, user_input: str, answer: str) -> None:
-        self.exchanges.append((user_input, answer))
+    workspace = WorkspaceService.scoped(
+        tmp_path,
+        event_bus=EventBus(),
+        build_index=False,
+    )
+    workspace.write_text("input/question.md", "Write a program that prints hello.")
+    context = ExecutionContext(
+        workflow_id=code_generation_workflow.id,
+        user_input="generate the solution file; do not run it",
+    )
+    context.set_var("workspace", workspace)
+    context.set_artifact(Artifact(
+        id="question-path",
+        type="question_path",
+        content="input/question.md",
+    ))
+    context.set_artifact(Artifact(
+        id="output-path",
+        type="output_path",
+        content="output/solution.py",
+    ))
+    planned_tools: list[str] = []
+    marker = tmp_path / "generated-code-ran.txt"
+
+    async def execute_plan(_self, plan, task, _context):
+        planned_tools.extend(step.tool for step in plan.steps)
+        if task.id == "design_algorithm":
+            text = "Print the requested greeting."
+        elif task.id == "generate_code":
+            text = source
+        elif task.id == "write_output":
+            workspace.write_text(task.inputs["path"], task.inputs["content"])
+            text = "file written"
+        else:
+            text = "question loaded"
+        return ExecutionResult(success=True, outputs={"text": text})
+
+    monkeypatch.setattr(WorkflowExecutor, "_execute_plan", execute_plan)
+    try:
+        result = asyncio.run(WorkflowExecutor().execute(code_generation_workflow, context))
+
+        assert ("run_python" in planned_tools) is False
+        assert result.success is expected_verified
+        assert result.metadata["terminal_outputs_verified"] is expected_verified
+        assert workspace.read_text("output/solution.py") == source
+        assert not marker.exists()
+        if expected_verified:
+            assert result.outputs["_summary"] == "已生成解题程序 → output/solution.py"
+    finally:
+        workspace.close()
 
 
 class _WorkflowSelector:
@@ -96,8 +161,14 @@ class _WorkflowSelector:
         return SimpleNamespace(decision=self.decision)
 
 
+@pytest.mark.parametrize(
+    ("terminal_outputs_verified", "expected_success"),
+    ((True, True), (False, False), (None, False)),
+)
 def test_question_workflow_uses_selected_generic_bindings_once(
     monkeypatch: pytest.MonkeyPatch,
+    terminal_outputs_verified: bool | None,
+    expected_success: bool,
 ) -> None:
     import agent.orchestrator.planner as planner_module
     from agent.executor.executors.workflow import WorkflowExecutor
@@ -111,7 +182,7 @@ def test_question_workflow_uses_selected_generic_bindings_once(
             "output_path": "output/answer.py",
         },
     ))
-    memory_view = _MemoryView()
+    memory_view = SimpleNamespace()
     session_context = SimpleNamespace(
         memory_view=memory_view,
         conversation_retriever=ConversationRetriever(ConversationTracker()),
@@ -124,19 +195,13 @@ def test_question_workflow_uses_selected_generic_bindings_once(
     planner_context = SimpleNamespace(
         resolved_query="",
         runtime_pending_target="",
+        run_results=[],
+        conversation=[],
         short_summary=lambda: "test context",
     )
-    resolution = SimpleNamespace(
-        target="",
-        symbol="",
-        resolution_trace="",
-        kind="none",
-        to_resolved_query=lambda: "",
-    )
-    orchestrator._context_builder.render_context = lambda _context, _now: ""
+    orchestrator._context_builder.render_system_context = lambda _now: ""
+    orchestrator._context_builder.render_untrusted_context = lambda _context: ""
     orchestrator._context_builder.build = lambda **_kwargs: planner_context
-    orchestrator._context_builder.update_conversation_state = lambda *_args, **_kwargs: None
-    orchestrator._reference_resolver.resolve = lambda *_args: resolution
 
     async def analyze_async(_context):
         return IntentResult(
@@ -157,11 +222,17 @@ def test_question_workflow_uses_selected_generic_bindings_once(
 
     execution_contexts = []
 
-    async def execute(_self, _workflow, context):
+    async def execute(_self, _workflow, context, **_kwargs):
         execution_contexts.append(context)
+        metadata = (
+            {}
+            if terminal_outputs_verified is None
+            else {"terminal_outputs_verified": terminal_outputs_verified}
+        )
         return SimpleNamespace(
             success=True,
             outputs={"_summary": "workflow result"},
+            metadata=metadata,
             error="",
         )
 
@@ -170,13 +241,17 @@ def test_question_workflow_uses_selected_generic_bindings_once(
     state, directive, answer = asyncio.run(orchestrator.plan(
         user_input,
         "user-1",
-        {"session": "", "short_term": ""},
+        {},
         "",
         "",
     ))
 
     assert directive == "FINISH"
-    assert answer == "workflow result"
+    if expected_success:
+        assert answer == "workflow result"
+    else:
+        assert "专用 Workflow 未完成" in answer
+        assert state["runtime_terminal_status"] == "BLOCKED"
     assert state["workflow"] == "code_generation"
     assert workflow_selector.calls == 1
     assert workflow_selector.available[0].id == "code_generation"
@@ -184,4 +259,3 @@ def test_question_workflow_uses_selected_generic_bindings_once(
     context = execution_contexts[0]
     assert context.get_artifact("question_path").content == "input/question.docx"
     assert context.get_artifact("output_path").content == "output/answer.py"
-    assert memory_view.exchanges == [(user_input, "workflow result")]

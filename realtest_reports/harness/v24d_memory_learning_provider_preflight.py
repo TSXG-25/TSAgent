@@ -42,8 +42,6 @@ _PROHIBITED_IMPORT_PREFIXES = (
     "agent.memory.persistence",
     "agent.memory.long_term",
     "agent.memory.resolution",
-    "agent.memory.session",
-    "agent.memory.short_term",
     "agent.services.memory_service",
     "evaluation",
     "evals",

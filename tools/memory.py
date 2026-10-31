@@ -1,9 +1,9 @@
 # tools/memory.py
 """Memory query tools for the agent.
 
-Provides tools to query and manage the agent's three-layer memory system:
-- Layer 2: Short-term (recent conversations)
-- Layer 3: Long-term (semantic summaries + user facts)
+Provides tools to query and manage the agent's long-term memory layer
+(semantic summaries + user facts).  Conversation history lives in the
+durable run log, not in a memory layer.
 """
 from agent.registry.tool_registry import registry
 
@@ -11,7 +11,7 @@ from agent.registry.tool_registry import registry
 def query_memory(query: str, k: int = 5, user_id: str = "default") -> str:
     """查询语义记忆和长期摘要，检索与查询最相关的历史记忆。
 
-    综合查询会话记录、短期记忆、长期摘要记忆和语义记忆。
+    综合查询长期摘要记忆和语义记忆。
 
     Args:
         query: 搜索查询文本
@@ -22,19 +22,8 @@ def query_memory(query: str, k: int = 5, user_id: str = "default") -> str:
         检索到的记忆片段列表
     """
     from agent.services import MemoryService
-    from agent.memory.session import get_session_context
 
     parts = []
-
-    # Session context (current conversation)
-    session = get_session_context(user_id, n=5)
-    if session:
-        parts.append("【当前会话】\n" + session)
-
-    # Short-term history
-    short_term = MemoryService.get_short_term_history(user_id, n=3)
-    if short_term:
-        parts.append("【近期对话】\n" + short_term)
 
     # Long-term summaries
     long_term = MemoryService.retrieve_long_term(user_id, query, k=k)
@@ -95,36 +84,8 @@ def save_fact(fact: str, user_id: str = "default") -> str:
         return f"事实未确认保存，未获得持久化提交证据: {fact[:100]}..."
 
 
-def get_session_info(user_id: str = "default") -> str:
-    """获取当前会话的详细信息，包括消息数量、会话主题和最近对话内容。
-
-    Args:
-        user_id: 用户名（默认 "default"）
-
-    Returns:
-        详细的会话信息
-    """
-    from agent.memory.session import get_message_count, get_last_topic, get_session_context
-    count = get_message_count(user_id)
-    topic = get_last_topic(user_id)
-    if count == 0:
-        return "当前没有活跃会话。"
-
-    # Get recent messages
-    recent = get_session_context(user_id, n=5)
-    
-    lines = [f"## 会话信息"]
-    lines.append(f"消息数量: {count}")
-    if topic:
-        lines.append(f"当前话题: {topic}")
-    if recent:
-        lines.append(f"\n最近对话:\n{recent}")
-    
-    return "\n".join(lines)
-
 
 # 注册工具
 registry.register(query_memory, category="memory", tags=["memory", "query", "semantic"])
 registry.register(get_user_preference, category="memory", tags=["memory", "preference", "facts"])
 registry.register(save_fact, category="memory", tags=["memory", "fact", "save"])
-registry.register(get_session_info, category="memory", tags=["memory", "session", "info"])

@@ -26,7 +26,7 @@ def test_memory_learning_dataset_is_frozen_and_valid() -> None:
 
     assert validate_dataset(payload) == ()
     assert len(payload["cases"]) == 24
-    assert dataset_hash(payload) == "e821b67e7da66b40a7c1cc38ac6e18d1636b6d01c6aeaa3e873f03bb95f928b7"
+    assert dataset_hash(payload) == "ab4ad39cf2d3f039f64e79d32fd9eafe3d8f1e76bee7905c4873a7fc4b7dd28f"
     assert {case["family"] for case in payload["cases"]} == {
         "ELIGIBILITY",
         "SOURCE_AUTHORITY",
@@ -89,7 +89,7 @@ def test_preflight_unlocks_only_with_production_learning_boundary() -> None:
     assert report["case_reports"] == []
     assert report["blockers"] == []
     assert report["discovery"]["retrieval_scope_fallback_without_filter"] is False
-    assert report["discovery"]["preference_extractor_directly_persists"] is False
+    assert report["discovery"]["preference_extractor_removed"] is True
     assert report["preserved_boundaries"]["memory_store_modified"] is True
     assert report["preserved_boundaries"]["store_architecture_rewritten"] is False
 

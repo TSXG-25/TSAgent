@@ -46,6 +46,15 @@ from agent.interruption import (
 )
 
 
+_FILE_MUTATION_VERBS = frozenset({
+    Verb.WRITE.value,
+    Verb.MODIFY.value,
+    Verb.DELETE.value,
+    Verb.MOVE.value,
+    Verb.COPY.value,
+})
+
+
 class ExecutionStage:
     """EXECUTE 阶段执行器。
 
@@ -77,7 +86,7 @@ class ExecutionStage:
             if state.get("messages") and hasattr(state["messages"][-1], "content")
             else ""
         )
-        authorization = EffectAuthorization.from_request(user_input)
+        authorization = EffectAuthorization.from_state(state, user_input)
         ownership = resolve_execution_ownership(state, tasks)
 
         # AgentState is a runtime cache; compile when a plan has not been cached.
@@ -296,9 +305,17 @@ class ExecutionStage:
                 context.set_var("artifact_store", run_context.artifacts)
                 context.set_var("event_bus", run_context.event_bus)
                 context.set_var("cancellation_view", run_context.cancellation_view)
+                context.set_var("repository_indexer", run_context.repository_indexer)
             context.set_var("execution_plan", plan)
             context.set_var("conversation_snapshot", state.get("conversation_snapshot"))
             context.set_var("conversation_reference_type", state.get("conversation_reference_type"))
+            context.set_var("conversation", state.get("conversation", []))
+            # Dependency outputs belong to this task's inputs. Historical
+            # Run context cannot substitute for the read/search just done.
+            context.set_var("dependency_results", [
+                item for item in (state.get("inbox") or {}).get("next_step", [])
+                if item.get("task_id") in task_obj.dependencies
+            ])
             context.set_var("conversation_runtime_continuation", state.get("conversation_runtime_continuation"))
 
             try:
@@ -308,27 +325,32 @@ class ExecutionStage:
                 exec_result = self._failed_result(plan, exc)
 
             exec_result = self._ensure_action_result(exec_result, plan)
-
-            if exec_result.success:
-                verification_error = self._verify_completion(task_obj, ws_service)
-                if verification_error:
-                    exec_result = replace(
-                        exec_result,
-                        success=False,
-                        error=verification_error,
-                        action_result=ActionResult.failure(
-                            error_code="ACTION_VERIFICATION_FAILED",
-                            content=verification_error,
-                            classification_source=ClassificationSource.STRUCTURED.value,
-                            retryable=False,
-                        ),
-                        metadata={
-                            **dict(exec_result.metadata or {}),
-                            "error_code": "ACTION_VERIFICATION_FAILED",
-                            "failed_component": "completion_verifier",
-                            "retryable": False,
-                        },
-                    )
+            if (
+                task_owner.owner is ExecutionOwner.COMPILED
+                and str(task_dict.get("verb", "")).lower() in _FILE_MUTATION_VERBS
+                and exec_result.success
+                and exec_result.action_result.verified is not True
+            ):
+                error = "UNVERIFIED_EFFECT: 执行器未提供文件变更的核验结果"
+                metadata = dict(exec_result.metadata or {})
+                metadata.update({
+                    "error_code": "UNVERIFIED_EFFECT",
+                    "failed_component": "execution_verifier",
+                    "retryable": False,
+                })
+                exec_result = replace(
+                    exec_result,
+                    success=False,
+                    error=error,
+                    action_result=ActionResult.failure(
+                        error_code="UNVERIFIED_EFFECT",
+                        content=error,
+                        verified=False,
+                        retryable=False,
+                        classification_source=ClassificationSource.STRUCTURED.value,
+                    ),
+                    metadata=metadata,
+                )
 
             completed_action_result = getattr(exec_result, "action_result", None)
             self._emit_progress(
@@ -380,6 +402,11 @@ class ExecutionStage:
                 state["runtime_failure_kind"] = fact.kind.value
                 state["runtime_failure_source"] = fact.classification_source.value
                 state["runtime_failure_retryable"] = fact.retryable
+                state["runtime_failure_side_effect_state"] = (
+                    action_result.side_effect_state
+                    or metadata.get("side_effect_state")
+                    or "UNKNOWN"
+                )
 
             action_result = getattr(exec_result, "action_result", None)
             dynamic_continues = bool(
@@ -637,7 +664,7 @@ class ExecutionStage:
         metadata = result.metadata or {}
         if result.success:
             verified = metadata.get("verified")
-            if verified is None and metadata.get("verifier"):
+            if verified is None and metadata.get("verifier") not in {None, "", "none"}:
                 verified = True
             action_result = ActionResult.success(
                 value=dict(result.outputs or {}),
@@ -659,74 +686,15 @@ class ExecutionStage:
         return replace(result, action_result=action_result)
 
     @staticmethod
-    def _verify_completion(task: Task, workspace=None) -> str:
-        """Verify file mutations before allowing a task to be reported done."""
-        try:
-            if workspace is None:
-                if task.verb in {
-                    Verb.WRITE,
-                    Verb.MODIFY,
-                    Verb.DELETE,
-                    Verb.COPY,
-                    Verb.MOVE,
-                }:
-                    return (
-                        "FILE_OPERATION_UNVERIFIED: 当前执行没有绑定 RunContext.workspace"
-                    )
-                return ""
-
-            def resolve(value: str):
-                return workspace.resolve_path(value)
-
-            if task.verb in (Verb.WRITE, Verb.MODIFY):
-                if task.target_type != "file" or not task.target.strip():
-                    return ""
-                full = resolve(task.target)
-                if not full.is_relative_to(workspace.root.resolve()):
-                    return f"FILE_WRITE_UNVERIFIED: 文件写入未验证：目标超出 workspace 范围: {task.target}"
-                if not full.exists() or not full.is_file():
-                    return f"FILE_WRITE_UNVERIFIED: 文件写入未验证：文件不存在: {task.target}"
-                if full.stat().st_size == 0:
-                    return f"FILE_WRITE_UNVERIFIED: 文件写入未验证：文件为空: {task.target}"
-                return ""
-
-            inputs = task.inputs or {}
-            if task.verb is Verb.DELETE:
-                full = resolve(task.target)
-                if not full.is_relative_to(workspace.root.resolve()):
-                    return f"FILE_OPERATION_UNVERIFIED: 目标超出 workspace 范围: {task.target}"
-                if full.exists():
-                    return f"FILE_OPERATION_UNVERIFIED: 删除目标仍存在: {task.target}"
-                return ""
-
-            if task.verb in (Verb.COPY, Verb.MOVE):
-                source_value = str(inputs.get("source", ""))
-                destination_value = str(inputs.get("destination", task.target))
-                source = resolve(source_value)
-                destination = resolve(destination_value)
-                if (
-                    not source.is_relative_to(workspace.root.resolve())
-                    or not destination.is_relative_to(workspace.root.resolve())
-                ):
-                    return "FILE_OPERATION_UNVERIFIED: 文件操作目标超出 workspace 范围"
-                if not destination.exists() or not destination.is_file():
-                    return f"FILE_OPERATION_UNVERIFIED: 目标文件不存在: {destination_value}"
-                if task.verb is Verb.COPY:
-                    if not source.exists() or source.read_bytes() != destination.read_bytes():
-                        return "FILE_OPERATION_UNVERIFIED: 复制后源/目标内容不一致"
-                elif source.exists():
-                    return f"FILE_OPERATION_UNVERIFIED: 移动源文件仍存在: {source_value}"
-                return ""
-
-            return ""
-        except Exception as exc:
-            return f"FILE_OPERATION_UNVERIFIED: {task.target} ({exc})"
-
-    @staticmethod
     def _apply_result(task_dict: dict, plan: ExecutionPlan, result) -> None:
         """把统一 ExecutionResult 投影回 AgentState 的 Runtime Cache。"""
         task_dict.setdefault("observations", [])
         metadata = result.metadata or {}
+        task_dict["verified_files"] = [
+            item for item in task_dict.get("verified_files", [])
+            if item["path"] not in metadata.get("consumed_files", [])
+        ] + list(metadata.get("verified_files", []))
+        task_dict.setdefault("consumed_files", []).extend(metadata.get("consumed_files", []))
         summary = (result.text or result.error or "")[:300]
         task_dict["status"] = "succeeded" if result.success else "failed"
         task_dict["error"] = "" if result.success else result.error
@@ -760,6 +728,11 @@ class ExecutionStage:
         """Record one dynamic action without falsely completing its Task."""
 
         metadata = result.metadata or {}
+        task_dict["verified_files"] = [
+            item for item in task_dict.get("verified_files", [])
+            if item["path"] not in metadata.get("consumed_files", [])
+        ] + list(metadata.get("verified_files", []))
+        task_dict.setdefault("consumed_files", []).extend(metadata.get("consumed_files", []))
         task_dict["status"] = "running"
         task_dict["error"] = "" if result.success else result.error
         task_dict["error_code"] = "" if result.success else str(

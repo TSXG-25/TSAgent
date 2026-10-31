@@ -80,6 +80,9 @@ def _selector_preserves_boundaries() -> bool:
 
 def _router_is_intent_only() -> bool:
     path = ROOT / "agent" / "router" / "workflow_router.py"
+    if not path.exists():
+        # Keyword router deleted; selector receives all projections.
+        return True
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     for node in ast.walk(tree):
         if isinstance(node, ast.FunctionDef) and node.name == "route":

@@ -1,11 +1,11 @@
 """TSAgent public package surface."""
 
-__all__ = ["TSAgent", "SessionRuntime"]
+__all__ = ["TSAgent"]
 
 
 def __getattr__(name: str):
-    if name in {"TSAgent", "SessionRuntime"}:
-        from agent.api import SessionRuntime, TSAgent
+    if name == "TSAgent":
+        from agent.api import TSAgent
 
-        return {"TSAgent": TSAgent, "SessionRuntime": SessionRuntime}[name]
+        return TSAgent
     raise AttributeError(name)

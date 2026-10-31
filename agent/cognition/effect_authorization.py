@@ -14,13 +14,8 @@ from typing import Any, Mapping, Sequence
 from .execution_need import (
     EffectScope,
     RequestedOutcome,
-    analyze_requested_outcomes,
 )
-from .resource_binding import (
-    BoundTarget,
-    extract_bound_targets,
-    normalize_resource_path,
-)
+from .resource_binding import normalize_resource_path
 
 
 _MUTATION_VERBS = frozenset({"write", "modify", "delete", "move", "copy"})
@@ -72,24 +67,42 @@ def _normalize_scope(value: str) -> str:
     return normalized + "/" if directory_scope and normalized != "." else normalized
 
 
-def _extract_write_scopes(text: str) -> tuple[str, ...]:
-    return tuple(target.path for target in extract_bound_targets(text))
-
-
 @dataclass(frozen=True)
 class EffectAuthorization:
-    """Immutable authorization derived from one original user request."""
+    """Immutable authorization derived from the Intent's declared facts."""
 
     requested_outcomes: tuple[RequestedOutcome, ...]
     write_scopes: tuple[str, ...]
-    bound_targets: tuple[BoundTarget, ...] = ()
 
     @classmethod
-    def from_request(cls, user_input: str) -> "EffectAuthorization":
+    def from_state(cls, state: Mapping[str, Any], user_input: str) -> "EffectAuthorization":
+        """Outcomes and write scopes come from the Intent, never from regex."""
+        outcomes = tuple(dict.fromkeys(
+            RequestedOutcome(item)
+            for item in state.get("requested_outcomes", ())
+        ))
+        goal_state = state.get("goal_state") or {}
+        prohibited = {
+            RequestedOutcome(item)
+            for item in goal_state.get("prohibited_effects", ())
+        }
+        outcomes = tuple(item for item in outcomes if item not in prohibited)
+        if (
+            state.get("artifact_required")
+            and RequestedOutcome.FILE_MUTATION not in prohibited
+            and RequestedOutcome.FILE_MUTATION not in outcomes
+        ):
+            outcomes = (*outcomes, RequestedOutcome.FILE_MUTATION)
+        write_targets = tuple(
+            _normalize_scope(target)
+            for target in state.get("intent_write_targets", ())
+            if str(target or "").strip()
+        )
+        if not write_targets and RequestedOutcome.FILE_MUTATION in outcomes:
+            write_targets = ("output/",)
         return cls(
-            requested_outcomes=analyze_requested_outcomes(user_input),
-            write_scopes=_extract_write_scopes(user_input),
-            bound_targets=extract_bound_targets(user_input),
+            requested_outcomes=outcomes,
+            write_scopes=write_targets,
         )
 
     @property
@@ -160,6 +173,9 @@ class EffectAuthorization:
         """Reject a task whose effect is outside the user's request."""
 
         verb = str(task.get("verb", "")).lower()
+        for path in task.get('output_paths', []):
+            if not self.allows_file_mutation or not self.allows_path(path):
+                return f'EFFECT_SCOPE_VIOLATION: 产物声明不在授权范围内: {path}'
         if verb in _MUTATION_VERBS:
             effect_scope = self._task_effect_scope(task)
             if effect_scope == EffectScope.INTERNAL_EXECUTION_EFFECT.value:
@@ -271,6 +287,11 @@ class EffectAuthorization:
                 outcome, (frozenset(), frozenset())
             )
             if tools & accepted_tools:
+                continue
+            if outcome is RequestedOutcome.FILE_MUTATION:
+                # A missing write task is a delivery gap owned by the goal
+                # gate and delivery-repair replan, not a capability violation;
+                # write_scopes already authorize any future mutation.
                 continue
             return (
                 "EXECUTION_REQUIRED: 用户明确要求"

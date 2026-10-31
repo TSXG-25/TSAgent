@@ -7,14 +7,9 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
 
-from agent.cognition.research_policy import (
-    is_fresh_research_request,
-    is_source_grounded_request,
-)
 from agent.runtime import UniversalAgent, _build_run_evidence
 from agent.runtime_context import ApplicationContext
 from agent.runtime_store import DurableRuntimeStoreView, SqliteRuntimeStore
-from agent.runtime_gates import is_previous_output_request
 from agent.service.runtime_launcher import RuntimeExecutionLauncher
 from agent.state import AgentState
 from agent.service import (
@@ -116,10 +111,6 @@ def _close_output_request_agent(agent: UniversalAgent) -> None:
 
 
 def test_h301_h302_h303_freshness_gate() -> None:
-    assert is_fresh_research_request("分析下今天A股市场") is True
-    assert is_fresh_research_request("分析下今天AI新闻") is True
-    assert is_source_grounded_request("分析下2026年08月10日A股市场") is True
-    assert is_fresh_research_request("解释什么是A股") is False
 
     missing = _build_run_evidence(
         _state(freshness_required=True, source_grounding_required=True),
@@ -178,94 +169,20 @@ def test_h304_answer_required_run_without_output_cannot_complete() -> None:
 
 def test_direct_chat_provider_failure_cannot_emit_completed(monkeypatch) -> None:
     class FailingLLM:
-        async def ainvoke(self, _messages: Any) -> Any:
-            raise ConnectionError("provider unavailable")
+        async def ainvoke(self, _messages):
+            raise TimeoutError("provider unavailable")
 
-    async def scenario() -> None:
-        from agent.context_policy import ContextPolicy
-        from agent.conversation import ConversationSnapshot
-        from agent.orchestrator import planner as planner_module
+    monkeypatch.setattr("agent.llm.llm", FailingLLM())
+    from agent.cognition.intent_engine import IntentEngine
+    from agent.cognition.cognitive_context import CognitiveContext
 
-        monkeypatch.setattr("agent.llm.llm", FailingLLM())
-        memory = SimpleNamespace(record_full_exchange=lambda *_args: None)
-        retriever = SimpleNamespace(
-            runtime_pending=lambda _user_id: False,
-            snapshot=lambda _user_id: ConversationSnapshot(),
-        )
-        context_builder = SimpleNamespace(
-            render_context=lambda _context, _now: "",
-            build=lambda **_kwargs: SimpleNamespace(short_summary=lambda: ""),
-            update_conversation_state=lambda *_args, **_kwargs: None,
-        )
-        resolver = SimpleNamespace(
-            resolve=lambda _input, _context: SimpleNamespace(
-                target="",
-                symbol="",
-                resolution_trace="",
-                to_resolved_query=lambda: "",
-            )
-        )
-        orchestrator = SimpleNamespace(
-            _context_builder=context_builder,
-            _reference_resolver=resolver,
-            session_context=SimpleNamespace(
-                memory_view=memory,
-                conversation_retriever=retriever,
-            ),
-            _timings={},
-        )
-        state, next_state, answer = await planner_module.PlannerStage(
-            orchestrator
-        ).run(
-            "你好",
-            "user-a",
-            {},
-            "",
-            "",
-            context_policy=ContextPolicy.for_request("你好"),
-        )
-        assert next_state == "FINISH"
-        assert answer == "抱歉，我暂时无法回答。"
-        assert state["runtime_terminal_status"] == "FAILED_TERMINAL"
-        assert state["runtime_failure_code"] == "PROVIDER_UNAVAILABLE"
+    engine = IntentEngine()
+    engine._llm = FailingLLM()
+    result = asyncio.run(engine.analyze_async(CognitiveContext(query="你好")))
 
-    asyncio.run(scenario())
+    assert result.failure_code.startswith("PROVIDER_")
+    assert result.failure_message
 
-
-def test_h305_output_request_uses_zero_planner_and_tool_calls(tmp_path: Path) -> None:
-    async def scenario() -> None:
-        store = SqliteRuntimeStore.open(tmp_path / "output.sqlite")
-        _seed_terminal_run(
-            store,
-            tenant_id="tenant-a",
-            session_id="session-a",
-            run_id="previous-run",
-            status="COMPLETED",
-            output="上一轮的真实输出",
-        )
-        agent = _output_request_agent(
-            store,
-            tenant_id="tenant-a",
-            session_id="session-a",
-        )
-        planner_calls = 0
-
-        async def forbidden_plan(*args: Any, **kwargs: Any) -> Any:
-            nonlocal planner_calls
-            planner_calls += 1
-            raise AssertionError("output retrieval must not enter Planner")
-
-        agent.orchestrator.plan = forbidden_plan  # type: ignore[method-assign]
-        try:
-            answer = await agent.run("输出呢")
-            assert answer == "上一轮的真实输出"
-            assert planner_calls == 0
-            assert agent.last_run_evidence["request_output"] is True
-        finally:
-            _close_output_request_agent(agent)
-            store.close()
-
-    asyncio.run(scenario())
 
 
 def test_run_output_is_persisted_and_projected_after_service_restart(tmp_path: Path) -> None:
@@ -352,93 +269,3 @@ def test_run_output_is_persisted_and_projected_after_service_restart(tmp_path: P
 
     asyncio.run(scenario())
 
-
-def test_h306_missing_previous_output_is_explicit_and_not_regenerated(tmp_path: Path) -> None:
-    async def scenario() -> None:
-        store = SqliteRuntimeStore.open(tmp_path / "missing-output.sqlite")
-        _seed_terminal_run(
-            store,
-            tenant_id="tenant-a",
-            session_id="session-a",
-            run_id="previous-run",
-            status="COMPLETED",
-        )
-        agent = _output_request_agent(
-            store,
-            tenant_id="tenant-a",
-            session_id="session-a",
-        )
-        try:
-            answer = await agent.run("输出呢")
-            assert "MISSING_PREVIOUS_OUTPUT" in answer
-            assert agent.last_run_evidence["failure_code"] == "MISSING_PREVIOUS_OUTPUT"
-        finally:
-            _close_output_request_agent(agent)
-            store.close()
-
-    asyncio.run(scenario())
-
-
-def test_h307_failed_previous_run_returns_summary_without_replanning(tmp_path: Path) -> None:
-    async def scenario() -> None:
-        store = SqliteRuntimeStore.open(tmp_path / "failed-output.sqlite")
-        _seed_terminal_run(
-            store,
-            tenant_id="tenant-a",
-            session_id="session-a",
-            run_id="previous-run",
-            status="BLOCKED",
-            output="不应把失败文本当作成功输出",
-            failure_code="RESEARCH_TOOL_UNAVAILABLE",
-        )
-        agent = _output_request_agent(
-            store,
-            tenant_id="tenant-a",
-            session_id="session-a",
-        )
-        try:
-            answer = await agent.run("输出呢")
-            assert "BLOCKED" in answer
-            assert "RESEARCH_TOOL_UNAVAILABLE" in answer
-            assert agent.last_run_evidence["request_output"] is True
-            assert agent.last_run_evidence["terminal_status"] == "BLOCKED"
-            assert agent.last_run_evidence["failure_code"] == "RESEARCH_TOOL_UNAVAILABLE"
-        finally:
-            _close_output_request_agent(agent)
-            store.close()
-
-    asyncio.run(scenario())
-
-
-def test_h308_output_lookup_is_session_scoped(tmp_path: Path) -> None:
-    async def scenario() -> None:
-        store = SqliteRuntimeStore.open(tmp_path / "scope.sqlite")
-        _seed_terminal_run(
-            store,
-            tenant_id="tenant-a",
-            session_id="session-a",
-            run_id="other-session-run",
-            status="COMPLETED",
-            output="不得泄漏给 session-b",
-        )
-        agent = _output_request_agent(
-            store,
-            tenant_id="tenant-a",
-            session_id="session-b",
-        )
-        try:
-            answer = await agent.run("输出呢")
-            assert "MISSING_PREVIOUS_OUTPUT" in answer
-            assert "不得泄漏" not in answer
-        finally:
-            _close_output_request_agent(agent)
-            store.close()
-
-    asyncio.run(scenario())
-
-
-def test_output_request_phrases_are_deterministic() -> None:
-    assert is_previous_output_request("输出呢")
-    assert is_previous_output_request("刚才的结果呢？")
-    assert is_previous_output_request("给我看刚才的输出")
-    assert not is_previous_output_request("输出一份今天的市场报告")

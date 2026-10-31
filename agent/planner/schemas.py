@@ -25,6 +25,10 @@ class TaskList(BaseModel):
     """Structured Planner response containing canonical Tasks."""
 
     tasks: List[_Task] = Field(description="Decomposed tasks")
+    abstain_reason: str = Field(
+        default="",
+        description="非空表示信息不足需要用户补充；此时 tasks 必须为空",
+    )
     metadata: PlanMetadata = Field(default_factory=PlanMetadata)
 
 

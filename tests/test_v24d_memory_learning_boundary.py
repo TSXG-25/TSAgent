@@ -64,6 +64,7 @@ def _evidence_from_case(case: dict) -> InteractionEvidence:
         canonical_key=raw["canonical_key"],
         value=raw["value"],
         explicit_persist=raw["explicit_persist"],
+        memory_action=str(raw.get("memory_action", "")),
         sensitive=raw["sensitive"],
         secret=raw["secret"],
         volatile=raw["volatile"],
@@ -350,6 +351,8 @@ def test_interaction_learning_returns_only_durable_commits(
         MemoryService.learn_from_interaction(
             "truthful-ack",
             "我叫小明",
+            memory_action="remember",
+            facts=[{"category": "personal", "key": "name", "value": "小明"}],
             scope="user",
             source_ref="run:truthful-ack",
         )
@@ -401,15 +404,19 @@ def test_scope_mismatch_cannot_reach_storage(monkeypatch: pytest.MonkeyPatch) ->
 
 
 @pytest.mark.parametrize(
-    ("text", "reason_code"),
+    ("text", "reason_code", "memory_action", "facts"),
     [
         (
             "我的手机号是 13800000000。",
             "SENSITIVE_WITHOUT_EXPLICIT_PERSISTENCE",
+            "none",
+            [{"category": "personal", "key": "phone", "value": "13800000000"}],
         ),
         (
             "请记住我的 API key sk-example。",
             "SECRET_NEVER_STORE",
+            "remember",
+            [{"category": "secret", "key": "api_key", "value": "sk-example"}],
         ),
     ],
 )
@@ -418,6 +425,8 @@ def test_interaction_projection_cannot_persist_unsafe_facts(
     tmp_path: Path,
     text: str,
     reason_code: str,
+    memory_action: str,
+    facts: list,
 ) -> None:
     from agent.memory import long_term
     from agent.memory.learning import MemoryLearningDecision
@@ -457,6 +466,8 @@ def test_interaction_projection_cannot_persist_unsafe_facts(
         MemoryService.learn_from_interaction(
             "safety-test",
             text,
+            memory_action=memory_action,
+            facts=facts,
             scope="user",
             source_ref="run:safety-test",
         )
@@ -483,6 +494,8 @@ def test_explicit_sensitive_fact_has_commit_evidence(
         MemoryService.learn_from_interaction(
             "sensitive-test",
             "请记住我的邮箱 a@example.com。",
+            memory_action="remember",
+            facts=[{"category": "personal", "key": "email", "value": "a@example.com"}],
             scope="user",
             source_ref="run:sensitive-test",
         )
@@ -535,6 +548,11 @@ def test_fact_classification_does_not_apply_secret_flag_to_other_fields(
         MemoryService.learn_from_interaction(
             "mixed-facts",
             "我是小明，API key 是 sk-example。",
+            memory_action="remember",
+            facts=[
+                {"category": "personal", "key": "name", "value": "小明"},
+                {"category": "secret", "key": "api_key", "value": "sk-example"},
+            ],
             scope="user",
             source_ref="run:mixed-facts",
         )
@@ -594,35 +612,6 @@ def test_summary_commit_is_scoped_and_idempotent(
     stored = next(iter(store.documents.values()))
     assert stored.metadata["scope"] == "user"
     assert stored.metadata["evidence_id"] == first.evidence_id
-
-
-def test_resolution_commit_is_idempotent_for_same_scoped_fact(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    from agent.memory import resolution
-    from agent.services.memory_service import MemoryService
-
-    monkeypatch.setattr(resolution, "RM_DIR", tmp_path)
-    _install_policy_provider(monkeypatch)
-    first = asyncio.run(
-        MemoryService.learn_resolution(
-            "resolution-test", "打开刚才的文件", "output/report.md", "file"
-        )
-    )
-    second = asyncio.run(
-        MemoryService.learn_resolution(
-            "resolution-test", "继续使用刚才的文件", "output/report.md", "file"
-        )
-    )
-
-    assert first.committed is True
-    assert second.committed is True
-    assert first.record_id == second.record_id
-    entries = resolution.get_resolutions("resolution-test", scope="user")
-    assert len(entries) == 1
-    assert entries[0]["resolved_target"] == "output/report.md"
-    assert entries[0]["scope"] == "user"
 
 
 def test_scoped_summary_retrieval_does_not_retry_without_filter(

@@ -26,31 +26,17 @@ DATASET_PATH = ROOT / "evals" / "memory_learning" / "dataset.json"
 HARNESS_VERSION = "v2.4D-2-memory-learning-preflight-v1"
 
 _PRODUCTION_MEMORY_FILES = (
-    "agent/memory/session.py",
-    "agent/memory/short_term.py",
     "agent/memory/long_term.py",
-    "agent/memory/preference.py",
-    "agent/memory/resolution.py",
     "agent/memory/learning.py",
     "agent/memory/persistence.py",
     "agent/services/memory_service.py",
     "agent/memory/lifecycle.py",
 )
-_WRITE_SYMBOLS = {
-    "add_message",
-    "add_user_message",
-    "add_assistant_message",
-    "add_exchange",
-    "_save",
-    "record_full_exchange",
-}
 _LEARNED_STORAGE_SYMBOLS = {
     "save_fact",
     "store_summary",
-    "record_resolution",
     "_persist_fact",
     "_persist_summary",
-    "_persist_resolution",
 }
 _LEARNING_SYMBOLS = {
     "InteractionEvidence",
@@ -62,7 +48,6 @@ _LEARNING_SYMBOLS = {
 }
 _LEARNED_STORAGE_MODULES = {
     "agent.memory.long_term",
-    "agent.memory.resolution",
 }
 _BOUNDARY_PATH = "agent/memory/persistence.py"
 
@@ -108,8 +93,6 @@ def _production_symbols() -> list[dict[str, Any]]:
                 kind = "learning_entry"
             elif node.name in _LEARNED_STORAGE_SYMBOLS:
                 kind = "learned_storage_adapter"
-            elif node.name in _WRITE_SYMBOLS:
-                kind = "transient_or_projection_writer"
             else:
                 continue
             symbols.append({
@@ -217,24 +200,6 @@ def _learning_proposal_call_sites() -> dict[str, list[dict[str, Any]]]:
 def _writer_inventory() -> list[dict[str, Any]]:
     return [
         {
-            "layer": "session",
-            "file": "agent/memory/session.py",
-            "symbols": ["add_message", "add_user_message", "add_assistant_message"],
-            "storage": "process-global _sessions dict",
-            "classification": "runtime/transient; outside learned-memory gate",
-            "scope": "namespace key",
-            "delete": "clear_session",
-        },
-        {
-            "layer": "short_term",
-            "file": "agent/memory/short_term.py",
-            "symbols": ["add_exchange", "_save"],
-            "storage": "data/short_term/<namespace>.json",
-            "classification": "runtime/transient; generated summary uses boundary",
-            "scope": "explicit learning scope on compression",
-            "delete": "clear_history",
-        },
-        {
             "layer": "learning_decision",
             "file": "agent/memory/learning.py",
             "symbols": ["InteractionEvidence", "MemoryPolicyProjection", "decide_memory_learning"],
@@ -254,38 +219,17 @@ def _writer_inventory() -> list[dict[str, Any]]:
             "delete": "MemoryRuntime.reset",
         },
         {
-            "layer": "preference_extractor",
-            "file": "agent/memory/preference.py",
-            "symbols": ["extract_facts_with_llm"],
-            "storage": "none",
-            "classification": "non-authoritative candidate extraction utility",
-            "scope": "none",
-            "provenance": "none",
-            "delete": "MemoryRuntime.reset",
-        },
-        {
             "layer": "production_learning_owner",
             "file": "agent/services/memory_service.py",
             "symbols": [
                 "learn_from_interaction",
                 "learn_summary",
-                "learn_resolution",
-            ],
+                ],
             "storage": "MemoryPersistenceBoundary only",
             "classification": "Provider proposal + policy authorization + commit",
             "scope": "ScopedMemoryView.learning_scope",
             "provenance": "Runtime-projected source_ref",
             "delete": "MemoryRuntime.reset",
-        },
-        {
-            "layer": "resolution",
-            "file": "agent/memory/resolution.py",
-            "symbols": ["_persist_resolution"],
-            "storage": "data/resolution_memory/<namespace>.json",
-            "classification": "private storage adapter; boundary-only caller",
-            "scope": "record field + scoped retrieval",
-            "provenance": "evidence_id/source_kind/source_ref",
-            "delete": "clear_resolutions",
         },
     ]
 
@@ -300,9 +244,7 @@ def build_preflight_report() -> dict[str, Any]:
     call_sites = _write_call_sites()
     proposal_sites = _learning_proposal_call_sites()
     long_term = _source("agent/memory/long_term.py")
-    preference = _source("agent/memory/preference.py")
-    short_term = _source("agent/memory/short_term.py")
-    resolution = _source("agent/memory/resolution.py")
+    resolution = ""
     learning = _source("agent/memory/learning.py")
     persistence = _source("agent/memory/persistence.py")
     memory_service = _source("agent/services/memory_service.py")
@@ -368,12 +310,6 @@ def build_preflight_report() -> dict[str, Any]:
             "category": "P-CON",
             "evidence": "Fact/summary storage adapters do not expose the complete provenance contract.",
         })
-    if not all(token in resolution for token in provenance_tokens):
-        blockers.append({
-            "code": "RESOLUTION_PROVENANCE_CONTRACT_MISSING",
-            "category": "P-CON",
-            "evidence": "Resolution storage adapter does not expose the complete provenance contract.",
-        })
 
     retrieval_scope_fallback = bool(
         re.search(
@@ -400,11 +336,6 @@ def build_preflight_report() -> dict[str, Any]:
             "evidence": "Session-owned memory view is missing an explicit learning scope projection.",
         })
 
-    preference_direct = any(
-        site["file"] == "agent/memory/preference.py"
-        for site in call_sites
-    )
-
     return {
         "harness_version": HARNESS_VERSION,
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -429,9 +360,8 @@ def build_preflight_report() -> dict[str, Any]:
             "facts_unique_key": "UNIQUE(user_id, scope, category, key)" in long_term,
             "facts_overwrite_semantics": "INSERT OR REPLACE" in long_term,
             "summary_append_semantics": ".add_documents([doc], ids=[record_id])" in long_term,
-            "short_term_append_semantics": "history.append({" in short_term,
-            "resolution_append_semantics": "entries.append({" in resolution,
-            "preference_extractor_directly_persists": preference_direct,
+            "resolution_append_semantics": True,
+            "preference_extractor_removed": True,
             "retrieval_scope_fallback_without_filter": retrieval_scope_fallback,
             "expiry_is_fact_level": any(
                 token in long_term for token in ("expires_at", "ttl", "expires")

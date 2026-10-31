@@ -16,6 +16,8 @@ import os
 import re
 from typing import Any, Dict, Optional
 
+from pydantic import ValidationError
+
 from agent.task import ExecutionPlan, ExecutionStep
 from agent.tool_identity import CANONICAL_TOOL_ALIASES, registry_tool_name
 from agent.security import redact_sensitive_text
@@ -46,6 +48,7 @@ class PlanExecutor:
         plan: ExecutionPlan,
         workspace: Optional[WorkspaceService] = None,
         cancellation_view: CancellationView | None = None,
+        repository_indexer=None,
     ) -> Dict[str, Any]:
         """执行 plan 的所有 steps。
 
@@ -59,7 +62,11 @@ class PlanExecutor:
             执行失败时不抛异常，在 outputs 中包含 "_error" 键。
         """
         if not plan or not plan.steps:
-            return {"_last_output": "", "_error": "空 plan，无步骤可执行"}
+            return {
+                "_last_output": "",
+                "_error": "空 plan，无步骤可执行",
+                "_side_effect_state": "NONE",
+            }
 
         try:
             self._validate_tools(plan)
@@ -72,6 +79,7 @@ class PlanExecutor:
                 "_files_written": [],
                 "_file_operations": [],
                 "_tools_called": [],
+                "_side_effect_state": "NONE",
             }
 
         variables: Dict[str, Any] = {}
@@ -95,6 +103,13 @@ class PlanExecutor:
             try:
                 if tool_name == "workspace":
                     result = await self._exec_workspace(step, args, workspace, variables)
+                elif tool_name == "repository":
+                    result = await self._exec_tool(
+                        tool_name,
+                        args,
+                        cancellation_view=cancellation_view,
+                        repository_indexer=repository_indexer,
+                    )
                 else:
                     if tool_name == "filesystem.write":
                         args = self._prepare_write_args(args)
@@ -162,9 +177,9 @@ class PlanExecutor:
 
                 # 记录文本摘要
                 if isinstance(result, dict):
-                    last_output = str(result.get("content", result.get("text", str(result))))[:300]
+                    last_output = str(result.get("content", result.get("text", str(result))))
                 else:
-                    last_output = str(result)[:300]
+                    last_output = str(result)
 
                 if cancellation_view is not None:
                     try:
@@ -189,7 +204,16 @@ class PlanExecutor:
                     f"{stable_error_message(e, fallback='tool step failed')}"
                 )
                 logger.error(error_msg)
-                error_code = classify_execution_error(e)
+                invalid_arguments = isinstance(e, ValidationError)
+                error_code = (
+                    "INVALID_TOOL_ARGUMENT"
+                    if invalid_arguments
+                    else classify_execution_error(e)
+                )
+                no_tool_effect = (
+                    invalid_arguments
+                    or error_code == "EXECUTION_ENVIRONMENT_UNAVAILABLE"
+                ) and step_idx == 0
                 return {
                     "_last_output": last_output,
                     "_error": error_msg,
@@ -199,6 +223,7 @@ class PlanExecutor:
                     "_files_written": files_written,
                     "_file_operations": file_operations,
                     "_tools_called": tools_called,
+                    "_side_effect_state": "NONE" if no_tool_effect else "UNKNOWN",
                     **variables,
                 }
 
@@ -270,18 +295,6 @@ class PlanExecutor:
 
         before = functions(original_tree)
         requested = set(
-            re.findall(r"([A-Za-z_]\w*)\s*(?:函数|方法)", instruction)
-        )
-        requested.update(
-            re.findall(
-                r"(?:给|修改|修复|新增|增加|添加|改成|改为)\s+([A-Za-z_]\w*)",
-                instruction,
-            )
-        )
-        # Some Chinese constructions put the symbol after punctuation (for
-        # example ``：给 f 增加``), so use the original AST as a bounded
-        # vocabulary rather than relying only on word-boundary regexes.
-        requested.update(
             name for name in before if name and name in instruction
         )
         if not requested:
@@ -322,7 +335,6 @@ class PlanExecutor:
             "query_memory": "memory",
             "get_user_preference": "memory",
             "save_fact": "memory",
-            "get_session_info": "memory",
             "propose_patch": "patch",
             "apply_patch": "patch",
             "list_all_tools": "meta",
@@ -393,6 +405,7 @@ class PlanExecutor:
         *,
         workspace: Optional[WorkspaceService] = None,
         cancellation_view: CancellationView | None = None,
+        repository_indexer=None,
     ) -> Dict[str, Any]:
         """通过 ToolRegistry 调用工具。
 
@@ -504,14 +517,15 @@ class PlanExecutor:
                 content = f"# {title}\n\n{source}\n"
             return {"content": content, "text": content}
 
-        # ── 特殊处理：repository 语义搜索（RepositoryService）──
+        # ── Run-scoped repository semantic search ──
         if tool_name == "repository":
-            from agent.services import RepositoryService
-
+            if repository_indexer is None:
+                raise RuntimeError("REPOSITORY_INDEX_UNAVAILABLE: Run has no workspace index")
             query = str(args.get("query", args.get("spec", "")))
             k = int(args.get("k", 5))
+            await asyncio.to_thread(repository_indexer.ensure_built)
             hits = await asyncio.to_thread(
-                RepositoryService.search_similar,
+                repository_indexer.search_similar,
                 query,
                 k,
             )

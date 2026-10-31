@@ -27,7 +27,6 @@ _INTERNAL_STORAGE_DIRS = {
     ".tsagent",
     "semantic_memory",
     "long_term_memory",
-    "short_term",
     "runtime_store",
     "checkpoint_store",
     "checkpoints",

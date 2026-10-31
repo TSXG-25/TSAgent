@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_runtime_entrypoints_do_not_import_legacy_artifact_or_event_singletons() -> None:
-    for relative in ("agent/runtime.py", "agent/session_runtime.py"):
+    for relative in ("agent/runtime.py", "agent/api.py"):
         source = (ROOT / relative).read_text(encoding="utf-8")
         assert "ArtifactService" not in source
         assert "from agent.event_bus import event_bus" not in source

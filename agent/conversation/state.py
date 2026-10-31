@@ -177,8 +177,8 @@ def classify_conversation_intent(
     if intent is not None:
         domain = getattr(intent, "domain", None)
         action = str(getattr(intent, "action", "")).lower()
-        reference_kind = str(getattr(intent, "reference_kind", "")).lower()
-        if reference_kind == "instruction" and text.startswith(("继续", "接着")):
+        relation = str(getattr(intent, "conversation_relation", "")).lower()
+        if relation == "reference" and text.startswith(("继续", "接着")):
             return ConversationIntent.CONTINUE_REFERENCE
         if domain == "memory" and action.startswith(_REFERENCE_ACTION_PREFIXES):
             return ConversationIntent.REFERENCE
@@ -329,24 +329,19 @@ def render_snapshot(snapshot: ConversationSnapshot) -> str:
 
 
 # ── Conversation Reference Resolver（v2.1B-2）──
-# 输入是 Intent Engine 的结构化输出（intent.reference_kind）；本层不解析中文。
-_REFERENCE_KIND_MAP = {
-    "goal": ReferenceType.LAST_GOAL,
-    "instruction": ReferenceType.LAST_INSTRUCTION,
-    "answer": ReferenceType.LAST_ANSWER,
-    "runtime": ReferenceType.LAST_RUNTIME,
+# 输入是 Intent Engine 的结构化输出；本层不解析中文。
+_RELATION_MAP = {
+    "reference": ReferenceType.LAST_INSTRUCTION,
+    "correction": ReferenceType.LAST_INSTRUCTION,
 }
 
 
 def resolve_reference_type(intent: Optional[object]) -> ReferenceType:
-    """把 REFERENCE / CONTINUE_* 意图映射到要检索的字段。
-
-    纯映射，零 regex；语言理解（reference_kind）由 Intent Engine 负责。
-    """
+    """把 conversation_relation 映射到要检索的字段（纯映射，零 regex）。"""
     if intent is None:
         return ReferenceType.UNKNOWN
-    kind = str(getattr(intent, "reference_kind", "") or "").strip().lower()
-    return _REFERENCE_KIND_MAP.get(kind, ReferenceType.UNKNOWN)
+    relation = str(getattr(intent, "conversation_relation", "") or "").strip().lower()
+    return _RELATION_MAP.get(relation, ReferenceType.UNKNOWN)
 
 
 def render_reference(snapshot: ConversationSnapshot,

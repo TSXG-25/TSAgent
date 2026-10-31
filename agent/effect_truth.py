@@ -10,13 +10,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-import re
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Mapping, Sequence
 
-from agent.cognition.execution_need import (
-    RequestedOutcome,
-    analyze_requested_outcomes,
-)
+from agent.cognition.execution_need import RequestedOutcome
 
 
 class EffectClass(str, Enum):
@@ -105,120 +101,6 @@ class ExecutionTruth:
         }
 
 
-_RESERVATION_RE = re.compile(
-    r"(?:帮我|请(?:帮我)?|我要|我想|帮忙).{0,20}"
-    r"(?:订|预订|预定|购买|买|下单|出票).{0,28}"
-    r"(?:机票|火车票|高铁票|车票|酒店|房间|餐厅|reservation|booking)",
-    re.IGNORECASE,
-)
-_MESSAGE_SEND_RE = re.compile(
-    r"(?:帮我|请(?:帮我)?|我要|我想|帮忙)?.{0,20}"
-    r"(?:发送|发出|发)\s*(?:一封)?(?:邮件|短信|消息)|"
-    r"send[_ -]?(?:email|message|sms)",
-    re.IGNORECASE,
-)
-_DEPLOY_RE = re.compile(
-    r"(?:帮我|请(?:帮我)?|我要|我想|帮忙).{0,12}"
-    r"(?:部署|上线|发布到云|发布服务|deploy)",
-    re.IGNORECASE,
-)
-_TRANSACTION_RE = re.compile(
-    r"(?:帮我|请(?:帮我)?|我要|我想|帮忙).{0,12}"
-    r"(?:下单|付款|支付|转账|购买|买入)",
-    re.IGNORECASE,
-)
-_REMOTE_MUTATION_RE = re.compile(
-    r"(?:帮我|请(?:帮我)?|我要|我想|帮忙).{0,20}"
-    r"(?:创建|修改|删除).{0,16}(?:github|云端|远程|issue|配置)",
-    re.IGNORECASE,
-)
-
-
-def _requirement(
-    effect_id: str,
-    capability: str,
-    target: str,
-    description: str,
-) -> EffectRequirement:
-    return EffectRequirement(
-        effect_id=effect_id,
-        effect_class=EffectClass.EXTERNAL_EFFECT,
-        capability=capability,
-        target=target,
-        description=description,
-    )
-
-
-def detect_requested_effects(text: str) -> tuple[EffectRequirement, ...]:
-    """Extract explicit external mutations without asking an LLM.
-
-    Informational questions such as "如何预订机票" intentionally do not
-    match.  The first version only recognizes imperative/action phrasing; it
-    can be extended with new effect classes without changing the gate.
-    """
-
-    value = str(text or "").strip()
-    requirements: list[EffectRequirement] = []
-    if _RESERVATION_RE.search(value):
-        requirements.append(
-            _requirement(
-                "external:reservation",
-                "reservation",
-                "reservation",
-                "预订机票、酒店或其他外部资源",
-            )
-        )
-    if _MESSAGE_SEND_RE.search(value):
-        requirements.append(
-            _requirement(
-                "external:message_send",
-                "message_send",
-                "message",
-                "发送邮件、短信或外部消息",
-            )
-        )
-    if _DEPLOY_RE.search(value):
-        requirements.append(
-            _requirement(
-                "external:deployment",
-                "deployment",
-                "deployment",
-                "部署或发布远程服务",
-            )
-        )
-    if _TRANSACTION_RE.search(value):
-        requirements.append(
-            _requirement(
-                "external:transaction",
-                "external_transaction",
-                "transaction",
-                "付款、转账、下单或购买",
-            )
-        )
-    if _REMOTE_MUTATION_RE.search(value):
-        requirements.append(
-            _requirement(
-                "external:remote_mutation",
-                "remote_resource_mutation",
-                "remote_resource",
-                "修改远程资源或云端配置",
-            )
-        )
-    return tuple(requirements)
-
-
-def infer_effect_class(text: str) -> EffectClass:
-    """Classify a request for diagnostics even when no effect is required."""
-
-    if detect_requested_effects(text):
-        return EffectClass.EXTERNAL_EFFECT
-    from agent.cognition.execution_need import analyze_execution_need
-
-    if analyze_execution_need(text) is True:
-        return EffectClass.LOCAL_EFFECT
-    return EffectClass.READ_ONLY
-
-
 def _copy_records(value: Any) -> list[dict[str, Any]]:
     if not isinstance(value, (list, tuple)):
         return []
@@ -291,19 +173,75 @@ def execution_truth(state: Mapping[str, Any]) -> ExecutionTruth:
     )
 
 
+_EXTERNAL_EFFECT_REQUIREMENTS = {
+    "reservation": (
+        "external:reservation",
+        "reservation",
+        "reservation",
+        "预订机票、酒店或其他外部资源",
+    ),
+    "message_send": (
+        "external:message_send",
+        "message_send",
+        "message",
+        "发送邮件、短信或外部消息",
+    ),
+    "deployment": (
+        "external:deployment",
+        "deployment",
+        "deployment",
+        "部署或发布远程服务",
+    ),
+    "transaction": (
+        "external:transaction",
+        "external_transaction",
+        "transaction",
+        "付款、转账、下单或购买",
+    ),
+    "remote_mutation": (
+        "external:remote_mutation",
+        "remote_resource_mutation",
+        "remote_resource",
+        "修改远程资源或云端配置",
+    ),
+}
+
+
 def initialize_effect_contract(
     state: Any,
     user_input: str,
     *,
+    external_effects: Sequence[Mapping[str, str]] = (),
     capability_resolver: Callable[[str, str], str | None] | None = None,
 ) -> ExecutionTruth:
-    """Register requested effects and mark missing capabilities deterministically."""
+    """Register intent-declared effects and mark missing capabilities."""
 
-    state["requested_outcomes"] = [
-        outcome.value for outcome in analyze_requested_outcomes(user_input)
-    ]
-    state["effect_class"] = infer_effect_class(user_input).value
-    detected = detect_requested_effects(user_input)
+    state["requested_outcomes"] = list(dict.fromkeys(
+        state.get("requested_outcomes", [])
+    ))
+    detected = tuple(
+        EffectRequirement(
+            effect_id=spec[0],
+            effect_class=EffectClass.EXTERNAL_EFFECT,
+            capability=spec[1],
+            target=spec[2],
+            description=spec[3],
+        )
+        for capability in (
+            str(item.get("capability", "")) for item in external_effects
+        )
+        for spec in (_EXTERNAL_EFFECT_REQUIREMENTS.get(capability),)
+        if spec is not None
+    )
+    state["effect_class"] = (
+        EffectClass.EXTERNAL_EFFECT.value
+        if detected
+        else (
+            EffectClass.LOCAL_EFFECT.value
+            if state["requested_outcomes"]
+            else EffectClass.READ_ONLY.value
+        )
+    )
     existing = _copy_records(state.get("required_effects"))
     existing_ids = {str(item.get("effect_id", "")) for item in existing}
     for detected_requirement in detected:
@@ -362,12 +300,20 @@ def enforce_completion_gate(state: Any) -> ExecutionTruth:
         if truth.unsupported_effects:
             state["runtime_failure_code"] = "UNSUPPORTED_CAPABILITY"
             state["runtime_terminal_status"] = "BLOCKED"
-        elif truth.unresolved_requested_outcomes:
-            state["runtime_failure_code"] = "EXECUTION_EVIDENCE_MISSING"
-            state["runtime_terminal_status"] = "FAILED_TERMINAL"
         else:
-            state["runtime_failure_code"] = "UNVERIFIED_EFFECT"
-            state["runtime_terminal_status"] = "FAILED_TERMINAL"
+            if not state.get("runtime_failure_code"):
+                task_failure = next((
+                    str(task["error_code"]) for task in state.get("plan", []) or []
+                    if task.get("status") == "failed" and task.get("error_code")
+                ), "")
+                state["runtime_failure_code"] = task_failure or (
+                    "EXECUTION_EVIDENCE_MISSING" if truth.unresolved_requested_outcomes else "UNVERIFIED_EFFECT"
+                )
+            if state.get("runtime_terminal_status") not in {"BLOCKED", "CANCELLED", "TIMED_OUT"}:
+                state["runtime_terminal_status"] = (
+                    "BLOCKED" if state["runtime_failure_code"] == "EXECUTION_ENVIRONMENT_UNAVAILABLE"
+                    else "FAILED_TERMINAL"
+                )
     return truth
 
 
@@ -388,7 +334,11 @@ def record_effect_result(
     metadata = getattr(result, "metadata", None) or {}
     executor = str(getattr(plan, "executor", "") or "")
     verifier = str(metadata.get("verifier", "") or "")
-    if bool(getattr(result, "success", False)) and executor == "tool" and verifier:
+    if (
+        bool(getattr(result, "success", False))
+        and executor == "tool"
+        and verifier not in {"", "none"}
+    ):
         evidence = EffectEvidence(
             effect_id=effect_id,
             status="VERIFIED",
@@ -430,6 +380,9 @@ def record_execution_evidence(state: Any, plan: Any, result: Any) -> None:
         return
     if str(getattr(plan, "executor", "") or "") != "tool":
         return
+    action_result = getattr(result, "action_result", None)
+    if action_result is None or action_result.verified is not True:
+        return
     steps = getattr(plan, "steps", ()) or ()
     evidence = _copy_records(state.get("execution_evidence"))
     existing = {
@@ -438,10 +391,24 @@ def record_execution_evidence(state: Any, plan: Any, result: Any) -> None:
     }
     metadata = getattr(result, "metadata", None) or {}
     verifier = str(metadata.get("verifier", "") or "")
+    for path, source in (
+        *((item["path"], "ExecutionVerifier:file") for item in metadata.get("verified_files", [])),
+        *((str(path), "ExecutionVerifier:file_operation") for path in metadata.get("consumed_files", [])),
+    ):
+        identity = (RequestedOutcome.FILE_MUTATION.value, path)
+        if identity in existing:
+            continue
+        evidence.append({
+            "outcome": RequestedOutcome.FILE_MUTATION.value,
+            "status": "VERIFIED",
+            "source": source,
+            "target": path[:240],
+        })
+        existing.add(identity)
     for step in steps:
         tool = str(getattr(step, "tool", "") or "")
         outcome = _STEP_OUTCOME.get(tool)
-        if outcome is None:
+        if outcome is None or outcome == RequestedOutcome.FILE_MUTATION.value:
             continue
         args = getattr(step, "args", {}) or {}
         target = str(
@@ -457,7 +424,11 @@ def record_execution_evidence(state: Any, plan: Any, result: Any) -> None:
         evidence.append({
             "outcome": outcome,
             "status": "VERIFIED",
-            "source": f"ExecutionVerifier:{verifier}" if verifier else "ToolExecutor",
+            "source": (
+                f"ExecutionVerifier:{verifier}"
+                if verifier not in {"", "none"}
+                else "ToolExecutor"
+            ),
             "target": target,
         })
         existing.add(identity)
@@ -475,28 +446,14 @@ def effect_label(requirement: Mapping[str, Any]) -> str:
     return labels.get(str(requirement.get("capability", "")), "外部操作")
 
 
-def has_success_claim(answer: str) -> bool:
-    """Detect affirmative external-effect claims, not refusals or explanations."""
-
-    return bool(re.search(
-        r"(?:已|已经|成功|完成|订好了|已出票|已发送|已部署|已下单)"
-        r".{0,12}(?:预订|预定|出票|发送|发出|部署|上线|下单|付款|支付|转账)",
-        str(answer or ""),
-        re.IGNORECASE,
-    ))
-
-
 __all__ = [
     "EffectClass",
     "EffectEvidence",
     "EffectRequirement",
     "ExecutionTruth",
-    "detect_requested_effects",
     "effect_label",
     "enforce_completion_gate",
     "execution_truth",
-    "has_success_claim",
-    "infer_effect_class",
     "initialize_effect_contract",
     "record_effect_result",
     "record_execution_evidence",

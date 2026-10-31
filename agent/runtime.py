@@ -17,19 +17,16 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Optional
 
-from agent.services import RepositoryService
 from agent.event_bus import Subscription
 from agent.registry.skill_registry import skill_registry
 from agent.state import AgentState
 from agent.effect_truth import enforce_completion_gate, execution_truth
 from agent.goal import GoalState, GoalStatus, GoalVerifier
 from agent.inbox import AgentInbox
-from agent.context_policy import ContextPolicy
 from agent.runtime_gates import (
     freshness_required_for,
     has_fresh_evidence,
     is_empty_or_punctuation_request,
-    is_previous_output_request,
     output_required,
 )
 from agent.orchestrator import ExecutionOrchestrator
@@ -54,28 +51,12 @@ from agent.failure import (
     FailurePolicy,
     failure_fact,
 )
-from agent.execution_errors import stable_error_message
+from agent.execution_errors import ProviderError, stable_error_message
 
 logger = logging.getLogger(__name__)
 
 FACT_EXTRACTION_TIMEOUT = float(os.getenv("TSAGENT_FACT_TIMEOUT", "15"))
 DEFAULT_WORKSPACE_ROOT = Path(__file__).resolve().parent.parent
-
-_FACT_CAPTURE_DENIAL_RE = re.compile(
-    r"(?:无法|不能|未能|没法|没有办法).{0,12}"
-    r"(?:确认|记住|保存|记录)|"
-    r"(?:无法|不能|未能|没法|没有办法).{0,12}(?:事实|信息|偏好)",
-    re.IGNORECASE,
-)
-_FACT_CAPTURE_ACK_RE = re.compile(
-    r"(?:已|已经|成功|确认)(?:记录|记住|保存|存下|记下)(?:了|好|完成)?|"
-    r"(?:记录|记住|保存|存下|记下)好了|"
-    r"(?:我会|我将|之后会|以后会)记(?:住|得)|"
-    r"(?:这条|该信息|这个偏好|这个事实).{0,10}"
-    r"(?:已|已经|成功)?(?:记录|记住|保存|存下|记下)|"
-    r"(?:纳入|写入|保存到).{0,8}(?:长期)?记忆",
-    re.IGNORECASE,
-)
 
 
 def _has_committed_memory_evidence(result: object) -> bool:
@@ -90,26 +71,20 @@ def _has_committed_memory_evidence(result: object) -> bool:
     )
 
 
-def _normalize_fact_capture_answer(answer: str, facts: object) -> str:
-    """Keep the user-visible claim aligned with the persisted fact result.
 
-    Fact extraction runs after the main answer so it cannot delay the turn.
-    If the learning boundary committed a fact while the model claimed it
-    could not remember/save it, replace only that contradictory claim.  If the
-    model claims that it recorded a fact without a durable commit, replace the
-    claim with a truthful non-commit acknowledgement.  Prose never establishes
-    a successful memory write.
-    """
+def _fact_capture_suffix(memory_action: str, facts: object) -> str:
+    if memory_action != "remember":
+        return ""
+    if _has_committed_memory_evidence(facts):
+        values = [
+            str(getattr(commit, "value", "") or "")
+            for commit in getattr(facts, "commit_evidence", ())
+            if getattr(commit, "committed", False)
+        ]
+        detail = ("：" + "、".join(v for v in values if v)) if any(values) else ""
+        return f"\n已记住{detail}。"
+    return "\n未保存到记忆：没有可确认写入长期记忆的事实。"
 
-    text = str(answer or "")
-    committed = _has_committed_memory_evidence(facts)
-    if committed:
-        if _FACT_CAPTURE_DENIAL_RE.search(text):
-            return "已记录你刚才提供的信息，之后可以继续询问我。"
-        return text
-    if _FACT_CAPTURE_ACK_RE.search(text):
-        return "我理解了这项信息，但本次没有确认写入长期记忆。"
-    return text
 
 
 def _runtime_has_unfinished_work(state: AgentState) -> bool:
@@ -142,37 +117,23 @@ def _runtime_pending_target(state: AgentState) -> str:
 def _verified_file_artifacts(state: AgentState) -> list[dict[str, str]]:
     """Project only verifier-approved file outputs for durable publication.
 
-    ``ExecutionStage`` marks a task succeeded only after its scoped workspace
-    verification passes. This projection carries that fact to the Service
-    boundary; it does not trust planner prose or tool return strings.
+    Executor receipts carry canonical paths and digests, including partial
+    files from a failed Task. Finalizer selects still-valid receipts; this
+    projection never derives paths from Task.target or the Task's verb.
     """
 
-    artifacts: list[dict[str, str]] = []
-    for task in state.get("plan", []) or []:
-        if not isinstance(task, dict) or str(task.get("status", "")) != "succeeded":
-            continue
-        verb = str(task.get("verb", "")).lower()
-        inputs = task.get("inputs") or {}
-        reference = ""
-        if verb in {"write", "modify"}:
-            reference = str(task.get("target", "") or "").strip()
-        elif verb in {"copy", "move"}:
-            reference = str(
-                inputs.get("destination", task.get("target", "")) or ""
-            ).strip()
-        if not reference:
-            continue
-        task_id = str(task.get("id", "") or "").strip()
-        artifacts.append(
-            {
-                "reference": reference,
-                "artifact_type": "file",
-                "producer_workflow_id": "runtime-execution",
-                "producer_stage_id": f"task:{task_id or 'unknown'}",
-                "producer_task_id": task_id,
-            }
-        )
-    return artifacts
+    return [
+        {
+            "reference": item["path"],
+            "digest": item["digest"],
+            "artifact_type": "file",
+            "producer_workflow_id": "runtime-execution",
+            "producer_stage_id": f"task:{item['producer_task_id']}",
+            "producer_task_id": item["producer_task_id"],
+        }
+        for item in state.get("file_artifact_evidence", [])
+        if item["path"] in state.get("verified_artifact_paths", [])
+    ]
 
 
 def _build_run_evidence(
@@ -206,7 +167,7 @@ def _build_run_evidence(
     budget_exhausted = bool(state.get("budget_exhausted", False))
     terminal_status = str(state.get("runtime_terminal_status", "") or "")
     truth = execution_truth(state)
-    freshness_required = freshness_required_for(user_input, state)
+    freshness_required = freshness_required_for(state)
     source_grounding_required = bool(state.get("source_grounding_required", False))
     fresh_evidence = has_fresh_evidence(state)
     answer_required = output_required(state)
@@ -300,6 +261,23 @@ def _build_run_evidence(
         "PROVIDER_UNAVAILABLE",
     }
     return {
+        "resolved_request": state.get("resolved_request", (state.get("goal_state") or {}).get("objective", "")),
+        "goal_missing": list(state.get("goal_missing", [])),
+        "action_observations": [
+            {
+                "task_id": item.get("task_id", ""),
+                "tool": item.get("tool", ""),
+                "result": {
+                    "ok": item["result"].get("ok", False),
+                    "verified": item["result"].get("verified", False),
+                    "error_code": item["result"].get("error_code", ""),
+                    "content": str(item["result"].get("content", ""))[:12000],
+                    "content_truncated": len(str(item["result"].get("content", ""))) > 12000,
+                },
+            }
+            for item in AgentInbox.from_dict(state.get("inbox")).next_step[-8:]
+            if "result" in item
+        ],
         "conversation_intent": state.get("conversation_intent", ""),
         "requires_execution": any(
             outcome != "USER_VISIBLE_OUTPUT"
@@ -347,6 +325,7 @@ def _build_run_evidence(
             for task in failed_tasks
         ],
         "failure_code": failure_code,
+        "failure_detail": str(state.get("runtime_failure_detail", "") or "")[:300],
         "failure_class": failure_class,
         "failed_component": failed_component,
         "retryable": retryable,
@@ -354,8 +333,10 @@ def _build_run_evidence(
         "goal_status": goal_decision.status.value,
         "goal_round": goal_state.round,
         "goal_max_rounds": goal_state.max_rounds,
+        "goal_contract": goal_state.to_dict(),
         "goal_missing": list(goal_decision.missing),
         "goal_evidence": [item.to_dict() for item in goal_decision.evidence],
+        "acceptance_evidence": list(state.get("acceptance_evidence", [])),
     }
 
 
@@ -391,11 +372,14 @@ class RuntimeState(str, Enum):
     FAIL = "FAIL"
 
 
-def _build_repo_context(user_input: str) -> str:
+def _build_repo_context(user_input: str, repository_indexer) -> str:
     """根据用户输入搜索相关代码片段。"""
     from agent.security import is_internal_storage_path
 
-    hits = RepositoryService.search_similar(user_input, k=5)
+    if repository_indexer is None:
+        raise RuntimeError("REPOSITORY_INDEX_UNAVAILABLE: request requires a workspace index")
+    repository_indexer.ensure_built()
+    hits = repository_indexer.search_similar(user_input, k=5)
     hits = [
         hit for hit in hits
         if not is_internal_storage_path(hit.get("path", ""))
@@ -607,10 +591,6 @@ class UniversalAgent:
             "recovery_directive": directive.to_dict(),
         })
         answer = f"抱歉，刚才在处理「{user_input[:30]}」时遇到了一点问题（{friendly}），请换一种说法再试试。"
-        try:
-            self._memory_view.record_full_exchange(user_input, answer)
-        except Exception:
-            pass
         return answer
 
     def _resolve_recovery(self, state: AgentState):
@@ -632,6 +612,8 @@ class UniversalAgent:
     @staticmethod
     def _classify(e: Exception) -> tuple:
         """异常 → (layer, error_code, friendly_hint)。"""
+        if isinstance(e, ProviderError):
+            return "provider", e.code, "LLM 服务调用失败"
         name = type(e).__name__
         msg = str(e)
         if "unexpected keyword" in msg or "TypeError" in msg:
@@ -655,8 +637,6 @@ class UniversalAgent:
         with cancellation_scope(view):
             try:
                 self._interruption_boundary(SafeCancellationBoundary.BEFORE_PLANNER)
-                if is_previous_output_request(user_input):
-                    return self._run_previous_output_request(user_input)
                 if is_empty_or_punctuation_request(user_input):
                     return self._run_invalid_request(user_input)
                 return await self._run_in_context(user_input)
@@ -685,95 +665,6 @@ class UniversalAgent:
             "effect_truth_ok": True,
             "request_output": False,
         }
-        try:
-            self._memory_view.record_full_exchange(user_input, answer)
-        except Exception:
-            pass
-        return answer
-
-    def _run_previous_output_request(self, user_input: str) -> str:
-        """Resolve ``输出呢`` from durable RunOutput without starting Planner.
-
-        The current Run is already durably created by AgentService.  It is
-        intentionally excluded from the lookup, so a request can never read
-        its own not-yet-committed output or another Session's output.
-        """
-        run_context = self._run_context
-        source_status = ""
-        answer = ""
-        terminal_status = "COMPLETED"
-        failure_code = ""
-        source = None
-        if run_context is not None and run_context.durable_store_view is not None:
-            view = run_context.durable_store_view
-            previous_run_id = view.latest_run_id(exclude_run_id=run_context.run_id)
-            if previous_run_id:
-                source = view.store.read_run_snapshot(
-                    run_context.tenant_id,
-                    previous_run_id,
-                    session_id=run_context.session_id,
-                )
-        if source is not None:
-            source_status = str(source.head.run_status)
-            output = getattr(source, "output", None)
-            if source_status in {"FAILED_TERMINAL", "BLOCKED", "CANCELLED", "TIMED_OUT"}:
-                payload: dict[str, Any] = {}
-                event = getattr(source, "terminal_event", None)
-                if event is not None:
-                    try:
-                        import json
-                        parsed = json.loads(event.payload_json)
-                        if isinstance(parsed, dict):
-                            payload = parsed
-                    except (TypeError, ValueError, json.JSONDecodeError):
-                        payload = {}
-                failure_code = str(payload.get("failure_code", "") or source_status)
-                answer = (
-                    f"上一轮任务状态为 {source_status}（{failure_code}），"
-                    "未产生可展示的成功输出。"
-                )
-                terminal_status = "BLOCKED"
-            elif output is not None and str(output.text).strip():
-                answer = str(output.text)
-            else:
-                terminal_status = "BLOCKED"
-                failure_code = "MISSING_PREVIOUS_OUTPUT"
-                answer = "上一轮尚无可展示的输出（MISSING_PREVIOUS_OUTPUT）。"
-        else:
-            # Non-Service/legacy callers retain a safe conversation fallback;
-            # they still never invoke Planner, tools, or an LLM to regenerate.
-            snapshot = self._session_context.conversation_retriever.snapshot(
-                self._memory_namespace
-            )
-            answer = str(getattr(snapshot, "last_answer", "") or "")
-            if not answer:
-                terminal_status = "BLOCKED"
-                failure_code = "MISSING_PREVIOUS_OUTPUT"
-                answer = "没有找到上一轮可展示的输出（MISSING_PREVIOUS_OUTPUT）。"
-
-        self.last_run_evidence = {
-            "terminal_status": terminal_status,
-            "terminal_outputs_verified": terminal_status == "COMPLETED" and bool(answer.strip()),
-            "runtime_pending": False,
-            "task_failures": [],
-            "failure_code": failure_code,
-            "answer": answer,
-            "answer_required": True,
-            "user_visible_output_verified": bool(answer.strip()),
-            "freshness_required": False,
-            "source_grounding_required": False,
-            "fresh_evidence": True,
-            "request_output": True,
-            "previous_output_run_id": (
-                None if source is None else source.head.run_id
-            ),
-            "previous_output_status": source_status,
-            "effect_truth_ok": True,
-        }
-        try:
-            self._memory_view.record_full_exchange(user_input, answer)
-        except Exception:
-            pass
         return answer
 
     def _interruption_boundary(
@@ -801,6 +692,42 @@ class UniversalAgent:
             if timed_out
             else "已收到取消请求，本次运行已在安全边界停止。"
         )
+        partial = signal.execution_evidence
+        artifacts = list(partial.get("verified_artifacts", []))
+        artifact_paths = [
+            str(item["reference"])
+            for item in artifacts
+            if str(item.get("reference", "")).strip()
+        ]
+        if artifact_paths:
+            answer += " 已核验并保留的文件：" + "、".join(artifact_paths) + "。"
+        completed_actions = list(partial.get("completed_actions", []))
+        if completed_actions:
+            summaries = [
+                f"{item['verb']} {item['target']}".strip()
+                for item in completed_actions
+                if str(item.get("verb", "")).strip()
+                or str(item.get("target", "")).strip()
+            ]
+            if summaries:
+                answer += " 已完成步骤：" + "；".join(summaries) + "。"
+        interrupted_action = partial.get("interrupted_action")
+        if isinstance(interrupted_action, dict):
+            action_summary = " ".join(
+                value
+                for value in (
+                    str(interrupted_action.get("verb", "") or "").strip(),
+                    str(interrupted_action.get("target", "") or "").strip(),
+                )
+                if value
+            )
+            answer += " 尚未完成的步骤：" + (
+                action_summary or "当前步骤"
+            ) + "。"
+            if interrupted_action.get("side_effect_state") == "UNKNOWN":
+                target = str(interrupted_action.get("target", "") or "").strip()
+                label = f"「{target}」" if target else "当前步骤"
+                answer += f"{label}的执行效果未能确认，未自动重放。"
         self.last_run_evidence = {
             "terminal_status": "CANCELLING",
             "terminal_outputs_verified": False,
@@ -813,7 +740,13 @@ class UniversalAgent:
             "interruption_phase": intent.phase.value,
             "interruption_boundary": signal.observation.boundary.value,
             "interruption_intent_revision": intent.revision,
-            "partial_execution_evidence": dict(signal.execution_evidence),
+            "partial_execution_evidence": dict(partial),
+            "verified_artifacts": artifacts,
+            "completed_actions": completed_actions,
+            "interrupted_action": interrupted_action,
+            "answer": answer,
+            "answer_required": True,
+            "user_visible_output_verified": True,
         }
         return answer
 
@@ -830,54 +763,10 @@ class UniversalAgent:
             bind_budget(budget)
         t0 = time.perf_counter()
 
-        context_policy = ContextPolicy.for_request(user_input)
-        if context_policy.pre_answer_fact_extraction:
-            try:
-                await asyncio.wait_for(
-                    self._memory_view.learn_from_interaction(
-                        user_input,
-                        source_ref=self._memory_learning_source_ref(),
-                    ),
-                    timeout=FACT_EXTRACTION_TIMEOUT,
-                )
-            except asyncio.TimeoutError:
-                logger.warning("事实抽取超时，继续执行主任务")
-            except Exception as exc:
-                # Do not emit a traceback from an optional memory enhancement.
-                logger.warning(
-                    "事实抽取失败，继续执行主任务: %s",
-                    stable_error_message(exc, fallback="fact learning failed")[:200],
-                )
-        self._memory_view.record_user_message(user_input)
-
-        from agent.query_normalizer import QueryNormalizer
-        normalized_input = QueryNormalizer.process(
-            user_input,
-            self._memory_namespace,
-            scope=self._session_context.memory_scope,
-        )
-        if context_policy.memory_retrieval:
-            # Chroma/SQLite-backed retrieval is synchronous.  Keep it off the
-            # event loop so event delivery, cancellation and watchdogs remain
-            # responsive during a cold embedding load.
-            context = await asyncio.to_thread(
-                self._memory_view.get_context,
-                normalized_input,
-            )
-        else:
-            context = {"session": "", "short_term": "", "long_term": "", "facts": ""}
-        context["runtime_pending_target"] = self._pending_execution_target
-        repo_context = (
-            await asyncio.to_thread(_build_repo_context, normalized_input)
-            if context_policy.repository_retrieval
-            else ""
-        )
-        skill = (
-            await asyncio.to_thread(skill_registry.select, normalized_input)
-            if context_policy.semantic_skill_selection
-            else None
-        )
-        skill_hint = skill.planner_hint if skill else ""
+        normalized_input = user_input
+        context = {"runtime_pending_target": self._pending_execution_target}
+        repo_context = ""
+        skill_hint = ""
 
         self._timings["init"] = round(time.perf_counter() - t0, 3)
 
@@ -889,23 +778,24 @@ class UniversalAgent:
             "current_task_index": 0,
             "artifacts": {},
             "memory_context": "\n\n".join(
-                part for part in (context.get("session", ""), context.get("short_term", ""))
+                part for part in (context.get("long_term", ""), context.get("facts", ""))
                 if part
             ),
             "repo_context": repo_context,
             "skill_hint": skill_hint,
-            "context_policy": context_policy.mode.value,
             "retries": 0,
             "workflow": None,
             "answer_required": True,
             "fresh_evidence": False,
             "request_output": False,
+            "original_request": user_input,
             "goal_state": GoalState(
                 objective=user_input,
                 max_rounds=budget.max_goal_rounds,
             ).to_dict(),
             "goal_evidence": [],
             "goal_missing": [],
+            "acceptance_evidence": [],
             "inbox": AgentInbox(next_turn=[user_input]).to_dict(),
             "execution_mode": "result_driven",
         }
@@ -959,7 +849,7 @@ class UniversalAgent:
                         context=context,
                         repo_context=repo_context,
                         skill_hint=skill_hint,
-                        context_policy=context_policy,
+
                         runtime_state=state,
                     )
                     if answer:
@@ -1051,6 +941,91 @@ class UniversalAgent:
                         SafeCancellationBoundary.AFTER_TOOL
                     )
                     self._emit_progress("stage_started", {
+                        "stage_id": "verification",
+                        "phase": "verification",
+                    })
+                    goal_decision = self.orchestrator.verify_goal(
+                        state,
+                        "Final user-visible response is pending.",
+                    )
+                    self._emit_progress("stage_completed", {
+                        "stage_id": "verification",
+                        "phase": "verification",
+                        "missing_count": len(goal_decision.missing),
+                    })
+                    delivery_gaps = tuple(
+                        item for item in goal_decision.missing
+                        if item.startswith("deliverable:")
+                    )
+                    plan = list(state.get("plan") or [])
+                    # An unresolved FILE_MUTATION outcome is repaired by the
+                    # same write task the delivery gap triggers. Acceptance
+                    # criteria fail the Run honestly but never drive repair:
+                    # editing a delivered file to satisfy a text criterion is
+                    # reward hacking, not delivery.
+                    repairable_extras = {"outcome:FILE_MUTATION"}
+                    repairable_delivery = bool(delivery_gaps) and all(
+                        item.startswith(("deliverable:", "acceptance:"))
+                        or item in repairable_extras
+                        for item in goal_decision.missing
+                    )
+                    repairable_plan = bool(plan) and all(
+                        str(task.get("status", "")) in {"succeeded", "skipped"}
+                        and str(task.get("verb", "")).lower()
+                        in {"read", "search", "fetch", "list", "explain", "write", "modify"}
+                        for task in plan
+                    )
+                    truth = execution_truth(state)
+                    # The repair itself resolves a missing deliverable and
+                    # the FILE_MUTATION outcome it produces; other unresolved
+                    # outcomes still block repair.
+                    unresolved_not_repairable = any(
+                        f"outcome:{outcome}" not in repairable_extras
+                        for outcome in truth.unresolved_requested_outcomes
+                    )
+                    if (
+                        repairable_delivery
+                        and repairable_plan
+                        and not truth.unresolved_required_effects
+                        and not unresolved_not_repairable
+                        and not state.get("runtime_failure_code")
+                        and str(state.get("runtime_terminal_status", ""))
+                        not in {"BLOCKED", "FAILED_TERMINAL", "CANCELLED", "TIMED_OUT"}
+                    ):
+                        inbox = AgentInbox.from_dict(state.get("inbox"))
+                        inbox.add_step({
+                            "kind": "goal_verification_rejected",
+                            "missing": list(delivery_gaps),
+                            "file_artifact_evidence": list(
+                                state.get("file_artifact_evidence", [])
+                            ),
+                            "acceptance_evidence": list(
+                                state.get("acceptance_evidence", [])
+                            ),
+                        })
+                        state["inbox"] = inbox.to_dict()
+                        if not _advance_goal_round(state, "delivery verification"):
+                            rt_state = RuntimeState.FINISH
+                            continue
+                        self._emit_progress("stage_started", {
+                            "stage_id": "replan",
+                            "phase": "replan",
+                            "reason": "delivery_verification",
+                        })
+                        state, next_state = await self.orchestrator.replan(
+                            state, normalized_input, self._memory_namespace,
+                        )
+                        self._emit_progress("stage_completed", {
+                            "stage_id": "replan",
+                            "phase": "replan",
+                        })
+                        rt_state = (
+                            RuntimeState[next_state]
+                            if isinstance(next_state, str)
+                            else next_state
+                        )
+                        continue
+                    self._emit_progress("stage_started", {
                         "stage_id": "finalization",
                         "phase": "finalization",
                     })
@@ -1066,21 +1041,111 @@ class UniversalAgent:
                     rt_state = RuntimeState.FINISH
 
                 elif rt_state == RuntimeState.REPLAN:
-                    # 已由 RECOVER 处理
-                    pass
-        except RunInterruptionRequested:
+                    self._emit_progress("stage_started", {
+                        "stage_id": "replan",
+                        "phase": "replan",
+                    })
+                    self._interruption_boundary(
+                        SafeCancellationBoundary.BEFORE_PLANNER
+                    )
+                    state, next_state = await self.orchestrator.replan(
+                        state, normalized_input, self._memory_namespace,
+                    )
+                    self._interruption_boundary(
+                        SafeCancellationBoundary.AFTER_PLANNER
+                    )
+                    self._emit_progress("stage_completed", {
+                        "stage_id": "replan",
+                        "phase": "replan",
+                    })
+                    rt_state = (
+                        RuntimeState[next_state]
+                        if isinstance(next_state, str)
+                        else next_state
+                    )
+        except RunInterruptionRequested as interruption:
             # Cooperative control flow must reach ``run()`` so the Service
             # launcher can converge the durable intent instead of recording a
             # generic Runtime failure.
+            self.orchestrator.verify_goal(
+                state,
+                "Runtime interrupted before final delivery.",
+            )
+            artifacts = _verified_file_artifacts(state)
+            touched_paths = {
+                str(path).replace("\\", "/").strip("/")
+                for path in interruption.execution_evidence.get("files_written", [])
+                if str(path).strip()
+            }
+            for operation in interruption.execution_evidence.get("file_operations", []):
+                if isinstance(operation, dict):
+                    touched_paths.update(
+                        str(operation[key]).replace("\\", "/").strip("/")
+                        for key in ("path", "source", "destination")
+                        if str(operation.get(key, "")).strip()
+                    )
+            artifacts = [
+                item for item in artifacts
+                if str(item["reference"]).replace("\\", "/").strip("/")
+                not in touched_paths
+            ]
+            completed_actions = []
+            for task in state.get("plan", []) or []:
+                if not isinstance(task, dict) or str(task.get("status", "")) != "succeeded":
+                    continue
+                observations = [
+                    str(observation.get("summary", "")).strip()
+                    for observation in task.get("observations", []) or []
+                    if isinstance(observation, dict)
+                    and str(observation.get("summary", "")).strip()
+                ]
+                completed_actions.append({
+                    "task_id": str(task.get("id", "")),
+                    "verb": str(task.get("verb", "")),
+                    "target": str(task.get("target", "")),
+                    "observations": observations,
+                })
+            active_task = next((
+                task for task in state.get("plan", []) or []
+                if isinstance(task, dict)
+                and str(task.get("status", "pending"))
+                not in {"succeeded", "skipped", "failed"}
+            ), None)
+            interrupted_action = None
+            if active_task is not None:
+                verb = str(active_task.get("verb", "")).lower()
+                interrupted_action = {
+                    "task_id": str(active_task.get("id", "")),
+                    "verb": verb,
+                    "target": str(active_task.get("target", "")),
+                    "side_effect_state": (
+                        "NONE"
+                        if verb in {"read", "search", "fetch", "list", "explain", "analyze"}
+                        else "UNKNOWN"
+                    ),
+                }
+                for key in ("completed_tool", "files_written", "file_operations"):
+                    if key in interruption.execution_evidence:
+                        interrupted_action[key] = interruption.execution_evidence[key]
+            interruption.execution_evidence.update({
+                "verified_artifacts": artifacts,
+                "completed_actions": completed_actions,
+                "interrupted_action": interrupted_action,
+            })
             raise
         except Exception as e:
             # P0.1: Runtime Recovery —— 不暴露 Traceback，Session 继续
             print(f"  ⚠️ Runtime 捕获异常并恢复: {type(e).__name__}")
             best_answer = self._recover(e, user_input, self._memory_namespace)
             runtime_terminal_status = "FAILED_TERMINAL"
-            runtime_failure_code = "RUNTIME_EXCEPTION"
+            runtime_failure_code = e.code if isinstance(e, ProviderError) else "RUNTIME_EXCEPTION"
             state["runtime_terminal_status"] = runtime_terminal_status
             state["runtime_failure_code"] = runtime_failure_code
+            # Persist a sanitized diagnostic into the durable failure payload;
+            # the traceback itself is never exposed to the user.
+            state["runtime_failure_detail"] = (
+                f"{type(e).__name__}: {stable_error_message(e)[:200]}"
+            )
             rt_state = RuntimeState.FINISH
 
         # ExecutionStage/Planner store deterministic terminal facts in the
@@ -1122,7 +1187,7 @@ class UniversalAgent:
         # only for explicit personal-fact statements, so it cannot delay chat,
         # research, repository, or ordinary execution requests.
         if (
-            context_policy.post_answer_fact_extraction
+            str(state.get("intent_memory_action", "") or "") == "remember"
             and str(state.get("runtime_terminal_status", ""))
             not in {"CANCELLED", "TIMED_OUT"}
         ):
@@ -1133,6 +1198,8 @@ class UniversalAgent:
                     self._memory_view.learn_from_interaction(
                         user_input,
                         source_ref=self._memory_learning_source_ref(),
+                        memory_action=str(state.get("intent_memory_action", "") or ""),
+                        facts=list(state.get("intent_memory_facts") or []),
                     ),
                     timeout=FACT_EXTRACTION_TIMEOUT,
                 )
@@ -1146,15 +1213,9 @@ class UniversalAgent:
             self._timings["fact_extraction_post"] = round(
                 time.perf_counter() - fact_started, 3
             )
-            normalized_answer = _normalize_fact_capture_answer(
-                final_answer, captured_facts,
+            final_answer = final_answer + _fact_capture_suffix(
+                str(state.get("intent_memory_action", "") or ""), captured_facts,
             )
-            if normalized_answer != final_answer:
-                final_answer = normalized_answer
-                # Finalizer has already recorded the first answer.  Record the
-                # corrected projection as the latest exchange so Conversation
-                # and the next turn observe the same truth as the fact store.
-                self._memory_view.record_full_exchange(user_input, final_answer)
         # ── v2.1B-1：会话状态更新（ADR-0013；每轮 answer 后）──
         conversation_diagnostic = None
         try:

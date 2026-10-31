@@ -7,18 +7,15 @@ Orchestrator 负责任务编排：
 - 后处理：Finalizer 生成答案并提交记忆
 
 Phase C.1：从 orchestrator.py 拆包。
-共享状态（timings / selector / conversation_state / replan_count）保留在容器，
+共享状态（timings / selector / replan_count）保留在容器，
 各 Stage 通过 self._orch 反向引用访问。
 """
 from typing import Any, Dict, Optional, Tuple
 
 from agent.state import AgentState
-from agent.cognition.cognitive_context import ConversationState
-from agent.cognition.reference_resolver import ReferenceResolver
 from agent.compiler.tool_selector import Compiler
 from agent.compiler.rules import DEFAULT_RULES
 from agent.runtime_context import RunContext, SessionContext
-from agent.context_policy import ContextPolicy
 from agent.runtime_budget import RunBudget
 from agent.inbox import AgentInbox
 from agent.next_action import NextAction
@@ -56,9 +53,6 @@ class ExecutionOrchestrator:
         self._next_action_selector = next_action_selector or NextActionSelector()
         self._workflow_selector = workflow_selector or WorkflowDecisionSelector()
 
-        # 认知层组件
-        self._reference_resolver = ReferenceResolver()
-        self._conversation_state = ConversationState()
 
         # 阶段对象（共享容器状态）
         self._context_builder = ContextBuilder(self)
@@ -104,7 +98,6 @@ class ExecutionOrchestrator:
         context: Dict,
         repo_context: str,
         skill_hint: str,
-        context_policy: Optional[ContextPolicy] = None,
         runtime_state: Optional[AgentState] = None,
     ) -> Tuple[AgentState, str, Optional[str]]:
         """PLAN 阶段：Build CognitiveContext → ReferenceResolver → IntentEngine → WorkflowRouter → Planner。"""
@@ -114,7 +107,6 @@ class ExecutionOrchestrator:
             context,
             repo_context,
             skill_hint,
-            context_policy=context_policy,
             runtime_state=runtime_state,
         )
 
@@ -137,21 +129,54 @@ class ExecutionOrchestrator:
         user_input: str,
         user_id: str,
     ) -> Tuple[AgentState, str]:
-        """Turn an ordinary action observation into the next bounded action.
+        """Choose a bounded response to one ordinary action observation."""
+        failure = state.get("runtime_failure") or {}
+        failure_code = str(
+            failure.get("error_code", "")
+            if isinstance(failure, dict)
+            else ""
+        ) or str(state.get("runtime_failure_code", "") or "")
+        tasks = list(state.get("plan") or [])
+        current_index = int(state.get("current_task_index", 0) or 0)
+        if not (
+            0 <= current_index < len(tasks)
+            and str(tasks[current_index].get("status", "")) == "failed"
+        ):
+            current_index = next(
+                (
+                    index for index, task in enumerate(tasks)
+                    if str(task.get("status", "")) == "failed"
+                ),
+                -1,
+            )
+        read_only_verbs = {"read", "search", "fetch", "list", "explain"}
+        task = tasks[current_index] if current_index >= 0 else {}
+        read_only_task = str(task.get("verb", "")).lower() in read_only_verbs
+        no_effect_states = {"NONE", "NOT_STARTED", "FAILED_BEFORE_COMMIT"}
+        side_effect_state = str(
+            state.get("runtime_failure_side_effect_state", "") or ""
+        )
+        effect_is_known_absent = read_only_task or side_effect_state in no_effect_states
+        if (
+            effect_is_known_absent
+            and failure_code in {
+                "FILE_NOT_FOUND",
+                "NO_SEARCH_MATCH",
+                "HTTP_404",
+                "INVALID_TOOL_ARGUMENT",
+            }
+        ):
+            state["runtime_failure_code"] = failure_code
+            state["runtime_terminal_status"] = ""
+            return state, "REPLAN"
 
-        Action failures are facts for the result-driven loop.  They must not
-        silently re-enter the open-ended Planner/Reflection path.  A retryable
-        action may be retried once using the already compiled plan; all other
-        failures become a terminal, truthful partial outcome.
-        """
         retryable = bool(state.get("runtime_failure_retryable", False))
         retry_count = int(state.get("action_retry_count", 0) or 0)
-        if retryable and retry_count < 1:
+        if retryable and effect_is_known_absent and retry_count < 1:
             state["action_retry_count"] = retry_count + 1
             state["runtime_failure_code"] = ""
+            state["runtime_failure_side_effect_state"] = ""
             state["runtime_terminal_status"] = ""
-            tasks = list(state.get("plan") or [])
-            current_index = int(state.get("current_task_index", 0) or 0)
             if 0 <= current_index < len(tasks):
                 task = tasks[current_index]
                 state["next_action"] = NextAction.tool_call(
@@ -177,7 +202,7 @@ class ExecutionOrchestrator:
         inbox.add_step({
             "kind": "terminal_observation",
             "error_code": state["runtime_failure_code"],
-            "reason": "ordinary action failure is not recoverable by replanning",
+            "reason": "action failure is not eligible for safe plan repair",
         })
         state["inbox"] = inbox.to_dict()
         return state, "FAIL"
@@ -239,6 +264,7 @@ class ExecutionOrchestrator:
             state["runtime_failure_class"] = ""
             state["runtime_failure_source"] = ""
             state["runtime_failure_retryable"] = False
+            state["runtime_failure_side_effect_state"] = ""
             state["runtime_failure_code"] = ""
             state["runtime_terminal_status"] = ""
             retry_plan = (
@@ -309,3 +335,7 @@ class ExecutionOrchestrator:
     ) -> str:
         """生成最终答案并提交记忆。"""
         return await self._finalizer.run(state, user_input, user_id, best_answer)
+
+    def verify_goal(self, state: AgentState, answer: str):
+        """Run the delivery verifier before finalization can claim success."""
+        return self._finalizer.verify_goal(state, answer)

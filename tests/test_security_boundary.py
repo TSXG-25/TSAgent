@@ -67,30 +67,6 @@ def test_sensitive_values_are_redacted():
     assert "REDACTED" in redacted
 
 
-def test_short_term_storage_redacts_sensitive_user_and_assistant_text(
-    monkeypatch, tmp_path
-):
-    import json
-
-    from agent.memory import short_term
-
-    monkeypatch.setattr(short_term, "ST_DIR", tmp_path)
-    secret = "sk-test-human-acceptance-123"
-
-    short_term.add_exchange(
-        "security-short-term",
-        f"我的 API key 是 {secret}",
-        f"我不会保存 {secret}",
-    )
-
-    record = json.loads(
-        (tmp_path / "security-short-term.json").read_text(encoding="utf-8")
-    )[0]
-    assert secret not in json.dumps(record, ensure_ascii=False)
-    assert "[REDACTED]" in record["user"]
-    assert "[REDACTED]" in record["assistant"]
-    assert secret not in short_term.get_history("security-short-term")
-
 
 def test_office_binary_writes_are_explicitly_rejected():
     from tools.filesystem import write_file

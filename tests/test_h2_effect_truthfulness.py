@@ -7,7 +7,6 @@ from types import SimpleNamespace
 
 from agent.effect_truth import (
     EffectClass,
-    detect_requested_effects,
     enforce_completion_gate,
     initialize_effect_contract,
     record_effect_result,
@@ -19,21 +18,12 @@ from agent.service.runtime_launcher import RuntimeExecutionLauncher
 from agent.task import ExecutionPlan, Task
 
 
-class _Memory:
-    def __init__(self) -> None:
-        self.exchanges: list[tuple[str, str]] = []
-
-    def record_full_exchange(self, user_input: str, answer: str) -> None:
-        self.exchanges.append((user_input, answer))
-
-
-def _finalizer() -> tuple[Finalizer, _Memory]:
-    memory = _Memory()
+def _finalizer() -> Finalizer:
     orchestrator = SimpleNamespace(
-        session_context=SimpleNamespace(memory_view=memory),
+        session_context=SimpleNamespace(memory_view=None),
         _timings={},
     )
-    return Finalizer(orchestrator), memory
+    return Finalizer(orchestrator)
 
 
 def _reservation_state() -> dict:
@@ -41,30 +31,84 @@ def _reservation_state() -> dict:
     initialize_effect_contract(
         state,
         "帮我订一张明天从北京到上海的机票",
+        external_effects=(
+            {"capability": "reservation", "description": "订机票"},
+        ),
         capability_resolver=lambda _capability, _context: None,
     )
     return state
 
 
-def test_effect_classifier_distinguishes_external_action_from_information() -> None:
-    action = detect_requested_effects("帮我订一张明天从北京到上海的机票")
-    question = detect_requested_effects("如何预订机票")
+def test_effect_classifier_maps_intent_declared_external_effects() -> None:
+    state: dict = {}
+    truth = initialize_effect_contract(
+        state,
+        "帮我订一张明天从北京到上海的机票",
+        external_effects=(
+            {"capability": "reservation", "description": "订机票"},
+        ),
+        capability_resolver=lambda _capability, _context: None,
+    )
 
-    assert len(action) == 1
-    assert action[0].effect_class is EffectClass.EXTERNAL_EFFECT
-    assert action[0].capability == "reservation"
-    assert question == ()
+    assert len(truth.required_effects) == 1
+    assert truth.required_effects[0]["effect_class"] == "EXTERNAL_EFFECT"
+    assert truth.required_effects[0]["capability"] == "reservation"
+    assert truth.unsupported_effects
 
 
-def test_unsupported_reservation_is_blocked_before_open_ended_planning() -> None:
+def _planner_context(query: str):
+    from agent.cognition.cognitive_context import CognitiveContext
+
+    context = CognitiveContext(query=query)
+    context.short_summary = lambda: ""
+    context.run_results = []
+    return context
+
+
+def test_unsupported_reservation_is_blocked_before_open_ended_planning(
+    monkeypatch,
+) -> None:
+    from tests.test_ha_r1_harness import ScriptedProvider, intent
+
+    request = "帮我订一张明天从北京到上海的机票"
+    provider = ScriptedProvider([
+        (request, intent(
+            request,
+            domain="运维",
+            action="reserve",
+            external_effects=[
+                {"capability": "reservation", "description": "订机票"},
+            ],
+        )),
+    ])
+    from agent.cognition.intent_engine import IntentEngine
+
+    engine = IntentEngine()
+    engine._llm = provider
+    monkeypatch.setattr("agent.orchestrator.planner.intent_engine", engine)
+
     async def scenario() -> None:
         orchestrator = SimpleNamespace(
+            _timings={},
+            run_context=None,
+            session_context=None,
+            _reference_resolver=SimpleNamespace(
+                resolve=lambda _input, _context: SimpleNamespace(
+                    target="",
+                    symbol="",
+                    resolution_trace="",
+                    to_resolved_query=lambda: SimpleNamespace(target="", symbol="", entities=[]),
+                )
+            ),
             _context_builder=SimpleNamespace(
-                render_context=lambda _context, _now: "",
-            )
+                render_system_context=lambda _now: "",
+                render_untrusted_context=lambda _context: "",
+                build=lambda **kwargs: _planner_context(kwargs["user_input"]),
+                update_conversation_state=lambda *_args, **_kwargs: None,
+            ),
         )
         state, next_state, answer = await PlannerStage(orchestrator).run(
-            "帮我订一张明天从北京到上海的机票",
+            request,
             "user-a",
             {},
             "",
@@ -82,7 +126,7 @@ def test_unsupported_reservation_is_blocked_before_open_ended_planning() -> None
 
 
 def test_finalizer_rejects_llm_success_claim_without_effect_evidence() -> None:
-    finalizer, memory = _finalizer()
+    finalizer = _finalizer()
     state = _reservation_state()
     state["plan"] = [{
         "id": "task-1",
@@ -103,7 +147,6 @@ def test_finalizer_rejects_llm_success_claim_without_effect_evidence() -> None:
     assert state["runtime_failure_code"] == "UNSUPPORTED_CAPABILITY"
     assert "已预订成功" not in answer
     assert "没有可用的预订能力" in answer
-    assert memory.exchanges[-1][1] == answer
 
 
 def test_unverified_known_effect_cannot_complete() -> None:
@@ -166,7 +209,7 @@ def test_one_verified_and_one_unsupported_effect_stays_blocked() -> None:
 
 
 def test_committed_verified_effect_is_allowed_on_resume() -> None:
-    finalizer, _memory = _finalizer()
+    finalizer = _finalizer()
     state = {
         "required_effects": [{
             "effect_id": "external:reservation",

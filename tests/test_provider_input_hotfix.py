@@ -90,8 +90,9 @@ def test_intent_provider_failure_short_circuits_generic_planner(monkeypatch) -> 
         forbidden_plan,
     )
     context_builder = SimpleNamespace(
-        render_context=lambda _context, _now: "",
-        build=lambda **_kwargs: SimpleNamespace(short_summary=lambda: ""),
+        render_system_context=lambda _now: "",
+        render_untrusted_context=lambda _context: "",
+        build=lambda **_kwargs: SimpleNamespace(short_summary=lambda: "", run_results=[], conversation=[]),
     )
     resolver = SimpleNamespace(
         resolve=lambda _input, _context: SimpleNamespace(
@@ -173,7 +174,7 @@ def test_llm_router_does_not_retry_same_provider_in_one_request() -> None:
             calls.append(self.name)
             raise ConnectionError(f"{self.name} unavailable")
 
-    router = LLMRouter()
+    router = LLMRouter(provider_mode="auto")
     router._deepseek = FailingProvider("deepseek")  # type: ignore[assignment]
     router._ollama = FailingProvider("ollama")  # type: ignore[assignment]
 
@@ -204,9 +205,7 @@ def test_punctuation_only_input_skips_runtime_planner() -> None:
 
     agent = GateAgent.__new__(GateAgent)
     agent._run_context = None
-    agent._memory_view = SimpleNamespace(
-        record_full_exchange=lambda *_args: None,
-    )
+    agent._memory_view = SimpleNamespace()
     answer = asyncio.run(agent.run("？"))
 
     assert "仅包含标点" in answer

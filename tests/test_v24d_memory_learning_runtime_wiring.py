@@ -8,7 +8,6 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-from agent.context_policy import ContextPolicy
 from agent.memory.learning import (
     MemoryLearningDecision,
     decide_memory_learning,
@@ -39,7 +38,7 @@ def test_runtime_turn_uses_provider_policy_and_commit_once(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
-    from agent.memory import long_term, preference
+    from agent.memory import long_term
     from agent.runtime import UniversalAgent
     from agent.services.memory_service import ScopedMemoryView
 
@@ -52,18 +51,10 @@ def test_runtime_turn_uses_provider_policy_and_commit_once(
         assert existing == evidence.existing
         return _selection(decide_memory_learning(evidence, policy))
 
-    async def legacy_extractor_forbidden(_text: str):
-        raise AssertionError("legacy fact extractor is not the learning authority")
-
     monkeypatch.setattr(
         MemoryLearningProvider,
         "select_with_evidence",
         select_with_evidence,
-    )
-    monkeypatch.setattr(
-        preference,
-        "extract_facts_with_llm",
-        legacy_extractor_forbidden,
     )
 
     class Orchestrator:
@@ -80,6 +71,10 @@ def test_runtime_turn_uses_provider_policy_and_commit_once(
                 "plan": [],
                 "requested_outcomes": ["USER_VISIBLE_OUTPUT"],
                 "answer_required": True,
+                "intent_memory_action": "remember",
+                "intent_memory_facts": [
+                    {"category": "personal", "key": "name", "value": "TS"}
+                ],
             }, "FINISH", "好的。"
 
         async def finalize(self, **kwargs: Any) -> str:
@@ -93,6 +88,7 @@ def test_runtime_turn_uses_provider_policy_and_commit_once(
     agent._pending_execution_target = ""
     agent._run_context = SimpleNamespace(
         run_id="run-memory-wiring",
+        repository_indexer=None,
         cancellation_view=SimpleNamespace(
             raise_if_requested=lambda *_args, **_kwargs: None
         ),
@@ -108,7 +104,7 @@ def test_runtime_turn_uses_provider_policy_and_commit_once(
 
     answer = asyncio.run(agent._run_in_context("我叫 TS"))
 
-    assert answer == "好的。"
+    assert answer == "好的。\n已记住。"
     assert provider_calls == ["personal.name"]
     assert long_term.get_fact(
         user_id,
@@ -163,11 +159,12 @@ def test_secret_provider_proposal_is_vetoed_before_storage(
     monkeypatch.setattr(long_term, "_persist_fact", persist_forbidden)
 
     prompt = "我的 API key 是 sk-test-example"
-    assert ContextPolicy.for_request(prompt).post_answer_fact_extraction is True
     result = asyncio.run(
         MemoryService.learn_from_interaction(
             "runtime-memory-safety",
             prompt,
+            memory_action="remember",
+            facts=[{"category": "secret", "key": "api_key", "value": "sk-test-example"}],
             scope="user",
             source_ref="run:runtime-memory-safety",
         )
@@ -201,7 +198,7 @@ def test_durable_learning_has_one_production_proposal_owner() -> None:
                     if isinstance(function, ast.Attribute)
                     else ""
                 )
-                if name in {"MemoryLearningProvider", "extract_facts_with_llm"}:
+                if name == "MemoryLearningProvider":
                     call_sites.append((str(path.relative_to(ROOT)), name))
 
     assert call_sites

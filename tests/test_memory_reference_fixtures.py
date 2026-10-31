@@ -120,6 +120,10 @@ def test_runner_materializes_reference_before_turns_and_tears_down_afterwards():
             self.agent = DummyAgent()
             self.calls = 0
 
+        @property
+        def last_run_evidence(self):
+            return self.agent.last_run_evidence
+
         async def run(self, _text):
             self.calls += 1
             if self.calls == 2:

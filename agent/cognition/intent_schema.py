@@ -2,10 +2,15 @@
 
 User Input 经过 ReferenceResolver + IntentEngine 处理后，得到结构化的意图表示。
 """
+from __future__ import annotations
+
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 from .execution_need import RequestedOutcome
+
+if TYPE_CHECKING:
+    from agent.goal import AcceptanceCriterion, DeliveryRequirement
 
 
 # ── 稳定的 Domain 层（不会频繁变化） ──
@@ -60,7 +65,7 @@ class IntentResult:
         current_file: 当前 Workspace 打开的文件（注入用）
         confidence: 置信度 (0-1)
         requires_execution: 是否需要 Agent 执行（False = 直接 LLM 回答）
-        requested_outcomes: 用户明确要求的结果集合（不信任 LLM 覆盖）
+        requested_outcomes: 由目标语义分析确定、供授权与完成验证使用的结果集合
         summary: 简短的意图说明
         raw_input: 原始用户输入
     """
@@ -73,12 +78,24 @@ class IntentResult:
     requires_execution: bool = True
     summary: str = ""
     raw_input: str = ""
-    reference_kind: str = ""   # 引用类意图的目标字段提示（answer/instruction/runtime/goal）；Intent Engine 判定
     freshness_required: bool = False
     source_grounding_required: bool = False
     requested_outcomes: tuple[RequestedOutcome, ...] = ()
     # Stable cognition-boundary failure.  A provider outage must not be
     # downgraded to DOMAIN_UNKNOWN and sent through a second Planner call.
+    artifact_required: bool = False
+    resolved_request: str = ""
+    conversation_relation: str = "new_request"
+    delivery_requirements: tuple[DeliveryRequirement, ...] = ()
+    prohibited_effects: tuple[str, ...] = ()
+    acceptance_criteria: tuple[AcceptanceCriterion, ...] = ()
+    write_targets: tuple[str, ...] = ()
+    external_effects: tuple[dict[str, str], ...] = ()
+    search_query: str = ""
+    search_timeliness: str = "any"
+    context_needs: dict[str, bool] = field(default_factory=dict)
+    memory_action: str = "none"
+    memory_facts: list[dict] = field(default_factory=list)
     failure_code: str = ""
     failure_message: str = ""
 

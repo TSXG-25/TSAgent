@@ -151,7 +151,6 @@ class MemoryPersistenceBoundary:
                     source_ref=decision.provenance["source_ref"],
                 )
             else:
-                from agent.memory.resolution import _persist_resolution
 
                 resolution = decision.resolution
                 if resolution is None:

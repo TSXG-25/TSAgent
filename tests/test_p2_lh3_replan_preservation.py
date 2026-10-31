@@ -180,9 +180,109 @@ def test_replan_executes_only_replacement_task_after_verified_writes(
     )
 
     assert next_state == "EXECUTE"
-    assert [task["verb"] for task in updated["plan"]] == ["explain"]
-    assert updated["plan"][0]["id"].startswith("replan-1-")
-    assert len(updated["execution_plans"]) == 1
+    assert [task["verb"] for task in updated["plan"]] == [
+        "write", "write", "explain",
+    ]
+    assert [task["status"] for task in updated["plan"]] == [
+        "succeeded", "succeeded", "pending",
+    ]
+    assert updated["plan"][2]["id"].startswith("replan-1-")
+    assert len(updated["execution_plans"]) == 3
+    assert updated["current_task_index"] == 2
     assert updated["replan_skipped_verified_effects"] == 2
     assert "已经成功并通过执行验证" in captured_prompts[0]
     assert "output/p2_l05.md" in captured_prompts[0]
+
+
+def test_identical_repair_plan_stops_as_no_progress(monkeypatch) -> None:
+    read_task = _task("read-1", "read", "missing.txt", "pending")
+
+    async def same_repair(_prompt, *_args, **_kwargs):
+        return SimpleNamespace(tasks=[dict(read_task)])
+
+    monkeypatch.setattr(
+        "agent.orchestrator.planner.plan_with_metadata",
+        same_repair,
+    )
+
+    class Selector:
+        def compile(self, task: Task, *, context) -> ExecutionPlan:
+            return ExecutionPlan(task=task, executor="llm")
+
+    orchestrator = SimpleNamespace(
+        replan_count=0,
+        _selector=Selector(),
+        _timings={},
+    )
+    stage = PlannerStage(orchestrator)
+    state = {
+        "plan": [{
+            **_task("read-0", "read", "missing.txt", "failed"),
+            "error": "missing.txt",
+            "error_code": "FILE_NOT_FOUND",
+        }],
+        "execution_plans": [],
+        "inbox": {},
+    }
+
+    first, first_state = asyncio.run(
+        stage.replan(state, "读取 missing.txt", "p2-user")
+    )
+    assert first_state == "EXECUTE"
+    first["plan"][-1]["status"] = "failed"
+    first["plan"][-1]["error"] = "missing.txt"
+    first["plan"][-1]["error_code"] = "FILE_NOT_FOUND"
+
+    second, second_state = asyncio.run(
+        stage.replan(first, "读取 missing.txt", "p2-user")
+    )
+
+    assert second_state == "FAIL"
+    assert second["runtime_failure_code"] == "REPLAN_NO_PROGRESS"
+    assert second["runtime_terminal_status"] == "FAILED_TERMINAL"
+
+
+def test_replan_rejects_write_outside_original_authorized_scope(monkeypatch) -> None:
+    async def unauthorized_plan(_prompt, *_args, **_kwargs):
+        return SimpleNamespace(tasks=[
+            _task("write-outside", "write", "private/leak.txt", "pending"),
+        ])
+
+    monkeypatch.setattr(
+        "agent.orchestrator.planner.plan_with_metadata",
+        unauthorized_plan,
+    )
+
+    class Selector:
+        def compile(self, task: Task, *, context) -> ExecutionPlan:
+            return ExecutionPlan(task=task, executor="llm")
+
+    orchestrator = SimpleNamespace(
+        replan_count=0,
+        _selector=Selector(),
+        _timings={},
+    )
+    state = {
+        "original_request": "读取 missing.txt 并将结果写入 output/report.txt",
+        "requested_outcomes": ["USER_VISIBLE_OUTPUT", "FILE_READ", "FILE_MUTATION"],
+        "plan": [{
+            **_task("read-0", "read", "missing.txt", "failed"),
+            "error": "missing.txt",
+            "error_code": "FILE_NOT_FOUND",
+        }],
+        "execution_plans": [],
+        "inbox": {},
+    }
+
+    updated, next_state = asyncio.run(
+        PlannerStage(orchestrator).replan(
+            state,
+            "读取 missing.txt 并将结果写入 output/report.txt",
+            "p2-user",
+        )
+    )
+
+    assert next_state == "FAIL"
+    assert updated["runtime_failure_code"] == "EFFECT_SCOPE_VIOLATION"
+    assert updated["runtime_terminal_status"] == "BLOCKED"
+    assert updated["plan"][0]["status"] == "failed"

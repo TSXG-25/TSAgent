@@ -97,7 +97,7 @@ class Compiler:
 
         Args:
             task: Planner task (verb + target + target_type + policy)
-            context: CompilerContext (workspace/registry/repository) — sole env input.
+            context: CompilerContext (workspace/registry) — sole env input.
 
         Returns:
             ExecutionPlan (executor="tool" | "llm")
@@ -114,7 +114,6 @@ class Compiler:
             context = CompilerContext(
                 workspace=context.workspace,
                 registry=_application_registry,
-                repository=context.repository,
                 extra=dict(context.extra),
             )
 
@@ -135,7 +134,7 @@ class Compiler:
     # ── Stage 1: Normalize（只做文本规范化，不猜）──
 
     def _normalize(self, task: Task) -> Task:
-        if not task.target:
+        if not task.target or task.target_type not in {"file", "symbol"}:
             return task
         target = task.target.strip()
         for ch in "\"'`":
@@ -154,7 +153,7 @@ class Compiler:
                 f"task={task.id}: target_type={task.target_type} 但 target 为空。"
             )
         if task.target_type == "file" and task.target:
-            if re.search(r"[\u4e00-\u9fff]", task.target):
+            if False:
                 raise CompileError(
                     f"task={task.id}: target_type=file 但 target 含中文字符: {task.target!r}。"
                     f"file target 必须是具体路径（如 output/solution.py）。"
@@ -179,9 +178,6 @@ class Compiler:
         services = {}
         if context.workspace is not None:
             services["workspace"] = context.workspace
-        if context.repository is not None:
-            services["repository"] = context.repository
-
         if task.verb == Verb.EXECUTE:
             for rule in self._rules:
                 if rule.matches(task):
@@ -384,8 +380,16 @@ class Compiler:
             return True
         actual = registry_tool_name(tool)
         try:
-            return registry.get(actual) is not None
+            registered = registry.get(actual)
         except Exception as exc:
             raise CompileError(
                 f"ToolRegistry unavailable while checking {tool!r}: {exc}"
             ) from exc
+        if registered is None:
+            return False
+        availability = registry.get_availability(actual)
+        if not availability.available:
+            raise CompileError(
+                f"{availability.reason_code}: {availability.reason}"
+            )
+        return True

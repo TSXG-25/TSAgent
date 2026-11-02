@@ -234,6 +234,33 @@ def test_edit_file_maps_to_scoped_edit_and_rejects_non_unique(
     asyncio.run(scenario())
 
 
+def test_failed_tool_attempt_does_not_poison_goal_verification(
+    monkeypatch, tmp_path,
+):
+    """An exploratory call that fails (e.g. listing a missing dir) is
+    feedback, not failed work — recovery later in the loop must complete."""
+    orch = _orchestrator(tmp_path)
+    achat, _calls = _scripted([
+        _turn(("list_directory", {"path": "src"})),
+        _turn(("write_file", {"path": "output/greeting.py", "content": "x = 1"})),
+        _turn(content="已写入 output/greeting.py"),
+    ])
+    monkeypatch.setattr("agent.llm.llm.achat", achat)
+    state = _mutation_state()
+
+    answer = asyncio.run(
+        AgentLoop(orch).run(state, user_input="写文件", user_id="u")
+    )
+
+    assert answer == "已写入 output/greeting.py"
+    assert (tmp_path / "output/greeting.py").read_text() == "x = 1"
+    assert [task["status"] for task in state["plan"]] == ["succeeded"]
+
+    from agent.goal import GoalVerifier
+    decision = GoalVerifier.verify(state, answer)
+    assert "failed task evidence" not in decision.missing
+
+
 def test_verifier_gap_feeds_back_twice_then_finalizes(monkeypatch, tmp_path):
     orch = _orchestrator(tmp_path)
     orch.verify_goal = lambda state, answer: SimpleNamespace(

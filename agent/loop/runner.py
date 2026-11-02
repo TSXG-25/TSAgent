@@ -397,7 +397,8 @@ class AgentLoop:
                                  error_code="EFFECT_SCOPE_VIOLATION")
 
         task_dict = _task_for_call(call, tool, index)
-        state.setdefault("plan", []).append(task_dict)
+        plan_tasks = state.setdefault("plan", [])
+        plan_tasks.append(task_dict)
         plan = ExecutionPlan(
             task=Task.from_dict(task_dict),
             steps=[
@@ -417,18 +418,23 @@ class AgentLoop:
         if action_result is not None:
             if action_result.ok:
                 return _tool_message(call, action_result.content or "OK")
-            return _tool_message(
-                call,
+            ok, content, error_code = (
+                False,
                 action_result.content or result.error or "执行失败",
-                ok=False,
-                error_code=action_result.error_code or "ACTION_EXECUTION_FAILED",
+                action_result.error_code or "ACTION_EXECUTION_FAILED",
             )
-        if result.success:
+        elif result.success:
             return _tool_message(call, result.text or "OK")
-        return _tool_message(
-            call,
-            result.error or "执行失败",
-            ok=False,
-            error_code=str((result.metadata or {}).get("error_code", ""))
-            or "ACTION_EXECUTION_FAILED",
-        )
+        else:
+            ok, content, error_code = (
+                False,
+                result.error or "执行失败",
+                str((result.metadata or {}).get("error_code", ""))
+                or "ACTION_EXECUTION_FAILED",
+            )
+        # A failed call is an attempt, not planned work: the model already got
+        # the error as feedback and run_events keep the audit trail. Keeping a
+        # "failed" task in plan would poison GoalVerifier's failed-task check
+        # even after the model recovers (e.g. list on a missing dir then write).
+        plan_tasks.remove(task_dict)
+        return _tool_message(call, content, ok=ok, error_code=error_code)

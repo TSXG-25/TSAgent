@@ -188,6 +188,14 @@ def _inject_time_to_system(messages: list[BaseMessage]) -> list[BaseMessage]:
     return [SystemMessage(content=now_hint)] + messages
 
 
+def _request_timeout(provider) -> float:
+    return float(
+        getattr(provider, "timeout", 0)
+        or getattr(provider, "request_timeout", 0)
+        or LLM_REQUEST_TIMEOUT
+    )
+
+
 class LLMRouter:
     def __init__(self, *, provider_mode: str | None = None):
         raw_mode = (
@@ -376,7 +384,7 @@ class LLMRouter:
         try:
             result = await await_interruptibly(
                 provider.ainvoke(messages, **kwargs),
-                timeout=LLM_REQUEST_TIMEOUT,
+                timeout=_request_timeout(provider),
             )
             self._on_success(name)
             return result
@@ -397,7 +405,7 @@ class LLMRouter:
                 try:
                     result = await await_interruptibly(
                         fallback_provider.ainvoke(messages, **kwargs),
-                        timeout=LLM_REQUEST_TIMEOUT,
+                        timeout=_request_timeout(fallback_provider),
                     )
                     self._on_success(fallback_name)
                     return result
@@ -410,7 +418,7 @@ class LLMRouter:
                 try:
                     result = await await_interruptibly(
                         self._provider_deepseek.ainvoke(messages, **kwargs),
-                        timeout=LLM_REQUEST_TIMEOUT,
+                        timeout=_request_timeout(self._provider_deepseek),
                     )
                     self._deepseek_available = True
                     return result

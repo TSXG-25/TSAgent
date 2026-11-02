@@ -923,6 +923,11 @@ def main() -> int:
         # Must be set before any agent import binds the router singleton.
         os.environ["TSAGENT_LLM_PROVIDER"] = args.provider
     mode = _provider_mode(args.provider)
+    if mode == "ollama":
+        # Local inference is an order of magnitude slower than the remote
+        # provider; give runs room so time budgets measure behaviour, not
+        # machine speed. An explicit env var still wins.
+        os.environ.setdefault("TSAGENT_MAX_RUNTIME_SECONDS", "600")
     abort_message = ensure_provider(mode)
     if abort_message:
         print(f"ABORT: {abort_message}", file=sys.stderr)

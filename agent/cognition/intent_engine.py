@@ -493,6 +493,28 @@ class IntentEngine:
             failure_message="任务理解返回了无效结构，本次未执行操作。",
         )
 
+    def _retry_prompt(
+        self,
+        user_input: str,
+        context: CognitiveContext,
+        error: Exception,
+    ) -> list:
+        """One repair retry: feed the contract violation back to the model.
+
+        Intent parsing is a trust boundary over an external API; weak local
+        models intermittently emit malformed JSON and a single retry with
+        the error attached recovers most of them.
+        """
+        return self._llm_prompt(user_input, context) + [
+            HumanMessage(
+                content=(
+                    f"上一条意图输出无效（{type(error).__name__}: "
+                    f"{str(error)[:200]}）。只输出合法的意图 JSON，"
+                    "字段和取值必须符合契约。"
+                )
+            )
+        ]
+
     def _llm_analyze(self, user_input: str, context: CognitiveContext) -> IntentResult:
         """Synchronous LLM analysis retained for non-Runtime callers."""
         try:
@@ -503,7 +525,19 @@ class IntentEngine:
                 context,
             )
         except Exception as error:
-            return self._llm_analysis_failure(user_input, error)
+            if classify_execution_error(error).startswith("PROVIDER_"):
+                return self._llm_analysis_failure(user_input, error)
+            try:
+                response = self._llm.invoke(
+                    self._retry_prompt(user_input, context, error)
+                )
+                return self._parse_llm_analysis(
+                    response,
+                    user_input,
+                    context,
+                )
+            except Exception:
+                return self._llm_analysis_failure(user_input, error)
 
     async def _llm_analyze_async(
         self,
@@ -519,7 +553,19 @@ class IntentEngine:
                 context,
             )
         except Exception as error:
-            return self._llm_analysis_failure(user_input, error)
+            if classify_execution_error(error).startswith("PROVIDER_"):
+                return self._llm_analysis_failure(user_input, error)
+            try:
+                response = await self._llm.ainvoke(
+                    self._retry_prompt(user_input, context, error)
+                )
+                return self._parse_llm_analysis(
+                    response,
+                    user_input,
+                    context,
+                )
+            except Exception:
+                return self._llm_analysis_failure(user_input, error)
 
 
 # 全局单例

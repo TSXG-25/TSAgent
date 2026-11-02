@@ -1,0 +1,597 @@
+{
+  "manifest": "core-scenarios-v1",
+  "run_id": "core_scenarios_20261102_021935",
+  "provider": "ollama",
+  "model": "qwen3:8b",
+  "started_at": "2026-11-02T02:19:35.225687+00:00",
+  "cases_file": "core_scenarios_cases.json",
+  "workspace_root": "/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261102_021935_workspace",
+  "cases": [
+    {
+      "id": "CS05",
+      "title": "follow-up '把它改成…' modifies the artifact created in turn 1",
+      "result": "FAIL",
+      "skip_reason": "",
+      "workspace": "/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261102_021935_workspace/cs05",
+      "duration_ms": 198380.2,
+      "error": "",
+      "turns": [
+        {
+          "turn": 1,
+          "request": "写一个汇率换算函数 convert(amount, rate)，保存到 output/calculator.py",
+          "status": "COMPLETED",
+          "output": "已生成/更新本地文件：\n/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261102_021935_workspace/cs05/output/calculator.py\n\n未自动验证：文件内容应满足：def convert(amount, rate):",
+          "artifacts": [
+            {
+              "artifact_id": "artifact-bd07b3e122a13dad1bd65f93",
+              "artifact_type": "file",
+              "digest": "4d0fd66eaeb74cb722cca6d0562514cb1824a8bf7c195becdf7eb48b8ccfa11c",
+              "reference": "artifact://core-scenarios/run-6ec2256e906247a9b0a5de430f989010/artifact-bd07b3e122a13dad1bd65f93",
+              "exists": true,
+              "verified": true,
+              "run_id": "run-6ec2256e906247a9b0a5de430f989010",
+              "display_name": "artifact-bd07b3e122a13dad1bd65f93",
+              "size": null,
+              "producer_workflow_id": "runtime-execution",
+              "producer_stage_id": "task:task-1",
+              "created_revision": 1,
+              "created_at": ""
+            }
+          ],
+          "provider_calls": 4,
+          "plan_calls": 1,
+          "replan_calls": 0,
+          "tool_calls": [
+            {
+              "tool": "llm",
+              "args": {
+                "verb": "write",
+                "target": "output/calculator.py",
+                "prompt": "你是文件生成器。只输出目标文件的完整内容，不要解释，不要 markdown 代码围栏。",
+                "user": "目标文件: output/calculator.py\n任务: 创建汇率换算函数 convert(amount, rate)\n说明: 将函数定义写入指定文件"
+              }
+            },
+            {
+              "tool": "filesystem.write",
+              "args": {
+                "path": "output/calculator.py",
+                "content": "def convert(amount, rate):\n    return amount * rate",
+                "mode": "overwrite",
+                "exact": "True"
+              }
+            }
+          ],
+          "intent": {
+            "domain": "development",
+            "action": "code",
+            "target": "output/calculator.py",
+            "confidence": 0.95,
+            "summary": "用户要求写一个汇率换算函数并保存到指定文件",
+            "requires_execution": true,
+            "artifact_required": true,
+            "requested_outcomes": [
+              "FILE_MUTATION"
+            ],
+            "delivery_requirements": [
+              {
+                "id": "1",
+                "kind": "file",
+                "quantity": 1,
+                "target": "output/calculator.py",
+                "acceptance_criteria": [
+                  {
+                    "kind": "unverifiable",
+                    "description": "文件内容应满足：def convert(amount, rate):"
+                  }
+                ]
+              }
+            ],
+            "acceptance_criteria": [],
+            "write_targets": [
+              "output/calculator.py"
+            ],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "new_request",
+            "resolved_request": "写一个汇率换算函数 convert(amount, rate)，保存到 output/calculator.py",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": ""
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "stage_started",
+            "task_started",
+            "task_completed",
+            "stage_completed",
+            "stage_started",
+            "stage_completed",
+            "stage_started",
+            "stage_completed",
+            "run_completed"
+          ],
+          "failure_summary": null,
+          "error": "",
+          "duration_ms": 77539.3
+        },
+        {
+          "turn": 2,
+          "request": "把它改成再加一个 HKD 到 JPY 的换算示例",
+          "status": "FAILED_TERMINAL",
+          "output": "目标尚未完成，缺少可验证证据：RUNTIME_TIME_BUDGET_EXHAUSTED。本次不会报告为成功。 已完成并保留的文件：output/calculator.py。 已完成的步骤：task-1（read output/calculator.py）、task-2（modify output/calculator.py）。",
+          "artifacts": [
+            {
+              "artifact_id": "artifact-3de9d335c7eb1d8ef38a9486",
+              "artifact_type": "file",
+              "digest": "8ce360824f14c5d0c2d5f75411fbb31e4d2bcb1d73d9984d25eb0a15a1203f59",
+              "reference": "artifact://core-scenarios/run-d4a43f67be6649ec9981c9dff443ddf5/artifact-3de9d335c7eb1d8ef38a9486",
+              "exists": true,
+              "verified": true,
+              "run_id": "run-d4a43f67be6649ec9981c9dff443ddf5",
+              "display_name": "artifact-3de9d335c7eb1d8ef38a9486",
+              "size": null,
+              "producer_workflow_id": "runtime-execution",
+              "producer_stage_id": "task:task-2",
+              "created_revision": 1,
+              "created_at": ""
+            }
+          ],
+          "provider_calls": 5,
+          "plan_calls": 1,
+          "replan_calls": 0,
+          "tool_calls": [
+            {
+              "tool": "filesystem.read",
+              "args": {
+                "path": "/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261102_021935_workspace/cs05/output/calculator.py"
+              }
+            },
+            {
+              "tool": "filesystem.read",
+              "args": {
+                "path": "/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261102_021935_workspace/cs05/output/calculator.py"
+              }
+            },
+            {
+              "tool": "llm",
+              "args": {
+                "verb": "edit",
+                "target": "output/calculator.py",
+                "content": "def convert(amount, rate):\n    return amount * rate",
+                "instruction": "在 convert 函数中添加 HKD 到 JPY 的换算示例",
+                "description": "修改文件以包含 HKD 到 JPY 的换算示例"
+              }
+            },
+            {
+              "tool": "filesystem.write",
+              "args": {
+                "path": "/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261102_021935_workspace/cs05/output/calculator.py",
+                "content": "def convert(amount, rate):\n    return amount * rate\n\n# HKD to JPY conversion example\n# 1 HKD = 16.5 JPY\n# 100 HKD = 1650 JPY\n# 500 HKD = 8250 JPY",
+                "exact": "True"
+              }
+            }
+          ],
+          "intent": {
+            "domain": "development",
+            "action": "modify",
+            "target": "output/calculator.py",
+            "confidence": 0.95,
+            "summary": "修改已有的汇率换算函数，添加 HKD 到 JPY 的换算示例",
+            "requires_execution": true,
+            "artifact_required": true,
+            "requested_outcomes": [
+              "FILE_MUTATION"
+            ],
+            "delivery_requirements": [
+              {
+                "id": "req_001",
+                "kind": "file",
+                "quantity": 1,
+                "target": "output/calculator.py",
+                "acceptance_criteria": [
+                  {
+                    "kind": "unverifiable",
+                    "description": "文件内容应满足：def convert(amount, rate):"
+                  },
+                  {
+                    "kind": "unverifiable",
+                    "description": "文件内容应满足：    return amount * rate"
+                  },
+                  {
+                    "kind": "unverifiable",
+                    "description": "文件内容应满足：HKD 到 JPY 的换算示例"
+                  }
+                ]
+              }
+            ],
+            "acceptance_criteria": [],
+            "write_targets": [
+              "output/calculator.py"
+            ],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "correction",
+            "resolved_request": "将 HKD 到 JPY 的换算示例添加到 output/calculator.py 文件中的 convert 函数中",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": ""
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "stage_started",
+            "task_started",
+            "task_completed",
+            "stage_completed",
+            "stage_started",
+            "task_started",
+            "task_completed",
+            "stage_completed",
+            "run_failed"
+          ],
+          "failure_summary": {
+            "code": "RUNTIME_TIME_BUDGET_EXHAUSTED",
+            "message": "The Run did not complete successfully",
+            "retryable": false,
+            "details": {
+              "failure_class": "execution",
+              "failed_component": "runtime"
+            }
+          },
+          "error": "",
+          "duration_ms": 120800.3
+        }
+      ],
+      "checks": [
+        {
+          "check": "status",
+          "passed": true,
+          "detail": "expected COMPLETED got COMPLETED",
+          "turn": 1
+        },
+        {
+          "check": "artifact_exists",
+          "passed": true,
+          "detail": "'output/calculator.py' matched ['/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261102_021935_workspace/cs05/output/calculator.py']",
+          "turn": 1
+        },
+        {
+          "check": "status",
+          "passed": false,
+          "detail": "expected COMPLETED got FAILED_TERMINAL",
+          "turn": 2
+        },
+        {
+          "check": "file_contains:output/calculator.py",
+          "passed": true,
+          "detail": "tokens ['convert', 'HKD', 'JPY'] in 'output/calculator.py': found in /Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261102_021935_workspace/cs05/output/calculator.py",
+          "turn": 2
+        },
+        {
+          "check": "intent.conversation_relation_in",
+          "passed": true,
+          "detail": "expected one of ['reference', 'correction'] got 'correction'",
+          "turn": 2
+        },
+        {
+          "check": "intent.resolved_request_contains",
+          "passed": true,
+          "detail": "'calculator' in resolved_request='将 HKD 到 JPY 的换算示例添加到 output/calculator.py 文件中的 convert 函数中'",
+          "turn": 2
+        }
+      ],
+      "files": {
+        "output/calculator.py": "def convert(amount, rate):\n    return amount * rate\n\n# HKD to JPY conversion example\n# 1 HKD = 16.5 JPY\n# 100 HKD = 1650 JPY\n# 500 HKD = 8250 JPY"
+      }
+    },
+    {
+      "id": "CS13",
+      "title": "session continuity survives a service restart on the same sqlite",
+      "result": "FAIL",
+      "skip_reason": "",
+      "workspace": "/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261102_021935_workspace/cs13",
+      "duration_ms": 213004.5,
+      "error": "",
+      "turns": [
+        {
+          "turn": 1,
+          "request": "写一个记账脚本保存到 output/ledger.py，支持添加记录",
+          "status": "COMPLETED",
+          "output": "已生成/更新本地文件：\n/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261102_021935_workspace/cs13/output/ledger.py\n\n未自动验证：文件内容应满足：支持添加记录\n未自动验证：文件内容应满足：支持添加记录",
+          "artifacts": [
+            {
+              "artifact_id": "artifact-50933b863118714078bbe56c",
+              "artifact_type": "file",
+              "digest": "192e187e263d975edd10d553ede397fd8ce05a74127f9ac06e5711bbe4d3a46a",
+              "reference": "artifact://core-scenarios/run-fb02ec7b3f2b4533a805240b233cca0e/artifact-50933b863118714078bbe56c",
+              "exists": true,
+              "verified": true,
+              "run_id": "run-fb02ec7b3f2b4533a805240b233cca0e",
+              "display_name": "artifact-50933b863118714078bbe56c",
+              "size": null,
+              "producer_workflow_id": "runtime-execution",
+              "producer_stage_id": "task:task-1",
+              "created_revision": 1,
+              "created_at": ""
+            }
+          ],
+          "provider_calls": 4,
+          "plan_calls": 1,
+          "replan_calls": 0,
+          "tool_calls": [
+            {
+              "tool": "llm",
+              "args": {
+                "verb": "write",
+                "target": "output/ledger.py",
+                "prompt": "你是文件生成器。只输出目标文件的完整内容，不要解释，不要 markdown 代码围栏。",
+                "user": "目标文件: output/ledger.py\n任务: 创建记账脚本文件\n说明: 编写支持添加记录的记账脚本"
+              }
+            },
+            {
+              "tool": "filesystem.write",
+              "args": {
+                "path": "output/ledger.py",
+                "content": "import json\nimport os\nfrom datetime import datetime\n\nLEDGER_FILE = 'ledger.json'\n\ndef load_ledger():\n    if not os.path.exists(LEDGER_FILE):\n        return []\n ",
+                "mode": "overwrite",
+                "exact": "True"
+              }
+            }
+          ],
+          "intent": {
+            "domain": "development",
+            "action": "code",
+            "target": "output/ledger.py",
+            "confidence": 0.95,
+            "summary": "用户需要一个记账脚本，保存到 output/ledger.py，支持添加记录",
+            "requires_execution": true,
+            "artifact_required": true,
+            "requested_outcomes": [
+              "FILE_MUTATION"
+            ],
+            "delivery_requirements": [
+              {
+                "id": "1",
+                "kind": "file",
+                "quantity": 1,
+                "target": "output/ledger.py",
+                "acceptance_criteria": [
+                  {
+                    "kind": "unverifiable",
+                    "description": "文件内容应满足：支持添加记录"
+                  }
+                ]
+              }
+            ],
+            "acceptance_criteria": [
+              {
+                "kind": "unverifiable",
+                "description": "文件内容应满足：支持添加记录"
+              }
+            ],
+            "write_targets": [
+              "output/ledger.py"
+            ],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "new_request",
+            "resolved_request": "写一个记账脚本保存到 output/ledger.py，支持添加记录",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": ""
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "stage_started",
+            "task_started",
+            "task_completed",
+            "stage_completed",
+            "stage_started",
+            "stage_completed",
+            "stage_started",
+            "stage_completed",
+            "run_completed"
+          ],
+          "failure_summary": null,
+          "error": "",
+          "duration_ms": 83890.7
+        },
+        {
+          "turn": 2,
+          "request": "在它里面再加一个删除记录的函数",
+          "status": "FAILED_TERMINAL",
+          "output": "目标尚未完成，缺少可验证证据：RUNTIME_TIME_BUDGET_EXHAUSTED。本次不会报告为成功。 已完成并保留的文件：output/ledger.py。 已完成的步骤：task-1（read output/ledger.py）、task-2（modify output/ledger.py）。",
+          "artifacts": [
+            {
+              "artifact_id": "artifact-e1138e41614474e0a5b68f83",
+              "artifact_type": "file",
+              "digest": "4fe5d0d8c2a152ca9970b93fb07da1f8de08a824d7c2d0a3518a04913cfdf7f1",
+              "reference": "artifact://core-scenarios/run-0b545e17a06f4967b0b3ed6b77e5f0af/artifact-e1138e41614474e0a5b68f83",
+              "exists": true,
+              "verified": true,
+              "run_id": "run-0b545e17a06f4967b0b3ed6b77e5f0af",
+              "display_name": "artifact-e1138e41614474e0a5b68f83",
+              "size": null,
+              "producer_workflow_id": "runtime-execution",
+              "producer_stage_id": "task:task-2",
+              "created_revision": 1,
+              "created_at": ""
+            }
+          ],
+          "provider_calls": 5,
+          "plan_calls": 1,
+          "replan_calls": 0,
+          "tool_calls": [
+            {
+              "tool": "filesystem.read",
+              "args": {
+                "path": "/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261102_021935_workspace/cs13/output/ledger.py"
+              }
+            },
+            {
+              "tool": "filesystem.read",
+              "args": {
+                "path": "/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261102_021935_workspace/cs13/output/ledger.py"
+              }
+            },
+            {
+              "tool": "llm",
+              "args": {
+                "verb": "edit",
+                "target": "output/ledger.py",
+                "content": "import json\nimport os\nfrom datetime import datetime\n\nLEDGER_FILE = 'ledger.json'\n\ndef load_ledger():\n    if not os.path.exists(LEDGER_FILE):\n        return []\n ",
+                "instruction": "在 ledger.py 中添加删除记录的函数",
+                "description": "添加一个函数用于删除记录"
+              }
+            },
+            {
+              "tool": "filesystem.write",
+              "args": {
+                "path": "/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261102_021935_workspace/cs13/output/ledger.py",
+                "content": "import json\nimport os\nfrom datetime import datetime\n\nLEDGER_FILE = 'ledger.json'\n\ndef load_ledger():\n    if not os.path.exists(LEDGER_FILE):\n        return []\n ",
+                "exact": "True"
+              }
+            }
+          ],
+          "intent": {
+            "domain": "development",
+            "action": "modify",
+            "target": "output/ledger.py",
+            "confidence": 0.95,
+            "summary": "在已有的记账脚本中添加一个删除记录的函数",
+            "requires_execution": true,
+            "artifact_required": true,
+            "requested_outcomes": [
+              "FILE_MUTATION"
+            ],
+            "delivery_requirements": [
+              {
+                "id": "req1",
+                "kind": "file",
+                "quantity": 1,
+                "target": "output/ledger.py",
+                "acceptance_criteria": [
+                  {
+                    "kind": "unverifiable",
+                    "description": "文件内容应满足：删除记录的函数"
+                  }
+                ]
+              }
+            ],
+            "acceptance_criteria": [
+              {
+                "kind": "unverifiable",
+                "description": "文件内容应满足：删除记录的函数"
+              }
+            ],
+            "write_targets": [
+              "output/ledger.py"
+            ],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "correction",
+            "resolved_request": "在 output/ledger.py 中添加一个删除记录的函数",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": ""
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "stage_started",
+            "task_started",
+            "task_completed",
+            "stage_completed",
+            "stage_started",
+            "task_started",
+            "task_completed",
+            "stage_completed",
+            "run_failed"
+          ],
+          "failure_summary": {
+            "code": "RUNTIME_TIME_BUDGET_EXHAUSTED",
+            "message": "The Run did not complete successfully",
+            "retryable": false,
+            "details": {
+              "failure_class": "execution",
+              "failed_component": "runtime"
+            }
+          },
+          "error": "",
+          "duration_ms": 129066.9
+        }
+      ],
+      "checks": [
+        {
+          "check": "status",
+          "passed": true,
+          "detail": "expected COMPLETED got COMPLETED",
+          "turn": 1
+        },
+        {
+          "check": "artifact_exists",
+          "passed": true,
+          "detail": "'output/ledger.py' matched ['/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261102_021935_workspace/cs13/output/ledger.py']",
+          "turn": 1
+        },
+        {
+          "check": "status",
+          "passed": false,
+          "detail": "expected COMPLETED got FAILED_TERMINAL",
+          "turn": 2
+        },
+        {
+          "check": "file_contains:output/ledger.py",
+          "passed": true,
+          "detail": "tokens ['def'] in 'output/ledger.py': found in /Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261102_021935_workspace/cs13/output/ledger.py",
+          "turn": 2
+        },
+        {
+          "check": "intent.conversation_relation_in",
+          "passed": true,
+          "detail": "expected one of ['reference', 'correction'] got 'correction'",
+          "turn": 2
+        },
+        {
+          "check": "intent.resolved_request_contains",
+          "passed": true,
+          "detail": "'ledger' in resolved_request='在 output/ledger.py 中添加一个删除记录的函数'",
+          "turn": 2
+        }
+      ],
+      "files": {
+        "output/ledger.py": "import json\nimport os\nfrom datetime import datetime\n\nLEDGER_FILE = 'ledger.json'\n\ndef load_ledger():\n    if not os.path.exists(LEDGER_FILE):\n        return []\n    with open(LEDGER_FILE, 'r') as f:\n        return json.load(f)\n\ndef save_ledger(ledger):\n    with open(LEDGER_FILE, 'w') as f:\n        json.dump(ledger, f, indent=4)\n\ndef add_entry(description, amount, category):\n    ledger = load_ledger()\n    entry = {\n        'id': len(ledger) + 1,\n        'timestamp': datetime.now().isoformat(),\n        'description': description,\n        'amount': amount,\n        'category': category\n    }\n    ledger.append(entry)\n    save_ledger(ledger)\n\ndef delete_entry(entry_id):\n    ledger = load_ledger()\n    for entry in ledger:\n        if entry['id'] == entry_id:\n            ledger.remove(entry)\n            break\n    save_ledger(ledger)\n\ndef main():\n    print(\"记账脚本\")\n    while True:\n        description = input(\"请输入描述（或输入'q'退出）: \")\n        if description.lower() == 'q':\n            break\n        try:\n            amount = float(input(\"请输入金额: \"))\n            category = input(\"请输入分类: \")\n            add_entry(description, amount, category)\n            print(\"记录已保存。\")\n        except ValueError:\n            print(\"金额必须为数字，请重新输入。\")\n\nif __name__ == '__main__':\n    main()"
+      }
+    }
+  ],
+  "summary": {
+    "total": 2,
+    "passed": 0,
+    "failed": 2,
+    "errors": 0,
+    "skipped": 0,
+    "provider_calls": 18
+  }
+}

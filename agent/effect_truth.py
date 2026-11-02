@@ -363,6 +363,7 @@ def record_effect_result(
 _STEP_OUTCOME = {
     "filesystem.read": RequestedOutcome.FILE_READ.value,
     "filesystem.write": RequestedOutcome.FILE_MUTATION.value,
+    "filesystem.edit": RequestedOutcome.FILE_MUTATION.value,
     "filesystem.copy": RequestedOutcome.FILE_MUTATION.value,
     "filesystem.move": RequestedOutcome.FILE_MUTATION.value,
     "filesystem.delete": RequestedOutcome.FILE_MUTATION.value,

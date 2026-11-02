@@ -8,6 +8,7 @@ from types import MappingProxyType
 CANONICAL_TOOL_ALIASES = MappingProxyType({
     "filesystem.read": "read_file",
     "filesystem.write": "write_file",
+    "filesystem.edit": "edit_file",
     "filesystem.list": "list_directory",
     "filesystem.delete": "delete_file",
     "filesystem.move": "move_file",

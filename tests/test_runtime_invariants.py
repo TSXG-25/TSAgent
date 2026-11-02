@@ -98,11 +98,3 @@ class TestInv5_PlannerIsolation:
         # Planner 不应直接操作 workspace.resolve（应由 Grounding 提供）
         assert "ws.resolve(" not in src or "_orch._context_builder" in src, \
             "Planner 直接调用 workspace.resolve"
-
-    def test_planner_gets_grounding_not_raw(self):
-        # plan_with_metadata 的 grounding 参数是 GroundingContext（整理后世界）
-        import inspect
-        from agent.planner.planner import plan_with_metadata
-
-        params = inspect.signature(plan_with_metadata).parameters
-        assert "grounding" in params, "plan_with_metadata 缺少 grounding（Planner Isolation）"

@@ -180,7 +180,6 @@ def test_fresh_research_blocks_before_planning_when_mcp_server_is_missing(
         _timings={},
     )
     monkeypatch.setattr(planner, "intent_engine", IntentEngine())
-    monkeypatch.setattr(planner, "_tool_registry", _unavailable_web_registry())
     loaded_modules = []
     monkeypatch.setattr(
         "agent.bootstrap.load_tool_modules",
@@ -193,13 +192,26 @@ def test_fresh_research_blocks_before_planning_when_mcp_server_is_missing(
             "user-a",
             {},
             "",
-            "",
         )
     )
 
-    assert next_state == "FINISH"
-    assert state["runtime_terminal_status"] == "BLOCKED"
-    assert state["runtime_failure_code"] == "RESEARCH_TOOL_UNAVAILABLE"
-    assert state["plan"][0]["error_code"] == "RESEARCH_TOOL_UNAVAILABLE"
-    assert "duckduckgo-mcp-server is not installed" in answer
+    # Planning no longer preflights the search tool: it enters the loop with
+    # the freshness contract recorded, and the web module is loaded so the
+    # loop catalog can include the tool if (and only if) it is available.
+    assert next_state == "LOOP"
+    assert state["freshness_required"] is True
+    assert state["source_grounding_required"] is True
     assert loaded_modules == [("web",)]
+
+    # The unavailable tool never reaches the model-facing catalog, so no
+    # fresh evidence can be produced and the run cannot report success.
+    from agent.cognition.effect_authorization import EffectAuthorization
+    from agent.loop import toolset as loop_toolset
+
+    monkeypatch.setattr(
+        loop_toolset, "_tool_registry", _unavailable_web_registry()
+    )
+    names = set(loop_toolset.build_toolset(
+        EffectAuthorization.from_state(state, "查一下今天的 AI 新闻")
+    ))
+    assert "web_search" not in names

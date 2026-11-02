@@ -3,7 +3,7 @@ import asyncio
 from pathlib import Path
 
 from tests.test_ha_r1_harness import (
-    intent, run_turn, service_at, setup_provider,
+    call_tool, intent, run_turn, service_at, setup_provider,
 )
 
 
@@ -14,11 +14,9 @@ def test_a_calculator_request_completes_with_reply_mentions_path(monkeypatch, tm
     provider = setup_provider(monkeypatch, [
         (request, intent(request, artifact=True, outcomes=['FILE_MUTATION'],
             deliverable_acceptance=[{"kind": "reply_mentions_artifact_path"}])),
-        ('用户需求', {'tasks': [
-            dict(id='write', verb='write', target='output/calculator.py',
-                 target_type='file', goal='创建计算器'),
-        ]}),
-        ('你是文件生成器', code),
+        (request, call_tool('write_file', path='output/calculator.py',
+                            content=code)),
+        ('calculator.py', '已创建 output/calculator.py'),
     ])
 
     async def scenario():
@@ -40,11 +38,9 @@ def test_b_unverifiable_criterion_disclosed_and_completes(monkeypatch, tmp_path)
     provider = setup_provider(monkeypatch, [
         (request, intent(request, artifact=True, outcomes=['FILE_MUTATION'],
             deliverable_acceptance=[{"kind": "unverifiable", "description": "界面美观"}])),
-        ('用户需求', {'tasks': [
-            dict(id='write', verb='write', target='output/todo.py',
-                 target_type='file', goal='创建脚本'),
-        ]}),
-        ('你是文件生成器', 'print("todo")\n'),
+        (request, call_tool('write_file', path='output/todo.py',
+                            content='print("todo")\n')),
+        ('todo.py', '已创建 output/todo.py'),
     ])
 
     async def scenario():
@@ -68,11 +64,9 @@ def test_c_file_contains_missing_fails_without_repair(monkeypatch, tmp_path):
                      "acceptance_criteria": [{"kind": "file_contains", "text": "摘要"}]}])
     provider = setup_provider(monkeypatch, [
         (request, semantics),
-        ('用户需求', {'tasks': [
-            dict(id='write', verb='write', target='output/report.md',
-                 target_type='file', goal='创建报告'),
-        ]}),
-        ('你是文件生成器', code),
+        (request, call_tool('write_file', path='output/report.md',
+                            content=code)),
+        ('report.md', '已创建 output/report.md'),
     ])
 
     async def scenario():
@@ -84,29 +78,24 @@ def test_c_file_contains_missing_fails_without_repair(monkeypatch, tmp_path):
         finally:
             await service.close()
     asyncio.run(scenario())
-    # intent + plan + file-gen only: no replan call, no file rewrite.
+    # intent + write_file call + final answer: no repair pass, no file rewrite.
     assert len(provider.calls) == 3
     assert (tmp_path / 'output/report.md').read_text().strip() == code.strip()
 
 
 def test_c2_deliverable_missing_still_triggers_repair(monkeypatch, tmp_path):
-    """All tasks succeed but no deliverable → repair-replan still fires."""
+    """Model answers without a deliverable → verifier feedback drives a
+    bounded repair round until the file is actually written."""
     request = '创建 output/report.md。'
     semantics = intent(request, artifact=True, outcomes=['FILE_MUTATION'],
         deliveries=[{"id": "report", "kind": "file", "quantity": 1,
                      "target": "output/report.md", "acceptance_criteria": []}])
     provider = setup_provider(monkeypatch, [
         (request, semantics),
-        ('用户需求', {'tasks': [
-            dict(id='draft', verb='explain', target='',
-                 target_type='text', goal='概述报告需求'),
-        ]}),
-        ('概述报告需求', '需求分析文本'),
-        ('执行规划器', {'tasks': [
-            dict(id='write', verb='write', target='output/report.md',
-                 target_type='file', goal='创建报告'),
-        ]}),
-        ('你是文件生成器', '报告内容\n'),
+        (request, '概述报告需求'),
+        ('deliverable:report', call_tool('write_file', path='output/report.md',
+                                         content='报告内容\n')),
+        ('report.md', '已创建 output/report.md'),
     ])
 
     async def scenario():
@@ -115,11 +104,12 @@ def test_c2_deliverable_missing_still_triggers_repair(monkeypatch, tmp_path):
             snapshot, _events = await run_turn(service, request, 1)
             assert snapshot.status.value == 'COMPLETED', snapshot
             assert (tmp_path / 'output/report.md').read_text().strip() == '报告内容'
+            assert 'deliverable:report' in provider.calls[2]
         finally:
             await service.close()
     asyncio.run(scenario())
-    # intent + plan + explain + replan-planner + file-gen prove repair ran.
-    assert len(provider.calls) == 5
+    # intent + premature answer + write_file + final answer prove repair ran.
+    assert len(provider.calls) == 4
 
 
 def test_d_effect_authorization_write_targets():

@@ -16,7 +16,6 @@ from agent.action_result import ActionResult
 from agent.compiler.tool_selector import CompileError, Compiler
 from agent.failure import FailurePolicy, FailureKind, failure_fact
 from agent.goal import GoalVerifier
-from agent.orchestrator.main import ExecutionOrchestrator
 from agent.runtime_budget import RunBudget
 from agent.task import ExecutionPlan, ExecutionStep, Task
 
@@ -102,25 +101,24 @@ def run() -> dict[str, object]:
     }, "")
     records.append(_record("H807", not incomplete.can_complete))
 
-    orchestrator = ExecutionOrchestrator()
-    async def exercise_observe():
-        return await orchestrator.observe_failure(
-            {
-                "runtime_failure_retryable": False,
-                "runtime_failure_code": "FILE_NOT_FOUND",
-                "plan": [],
-                "inbox": {},
-            },
-            "read missing",
-            "h8",
-        )
+    from agent.runtime import _build_run_evidence
 
-    observed, next_state = asyncio.run(exercise_observe())
+    terminal = _build_run_evidence(
+        {
+            "plan": [{"id": "t1", "verb": "read", "status": "failed",
+                      "error_code": "FILE_NOT_FOUND"}],
+            "runtime_terminal_status": "FAILED_TERMINAL",
+            "runtime_failure_code": "FILE_NOT_FOUND",
+            "answer_required": True,
+        },
+        "无法读取缺失文件。",
+        1,
+        "read missing",
+    )
     records.append(_record(
         "H808",
-        next_state == "FAIL"
-        and observed["runtime_terminal_status"] == "FAILED_TERMINAL"
-        and not orchestrator.replan_count,
+        terminal["terminal_status"] == "FAILED_TERMINAL"
+        and terminal["failure_code"] == "FILE_NOT_FOUND",
     ))
 
     summary = validate_records(records)

@@ -6,58 +6,8 @@ from pathlib import Path
 import pytest
 
 from tests.test_ha_r1_harness import (
-    intent, run_turn, service_at, setup_provider,
+    call_tool, intent, run_turn, service_at, setup_provider,
 )
-
-
-def test_a_workflow_selector_gets_catalog_and_decline_falls_back(monkeypatch, tmp_path):
-    """requires_execution + non-empty registry → selector sees ALL projections;
-    DECLINE → generic Planner; no keyword needed (request has no 题目)."""
-    from agent.workflow_decision import WorkflowDecision, WorkflowDecisionKind
-    from agent.workflow_selector import WorkflowSelection, WorkflowSelectionEvidence
-
-    request = '用 Python 实现一个二分查找函数并保存文件'
-    seen: dict = {}
-
-    class RecordingSelector:
-        async def select_with_evidence(self, goal, context, projections):
-            seen['projections'] = list(projections)
-            return WorkflowSelection(
-                decision=WorkflowDecision(
-                    kind=WorkflowDecisionKind.DECLINE, reason='generic ok'),
-                evidence=WorkflowSelectionEvidence(
-                    provider='test', provider_path='SINGLE_PROVIDER',
-                    format_path='RAW_ONLY', raw_output='decline',
-                    structured_error=''),
-            )
-
-    # Revert the conftest stub: this test wants a recording selector.
-    from agent.orchestrator.main import ExecutionOrchestrator
-    monkeypatch.setattr(ExecutionOrchestrator, "__init__",
-                        ExecutionOrchestrator.__init__)
-
-    provider = setup_provider(monkeypatch, [
-        (request, intent(request, artifact=True, outcomes=['FILE_MUTATION'],
-            write_targets=['output/bs.py'], domain='development')),
-        ('用户需求', {'tasks': [
-            dict(id='write', verb='write', target='output/bs.py',
-                 target_type='file', goal='实现二分查找'),
-        ]}),
-        ('你是文件生成器', 'def bs(a, x):\n    lo, hi = 0, len(a)\n    while lo < hi:\n        mid = (lo + hi) // 2\n        if a[mid] < x: lo = mid + 1\n        else: hi = mid\n    return lo\n'),
-    ])
-
-    async def scenario():
-        service, _ = service_at(tmp_path)
-        try:
-            # inject recording selector into the orchestrator's selector slot
-            for launcher in (getattr(service, '_launcher', None),):
-                pass
-            snapshot, _ = await run_turn(service, request, 1)
-            assert snapshot.status.value == 'COMPLETED', snapshot
-        finally:
-            await service.close()
-    asyncio.run(scenario())
-    assert not provider.replies
 
 
 def test_b_memory_action_remember_commit_and_miss(tmp_path, monkeypatch):
@@ -143,15 +93,13 @@ def test_c_memory_action_forget_routes_to_lifecycle():
 
 def test_d_claimed_write_without_artifact_cannot_complete(monkeypatch, tmp_path):
     """Answer prose claiming a write with no verified artifact ≠ COMPLETED."""
+    monkeypatch.setenv('TSAGENT_MAX_GOAL_ROUNDS', '2')
     request = '把结果保存到 output/x.py'
     provider = setup_provider(monkeypatch, [
         (request, intent(request, artifact=True, outcomes=['FILE_MUTATION'],
             write_targets=['output/x.py'])),
-        ('用户需求', {'tasks': [
-            dict(id='talk', verb='explain', target='',
-                 target_type='text', goal='只是说明'),
-        ]}),
-        ('用户需求', '我已写入 output/x.py'),
+        (request, '我已写入 output/x.py'),
+        ('deliverable', '我已写入 output/x.py'),
     ])
 
     async def scenario():
@@ -159,6 +107,7 @@ def test_d_claimed_write_without_artifact_cannot_complete(monkeypatch, tmp_path)
         try:
             snapshot, _ = await run_turn(service, request, 1)
             assert snapshot.status.value != 'COMPLETED', snapshot
+            assert not (tmp_path / 'output/x.py').exists()
         finally:
             await service.close()
     asyncio.run(scenario())
@@ -170,11 +119,9 @@ def test_e_chinese_filename_target_completes(monkeypatch, tmp_path):
     provider = setup_provider(monkeypatch, [
         (request, intent(request, artifact=True, outcomes=['FILE_MUTATION'],
             write_targets=['output/计算器.py'])),
-        ('用户需求', {'tasks': [
-            dict(id='write', verb='write', target='output/计算器.py',
-                 target_type='file', goal='创建中文名文件'),
-        ]}),
-        ('你是文件生成器', 'print("calc")\n'),
+        (request, call_tool('write_file', path='output/计算器.py',
+                            content='print("calc")\n')),
+        ('计算器.py', '已创建 output/计算器.py'),
     ])
 
     async def scenario():

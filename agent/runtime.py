@@ -45,8 +45,6 @@ from agent.interruption import (
 )
 from agent.failure import (
     ClassificationSource,
-    FailureFact,
-    FailureKind,
     FailurePolicy,
     failure_fact,
 )
@@ -182,13 +180,12 @@ def _build_run_evidence(
     # Preserve the stable boundary error even when GoalVerifier has already
     # converted a stale COMPLETED status into BLOCKED/FAILED.  The generic
     # runtime fallback below must not hide a more actionable contract reason.
-    if not failure_code:
-        if "fresh external evidence" in goal_decision.missing:
-            failure_code = "RESEARCH_TOOL_UNAVAILABLE"
-        elif "user-visible output" in goal_decision.missing:
-            failure_code = "MISSING_USER_OUTPUT"
-        elif goal_decision.blocker:
-            failure_code = goal_decision.blocker
+    if "fresh external evidence" in goal_decision.missing:
+        failure_code = "RESEARCH_TOOL_UNAVAILABLE"
+    elif "user-visible output" in goal_decision.missing:
+        failure_code = "MISSING_USER_OUTPUT"
+    elif not failure_code and goal_decision.blocker:
+        failure_code = goal_decision.blocker
     if not terminal_status:
         terminal_status = (
             "COMPLETED"
@@ -361,12 +358,7 @@ def _advance_goal_round(state: AgentState, reason: str) -> bool:
 class RuntimeState(str, Enum):
     INIT = "INIT"
     PLAN = "PLAN"
-    EXECUTE = "EXECUTE"
-    NEXT_ACTION = "NEXT_ACTION"
-    NEXT_TASK = "NEXT_TASK"
-    OBSERVE = "OBSERVE"
-    RECOVER = "RECOVER"
-    REPLAN = "REPLAN"
+    LOOP = "LOOP"
     FINISH = "FINISH"
     FAIL = "FAIL"
 
@@ -592,22 +584,6 @@ class UniversalAgent:
         answer = f"抱歉，刚才在处理「{user_input[:30]}」时遇到了一点问题（{friendly}），请换一种说法再试试。"
         return answer
 
-    def _resolve_recovery(self, state: AgentState):
-        """Resolve one structural failure through the single policy seam."""
-        payload = state.get("runtime_failure")
-        if isinstance(payload, dict):
-            failure = FailureFact.from_dict(payload)
-        else:
-            failure = failure_fact(
-                str(state.get("runtime_failure_code", "UNKNOWN")),
-                message=str(state.get("runtime_failure_message", "")),
-                component="runtime",
-            )
-        directive = self._failure_policy.resolve(failure, state)
-        state["recovery_directive"] = directive.to_dict()
-        self._emit("recovery_decided", directive.to_dict())
-        return directive
-
     @staticmethod
     def _classify(e: Exception) -> tuple:
         """异常 → (layer, error_code, friendly_hint)。"""
@@ -765,7 +741,6 @@ class UniversalAgent:
         normalized_input = user_input
         context = {"runtime_pending_target": self._pending_execution_target}
         repo_context = ""
-        skill_hint = ""
 
         self._timings["init"] = round(time.perf_counter() - t0, 3)
 
@@ -781,7 +756,6 @@ class UniversalAgent:
                 if part
             ),
             "repo_context": repo_context,
-            "skill_hint": skill_hint,
             "retries": 0,
             "workflow": None,
             "answer_required": True,
@@ -847,8 +821,6 @@ class UniversalAgent:
                         user_id=self._memory_namespace,
                         context=context,
                         repo_context=repo_context,
-                        skill_hint=skill_hint,
-
                         runtime_state=state,
                     )
                     if answer:
@@ -863,205 +835,27 @@ class UniversalAgent:
                     })
                     rt_state = RuntimeState[next_state] if isinstance(next_state, str) else next_state
 
-                elif rt_state == RuntimeState.EXECUTE:
+                elif rt_state == RuntimeState.LOOP:
                     self._emit_progress("stage_started", {
-                        "stage_id": "execution",
+                        "stage_id": "loop",
                         "phase": "execution",
                     })
                     self._interruption_boundary(
                         SafeCancellationBoundary.BEFORE_TOOL
                     )
-                    state, next_state = await self.orchestrator.execute(state)
-                    self._interruption_boundary(
-                        SafeCancellationBoundary.AFTER_TOOL
-                    )
-                    self._emit_progress("stage_completed", {
-                        "stage_id": "execution",
-                        "phase": "execution",
-                    })
-                    rt_state = RuntimeState[next_state] if isinstance(next_state, str) else next_state
-
-                elif rt_state == RuntimeState.NEXT_ACTION:
-                    # The previous ActionResult is already in Inbox.next_step;
-                    # continue with the next pending task without another
-                    # planning call.
-                    rt_state = RuntimeState.EXECUTE
-
-                elif rt_state == RuntimeState.OBSERVE:
-                    # Ordinary action failures are observations.  Give the
-                    # next bounded goal round the facts before selecting the
-                    # next action. Structural failures are handled by the
-                    # FailurePolicy branch below.
-                    if not _advance_goal_round(state, "action observation"):
-                        rt_state = RuntimeState.FINISH
-                        continue
-                    self._interruption_boundary(
-                        SafeCancellationBoundary.BEFORE_PLANNER
-                    )
-                    state, next_state = await self.orchestrator.observe_failure(
-                        state, normalized_input, self._memory_namespace,
-                    )
-                    self._interruption_boundary(
-                        SafeCancellationBoundary.AFTER_PLANNER
-                    )
-                    rt_state = RuntimeState[next_state] if isinstance(next_state, str) else next_state
-
-                elif rt_state == RuntimeState.RECOVER:
-                    directive = self._resolve_recovery(state)
-                    if directive.action == "observe":
-                        # Preserve the existing bounded observation adapter;
-                        # ordinary action failures never enter Reflection.
-                        rt_state = RuntimeState.OBSERVE
-                        continue
-                    if directive.action in {"ask", "finish"}:
-                        state["runtime_terminal_status"] = (
-                            "BLOCKED" if directive.action == "ask" else "FAILED_TERMINAL"
-                        )
-                        state["runtime_failure_class"] = "structural"
-                        rt_state = RuntimeState.FINISH
-                        continue
-                    if not _advance_goal_round(state, "structural recovery"):
-                        rt_state = RuntimeState.FINISH
-                        continue
-                    self._interruption_boundary(
-                        SafeCancellationBoundary.BEFORE_PLANNER
-                    )
-                    state, next_state = await self.orchestrator.recover_structural_failure(
-                        state, normalized_input, self._memory_namespace,
-                        directive,
-                    )
-                    self._interruption_boundary(
-                        SafeCancellationBoundary.AFTER_PLANNER
-                    )
-                    rt_state = RuntimeState[next_state] if isinstance(next_state, str) else next_state
-
-                elif rt_state == RuntimeState.NEXT_TASK:
-                    self._interruption_boundary(
-                        SafeCancellationBoundary.AFTER_TOOL
-                    )
-                    self._emit_progress("stage_started", {
-                        "stage_id": "verification",
-                        "phase": "verification",
-                    })
-                    goal_decision = self.orchestrator.verify_goal(
+                    answer = await self.orchestrator.run_loop(
                         state,
-                        "Final user-visible response is pending.",
+                        normalized_input,
+                        self._memory_namespace,
                     )
+                    if answer:
+                        best_answer = answer
                     self._emit_progress("stage_completed", {
-                        "stage_id": "verification",
-                        "phase": "verification",
-                        "missing_count": len(goal_decision.missing),
-                    })
-                    delivery_gaps = tuple(
-                        item for item in goal_decision.missing
-                        if item.startswith("deliverable:")
-                    )
-                    plan = list(state.get("plan") or [])
-                    # An unresolved FILE_MUTATION outcome is repaired by the
-                    # same write task the delivery gap triggers. Acceptance
-                    # criteria fail the Run honestly but never drive repair:
-                    # editing a delivered file to satisfy a text criterion is
-                    # reward hacking, not delivery.
-                    repairable_extras = {"outcome:FILE_MUTATION"}
-                    repairable_delivery = bool(delivery_gaps) and all(
-                        item.startswith(("deliverable:", "acceptance:"))
-                        or item in repairable_extras
-                        for item in goal_decision.missing
-                    )
-                    repairable_plan = bool(plan) and all(
-                        str(task.get("status", "")) in {"succeeded", "skipped"}
-                        and str(task.get("verb", "")).lower()
-                        in {"read", "search", "fetch", "list", "explain", "write", "modify"}
-                        for task in plan
-                    )
-                    truth = execution_truth(state)
-                    # The repair itself resolves a missing deliverable and
-                    # the FILE_MUTATION outcome it produces; other unresolved
-                    # outcomes still block repair.
-                    unresolved_not_repairable = any(
-                        f"outcome:{outcome}" not in repairable_extras
-                        for outcome in truth.unresolved_requested_outcomes
-                    )
-                    if (
-                        repairable_delivery
-                        and repairable_plan
-                        and not truth.unresolved_required_effects
-                        and not unresolved_not_repairable
-                        and not state.get("runtime_failure_code")
-                        and str(state.get("runtime_terminal_status", ""))
-                        not in {"BLOCKED", "FAILED_TERMINAL", "CANCELLED", "TIMED_OUT"}
-                    ):
-                        inbox = AgentInbox.from_dict(state.get("inbox"))
-                        inbox.add_step({
-                            "kind": "goal_verification_rejected",
-                            "missing": list(delivery_gaps),
-                            "file_artifact_evidence": list(
-                                state.get("file_artifact_evidence", [])
-                            ),
-                            "acceptance_evidence": list(
-                                state.get("acceptance_evidence", [])
-                            ),
-                        })
-                        state["inbox"] = inbox.to_dict()
-                        if not _advance_goal_round(state, "delivery verification"):
-                            rt_state = RuntimeState.FINISH
-                            continue
-                        self._emit_progress("stage_started", {
-                            "stage_id": "replan",
-                            "phase": "replan",
-                            "reason": "delivery_verification",
-                        })
-                        state, next_state = await self.orchestrator.replan(
-                            state, normalized_input, self._memory_namespace,
-                        )
-                        self._emit_progress("stage_completed", {
-                            "stage_id": "replan",
-                            "phase": "replan",
-                        })
-                        rt_state = (
-                            RuntimeState[next_state]
-                            if isinstance(next_state, str)
-                            else next_state
-                        )
-                        continue
-                    self._emit_progress("stage_started", {
-                        "stage_id": "finalization",
-                        "phase": "finalization",
-                    })
-                    best_answer = await self.orchestrator.finalize(
-                        state=state,
-                        user_input=user_input,
-                        user_id=self._memory_namespace,
-                    )
-                    self._emit_progress("stage_completed", {
-                        "stage_id": "finalization",
-                        "phase": "finalization",
+                        "stage_id": "loop",
+                        "phase": "execution",
                     })
                     rt_state = RuntimeState.FINISH
 
-                elif rt_state == RuntimeState.REPLAN:
-                    self._emit_progress("stage_started", {
-                        "stage_id": "replan",
-                        "phase": "replan",
-                    })
-                    self._interruption_boundary(
-                        SafeCancellationBoundary.BEFORE_PLANNER
-                    )
-                    state, next_state = await self.orchestrator.replan(
-                        state, normalized_input, self._memory_namespace,
-                    )
-                    self._interruption_boundary(
-                        SafeCancellationBoundary.AFTER_PLANNER
-                    )
-                    self._emit_progress("stage_completed", {
-                        "stage_id": "replan",
-                        "phase": "replan",
-                    })
-                    rt_state = (
-                        RuntimeState[next_state]
-                        if isinstance(next_state, str)
-                        else next_state
-                    )
         except RunInterruptionRequested as interruption:
             # Cooperative control flow must reach ``run()`` so the Service
             # launcher can converge the durable intent instead of recording a

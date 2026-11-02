@@ -199,10 +199,7 @@ class _Recorder:
         self._originals.append((engine, "analyze_async", original_analyze))
 
         original_plan = orchestrator_main.ExecutionOrchestrator.plan
-        original_replan = orchestrator_main.ExecutionOrchestrator.replan
-        original_recover = (
-            orchestrator_main.ExecutionOrchestrator.recover_structural_failure
-        )
+        original_replan = orchestrator_main.ExecutionOrchestrator.run_loop
 
         async def plan(owner, *args, **kwargs):
             self.plan_calls += 1
@@ -212,17 +209,8 @@ class _Recorder:
             self.replan_calls += 1
             return await original_replan(owner, *args, **kwargs)
 
-        async def recover(owner, *args, **kwargs):
-            self.replan_calls += 1
-            return await original_recover(owner, *args, **kwargs)
-
         self._patch(orchestrator_main.ExecutionOrchestrator, "plan", plan)
-        self._patch(orchestrator_main.ExecutionOrchestrator, "replan", replan)
-        self._patch(
-            orchestrator_main.ExecutionOrchestrator,
-            "recover_structural_failure",
-            recover,
-        )
+        self._patch(orchestrator_main.ExecutionOrchestrator, "run_loop", replan)
 
         original_exec_tool = plan_executor.PlanExecutor._exec_tool
 

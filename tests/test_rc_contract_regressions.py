@@ -22,7 +22,7 @@ import pytest
 
 from agent.goal import DeliveryRequirement, GoalState
 from tests.test_ha_r1_harness import (
-    intent, run_turn, service_at, setup_provider,
+    call_tool, intent, run_turn, service_at, setup_provider,
 )
 
 
@@ -157,11 +157,9 @@ def test_a_sparse_intent_payload_completes_through_service(monkeypatch, tmp_path
         requirement.pop("acceptance_criteria", None)
     provider = setup_provider(monkeypatch, [
         (request, semantics),
-        ("用户需求", {"tasks": [
-            dict(id="write", verb="write", target="output/calculator.py",
-                 target_type="file", goal="创建计算器"),
-        ]}),
-        ("你是文件生成器", "def add(a, b):\n    return a + b\n"),
+        (request, call_tool("write_file", path="output/calculator.py",
+                            content="def add(a, b):\n    return a + b\n")),
+        ("calculator.py", "已创建 output/calculator.py"),
     ])
 
     async def scenario():
@@ -229,36 +227,16 @@ def test_a_runtime_exception_records_sanitized_failure_detail(monkeypatch):
     assert "acceptance_criteria" in evidence["failure_detail"]
 
 
-# ── B) workflow selector routing contract ────────────────────────────────
-
-
-def _real_workflow_selector(monkeypatch):
-    """Undo the conftest decline-stub so the real Provider-backed selector runs."""
-    from agent.workflow_selector import WorkflowDecisionSelector
-
-    monkeypatch.setattr(
-        "agent.orchestrator.main.WorkflowDecisionSelector",
-        WorkflowDecisionSelector,
-    )
-
-
-def test_b_selection_prompt_declines_when_bindings_not_derivable():
-    """Contract-level: the prompt must route underivable bindings to DECLINE
-    and reserve ASK for genuine workflow-shaped requests."""
-    from agent.workflow_selector import WORKFLOW_SELECTION_PROMPT
-
-    prompt = WORKFLOW_SELECTION_PROMPT
-    assert "required bindings cannot be fully derived" in prompt
-    assert "not a match" in prompt
-    assert "decline" in prompt.lower()
-    assert "generic Planner can deliver" in prompt
-    # ASK is reserved for goals clearly about the Workflow's own task.
-    assert "Ask only when the Goal is clearly about" in prompt
+# ── B) workflow routing contract ─────────────────────────────────────────
+#
+# The model now selects a Workflow directly through the run_workflow tool;
+# there is no selector LLM.  The durable binding checks (required bindings,
+# declared input-file existence) still gate the call.
 
 
 def test_b_code_generation_projection_states_question_file_scope():
-    """The catalog metadata is the only applicability signal the selector gets."""
-    from agent.workflow_selector import WorkflowDefinitionProjection
+    """The catalog metadata is the only applicability signal the model gets."""
+    from agent.workflow.projection import WorkflowDefinitionProjection
     from workflows.code_generation import code_generation_workflow
 
     projection = WorkflowDefinitionProjection.from_workflow(code_generation_workflow)
@@ -268,138 +246,19 @@ def test_b_code_generation_projection_states_question_file_scope():
     assert "不适用" in projection.description or "仅" in projection.description
 
 
-def test_b_instantiate_with_derivable_bindings_still_selects():
-    """A question-file request can still instantiate code_generation."""
-    from agent.workflow_decision import WorkflowDecisionKind
-    from agent.workflow_selector import (
-        WorkflowContextProjection,
-        WorkflowDecisionSelector,
-        WorkflowDefinitionProjection,
-    )
-    from workflows.code_generation import code_generation_workflow
-
-    class Provider:
-        async def ainvoke(self, messages):
-            return SimpleNamespace(content=json.dumps({
-                "kind": "instantiate",
-                "workflow_id": "code_generation",
-                "bindings": {
-                    "question_path": "input/question.docx",
-                    "output_path": "output/solution.py",
-                },
-                "reason": "user supplied a question file to solve",
-            }, ensure_ascii=False))
-
-    projection = WorkflowDefinitionProjection.from_workflow(code_generation_workflow)
-    selector = WorkflowDecisionSelector(
-        provider=Provider(), supports_structured_output=False,
-    )
-    decision = asyncio.run(selector.select(
-        "解答 input/question.docx 并写入 output/solution.py",
-        WorkflowContextProjection(
-            capabilities=("filesystem.read", "filesystem.write"),
-        ),
-        (projection,),
-    ))
-
-    assert decision.kind is WorkflowDecisionKind.INSTANTIATE
-    assert decision.workflow_id == "code_generation"
-    assert decision.bindings["question_path"] == "input/question.docx"
-
-
-def test_b_generic_request_decline_falls_back_to_generic_planner(
-    monkeypatch, tmp_path,
-):
-    """E2E: '写个计算器' reaches the real selector; DECLINE → generic Planner
-    completes the delivery instead of blocking."""
-    request = "写个计算器"
-    _real_workflow_selector(monkeypatch)
-    provider = setup_provider(monkeypatch, [
-        (request, intent(request, artifact=True, outcomes=["FILE_MUTATION"])),
-        ("Workflow Selector", {
-            "kind": "decline",
-            "workflow_id": "",
-            "bindings": {},
-            "reason": "generic programming request; question_path is not derivable",
-        }),
-        ("用户需求", {"tasks": [
-            dict(id="write", verb="write", target="output/calculator.py",
-                 target_type="file", goal="创建计算器"),
-        ]}),
-        ("你是文件生成器", "def add(a, b):\n    return a + b\n"),
-    ])
-
-    async def scenario():
-        service, _ = service_at(tmp_path)
-        try:
-            snapshot, _ = await run_turn(service, request, 1)
-            assert snapshot.status.value == "COMPLETED", snapshot
-            assert (tmp_path / "output/calculator.py").is_file()
-        finally:
-            await service.close()
-
-    asyncio.run(scenario())
-    assert not provider.replies
-    selector_call = next(c for c in provider.calls if "Workflow Selector" in c)
-    assert "question_path" in selector_call
-
-
-def test_b_genuine_workflow_ask_still_blocks_with_clarification(
-    monkeypatch, tmp_path,
-):
-    """ASK is honored: a workflow-shaped request missing a required input
-    still surfaces a clarification instead of silently declining."""
-    request = "帮我解答那道题，生成解法文件"
-    _real_workflow_selector(monkeypatch)
-    provider = setup_provider(monkeypatch, [
-        (request, intent(request, outcomes=["FILE_READ", "FILE_MUTATION"])),
-        ("Workflow Selector", {
-            "kind": "ask",
-            "workflow_id": "",
-            "bindings": {},
-            "reason": "请提供题目文件的具体路径（question_path）",
-        }),
-    ])
-
-    async def scenario():
-        service, _ = service_at(tmp_path)
-        try:
-            snapshot, _ = await run_turn(service, request, 1)
-            assert snapshot.status.value == "BLOCKED", snapshot
-            assert "question_path" in snapshot.output.text
-        finally:
-            await service.close()
-
-    asyncio.run(scenario())
-    assert not provider.replies
-
-
-# ── B2) fabricated input-path bindings are rejected at the Run boundary ──
+# ── B2) fabricated input-path bindings are rejected at the tool boundary ──
 #
-# Real-ollama regression: the Selector instantiated code_generation with a
-# fabricated question_path (output/question.md, absent) and the run died on
-# the dead read.  Binding completeness is the Selector's contract; input
-# file existence is verified at the orchestrator boundary where the Run
-# workspace is reachable.  A missing declared input is "not a match" →
-# generic Planner, never a doomed Workflow run.
-
-
-def _question_workflow_decision(question_path="output/question.md"):
-    return {
-        "kind": "instantiate",
-        "workflow_id": "code_generation",
-        "bindings": {
-            "question_path": question_path,
-            "output_path": "output/solution.py",
-        },
-        "reason": "user supplied a question file to solve",
-    }
+# Real-ollama regression: a fabricated question_path (output/question.md,
+# absent) used to doom the run on a dead read.  Declared input-file
+# existence is verified inside run_workflow where the Run workspace is
+# reachable → WORKFLOW_INPUT_MISSING is a tool error, never a doomed
+# Workflow run.
 
 
 def test_b2_code_generation_declares_question_path_as_input_file():
     """The capability metadata marks input bindings vs. write targets."""
     import tools.filesystem  # noqa: F401 — registers filesystem tools
-    from agent.workflow_selector import WorkflowDefinitionProjection
+    from agent.workflow.projection import WorkflowDefinitionProjection
     from workflows.code_generation import code_generation_workflow
 
     projection = WorkflowDefinitionProjection.from_workflow(code_generation_workflow)
@@ -410,12 +269,12 @@ def test_b2_code_generation_declares_question_path_as_input_file():
 
 
 def test_b2_missing_input_files_are_reported_only_for_declared_bindings(tmp_path):
-    """Unit: the orchestrator helper flags missing question_path only."""
+    """Unit: the run_workflow helper flags missing question_path only."""
     import tools.filesystem  # noqa: F401 — registers filesystem tools
     from agent.event_bus import EventBus
-    from agent.orchestrator.planner import _missing_required_input_files
+    from agent.loop.workflow_tool import missing_required_input_files
     from agent.services.workspace_service import WorkspaceService
-    from agent.workflow_selector import WorkflowDefinitionProjection
+    from agent.workflow.projection import WorkflowDefinitionProjection
     from workflows.code_generation import code_generation_workflow
 
     projection = WorkflowDefinitionProjection.from_workflow(code_generation_workflow)
@@ -427,40 +286,42 @@ def test_b2_missing_input_files_are_reported_only_for_declared_bindings(tmp_path
             "question_path": "output/question.md",
             "output_path": "output/solution.py",
         }
-        assert _missing_required_input_files(
+        assert missing_required_input_files(
             projection, bindings, workspace,
         ) == ["question_path=output/question.md"]
 
         workspace.write_text("input/question.md", "把 100 USD 换成 CNY")
         bindings["question_path"] = "input/question.md"
         # output/solution.py still does not exist — not an input binding.
-        assert _missing_required_input_files(
+        assert missing_required_input_files(
             projection, bindings, workspace,
         ) == []
 
         # No bound workspace → nothing to resolve → nothing reported.
-        assert _missing_required_input_files(projection, bindings, None) == []
+        assert missing_required_input_files(projection, bindings, None) == []
     finally:
         workspace.close()
 
 
-def test_b2_instantiate_with_missing_question_file_falls_back_to_planner(
+def test_b2_missing_question_file_is_a_tool_error_not_a_doomed_run(
     monkeypatch, tmp_path,
 ):
-    """E2E: Selector INSTANTIATEs a fabricated question_path; the file is
-    absent → the orchestrator declines the match and the generic Planner
-    completes the request instead of running a doomed read."""
-    import tools.filesystem  # noqa: F401 — selector capability check
+    """E2E: the model calls run_workflow with a fabricated question_path;
+    the file is absent → WORKFLOW_INPUT_MISSING comes back as a tool error
+    and the model completes the request itself instead."""
+    import tools.filesystem  # noqa: F401 — workflow capability check
     request = "写个汇率计算器"
-    _real_workflow_selector(monkeypatch)
     provider = setup_provider(monkeypatch, [
         (request, intent(request, artifact=True, outcomes=["FILE_MUTATION"])),
-        ("Workflow Selector", _question_workflow_decision()),
-        ("专用工作流未完成", {"tasks": [
-            dict(id="write", verb="write", target="output/calculator.py",
-                 target_type="file", goal="创建计算器"),
-        ]}),
-        ("你是文件生成器", "def add(a, b):\n    return a + b\n"),
+        (request, call_tool("run_workflow", workflow_id="code_generation",
+                            bindings={
+                                "question_path": "output/question.md",
+                                "output_path": "output/solution.py",
+                            })),
+        ("WORKFLOW_INPUT_MISSING", call_tool(
+            "write_file", path="output/calculator.py",
+            content="def add(a, b):\n    return a + b\n")),
+        ("calculator.py", "已创建 output/calculator.py"),
     ])
 
     async def scenario():
@@ -476,29 +337,25 @@ def test_b2_instantiate_with_missing_question_file_falls_back_to_planner(
 
     asyncio.run(scenario())
     assert not provider.replies
-    fallback_call = next(
-        c for c in provider.calls if "专用工作流未完成" in c
-    )
-    assert request in fallback_call
 
 
-def test_b2_instantiate_with_seeded_question_file_runs_workflow(
+def test_b2_seeded_question_file_runs_workflow_through_tool(
     monkeypatch, tmp_path,
 ):
-    """E2E: the same INSTANTIATE decision is honored when question_path is a
-    real workspace file — code_generation runs end to end and writes the
-    solution; output_path legitimately did not exist beforehand."""
-    import tools.filesystem  # noqa: F401 — selector capability check
+    """E2E: run_workflow with a real question_path executes code_generation
+    end to end and writes the solution through the durable coordinator."""
+    import tools.filesystem  # noqa: F401 — workflow capability check
     request = "解答 input/question.md 并把答案保存为 output/solution.py"
-    _real_workflow_selector(monkeypatch)
     provider = setup_provider(monkeypatch, [
         (request, intent(
             request, artifact=True,
             outcomes=["FILE_READ", "FILE_MUTATION"],
         )),
-        ("Workflow Selector", _question_workflow_decision(
-            question_path="input/question.md",
-        )),
+        (request, call_tool("run_workflow", workflow_id="code_generation",
+                            bindings={
+                                "question_path": "input/question.md",
+                                "output_path": "output/solution.py",
+                            })),
         ("你是一个算法设计助手", "直接按汇率做乘法换算。"),
         (
             "你是一个 Python 代码生成助手",
@@ -513,6 +370,7 @@ def test_b2_instantiate_with_seeded_question_file_runs_workflow(
             "if __name__ == '__main__':\n"
             "    main()\n",
         ),
+        ("solution.py", "已完成解答并写入 output/solution.py"),
     ])
     monkeypatch.setattr("agent.executor.llm_executor.llm", provider)
     (tmp_path / "input").mkdir()
@@ -537,65 +395,55 @@ def test_b2_instantiate_with_seeded_question_file_runs_workflow(
     assert not provider.replies
 
 
-# ── C) authorization boundary feeds back into planning ───────────────────
+# ── C) authorization boundary feeds back as tool errors ──────────────────
 
 
-def test_c_planner_receives_authorized_outcomes_boundary(monkeypatch):
-    """The Planner prompt states which effects the Intent authorized."""
-    import agent.planner.planner as planner_module
+def test_c_toolset_is_gated_by_authorized_outcomes():
+    """The loop catalog only exposes effects the Intent authorized."""
     from agent.cognition.effect_authorization import EffectAuthorization
     from agent.cognition.execution_need import RequestedOutcome
-    from tests.test_ha_r1_harness import ScriptedProvider
+    from agent.loop.toolset import build_toolset
 
-    provider = ScriptedProvider([
-        ("用户需求", {"tasks": [
-            {"verb": "write", "target": "output/calculator.py",
-             "target_type": "file", "goal": "创建计算器"},
-        ]}),
-    ])
-    monkeypatch.setattr(planner_module, "llm", provider)
-    authorization = EffectAuthorization(
+    mutation = EffectAuthorization(
         requested_outcomes=(
             RequestedOutcome.USER_VISIBLE_OUTPUT,
             RequestedOutcome.FILE_MUTATION,
         ),
         write_scopes=("output/",),
     )
+    names = set(build_toolset(mutation))
+    assert "write_file" in names
+    assert "edit_file" in names
+    assert "read_file" in names
+    # CODE_EXECUTION / COMMAND_EXECUTION were never authorized.
+    assert "shell" not in names
+    assert "run_python" not in names
 
-    output = asyncio.run(planner_module.plan_with_metadata(
-        "写个计算器", authorization=authorization,
-    ))
+    chat = EffectAuthorization(
+        requested_outcomes=(RequestedOutcome.USER_VISIBLE_OUTPUT,),
+        write_scopes=(),
+    )
+    names = set(build_toolset(chat))
+    assert "write_file" not in names
+    assert "edit_file" not in names
+    assert "read_file" in names
 
-    assert output.tasks
-    planner_prompt = provider.calls[0]
-    assert "已授权结果" in planner_prompt
-    assert "FILE_MUTATION" in planner_prompt
-    assert "未授权 execute" in planner_prompt
 
-
-def test_c_unauthorized_execute_plan_retries_with_feedback_then_completes(
+def test_c_unauthorized_tool_call_retries_with_feedback_then_completes(
     monkeypatch, tmp_path,
 ):
-    """E2E: read→modify→execute on output/calculator.py is not authorized
-    (user never asked to run it).  The violation feeds back into the
-    Planner, which returns an executable plan; the run completes and no
-    execute side effect ever happens."""
+    """E2E: a write outside the authorized scope is denied per call
+    (EFFECT_SCOPE_VIOLATION); the model then uses an in-scope path and the
+    run completes — the denied side effect never happens."""
     request = "写个计算器"
     provider = setup_provider(monkeypatch, [
         (request, intent(request, artifact=True, outcomes=["FILE_MUTATION"])),
-        ("原始需求", {"tasks": [
-            dict(id="read", verb="read", target="output/calculator.py",
-                 target_type="file", goal="读取计算器"),
-            dict(id="modify", verb="modify", target="output/calculator.py",
-                 target_type="file", goal="修改计算器"),
-            dict(id="run", verb="execute", target="output/calculator.py",
-                 target_type="file", goal="运行计算器"),
-        ]}),
-        ("包含未授权的效果", {"tasks": [
-            dict(id="write", verb="write", target="output/calculator.py",
-                 target_type="file", goal="创建计算器"),
-        ]}),
-        ("你是文件生成器", "def add(a, b):\n    return a + b\n"),
+        (request, call_tool("write_file", path="agent/evil.py",
+                            content="x = 1\n")),
+        ("EFFECT_SCOPE_VIOLATION", call_tool(
+            "write_file", path="output/calculator.py",
+            content="def add(a, b):\n    return a + b\n")),
+        ("calculator.py", "已创建 output/calculator.py"),
     ])
 
     async def scenario():
@@ -604,50 +452,36 @@ def test_c_unauthorized_execute_plan_retries_with_feedback_then_completes(
             snapshot, _ = await run_turn(service, request, 1)
             assert snapshot.status.value == "COMPLETED", snapshot
             assert (tmp_path / "output/calculator.py").is_file()
+            # The out-of-scope write never happened.
+            assert not (tmp_path / "agent/evil.py").exists()
         finally:
             await service.close()
 
     asyncio.run(scenario())
     assert not provider.replies
-    feedback_call = next(
-        c for c in provider.calls if "包含未授权的效果" in c
-    )
-    assert "EFFECT_SCOPE_VIOLATION" in feedback_call
 
 
-def test_c_persistent_unauthorized_plan_fails_effect_scope_violation(
+def test_c_persistent_unauthorized_calls_cannot_complete(
     monkeypatch, tmp_path,
 ):
-    """Still violating after the retry budget → honest EFFECT_SCOPE_VIOLATION
-    terminal; no task executes, so no side effect can happen."""
+    """A model that only produces scope violations and prose claims cannot
+    complete the run; no side effect ever happens."""
+    monkeypatch.setenv("TSAGENT_MAX_GOAL_ROUNDS", "2")
     request = "写个计算器"
     provider = setup_provider(monkeypatch, [
         (request, intent(request, artifact=True, outcomes=["FILE_MUTATION"])),
-        ("原始需求", {"tasks": [
-            dict(id="write", verb="write", target="output/calculator.py",
-                 target_type="file", goal="创建计算器"),
-            dict(id="run", verb="execute", target="output/calculator.py",
-                 target_type="file", goal="运行计算器"),
-        ]}),
-        ("包含未授权的效果", {"tasks": [
-            dict(id="write", verb="write", target="output/calculator.py",
-                 target_type="file", goal="创建计算器"),
-            dict(id="run", verb="execute", target="output/calculator.py",
-                 target_type="file", goal="运行计算器"),
-        ]}),
+        (request, call_tool("write_file", path="agent/evil.py",
+                            content="x = 1\n")),
+        ("EFFECT_SCOPE_VIOLATION", "已创建 output/calculator.py"),
+        ("deliverable", "已创建 output/calculator.py"),
     ])
 
     async def scenario():
         service, store = service_at(tmp_path)
         try:
             snapshot, _ = await run_turn(service, request, 1)
-            assert snapshot.status.value == "BLOCKED", snapshot
-            persisted = store.read_run_snapshot(
-                "ha-tenant", snapshot.run_id, session_id="ha-session",
-            )
-            payload = json.loads(persisted.terminal_event.payload_json)
-            assert payload["failure_code"] == "EFFECT_SCOPE_VIOLATION"
-            # Preflight fires before the first side effect.
+            assert snapshot.status.value != "COMPLETED", snapshot
+            assert not (tmp_path / "agent/evil.py").exists()
             assert not (tmp_path / "output/calculator.py").exists()
         finally:
             await service.close()

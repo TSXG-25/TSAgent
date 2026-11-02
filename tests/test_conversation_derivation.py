@@ -147,64 +147,6 @@ def test_render_conversation_text() -> None:
     assert text == "用户: 问题\n助手: 回答"
 
 
-def test_planner_renders_conversation_not_run_results_json(monkeypatch) -> None:
-    import agent.planner.planner as planner_module
-    from agent.cognition.cognitive_context import PlannerContext
-
-    captured: list[list] = []
-
-    class FakeLLM:
-        supports_structured_output = False
-
-        async def ainvoke(self, messages: Any, **_kwargs: Any) -> Any:
-            captured.append(messages)
-            return SimpleNamespace(
-                content=json.dumps(
-                    {
-                        "tasks": [
-                            {
-                                "id": "task-1",
-                                "verb": "read",
-                                "target": "output/report.md",
-                                "target_type": "file",
-                                "goal": "读取报告",
-                                "description": "读取 output/report.md",
-                                "success_condition": "读取完成",
-                                "dependencies": [],
-                                "children": [],
-                            }
-                        ]
-                    },
-                    ensure_ascii=False,
-                )
-            )
-
-    monkeypatch.setattr(planner_module, "llm", FakeLLM())
-
-    context = PlannerContext(
-        query="读取 output/report.md",
-        conversation=[
-            {"role": "user", "content": "帮我写个计算器"},
-            {"role": "assistant", "content": "已写入 output/calc.py"},
-        ],
-        run_results=[{"run_id": "run-9", "goal_contract": {"objective": "x"}}],
-    )
-    output = asyncio.run(
-        planner_module.plan_with_metadata(
-            "读取 output/report.md",
-            planning_context=context,
-        )
-    )
-
-    assert output.tasks
-    human = next(m for m in captured[0] if m.__class__.__name__ == "HumanMessage")
-    assert "## 最近对话" in human.content
-    assert "用户: 帮我写个计算器" in human.content
-    assert "助手: 已写入 output/calc.py" in human.content
-    assert '"run_id"' not in human.content
-    assert '"goal_contract"' not in human.content
-
-
 def test_llm_executor_renders_conversation_history(monkeypatch) -> None:
     from agent.executor.llm_executor import LLMExecutor
     from agent.task import Task

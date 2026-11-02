@@ -28,6 +28,7 @@ _EXECUTION_TOOLS = frozenset({
 })
 _MUTATION_TOOLS = frozenset({
     "filesystem.write",
+    "filesystem.edit",
     "filesystem.copy",
     "filesystem.move",
     "filesystem.delete",

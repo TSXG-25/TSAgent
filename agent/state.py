@@ -41,7 +41,6 @@ class AgentState(TypedDict, total=False):
     # Context
     memory_context: Optional[str]
     repo_context: Optional[str]
-    skill_hint: str
     retries: int
     workflow: Optional[str]
     artifact_required: bool
@@ -109,9 +108,5 @@ class AgentState(TypedDict, total=False):
     goal_missing: List[str]
     acceptance_evidence: List[Dict[str, Any]]
     inbox: Dict[str, Any]
-    next_action: Dict[str, Any]
     last_action_result: Dict[str, Any]
-    answer_ready: bool
     execution_mode: str
-    execution_ownership: Dict[str, Dict[str, Any]]
-    resolved_execution_ownership: Dict[str, Dict[str, Any]]

@@ -112,7 +112,6 @@ def test_unsupported_reservation_is_blocked_before_open_ended_planning(
             "user-a",
             {},
             "",
-            "",
         )
         assert next_state == "FINISH"
         assert state["runtime_terminal_status"] == "BLOCKED"

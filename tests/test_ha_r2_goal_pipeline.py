@@ -6,7 +6,8 @@ import asyncio
 
 import pytest
 
-from tests.test_ha_r1_harness import intent, run_turn, service_at, setup_provider
+import tools.python  # noqa: F401 — registers run_python/run_python_file for the loop catalog
+from tests.test_ha_r1_harness import call_tool, intent, run_turn, service_at, setup_provider
 from agent.cognition.cognitive_context import CognitiveContext
 from agent.cognition.effect_authorization import EffectAuthorization
 from agent.cognition.intent_engine import IntentEngine
@@ -60,12 +61,9 @@ def test_named_python_creation_and_real_execution_through_service(monkeypatch, t
         (request, intent(request, target='fibonacci.py', artifact=True,
                          outcomes=['FILE_MUTATION', 'CODE_EXECUTION'],
                          write_targets=['fibonacci.py'])),
-        ('用户需求', {'tasks': [
-            dict(id='create', verb='write', target='fibonacci.py', target_type='file',
-                 goal=request, inputs={'content': source}),
-            dict(id='run', verb='execute', target='fibonacci.py', target_type='file',
-                 goal='实际执行并验证', dependencies=['create']),
-        ]}),
+        (request, call_tool('write_file', path='fibonacci.py', content=source)),
+        ('fibonacci.py', call_tool('run_python_file', path='fibonacci.py')),
+        ('FIBONACCI-VERIFIED', 'fibonacci.py 已创建并实际运行验证，输出 FIBONACCI-VERIFIED 0 5。'),
     ])
     async def scenario():
         service, _ = service_at(tmp_path)
@@ -100,14 +98,9 @@ def test_service_does_not_repair_a_failed_acceptance_criterion(
     ]
     provider = setup_provider(monkeypatch, [
         (request, semantics),
-        ('用户需求', {'tasks': [dict(
-            id='write-report',
-            verb='write',
-            target='output/report.md',
-            target_type='file',
-            goal='创建报告文件',
-        )]}),
-        ('output/report.md', '本报告仅包含正文内容。'),
+        (request, call_tool('write_file', path='output/report.md',
+                            content='本报告仅包含正文内容。')),
+        ('report.md', '已创建 output/report.md'),
     ])
 
     async def scenario():
@@ -159,23 +152,14 @@ def test_service_correction_versions_goal_and_preserves_new_prohibition(
     updated_source = 'print("v1")\n# 用途：演示工具脚本。'
     provider = setup_provider(monkeypatch, [
         (first_request, first_intent),
-        ('用户需求', {'tasks': [dict(
-            id='create-tool',
-            verb='write',
-            target='output/tool.py',
-            target_type='file',
-            goal='创建工具脚本',
-        )]}),
-        ('output/tool.py', 'print("v1")'),
+        (first_request, call_tool('write_file', path='output/tool.py',
+                                  content='print("v1")')),
+        ('tool.py', '已创建 output/tool.py'),
         (correction, correction_intent),
-        ('用户需求', {'tasks': [dict(
-            id='correct-tool',
-            verb='modify',
-            target='output/tool.py',
-            target_type='file',
-            goal='保留现有代码并补充用途说明',
-        )]}),
-        ('文件原文', updated_source),
+        (correction, call_tool('read_file', path='output/tool.py')),
+        ('print("v1")', call_tool('write_file', path='output/tool.py',
+                                 content=updated_source)),
+        ('用途', '已保留脚本并补充用途说明。'),
     ])
 
     async def scenario():
@@ -218,12 +202,10 @@ def test_append_survives_preservation_clause_and_retains_original_bytes(monkeypa
         (request, intent(request, resolved=resolved, target='test_note.txt', action='append',
         write_targets=['test_note.txt'],
                          artifact=True, outcomes=['FILE_READ', 'FILE_MUTATION'])),
-        ('用户需求', {'tasks': [
-            dict(id='read', verb='read', target='test_note.txt', target_type='file', goal='读取现有内容'),
-            dict(id='append', verb='write', target='test_note.txt', target_type='file',
-                 goal='追加一行并保留已有内容', dependencies=['read'],
-                 inputs={'content': 'second line\n', 'mode': 'append'}),
-        ]}),
+        (resolved, call_tool('read_file', path='test_note.txt')),
+        ('TSAgent human test', call_tool('write_file', path='test_note.txt',
+            content='second line\n', mode='append')),
+        ('second line', '已在 test_note.txt 末尾追加“second line”，原有内容已保留。'),
     ])
     async def scenario():
         service, _ = service_at(tmp_path)
@@ -246,17 +228,11 @@ def test_write_read_explain_delivers_current_content_and_path(monkeypatch, tmp_p
         (request, intent(request, target='test_note.txt', artifact=True,
         write_targets=['test_note.txt'],
                          outcomes=['FILE_MUTATION', 'FILE_READ'])),
-        ('用户需求', {'tasks': [
-            dict(id='write', verb='write', target='test_note.txt', target_type='file',
-                 goal='写入文本', inputs={'content': 'TSAgent human test'}),
-            dict(id='read', verb='read', target='test_note.txt', target_type='file',
-                 goal='读取实际文件内容', dependencies=['write']),
-            dict(id='explain', verb='explain', target='test_note.txt 的内容', target_type='text',
-                 goal='告诉用户读取的内容', dependencies=['read']),
-        ]}),
-        ('本轮依赖任务的实际结果', '文件内容：TSAgent human test'),
+        (request, call_tool('write_file', path='test_note.txt',
+                            content='TSAgent human test')),
+        ('test_note.txt', call_tool('read_file', path='test_note.txt')),
+        ('TSAgent human test', '文件内容：TSAgent human test'),
     ])
-    monkeypatch.setattr('agent.executor.llm_executor.llm', provider)
     async def scenario():
         service, store = service_at(tmp_path)
         seed_run(store, answer='UNRELATED HISTORY', run='unrelated')
@@ -268,7 +244,7 @@ def test_write_read_explain_delivers_current_content_and_path(monkeypatch, tmp_p
             assert str(tmp_path/'test_note.txt') in snapshot.output.text
             assert 'UNRELATED HISTORY' not in snapshot.output.text
             assert '"content": "TSAgent human test"' in provider.calls[-1]
-            assert provider.calls[-1].rfind('当前任务：') > provider.calls[-1].find('UNRELATED HISTORY')
+            assert provider.calls[-1].find('UNRELATED HISTORY') < provider.calls[-1].rfind('"content": "TSAgent human test"')
         finally:
             await service.close()
     asyncio.run(scenario())
@@ -287,11 +263,9 @@ def test_provider_timeout_after_search_preserves_category_and_partial_work(monke
     provider = setup_provider(monkeypatch, [
         (request_text, intent(request_text, domain='网络', action='fresh_research',
             source=True, freshness=True, search_query='今天的新闻')),
+        (request_text, call_tool('web_search', query='今天的新闻')),
+        ('example.org/news', ProviderError('scripted provider timeout', TimeoutError())),
     ])
-    class Unavailable:
-        async def ainvoke(self, messages, **kwargs):
-            raise ProviderError('scripted provider timeout', TimeoutError())
-    monkeypatch.setattr('agent.answer_generator.llm', Unavailable())
     async def scenario():
         service, _ = service_at(tmp_path)
         try:

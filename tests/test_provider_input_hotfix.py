@@ -10,9 +10,7 @@ from agent.execution_errors import classify_execution_error
 from agent.cognition.cognitive_context import CognitiveContext
 from agent.cognition.intent_engine import IntentEngine
 from agent.llm import LLMRouter
-from agent.orchestrator.planner import PlannerStage, _apply_planner_failure
-from agent.planner import planner as planner_module
-from agent.planner.planner import PlanOutput
+from agent.orchestrator.planner import PlannerStage
 from agent.runtime import UniversalAgent
 from agent.runtime_gates import is_empty_or_punctuation_request
 from agent.service import (
@@ -26,25 +24,6 @@ from agent.service import (
 from agent.state import AgentState
 from agent.runtime_store import SqliteRuntimeStore
 from agent.service.runtime_launcher import RuntimeExecutionLauncher
-
-
-def test_provider_unavailable_becomes_plan_failure_not_fake_task(monkeypatch) -> None:
-    class FailingLLM:
-        supports_structured_output = False
-
-        async def ainvoke(self, _messages: Any) -> Any:
-            raise RuntimeError(
-                "所有 LLM 提供商均不可用。最后一次错误: Connection error."
-            )
-
-    monkeypatch.setattr(planner_module, "llm", FailingLLM())
-    output = asyncio.run(
-        planner_module.plan_with_metadata("分析一个问题", "", "", "", None)
-    )
-
-    assert output.tasks == []
-    assert output.failure_code == "PROVIDER_UNAVAILABLE"
-    assert classify_execution_error(output.failure_message) == ""
 
 
 def test_intent_provider_failure_is_explicit_and_not_unknown_fallback() -> None:
@@ -63,7 +42,7 @@ def test_intent_provider_failure_is_explicit_and_not_unknown_fallback() -> None:
     assert intent.requires_execution is True
 
 
-def test_intent_provider_failure_short_circuits_generic_planner(monkeypatch) -> None:
+def test_intent_provider_failure_short_circuits_to_terminal_fail(monkeypatch) -> None:
     from agent.cognition.intent_schema import IntentResult
     from agent.orchestrator import planner as orchestrator_planner_module
 
@@ -81,14 +60,6 @@ def test_intent_provider_failure_short_circuits_generic_planner(monkeypatch) -> 
         unavailable_intent,
     )
 
-    async def forbidden_plan(*_args: Any, **_kwargs: Any) -> Any:
-        raise AssertionError("provider outage must not enter generic Planner")
-
-    monkeypatch.setattr(
-        orchestrator_planner_module,
-        "plan_with_metadata",
-        forbidden_plan,
-    )
     context_builder = SimpleNamespace(
         render_system_context=lambda _now: "",
         render_untrusted_context=lambda _context: "",
@@ -115,52 +86,12 @@ def test_intent_provider_failure_short_circuits_generic_planner(monkeypatch) -> 
             "user-a",
             {},
             "",
-            "",
         )
         assert next_state == "FAIL"
         assert state["runtime_failure_code"] == "PROVIDER_UNAVAILABLE"
         assert answer == "当前 LLM 服务暂时不可用，本次未生成或执行任务。"
 
     asyncio.run(scenario())
-
-
-def test_planner_failure_is_terminal_and_does_not_enter_replan() -> None:
-    state: AgentState = {}
-    result = _apply_planner_failure(
-        state,
-        PlanOutput(
-            failure_code="PROVIDER_UNAVAILABLE",
-            failure_message="当前 LLM 服务暂时不可用，本次未生成或执行任务。",
-        ),
-    )
-
-    assert result == (
-        state,
-        "FAIL",
-        "当前 LLM 服务暂时不可用，本次未生成或执行任务。",
-    )
-    assert state["runtime_terminal_status"] == "FAILED_TERMINAL"
-    assert state["runtime_failure_code"] == "PROVIDER_UNAVAILABLE"
-
-
-def test_provider_unavailable_task_is_non_retriable() -> None:
-    stage = PlannerStage(SimpleNamespace(replan_count=0))
-    state: AgentState = {
-        "plan": [{
-            "id": "task-1",
-            "status": "failed",
-            "error": "所有 LLM 提供商均不可用",
-            "error_code": "PROVIDER_UNAVAILABLE",
-        }],
-    }
-
-    updated, next_state = asyncio.run(
-        stage.replan(state, "分析一个问题", "user-a")
-    )
-
-    assert next_state == "FAIL"
-    assert updated["runtime_failure_code"] == "PROVIDER_UNAVAILABLE"
-    assert stage._orch.replan_count == 0
 
 
 def test_llm_router_does_not_retry_same_provider_in_one_request() -> None:

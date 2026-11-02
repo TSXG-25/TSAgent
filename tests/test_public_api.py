@@ -45,7 +45,6 @@ def _provider(monkeypatch, replies):
     engine = IntentEngine()
     engine._llm = provider
     monkeypatch.setattr("agent.orchestrator.planner.intent_engine", engine)
-    monkeypatch.setattr("agent.planner.planner.llm", provider)
     monkeypatch.setattr("agent.answer_generator.llm", provider)
     return provider
 

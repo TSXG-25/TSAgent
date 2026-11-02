@@ -198,20 +198,4 @@ def test_structured_environment_failure_is_not_executed_twice(monkeypatch, tmp_p
     )
     assert result.action_result.retryable is False
 
-    state, next_state = asyncio.run(ExecutionOrchestrator().observe_failure(
-        {
-            "runtime_failure_retryable": result.action_result.retryable,
-            "runtime_failure": {
-                "error_code": result.action_result.error_code,
-            },
-            "plan": [task.to_dict()],
-            "execution_plans": [plan],
-            "inbox": {},
-        },
-        "执行 date",
-        "human-test",
-    ))
-
-    assert next_state == "FAIL"
-    assert state["runtime_failure_code"] == "EXECUTION_ENVIRONMENT_UNAVAILABLE"
     assert calls == 1

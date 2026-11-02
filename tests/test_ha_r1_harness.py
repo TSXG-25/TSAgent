@@ -43,6 +43,11 @@ def intent(request, *, resolved=None, relation="new_request", artifact=False, ou
                 freshness_required=freshness, source_grounding_required=source)
 
 
+def call_tool(name, **arguments):
+    """Scripted achat reply carrying one native tool call."""
+    return {'tool_calls': [{'name': name, 'arguments': arguments}]}
+
+
 class ScriptedProvider:
     supports_structured_output = False
 
@@ -50,22 +55,67 @@ class ScriptedProvider:
         self.replies = list(replies)
         self.calls = []
 
-    async def ainvoke(self, messages, **kwargs):
-        text = "\n".join(m['content'] if isinstance(m, dict) else str(m.content) for m in messages)
+    @staticmethod
+    def _text(messages) -> str:
+        parts = []
+        for message in messages:
+            if isinstance(message, dict):
+                content = str(message.get('content', ''))
+                tool_calls = message.get('tool_calls') or ()
+                if tool_calls:
+                    content += "\n" + json.dumps(tool_calls, ensure_ascii=False)
+                parts.append(content)
+            else:
+                parts.append(str(getattr(message, 'content', '')))
+        return "\n".join(parts)
+
+    def _next(self, text):
         self.calls.append(text)
         assert self.replies, f"Unexpected Provider call: {text[:500]}"
         required, reply = self.replies.pop(0)
         assert required in text, (required, text[:1000])
-        return SimpleNamespace(content=json.dumps(reply, ensure_ascii=False) if isinstance(reply, dict) else reply)
+        if isinstance(reply, Exception):
+            raise reply
+        return reply
+
+    async def ainvoke(self, messages, **kwargs):
+        reply = self._next(self._text(messages))
+        return SimpleNamespace(content=json.dumps(reply, ensure_ascii=False) if isinstance(reply, dict) else str(reply))
+
+    async def achat(self, messages, tools=None, **kwargs):
+        from agent.llm import ChatTurn, ToolCall
+
+        reply = self._next(self._text(messages))
+        if isinstance(reply, ChatTurn):
+            return reply
+        if isinstance(reply, dict) and 'tool_calls' in reply:
+            return ChatTurn(
+                content=str(reply.get('content', '')),
+                tool_calls=tuple(
+                    ToolCall(
+                        id=str(call.get('id', f'call-{index}')),
+                        name=str(call['name']),
+                        arguments=dict(call.get('arguments') or {}),
+                    )
+                    for index, call in enumerate(reply['tool_calls'])
+                ),
+            )
+        return ChatTurn(
+            content=json.dumps(reply, ensure_ascii=False)
+            if isinstance(reply, dict)
+            else str(reply)
+        )
 
 
 def setup_provider(monkeypatch, replies):
     provider = ScriptedProvider(replies)
     monkeypatch.setattr('agent.llm.llm', provider)
+    # runner binds `from agent.llm import llm` at import time, so patch the
+    # name in the loop module's own namespace as well.
+    monkeypatch.setattr('agent.loop.runner.llm', provider)
     engine = IntentEngine()
     engine._llm = provider
     monkeypatch.setattr('agent.orchestrator.planner.intent_engine', engine)
-    monkeypatch.setattr('agent.planner.planner.llm', provider)
     monkeypatch.setattr('agent.answer_generator.llm', provider)
     return provider
 
@@ -93,14 +143,14 @@ def service_at(tmp_path):
 def test_real_creation_then_modification_across_service_restart(monkeypatch, tmp_path):
     provider = setup_provider(monkeypatch, [
         (CREATE, intent(CREATE, artifact=True, outcomes=['FILE_MUTATION'])),
-        ('用户需求', {'tasks': [dict(id='create', verb='write', target='output/calculator.py', target_type='file', goal='创建汇率计算器', children=[])]}),
-        ('汇率计算器', SOURCE),
+        (CREATE, call_tool('write_file', path='output/calculator.py', content=SOURCE)),
+        ('output/calculator.py', '已创建 output/calculator.py'),
         (MODIFY, intent(MODIFY, resolved='修改 output/calculator.py，保留现有换算函数并加入 HKD → JPY 示例。',
                         relation='reference', artifact=True, outcomes=['FILE_READ','FILE_MUTATION'], action='modify', target='output/calculator.py',
             write_targets=['output/calculator.py'])),
-        ('用户需求', {'tasks': [dict(id='modify', verb='modify', target='output/calculator.py',
-            target_type='file', goal='修改 output/calculator.py')]}),
-        ('文件原文', UPDATED),
+        ('output/calculator.py', call_tool('read_file', path='output/calculator.py')),
+        ('def convert', call_tool('write_file', path='output/calculator.py', content=UPDATED)),
+        ('HKD', '已更新 output/calculator.py，加入 HKD → JPY 示例。'),
     ])
 
     async def scenario():
@@ -181,8 +231,8 @@ def test_correction_keeps_previous_unmet_goal_and_creates_real_file(monkeypatch,
 
     provider = setup_provider(monkeypatch, [
         (CORRECT, intent(CORRECT, resolved='创建本地汇率转换计算器并告诉用户路径。', relation='correction', artifact=True, outcomes=['FILE_MUTATION'])),
-        ('汇率转换计算器', {'tasks':[dict(id='create',verb='write',target='output/recovered.py',target_type='file',goal='汇率转换计算器',children=[])]}),
-        ('汇率转换计算器', SOURCE),
+        ('汇率转换计算器', call_tool('write_file', path='output/recovered.py', content=SOURCE)),
+        ('recovered.py', '已创建本地文件 output/recovered.py'),
     ])
     async def scenario():
         service, store = service_at(tmp_path)
@@ -234,18 +284,19 @@ def test_four_turn_search_summary_creation_modification(monkeypatch, tmp_path):
     provider = setup_provider(monkeypatch, [
         (search_request, intent(search_request, domain='网络', action='fresh_research',
             source=True, freshness=True, search_query='电网 港口 恢复 新闻')),
-        ('网络搜索结果', '测试来源报道电网及港口恢复。来源：https://news.example.org/event-a 和 https://news.example.org/event-b'),
+        (search_request, call_tool('web_search', query='电网 港口 恢复 新闻')),
+        ('news.example.org/event-a', '测试来源报道电网及港口恢复。来源：https://news.example.org/event-a 和 https://news.example.org/event-b'),
         (summary_request, intent(summary_request, resolved='总结上一轮检索到的电网和港口恢复事件，说明现有来源不足以判断其全球重要性。',
                                  relation='reference', domain='知识', action='summarize')),
         ('电网', '上一轮两个事件是电网和港口恢复；现有来源不足以判定它们是全球重大新闻。'),
         (CREATE, intent(CREATE, artifact=True, outcomes=['FILE_MUTATION'])),
-        ('用户需求', {'tasks': [dict(id='create', verb='write', target='output/calculator.py', target_type='file', goal='创建汇率计算器', children=[])]}),
-        ('汇率计算器', SOURCE),
+        (CREATE, call_tool('write_file', path='output/calculator.py', content=SOURCE)),
+        ('calculator.py', '已创建 output/calculator.py'),
         (MODIFY, intent(MODIFY, resolved='修改 output/calculator.py，保留换算函数并加入 HKD → JPY 示例。', relation='reference', artifact=True, outcomes=['FILE_READ','FILE_MUTATION'], action='modify', target='output/calculator.py',
             write_targets=['output/calculator.py'])),
-        ('用户需求', {'tasks': [dict(id='modify', verb='modify', target='output/calculator.py',
-            target_type='file', goal='修改 output/calculator.py')]}),
-        ('文件原文', UPDATED),
+        ('calculator.py', call_tool('read_file', path='output/calculator.py')),
+        ('def convert', call_tool('write_file', path='output/calculator.py', content=UPDATED)),
+        ('HKD', '已更新 output/calculator.py，加入 HKD → JPY 示例。'),
     ])
     async def scenario():
         service, store = service_at(tmp_path)
@@ -255,7 +306,7 @@ def test_four_turn_search_summary_creation_modification(monkeypatch, tmp_path):
             second, _ = await run_turn(service, summary_request, 2)
             assert second.status.value == 'COMPLETED', second
             assert '电网' in second.output.text
-            assert 'news.example.org/event-b' in provider.calls[1]
+            assert 'news.example.org/event-b' in provider.calls[2]
             assert len(search_calls) == 1
             third, _ = await run_turn(service, CREATE, 3)
             assert third.status.value == 'COMPLETED', third
@@ -308,7 +359,8 @@ def test_fresh_research_uses_local_mcp_stdio_through_service(monkeypatch, tmp_pa
     provider = setup_provider(monkeypatch, [
         (request, intent(request, domain='网络', action='fresh_research',
             source=True, freshness=True, search_query='离线测试新闻')),
-        ('网络搜索结果', '离线 MCP 测试搜索结果。来源：https://example.test/offline'),
+        (request, call_tool('web_search', query='离线测试新闻')),
+        ('example.test/offline', '离线 MCP 测试搜索结果。来源：https://example.test/offline'),
     ])
 
     async def scenario():
@@ -327,9 +379,8 @@ def test_fresh_research_uses_local_mcp_stdio_through_service(monkeypatch, tmp_pa
 
     asyncio.run(scenario())
     assert not provider.replies
-    assert 'https://example.test/offline' in next(
-        call for call in provider.calls if '网络搜索结果' in call
-    )
+    # The final answer turn sees the source-backed web_search tool result.
+    assert 'https://example.test/offline' in provider.calls[-1]
     assert stopped_file.read_text() == 'stopped'
 
 
@@ -375,12 +426,11 @@ def test_fresh_research_materializes_source_backed_report_through_service(
             outcomes=['FILE_MUTATION'],
             write_targets=['output/research.md'],
             search_query='离线测试新闻')),
-        ('用户需求', {'tasks': [
-            dict(id='write-report', verb='write', target='output/research.md',
-                 target_type='file', goal='把带来源的报告保存到 output/research.md'),
-        ]}),
-        ('你是文件生成器',
-         '# 离线测试报告\n\n来源：https://example.test/offline\nSynthetic result for local MCP integration testing only.'),
+        (request, call_tool('web_search', query='离线测试新闻')),
+        ('example.test/offline', call_tool(
+            'write_file', path='output/research.md',
+            content='# 离线测试报告\n\n来源：https://example.test/offline\nSynthetic result for local MCP integration testing only.')),
+        ('research.md', '已把带来源的报告保存到 output/research.md'),
     ])
 
     async def scenario():
@@ -487,29 +537,9 @@ def test_service_cancellation_publishes_verified_partial_file(
     semantics['delivery_requirements'][0]['target'] = 'output/partial.txt'
     provider = setup_provider(monkeypatch, [
         (request_text, semantics),
-        ('用户需求', {'tasks': [
-            dict(
-                id='write-partial',
-                verb='write',
-                target='output/partial.txt',
-                target_type='file',
-                goal='生成部分交付文件',
-                inputs={'content': partial_text},
-                children=[],
-            ),
-            dict(
-            id='wait-search',
-                verb='search',
-                target='等待中的检查',
-                target_type='text',
-                goal='等待用于验证取消的检索结果',
-                inputs={'query': 'wait'},
-                policy={
-                    'executor': 'tool',
-                    'tool_policy': {'allow': ['web_search']},
-                },
-            ),
-        ]}),
+        (request_text, call_tool('write_file', path='output/partial.txt',
+                                 content=partial_text)),
+        ('partial.txt', call_tool('web_search', query='wait')),
     ])
     tool_started = asyncio.Event()
     tool_cancelled = asyncio.Event()
@@ -570,13 +600,13 @@ def test_service_cancellation_publishes_verified_partial_file(
             assert (tmp_path / 'output/partial.txt').read_text() == partial_text
             assert any(
                 event.event_type.value == 'task_completed'
-                and event.payload.get('task_id') == 'write-partial'
+                and event.payload.get('verb') == 'write'
                 and event.payload.get('verified') is True
                 for event in events
             )
             assert not any(
                 event.event_type.value == 'task_completed'
-                and event.payload.get('task_id') == 'wait-search'
+                and event.payload.get('verb') == 'search'
                 for event in events
             )
             assert snapshot.output is not None

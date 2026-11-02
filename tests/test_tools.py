@@ -71,7 +71,6 @@ def test_load_all_tools():
         "web_search", "web_fetch",
         "run_python", "run_python_file",
         "query_memory", "get_user_preference", "save_fact",
-        "list_workflows", "get_workflow", "run_workflow",
         "propose_patch", "apply_patch",
         "list_all_tools", "get_tool_info",
     ]
@@ -93,7 +92,6 @@ def test_category_and_tags():
     assert "shell" in categories
     assert "code" in categories
     assert "memory" in categories
-    assert "workflow" in categories
     assert "meta" in categories
 
     # Check tags exist
@@ -143,7 +141,6 @@ def test_tool_registry_imports():
         "tools.patch",
         "tools.python",
         "tools.memory",
-        "tools.workflow",
         "tools.meta",
     ]
 
@@ -180,7 +177,7 @@ def _unload_tool_modules():
     import importlib
     modules_to_unload = [
         "tools.filesystem", "tools.shell", "tools.web", "tools.patch",
-        "tools.python", "tools.memory", "tools.workflow", "tools.meta",
+        "tools.python", "tools.memory", "tools.meta",
         "tools",  # also unload the package itself
     ]
     for mod_name in modules_to_unload:

@@ -73,7 +73,7 @@ def test_structural_action_result_is_routed_to_recovery_state(monkeypatch) -> No
                 metadata={"executor": "unknown"},
             )
 
-    monkeypatch.setitem(executor_factory._registry, "unknown", UnknownToolExecutor)
+    monkeypatch.setitem(executor_factory._registry, "tool", UnknownToolExecutor)
     task = Task.from_dict({
         "id": "structural-failure",
         "verb": "read",
@@ -98,11 +98,14 @@ def test_structural_action_result_is_routed_to_recovery_state(monkeypatch) -> No
         _timings: dict[str, float] = {}
         run_context = None
 
-    updated, next_state = asyncio.run(ExecutionStage(Orchestrator()).run(state))
+    plan = state["execution_plans"][0]
+    task_dict = state["plan"][0]
+    asyncio.run(
+        ExecutionStage(Orchestrator()).execute_action(state, task_dict, plan)
+    )
 
-    assert next_state == "RECOVER"
-    assert updated["runtime_failure_kind"] == FailureKind.STRUCTURAL.value
-    assert updated["runtime_failure"]["error_code"] == "UNKNOWN_TOOL"
+    assert state["runtime_failure_kind"] == FailureKind.STRUCTURAL.value
+    assert state["runtime_failure"]["error_code"] == "UNKNOWN_TOOL"
 
 
 def test_production_agent_code_does_not_import_evaluation() -> None:
@@ -149,101 +152,7 @@ def test_production_agent_code_does_not_import_compat_modules() -> None:
     assert offenders == []
 
 
-def test_runtime_owns_replan_transition_in_the_single_state_loop() -> None:
-    source = (ROOT / "agent/runtime.py").read_text(encoding="utf-8")
-    assert "elif rt_state == RuntimeState.REPLAN:" in source
-    assert "await self.orchestrator.replan(" in source
-
-
-def test_read_only_failure_enters_bounded_replan() -> None:
-    orchestrator = ExecutionOrchestrator()
-    state, next_state = asyncio.run(orchestrator.observe_failure(
-        {
-            "runtime_failure_retryable": False,
-            "runtime_failure": {"error_code": "FILE_NOT_FOUND"},
-            "plan": [{
-                "id": "read-missing",
-                "verb": "read",
-                "status": "failed",
-            }],
-            "inbox": {},
-        },
-        "read missing",
-        "h8",
-    ))
-
-    assert next_state == "REPLAN"
-    assert state["runtime_terminal_status"] == ""
-    assert state["runtime_failure_code"] == "FILE_NOT_FOUND"
-
-
-def test_failure_with_uncertain_write_effect_never_enters_replan() -> None:
-    orchestrator = ExecutionOrchestrator()
-    state, next_state = asyncio.run(orchestrator.observe_failure(
-        {
-            "runtime_failure_retryable": False,
-            "runtime_failure": {"error_code": "FILE_NOT_FOUND"},
-            "plan": [{
-                "id": "write-task",
-                "verb": "write",
-                "status": "failed",
-            }],
-            "inbox": {},
-        },
-        "write missing",
-        "h8",
-    ))
-
-    assert next_state == "FAIL"
-    assert state["runtime_terminal_status"] == "FAILED_TERMINAL"
-    assert state["runtime_failure_code"] == "FILE_NOT_FOUND"
-
-
-def test_write_argument_failure_with_proven_no_effect_enters_replan() -> None:
-    orchestrator = ExecutionOrchestrator()
-    state, next_state = asyncio.run(orchestrator.observe_failure(
-        {
-            "runtime_failure_retryable": True,
-            "runtime_failure_side_effect_state": "NONE",
-            "runtime_failure": {"error_code": "INVALID_TOOL_ARGUMENT"},
-            "plan": [{
-                "id": "write-task",
-                "verb": "write",
-                "status": "failed",
-            }],
-            "inbox": {},
-        },
-        "write output/example.txt",
-        "h8",
-    ))
-
-    assert next_state == "REPLAN"
-    assert state["runtime_terminal_status"] == ""
-
-
-def test_uncertain_retryable_write_is_not_replayed() -> None:
-    orchestrator = ExecutionOrchestrator()
-    state, next_state = asyncio.run(orchestrator.observe_failure(
-        {
-            "runtime_failure_retryable": True,
-            "runtime_failure_side_effect_state": "UNKNOWN",
-            "runtime_failure": {"error_code": "TOOL_EXECUTION_FAILED"},
-            "plan": [{
-                "id": "write-task",
-                "verb": "write",
-                "status": "failed",
-            }],
-            "inbox": {},
-        },
-        "write output/example.txt",
-        "h8",
-    ))
-
-    assert next_state == "FAIL"
-    assert state["runtime_terminal_status"] == "FAILED_TERMINAL"
-
-
-def test_runtime_dispatches_replan_from_observed_action_failure(monkeypatch) -> None:
+def test_runtime_dispatches_loop_from_plan_and_propagates_failure(monkeypatch) -> None:
     from types import SimpleNamespace
 
     import agent.runtime as runtime_module
@@ -274,26 +183,15 @@ def test_runtime_dispatches_replan_from_observed_action_failure(monkeypatch) -> 
 
         async def plan(self, **kwargs):
             calls.append("plan")
-            return kwargs["runtime_state"], "EXECUTE", None
+            return kwargs["runtime_state"], "LOOP", None
 
-        async def execute(self, state):
-            calls.append("execute")
+        async def run_loop(self, state, *_args):
+            calls.append("loop")
             state["plan"] = [{"id": "read-1", "verb": "read", "status": "failed"}]
             state["runtime_failure"] = {"error_code": "FILE_NOT_FOUND"}
-            state["runtime_failure_retryable"] = False
-            state["current_task_index"] = 0
-            return state, "OBSERVE"
-
-        async def observe_failure(self, state, *_args):
-            calls.append("observe")
-            return state, "REPLAN"
-
-        async def replan(self, state, *_args):
-            calls.append("replan")
-            state["runtime_failure_code"] = "REPLAN_NO_PROGRESS"
-            state["runtime_failure_class"] = "planning"
+            state["runtime_failure_code"] = "FILE_NOT_FOUND"
             state["runtime_terminal_status"] = "FAILED_TERMINAL"
-            return state, "FAIL"
+            return "partial result"
 
         async def finalize(self, **_kwargs):
             return "partial result"
@@ -316,61 +214,8 @@ def test_runtime_dispatches_replan_from_observed_action_failure(monkeypatch) -> 
     answer = asyncio.run(agent._run_in_context("读取 missing.txt"))
 
     assert answer == "partial result"
-    assert calls == ["plan", "execute", "observe", "replan"]
-    assert agent.last_run_evidence["failure_code"] == "REPLAN_NO_PROGRESS"
-
-
-def test_structural_retry_requeues_action_without_planner(monkeypatch) -> None:
-    orchestrator = ExecutionOrchestrator()
-
-    async def forbidden(*_args, **_kwargs):
-        raise AssertionError("structural recovery must not invoke Planner.replan")
-
-    monkeypatch.setattr(orchestrator._planner, "replan", forbidden)
-    orchestrator.bind_run_budget(RunBudget(max_recoveries=2))
-    failed = {"id": "t1", "status": "failed", "error": "broken", "error_code": "RUNTIME_INVARIANT_BROKEN"}
-    pending = {"id": "t2", "status": "pending"}
-    directive = SimpleNamespace(
-        action="retry",
-        reason="retry after structural recovery",
-        failure=SimpleNamespace(code="RUNTIME_INVARIANT_BROKEN"),
-        to_dict=lambda: {"action": "retry"},
-    )
-
-    state, next_state = asyncio.run(orchestrator.recover_structural_failure(
-        {"plan": [failed, pending], "inbox": {}}, "run", "user", directive,
-    ))
-
-    assert next_state == "NEXT_ACTION"
-    assert state["plan"][0]["status"] == "pending"
-    assert state["current_task_index"] == 0
-    assert state["runtime_failure_code"] == ""
-    assert state["inbox"]["next_step"][-1]["action"] == "retry"
-
-
-def test_structural_recovery_exhaustion_is_terminal_without_replan(monkeypatch) -> None:
-    orchestrator = ExecutionOrchestrator()
-
-    async def forbidden(*_args, **_kwargs):
-        raise AssertionError("recovery exhaustion must not invoke Planner.replan")
-
-    monkeypatch.setattr(orchestrator._planner, "replan", forbidden)
-    orchestrator.bind_run_budget(RunBudget(max_recoveries=0))
-    directive = SimpleNamespace(
-        action="retry",
-        reason="retry unavailable",
-        failure=SimpleNamespace(code="RUNTIME_INVARIANT_BROKEN"),
-        to_dict=lambda: {"action": "retry"},
-    )
-
-    state, next_state = asyncio.run(orchestrator.recover_structural_failure(
-        {"plan": [{"id": "t1", "status": "failed"}], "inbox": {}},
-        "run", "user", directive,
-    ))
-
-    assert next_state == "FAIL"
-    assert state["runtime_failure_code"] == "RUNTIME_RECOVERY_BUDGET_EXHAUSTED"
-    assert state["runtime_terminal_status"] == "FAILED_TERMINAL"
+    assert calls == ["plan", "loop"]
+    assert agent.last_run_evidence["failure_code"] == "FILE_NOT_FOUND"
 
 
 def test_evaluation_failure_contract_is_a_production_facade() -> None:

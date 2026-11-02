@@ -165,7 +165,7 @@ class PlanExecutor:
                 # ── 收集世界状态痕迹（Verifier 的唯一输入，ADR-0012）──
                 # 写入是否真正生效由 ExecutionVerifier 在 Pipeline 末端判定，
                 # Tool 的返回字符串不代表成功。
-                if tool_name == "filesystem.write":
+                if tool_name in {"filesystem.write", "filesystem.edit"}:
                     files_written.append(str(args.get("path", "")))
                 elif tool_name in {
                     "filesystem.copy",
@@ -572,6 +572,7 @@ class PlanExecutor:
             name_map = {
                 "read": "read_file",
                 "write": "write_file",
+                "edit": "edit_file",
                 "list": "list_directory",
                 "delete": "delete_file",
                 "move": "move_file",
@@ -684,6 +685,12 @@ class PlanExecutor:
                 )
             if operation == "delete":
                 return workspace.delete_file(str(args.get("path", "")))
+            if operation == "edit":
+                return workspace.edit_text(
+                    str(args.get("path", "")),
+                    str(args.get("old_string", "")),
+                    str(args.get("new_string", "")),
+                )
             if operation == "list":
                 return workspace.list_directory(str(args.get("path", ".")))
             raise ValueError(f"UNKNOWN_TOOL: 未知 filesystem operation: {operation}")

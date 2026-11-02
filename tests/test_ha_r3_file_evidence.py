@@ -153,7 +153,8 @@ def test_artifact_declaration_does_not_authorize_a_new_write_scope():
 
 @pytest.mark.parametrize('tamper', [False, True])
 def test_service_publishes_command_artifacts_with_matching_digest(monkeypatch, tmp_path, tamper):
-    from tests.test_ha_r1_harness import setup_provider, service_at, run_turn, intent
+    from tests.test_ha_r1_harness import call_tool, setup_provider, service_at, run_turn, intent
+    import tools.shell  # noqa: F401 — registers the shell tool for the loop catalog
     from agent import sandbox
     monkeypatch.setenv('TSAGENT_ALLOW_LOCAL_EXECUTION', '1')
     monkeypatch.setattr(sandbox, '_check_docker', lambda: False)
@@ -168,8 +169,9 @@ def test_service_publishes_command_artifacts_with_matching_digest(monkeypatch, t
     command = shell("from pathlib import Path; Path('output').mkdir(exist_ok=True); Path('output/a.csv').write_text('A'); Path('output/b.csv').write_text('B'); print('TWO-REPORTS')").args['cmd']
     provider = setup_provider(monkeypatch, [
         (request, intent(request, artifact=True, outcomes=['FILE_MUTATION','COMMAND_EXECUTION'])),
-        ('用户需求', {'tasks': [dict(id='generator', verb='execute', target=command,
-            target_type='text', goal='运行生成器', output_paths=['output/a.csv','output/b.csv'])]}),
+        (request, call_tool('shell', cmd=command,
+            output_paths=['output/a.csv','output/b.csv'])),
+        ('TWO-REPORTS', '已生成两份 CSV 报告'),
     ])
     async def scenario():
         service, _ = service_at(tmp_path)

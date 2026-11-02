@@ -205,7 +205,7 @@ class _Probe:
         original_llm_invoke = llm_module.llm.invoke
         original_llm_ainvoke = llm_module.llm.ainvoke
         original_plan = orchestrator_module.ExecutionOrchestrator.plan
-        original_replan = orchestrator_module.ExecutionOrchestrator.recover_structural_failure
+        original_replan = orchestrator_module.ExecutionOrchestrator.run_loop
 
         async def tool(owner: Any, tool_name: str, args: dict[str, Any], **kwargs: Any) -> Any:
             self.tool_calls.append(str(tool_name))
@@ -231,7 +231,7 @@ class _Probe:
         self._patch(llm_module.llm, "invoke", llm_invoke)
         self._patch(llm_module.llm, "ainvoke", llm_ainvoke)
         self._patch(orchestrator_module.ExecutionOrchestrator, "plan", plan)
-        self._patch(orchestrator_module.ExecutionOrchestrator, "recover_structural_failure", replan)
+        self._patch(orchestrator_module.ExecutionOrchestrator, "run_loop", replan)
 
     def close(self) -> None:
         for owner, name, original in reversed(self._originals):

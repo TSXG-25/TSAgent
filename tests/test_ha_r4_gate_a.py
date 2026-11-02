@@ -4,7 +4,7 @@ import hashlib
 
 import pytest
 
-from tests.test_ha_r1_harness import intent, run_turn, service_at, setup_provider
+from tests.test_ha_r1_harness import call_tool, intent, run_turn, service_at, setup_provider
 
 
 @pytest.mark.parametrize('utterance', [
@@ -18,9 +18,9 @@ def test_artifact_gate_overrides_math_and_no_execution(monkeypatch, tmp_path, ut
     assert semantic['requires_execution'] is True
     provider = setup_provider(monkeypatch, [
         (utterance, semantic),
-        ('用户需求', {'tasks': [dict(id='write', verb='write',
-            target='output/probe.txt', target_type='file', goal=utterance,
-            inputs={'content': 'OFFLINE CONTRACT PROBE'})]}),
+        (utterance, call_tool('write_file', path='output/probe.txt',
+                              content='OFFLINE CONTRACT PROBE')),
+        ('probe.txt', '已创建 output/probe.txt'),
     ])
 
     async def scenario():
@@ -53,24 +53,11 @@ def test_two_requested_reports_require_and_publish_two_distinct_files(
     }]
     provider = setup_provider(monkeypatch, [
         (request, semantics),
-        ('用户需求', {'tasks': [
-            dict(
-                id='write-report-a',
-                verb='write',
-                target='output/report-a.md',
-                target_type='file',
-                goal='创建第一份报告',
-                inputs={'content': '# 报告 A\n\n离线交付 A。\n'},
-            ),
-            dict(
-                id='write-report-b',
-                verb='write',
-                target='output/report-b.md',
-                target_type='file',
-                goal='创建第二份报告',
-                inputs={'content': '# 报告 B\n\n离线交付 B。\n'},
-            ),
-        ]}),
+        (request, call_tool('write_file', path='output/report-a.md',
+                            content='# 报告 A\n\n离线交付 A。\n')),
+        ('report-a.md', call_tool('write_file', path='output/report-b.md',
+                                  content='# 报告 B\n\n离线交付 B。\n')),
+        ('report-b.md', '已完成两份报告'),
     ])
 
     async def scenario():
@@ -117,26 +104,15 @@ def test_two_report_goal_reports_one_verified_file_when_second_write_fails(
     }]
     blocked_target = tmp_path / 'output/report-b.md'
     blocked_target.mkdir(parents=True)
+    monkeypatch.setenv('TSAGENT_MAX_GOAL_ROUNDS', '2')
     provider = setup_provider(monkeypatch, [
         (request, semantics),
-        ('用户需求', {'tasks': [
-            dict(
-                id='write-report-a',
-                verb='write',
-                target='output/report-a.md',
-                target_type='file',
-                goal='创建第一份报告',
-                inputs={'content': '# 报告 A\n\n离线交付 A。\n'},
-            ),
-            dict(
-                id='write-report-b',
-                verb='write',
-                target='output/report-b.md',
-                target_type='file',
-                goal='创建第二份报告',
-                inputs={'content': '# 报告 B\n\n离线交付 B。\n'},
-            ),
-        ]}),
+        (request, call_tool('write_file', path='output/report-a.md',
+                            content='# 报告 A\n\n离线交付 A。\n')),
+        ('report-a.md', call_tool('write_file', path='output/report-b.md',
+                                  content='# 报告 B\n\n离线交付 B。\n')),
+        ('report-b.md', '已完成两份报告'),
+        ('deliverable', '已完成两份报告'),
     ])
 
     async def scenario():
@@ -157,14 +133,15 @@ def test_two_report_goal_reports_one_verified_file_when_second_write_fails(
             assert 'output/report-a.md' in snapshot.output.text
             assert any(
                 event.event_type.value == 'task_completed'
-                and event.payload.get('task_id') == 'write-report-a'
+                and event.payload.get('verb') == 'write'
                 and event.payload.get('verified') is True
                 for event in events
             )
             assert not any(
                 event.event_type.value == 'task_completed'
-                and event.payload.get('task_id') == 'write-report-b'
+                and event.payload.get('verb') == 'write'
                 and event.payload.get('status') == 'succeeded'
+                and event.payload.get('verified') is False
                 for event in events
             )
         finally:
@@ -206,36 +183,17 @@ def test_bad_apple_player_discloses_missing_asset_and_prohibited_execution(
     ]
     provider = setup_provider(monkeypatch, [
         (request, semantics),
-        ('用户需求', {'tasks': [
-            dict(
-                id='write-player',
-                verb='write',
-                target='output/bad_apple_player.html',
-                target_type='file',
-                goal='创建本地 Bad Apple 播放器',
-                inputs={
-                    'content': (
-                        '<!doctype html><title>Bad Apple 本地播放器</title>\n'
-                        '<video controls src="assets/bad_apple.mp4"></video>\n'
-                    ),
-                },
-            ),
-            dict(
-                id='write-usage',
-                verb='write',
-                target='output/README.md',
-                target_type='file',
-                goal='说明素材缺失和使用方式',
-                inputs={
-                    'content': (
-                        '# 使用说明\n\n'
-                        '素材尚未提供或下载。请把有权使用的视频文件放到 '
-                        '`output/assets/bad_apple.mp4`。\n'
-                        '播放器已生成但未运行；播放效果未验证。\n'
-                    ),
-                },
-            ),
-        ]}),
+        (request, call_tool(
+            'write_file', path='output/bad_apple_player.html',
+            content='<!doctype html><title>Bad Apple 本地播放器</title>\n'
+                    '<video controls src="assets/bad_apple.mp4"></video>\n')),
+        ('bad_apple_player.html', call_tool(
+            'write_file', path='output/README.md',
+            content='# 使用说明\n\n'
+                    '素材尚未提供或下载。请把有权使用的视频文件放到 '
+                    '`output/assets/bad_apple.mp4`。\n'
+                    '播放器已生成但未运行；播放效果未验证。\n')),
+        ('README.md', '已交付播放器与使用说明，素材缺口已说明，未运行程序。'),
     ])
 
     async def scenario():

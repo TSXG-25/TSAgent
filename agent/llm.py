@@ -3,11 +3,13 @@
 提供与之前一致的 `llm.ainvoke(messages)` 接口，所有使用者无需修改。
 同时自动在所有请求中注入当前时间信息。
 """
+import json
 import os
 import logging
 import time
+from dataclasses import dataclass
 from types import SimpleNamespace
-from typing import Any, Final, Protocol
+from typing import Any, Awaitable, Callable, Final, Mapping, Protocol, Sequence
 from datetime import datetime
 from dotenv import load_dotenv
 
@@ -18,6 +20,113 @@ from agent.interruption import RunInterruptionRequested, await_interruptibly
 from agent.execution_errors import ProviderError, stable_error_message
 
 logger = logging.getLogger(__name__)
+
+
+# --- Native tool calling ---
+# Canonical transcript messages are plain dicts so they serialize into the
+# durable AgentState unchanged:
+#   {"role": "system"|"user"|"assistant", "content": str}
+#   {"role": "assistant", "content": str,
+#    "tool_calls": [{"id": str, "name": str, "arguments": dict}]}
+#   {"role": "tool", "tool_call_id": str, "name": str, "content": str}
+
+
+@dataclass(frozen=True)
+class ToolCall:
+    id: str
+    name: str
+    arguments: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class ChatTurn:
+    """One assistant turn in the tool-calling loop."""
+
+    content: str = ""
+    tool_calls: tuple[ToolCall, ...] = ()
+
+
+def function_tool_spec(
+    name: str, description: str, parameters: Mapping[str, Any]
+) -> dict[str, Any]:
+    """OpenAI-compatible tool spec; Ollama accepts the same shape."""
+    return {
+        "type": "function",
+        "function": {
+            "name": name,
+            "description": description,
+            "parameters": dict(parameters),
+        },
+    }
+
+
+def _to_openai_messages(messages: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Render canonical transcript dicts as OpenAI chat-completion messages."""
+    rendered: list[dict[str, Any]] = []
+    for message in messages:
+        role = str(message.get("role", "user"))
+        if role == "tool":
+            rendered.append({
+                "role": "tool",
+                "tool_call_id": str(message.get("tool_call_id", "")),
+                "content": str(message.get("content", "")),
+            })
+            continue
+        entry: dict[str, Any] = {
+            "role": role,
+            "content": str(message.get("content", "")),
+        }
+        calls = message.get("tool_calls") or ()
+        if calls:
+            entry["tool_calls"] = [
+                {
+                    "id": str(call.get("id", "")),
+                    "type": "function",
+                    "function": {
+                        "name": str(call.get("name", "")),
+                        "arguments": json.dumps(
+                            call.get("arguments") or {}, ensure_ascii=False
+                        ),
+                    },
+                }
+                for call in calls
+            ]
+        rendered.append(entry)
+    return rendered
+
+
+def _parse_tool_arguments(raw: Any) -> dict[str, Any]:
+    """Parse provider-returned arguments; malformed JSON degrades visibly."""
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, str):
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            return {"__invalid_arguments__": raw[:500]}
+        return parsed if isinstance(parsed, dict) else {"__invalid_arguments__": raw[:500]}
+    return {}
+
+
+def _openai_turn(data: Mapping[str, Any]) -> ChatTurn:
+    choices = data.get("choices") if isinstance(data, Mapping) else None
+    if not choices:
+        raise RuntimeError("chat completion returned no choices")
+    message = choices[0].get("message", {}) if isinstance(choices[0], Mapping) else {}
+    if not isinstance(message, Mapping):
+        raise RuntimeError("chat completion returned a malformed message")
+    content = message.get("content")
+    tool_calls = tuple(
+        ToolCall(
+            id=str(call.get("id", f"call-{index}")),
+            name=str((call.get("function") or {}).get("name", "")),
+            arguments=_parse_tool_arguments(
+                (call.get("function") or {}).get("arguments")
+            ),
+        )
+        for index, call in enumerate(message.get("tool_calls") or ())
+    )
+    return ChatTurn(content=content if isinstance(content, str) else "", tool_calls=tool_calls)
 
 # --- Configuration ---
 DEEPSEEK_API_KEY = os.getenv("OPENAI_API_KEY", "")
@@ -40,9 +149,14 @@ class _Provider(Protocol):
 
     async def ainvoke(self, messages: list[BaseMessage], **kwargs: object) -> Any: ...
 
-    def with_structured_output(self, *args: object, **kwargs: object) -> Any: ...
+    async def achat(
+        self,
+        messages: Sequence[Mapping[str, Any]],
+        tools: Sequence[Mapping[str, Any]],
+        **kwargs: object,
+    ) -> ChatTurn: ...
 
-    def bind_tools(self, tools: list[object]) -> Any: ...
+    def with_structured_output(self, *args: object, **kwargs: object) -> Any: ...
 
 
 class _OllamaHTTPProvider:
@@ -85,6 +199,98 @@ class _OllamaHTTPProvider:
                 "content": content,
             })
         return result
+
+    @staticmethod
+    def _chat_messages(
+        messages: Sequence[Mapping[str, Any]],
+    ) -> list[dict[str, object]]:
+        """Render canonical transcript dicts for the native /api/chat schema."""
+        rendered: list[dict[str, object]] = []
+        for message in messages:
+            role = str(message.get("role", "user"))
+            if role == "tool":
+                rendered.append({
+                    "role": "tool",
+                    "tool_name": str(message.get("name", "")),
+                    "content": str(message.get("content", "")),
+                })
+                continue
+            entry: dict[str, object] = {
+                "role": role,
+                "content": str(message.get("content", "")),
+            }
+            calls = message.get("tool_calls") or ()
+            if calls:
+                entry["tool_calls"] = [
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": str(call.get("name", "")),
+                            "arguments": dict(call.get("arguments") or {}),
+                        },
+                    }
+                    for call in calls
+                ]
+            rendered.append(entry)
+        return rendered
+
+    def _chat_payload(
+        self,
+        messages: Sequence[Mapping[str, Any]],
+        tools: Sequence[Mapping[str, Any]],
+        kwargs: dict[str, object],
+    ) -> dict[str, object]:
+        options: dict[str, object] = {"temperature": kwargs.get("temperature", 0)}
+        if "max_tokens" in kwargs:
+            options["num_predict"] = kwargs["max_tokens"]
+        return {
+            "model": self.model,
+            "messages": self._chat_messages(messages),
+            "tools": [dict(tool) for tool in tools],
+            "stream": False,
+            "think": False,
+            "options": options,
+        }
+
+    async def achat(
+        self,
+        messages: Sequence[Mapping[str, Any]],
+        tools: Sequence[Mapping[str, Any]],
+        **kwargs: object,
+    ) -> ChatTurn:
+        import httpx
+
+        async with httpx.AsyncClient(
+            timeout=self.timeout,
+            trust_env=False,
+        ) as client:
+            response = await client.post(
+                self._chat_url,
+                headers={"Authorization": "Bearer ollama"},
+                json=self._chat_payload(messages, tools, kwargs),
+            )
+        if response.is_error:
+            raise RuntimeError(
+                f"Ollama HTTP {response.status_code}: {response.text[:200]}"
+            )
+        data = response.json()
+        message = data.get("message", {}) if isinstance(data, dict) else {}
+        if not isinstance(message, dict):
+            raise RuntimeError("Ollama returned a malformed chat message")
+        content = message.get("content")
+        tool_calls = tuple(
+            ToolCall(
+                id=str(call.get("id", f"call-{index}")),
+                name=str((call.get("function") or {}).get("name", "")),
+                arguments=_parse_tool_arguments(
+                    (call.get("function") or {}).get("arguments")
+                ),
+            )
+            for index, call in enumerate(message.get("tool_calls") or ())
+        )
+        if not isinstance(content, str) and not tool_calls:
+            raise RuntimeError("Ollama returned an empty chat completion")
+        return ChatTurn(content=content if isinstance(content, str) else "", tool_calls=tool_calls)
 
     def _payload(
         self,
@@ -167,8 +373,62 @@ class _OllamaHTTPProvider:
     def with_structured_output(self, *_args: object, **_kwargs: object) -> object:
         raise RuntimeError("Ollama structured output is disabled")
 
-    def bind_tools(self, _tools: list[object]) -> object:
-        raise RuntimeError("Ollama tool binding is not supported by this adapter")
+
+async def _deepseek_achat(
+    provider: Any,
+    messages: Sequence[Mapping[str, Any]],
+    tools: Sequence[Mapping[str, Any]],
+    kwargs: dict[str, object],
+) -> ChatTurn:
+    """Native OpenAI-compatible tool calling against the DeepSeek endpoint."""
+    import httpx
+
+    payload: dict[str, Any] = {
+        "model": getattr(provider, "model_name", None) or DEEPSEEK_MODEL,
+        "messages": _to_openai_messages(messages),
+        "tools": [dict(tool) for tool in tools],
+        "tool_choice": "auto",
+        "temperature": kwargs.get("temperature", 0),
+        "stream": False,
+    }
+    if "max_tokens" in kwargs:
+        payload["max_tokens"] = kwargs["max_tokens"]
+    api_key = (
+        getattr(provider, "openai_api_key", None) or DEEPSEEK_API_KEY
+    )
+    base_url = (
+        getattr(provider, "openai_api_base", None) or DEEPSEEK_BASE_URL
+    ).rstrip("/")
+    async with httpx.AsyncClient(timeout=_request_timeout(provider)) as client:
+        response = await client.post(
+            f"{base_url}/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}"},
+            json=payload,
+        )
+    if response.is_error:
+        raise RuntimeError(
+            f"DeepSeek HTTP {response.status_code}: {response.text[:200]}"
+        )
+    return _openai_turn(response.json())
+
+
+def _inject_time_to_transcript(
+    messages: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """Apply the same current-time hint to canonical transcript dicts."""
+    now_hint = f"[当前时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]"
+    rendered = [dict(message) for message in messages]
+    for index, message in enumerate(rendered):
+        if message.get("role") == "system":
+            content = str(message.get("content", ""))
+            if "[当前时间:" in content:
+                import re
+                content = re.sub(r"\[当前时间: [^\]]+\]", now_hint, content)
+            else:
+                content = f"{now_hint}\n{content}"
+            rendered[index] = {**message, "content": content}
+            return rendered
+    return [{"role": "system", "content": now_hint}] + rendered
 
 
 def _inject_time_to_system(messages: list[BaseMessage]) -> list[BaseMessage]:
@@ -378,12 +638,15 @@ class LLMRouter:
                 f"{stable_error_message(last_error, fallback='all provider requests failed')}", last_error,
             ) from last_error
 
-    async def ainvoke(self, messages: list[BaseMessage], **kwargs):
-        messages = _inject_time_to_system(messages)
+    async def _aexecute(
+        self,
+        call: Callable[[Any, str], Awaitable[Any]],
+    ):
+        """Run one provider call with the shared fallback/timeout policy."""
         provider, name = self._get_active_provider()
         try:
             result = await await_interruptibly(
-                provider.ainvoke(messages, **kwargs),
+                call(provider, name),
                 timeout=_request_timeout(provider),
             )
             self._on_success(name)
@@ -404,7 +667,7 @@ class LLMRouter:
                 attempted.add(fallback_name)
                 try:
                     result = await await_interruptibly(
-                        fallback_provider.ainvoke(messages, **kwargs),
+                        call(fallback_provider, fallback_name),
                         timeout=_request_timeout(fallback_provider),
                     )
                     self._on_success(fallback_name)
@@ -417,7 +680,7 @@ class LLMRouter:
             if "deepseek" not in attempted:
                 try:
                     result = await await_interruptibly(
-                        self._provider_deepseek.ainvoke(messages, **kwargs),
+                        call(self._provider_deepseek, "deepseek"),
                         timeout=_request_timeout(self._provider_deepseek),
                     )
                     self._deepseek_available = True
@@ -431,6 +694,28 @@ class LLMRouter:
                 "所有 LLM 提供商均不可用。最后一次错误: "
                 f"{stable_error_message(last_error, fallback='all provider requests failed')}", last_error,
             ) from last_error
+
+    async def ainvoke(self, messages: list[BaseMessage], **kwargs):
+        messages = _inject_time_to_system(messages)
+        return await self._aexecute(
+            lambda provider, _name: provider.ainvoke(messages, **kwargs)
+        )
+
+    async def achat(
+        self,
+        messages: Sequence[Mapping[str, Any]],
+        tools: Sequence[Mapping[str, Any]],
+        **kwargs: Any,
+    ) -> ChatTurn:
+        """Native tool-calling chat; transcript is canonical dict messages."""
+        rendered = _inject_time_to_transcript(messages)
+        return await self._aexecute(
+            lambda provider, name: (
+                _deepseek_achat(provider, rendered, tools, kwargs)
+                if name == "deepseek"
+                else provider.achat(rendered, tools, **kwargs)
+            )
+        )
 
     @property
     def status(self) -> dict:

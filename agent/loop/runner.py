@@ -37,6 +37,25 @@ _VERIFICATION_FEEDBACK_LITERALS = frozenset({
     "fresh external evidence",
     "user-visible output",
 })
+# Feedback loops are strictly bounded: two concrete nudges, then the Run
+# reports the honest gap instead of burning the whole budget.
+MAX_VERIFICATION_FEEDBACK_ROUNDS = 2
+
+_GAP_TOOL_HINTS = {
+    "deliverable": "write_file(path, content) 或 edit_file(path, old_string, new_string)",
+    "outcome:FILE_MUTATION": "write_file / edit_file",
+    "outcome:CODE_EXECUTION": "run_python(code) 或 run_python_file(path)",
+    "outcome:COMMAND_EXECUTION": "shell(cmd)",
+    "fresh external evidence": "web_search(query) 或 web_fetch(url)",
+    "user-visible output": "直接给出最终答复",
+}
+
+
+def _gap_hint(gap: str) -> str:
+    for key, hint in _GAP_TOOL_HINTS.items():
+        if gap.startswith(key) or gap == key:
+            return hint
+    return "合适的工具调用"
 
 
 def _tool_message(call: ToolCall, content: str, ok: bool = True,
@@ -211,7 +230,13 @@ class AgentLoop:
             if not turn.tool_calls:
                 answer = (turn.content or "").strip()
                 gaps = self._verification_gaps(state, answer)
-                if gaps and self._advance_goal_round(state):
+                feedback_round = int(state.get("verification_feedback_rounds", 0) or 0)
+                if (
+                    gaps
+                    and feedback_round < MAX_VERIFICATION_FEEDBACK_ROUNDS
+                    and self._advance_goal_round(state)
+                ):
+                    state["verification_feedback_rounds"] = feedback_round + 1
                     transcript.append({
                         "role": "assistant",
                         "content": answer,
@@ -221,7 +246,12 @@ class AgentLoop:
                         "content": (
                             "[运行时校验] 尚未满足: "
                             + "; ".join(gaps)
-                            + "。请用工具完成缺口，或如实说明无法完成的原因。"
+                            + "。缺口需要用工具补上，例如: "
+                            + "; ".join(dict.fromkeys(
+                                _gap_hint(gap) for gap in gaps
+                            ))
+                            + "。请直接调用工具完成，不要只输出文字；"
+                            "确实无法完成时如实说明原因。"
                         ),
                     })
                     continue

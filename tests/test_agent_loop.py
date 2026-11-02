@@ -234,7 +234,7 @@ def test_edit_file_maps_to_scoped_edit_and_rejects_non_unique(
     asyncio.run(scenario())
 
 
-def test_verifier_gap_feeds_back_until_goal_rounds_exhaust(monkeypatch, tmp_path):
+def test_verifier_gap_feeds_back_twice_then_finalizes(monkeypatch, tmp_path):
     orch = _orchestrator(tmp_path)
     orch.verify_goal = lambda state, answer: SimpleNamespace(
         missing=["deliverable:report:1"],
@@ -247,18 +247,22 @@ def test_verifier_gap_feeds_back_until_goal_rounds_exhaust(monkeypatch, tmp_path
 
     monkeypatch.setattr("agent.llm.llm.achat", achat)
     state = _mutation_state()
-    state["goal_state"] = GoalState(objective="写报告", max_rounds=2).to_dict()
+    state["goal_state"] = GoalState(objective="写报告", max_rounds=10).to_dict()
 
     answer = asyncio.run(
         AgentLoop(orch).run(state, user_input="写报告", user_id="u")
     )
 
+    # Two concrete nudges, then the answer is finalized; the missing
+    # deliverable stays honest in run evidence, not in a burnt budget.
     assert answer == "已完成但没有文件"
-    assert len(calls) == 3  # initial + 2 feedback rounds (max_rounds=2)
+    assert len(calls) == 3  # initial + MAX_VERIFICATION_FEEDBACK_ROUNDS
     feedback = [
         m["content"] for m in calls[-1] if m.get("role") == "user"
     ]
-    assert any("[运行时校验]" in item and "deliverable:report:1" in item
-               for item in feedback)
-    assert state["runtime_terminal_status"] == "FAILED_TERMINAL"
-    assert state["runtime_failure_code"] == "GOAL_ROUND_LIMIT"
+    assert any(
+        "[运行时校验]" in item and "deliverable:report:1" in item
+        and "write_file" in item
+        for item in feedback
+    )
+    assert state["verification_feedback_rounds"] == 2

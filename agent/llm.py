@@ -28,6 +28,7 @@ DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3:8b")
 LLM_REQUEST_TIMEOUT: Final[float] = float(os.getenv("TSAGENT_LLM_TIMEOUT", "45"))
+OLLAMA_REQUEST_TIMEOUT: Final[float] = float(os.getenv("TSAGENT_OLLAMA_TIMEOUT", "120"))
 LLM_PROVIDER_COOLDOWN: Final[float] = float(
     os.getenv("TSAGENT_LLM_PROVIDER_COOLDOWN", "5")
 )
@@ -56,6 +57,11 @@ class _OllamaHTTPProvider:
     def __init__(self, *, model: str, base_url: str, timeout: float) -> None:
         self.model = model
         self.base_url = base_url.rstrip("/")
+        # Native Ollama endpoints live off the host root, not under the
+        # OpenAI-compatible /v1 prefix the base URL carries.
+        self._chat_url = (
+            self.base_url.removesuffix("/v1") + "/api/chat"
+        )
         self.timeout = timeout
 
     @staticmethod
@@ -85,23 +91,27 @@ class _OllamaHTTPProvider:
         messages: list[BaseMessage],
         kwargs: dict[str, object],
     ) -> dict[str, object]:
-        payload: dict[str, object] = {
+        options: dict[str, object] = {"temperature": kwargs.get("temperature", 0)}
+        if "max_tokens" in kwargs:
+            options["num_predict"] = kwargs["max_tokens"]
+        for key in ("top_p", "stop"):
+            if key in kwargs:
+                options[key] = kwargs[key]
+        return {
             "model": self.model,
             "messages": self._messages(messages),
-            "temperature": kwargs.get("temperature", 0),
+            "stream": False,
+            # Ollama's native endpoint is the only one that honours
+            # think:false; the OpenAI shim ignores it and qwen3 spends
+            # most of its latency on the reasoning trace.
+            "think": False,
+            "options": options,
         }
-        for key in ("max_tokens", "top_p", "stop"):
-            if key in kwargs:
-                payload[key] = kwargs[key]
-        return payload
 
     @staticmethod
     def _response(response: Any) -> SimpleNamespace:
         data = response.json()
-        choices = data.get("choices", []) if isinstance(data, dict) else []
-        if not choices or not isinstance(choices[0], dict):
-            raise RuntimeError("Ollama returned no chat completion choices")
-        message = choices[0].get("message", {})
+        message = data.get("message", {}) if isinstance(data, dict) else {}
         content = message.get("content", "") if isinstance(message, dict) else ""
         if not isinstance(content, str) or not content.strip():
             raise RuntimeError("Ollama returned an empty chat completion")
@@ -122,7 +132,7 @@ class _OllamaHTTPProvider:
             trust_env=False,
         ) as client:
             response = await client.post(
-                f"{self.base_url}/chat/completions",
+                self._chat_url,
                 headers={"Authorization": "Bearer ollama"},
                 json=self._payload(messages, kwargs),
             )
@@ -144,7 +154,7 @@ class _OllamaHTTPProvider:
             trust_env=False,
         ) as client:
             response = client.post(
-                f"{self.base_url}/chat/completions",
+                self._chat_url,
                 headers={"Authorization": "Bearer ollama"},
                 json=self._payload(messages, kwargs),
             )
@@ -262,7 +272,7 @@ class LLMRouter:
             self._ollama = _OllamaHTTPProvider(
                 model=OLLAMA_MODEL,
                 base_url=OLLAMA_BASE_URL,
-                timeout=LLM_REQUEST_TIMEOUT,
+                timeout=OLLAMA_REQUEST_TIMEOUT,
             )
         return self._ollama
 

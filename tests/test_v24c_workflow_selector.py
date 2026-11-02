@@ -138,7 +138,7 @@ def test_workflow_definition_without_capability_metadata_fails_fast() -> None:
 
 def test_workflow_projection_hash_is_frozen() -> None:
     assert workflow_projection_hash() == (
-        "283c02fca3ef07aab5cac01806b677d2ec24dcb75dccf052b1533601c8c84e14"
+        "8768b9389dee0f5d3f489c807083614dc1b1bfa602a198bb57224309c3657044"
     )
 
 

@@ -168,7 +168,7 @@ def test_ollama_http_provider_bypasses_system_proxy(monkeypatch) -> None:
 
         @staticmethod
         def json() -> dict:
-            return {"choices": [{"message": {"content": "ok"}}]}
+            return {"message": {"role": "assistant", "content": "ok"}}
 
     class Client:
         def __init__(self, **kwargs: object) -> None:

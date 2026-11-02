@@ -374,6 +374,169 @@ def test_b_genuine_workflow_ask_still_blocks_with_clarification(
     assert not provider.replies
 
 
+# ── B2) fabricated input-path bindings are rejected at the Run boundary ──
+#
+# Real-ollama regression: the Selector instantiated code_generation with a
+# fabricated question_path (output/question.md, absent) and the run died on
+# the dead read.  Binding completeness is the Selector's contract; input
+# file existence is verified at the orchestrator boundary where the Run
+# workspace is reachable.  A missing declared input is "not a match" →
+# generic Planner, never a doomed Workflow run.
+
+
+def _question_workflow_decision(question_path="output/question.md"):
+    return {
+        "kind": "instantiate",
+        "workflow_id": "code_generation",
+        "bindings": {
+            "question_path": question_path,
+            "output_path": "output/solution.py",
+        },
+        "reason": "user supplied a question file to solve",
+    }
+
+
+def test_b2_code_generation_declares_question_path_as_input_file():
+    """The capability metadata marks input bindings vs. write targets."""
+    import tools.filesystem  # noqa: F401 — registers filesystem tools
+    from agent.workflow_selector import WorkflowDefinitionProjection
+    from workflows.code_generation import code_generation_workflow
+
+    projection = WorkflowDefinitionProjection.from_workflow(code_generation_workflow)
+
+    assert projection.required_input_paths == ("question_path",)
+    # output_path is a write target: absence must never be checked.
+    assert "output_path" not in projection.required_input_paths
+
+
+def test_b2_missing_input_files_are_reported_only_for_declared_bindings(tmp_path):
+    """Unit: the orchestrator helper flags missing question_path only."""
+    import tools.filesystem  # noqa: F401 — registers filesystem tools
+    from agent.event_bus import EventBus
+    from agent.orchestrator.planner import _missing_required_input_files
+    from agent.services.workspace_service import WorkspaceService
+    from agent.workflow_selector import WorkflowDefinitionProjection
+    from workflows.code_generation import code_generation_workflow
+
+    projection = WorkflowDefinitionProjection.from_workflow(code_generation_workflow)
+    workspace = WorkspaceService.scoped(
+        tmp_path, event_bus=EventBus(), build_index=False,
+    )
+    try:
+        bindings = {
+            "question_path": "output/question.md",
+            "output_path": "output/solution.py",
+        }
+        assert _missing_required_input_files(
+            projection, bindings, workspace,
+        ) == ["question_path=output/question.md"]
+
+        workspace.write_text("input/question.md", "把 100 USD 换成 CNY")
+        bindings["question_path"] = "input/question.md"
+        # output/solution.py still does not exist — not an input binding.
+        assert _missing_required_input_files(
+            projection, bindings, workspace,
+        ) == []
+
+        # No bound workspace → nothing to resolve → nothing reported.
+        assert _missing_required_input_files(projection, bindings, None) == []
+    finally:
+        workspace.close()
+
+
+def test_b2_instantiate_with_missing_question_file_falls_back_to_planner(
+    monkeypatch, tmp_path,
+):
+    """E2E: Selector INSTANTIATEs a fabricated question_path; the file is
+    absent → the orchestrator declines the match and the generic Planner
+    completes the request instead of running a doomed read."""
+    import tools.filesystem  # noqa: F401 — selector capability check
+    request = "写个汇率计算器"
+    _real_workflow_selector(monkeypatch)
+    provider = setup_provider(monkeypatch, [
+        (request, intent(request, artifact=True, outcomes=["FILE_MUTATION"])),
+        ("Workflow Selector", _question_workflow_decision()),
+        ("专用工作流未完成", {"tasks": [
+            dict(id="write", verb="write", target="output/calculator.py",
+                 target_type="file", goal="创建计算器"),
+        ]}),
+        ("你是文件生成器", "def add(a, b):\n    return a + b\n"),
+    ])
+
+    async def scenario():
+        service, _ = service_at(tmp_path)
+        try:
+            snapshot, _ = await run_turn(service, request, 1)
+            assert snapshot.status.value == "COMPLETED", snapshot
+            assert (tmp_path / "output/calculator.py").is_file()
+            # The workflow never ran: no solution file was produced.
+            assert not (tmp_path / "output/solution.py").exists()
+        finally:
+            await service.close()
+
+    asyncio.run(scenario())
+    assert not provider.replies
+    fallback_call = next(
+        c for c in provider.calls if "专用工作流未完成" in c
+    )
+    assert request in fallback_call
+
+
+def test_b2_instantiate_with_seeded_question_file_runs_workflow(
+    monkeypatch, tmp_path,
+):
+    """E2E: the same INSTANTIATE decision is honored when question_path is a
+    real workspace file — code_generation runs end to end and writes the
+    solution; output_path legitimately did not exist beforehand."""
+    import tools.filesystem  # noqa: F401 — selector capability check
+    request = "解答 input/question.md 并把答案保存为 output/solution.py"
+    _real_workflow_selector(monkeypatch)
+    provider = setup_provider(monkeypatch, [
+        (request, intent(
+            request, artifact=True,
+            outcomes=["FILE_READ", "FILE_MUTATION"],
+        )),
+        ("Workflow Selector", _question_workflow_decision(
+            question_path="input/question.md",
+        )),
+        ("你是一个算法设计助手", "直接按汇率做乘法换算。"),
+        (
+            "你是一个 Python 代码生成助手",
+            "def convert(amount, rate):\n"
+            "    return amount * rate\n"
+            "\n"
+            "\n"
+            "def main():\n"
+            "    print(convert(100, 7.2))\n"
+            "\n"
+            "\n"
+            "if __name__ == '__main__':\n"
+            "    main()\n",
+        ),
+    ])
+    monkeypatch.setattr("agent.executor.llm_executor.llm", provider)
+    (tmp_path / "input").mkdir()
+    (tmp_path / "input/question.md").write_text(
+        "把 100 USD 按汇率 7.2 换成 CNY", encoding="utf-8",
+    )
+
+    async def scenario():
+        service, _ = service_at(tmp_path)
+        try:
+            snapshot, _ = await run_turn(service, request, 1)
+            assert snapshot.status.value == "COMPLETED", snapshot
+            solution = tmp_path / "output/solution.py"
+            assert solution.is_file()
+            assert "def convert" in solution.read_text()
+            # The workflow's verified artifact is disclosed as a local file.
+            assert "output/solution.py" in snapshot.output.text
+        finally:
+            await service.close()
+
+    asyncio.run(scenario())
+    assert not provider.replies
+
+
 # ── C) authorization boundary feeds back into planning ───────────────────
 
 

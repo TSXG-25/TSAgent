@@ -598,6 +598,9 @@ class RunResumeCoordinator:
         if not checkpoint_chain or checkpoint_chain[-1].checkpoint_id != checkpoint.checkpoint_id:
             return original_index
 
+        # Only file-backed artifacts are durable commit facts; in-memory
+        # intermediates carry no external reference (same boundary as
+        # RuntimeExecutionLauncher._artifact_commit_facts).
         artifact_facts = tuple(
             ArtifactCommitFact(
                 artifact_id=artifact.artifact_id,
@@ -613,6 +616,7 @@ class RunResumeCoordinator:
             )
             for artifact in updated_index.artifacts
             if artifact.producer_workflow_id == workflow_id
+            and str(artifact.reference or "").strip()
         )
         head = self._durable_store.head()
         next_index = replace(

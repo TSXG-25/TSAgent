@@ -288,6 +288,32 @@ class IntentEngine:
                 content = content[4:]
         obj = json.loads(content.strip())
 
+        _QUOTE_PAIRS = (
+            ("\u201c", "\u201d"), ("\u2018", "\u2019"), ("\u300c", "\u300d"),
+            ("\u300e", "\u300f"), ('"', '"'), ("'", "'"), ("`", "`"),
+        )
+
+        def _user_quoted_text(text: str) -> bool:
+            return any(
+                f"{opening}{text}{closing}" in user_input
+                for opening, closing in _QUOTE_PAIRS
+            )
+
+        def _downgrade_unquoted_file_contains(criterion: dict) -> dict:
+            """file_contains is a hard gate only for text the user quoted.
+
+            Models fabricate literal-text criteria from feature descriptions
+            ("supports X" -> file must contain "X"), which makes honest Runs
+            fail on invented obligations.  An unquoted criterion degrades to
+            an unverifiable advisory instead of a hard completion gate.
+            """
+            if not isinstance(criterion, dict) or criterion.get("kind") != "file_contains":
+                return criterion
+            text = criterion.get("text")
+            if not isinstance(text, str) or not text or _user_quoted_text(text):
+                return criterion
+            return {"kind": "unverifiable", "description": f"文件内容应满足：{text}"}
+
         domain_map = {
             "开发": DOMAIN_DEVELOPMENT,
             "知识": DOMAIN_KNOWLEDGE,
@@ -323,7 +349,13 @@ class IntentEngine:
         from agent.goal import DeliveryRequirement
 
         delivery_requirements = tuple(
-            DeliveryRequirement.from_dict(item)
+            DeliveryRequirement.from_dict({
+                **item,
+                "acceptance_criteria": [
+                    _downgrade_unquoted_file_contains(c)
+                    for c in item.get("acceptance_criteria") or []
+                ],
+            })
             for item in raw_deliveries
             if isinstance(item, dict)
         )
@@ -356,7 +388,8 @@ class IntentEngine:
         from agent.goal import AcceptanceCriterion
 
         acceptance_criteria = tuple(
-            AcceptanceCriterion.from_dict(item) for item in raw_acceptance
+            AcceptanceCriterion.from_dict(_downgrade_unquoted_file_contains(item))
+            for item in raw_acceptance
         )
         raw_write_targets = obj.get("write_targets") or []
         if not isinstance(raw_write_targets, list) or any(

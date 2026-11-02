@@ -16,10 +16,14 @@ code_generation_workflow = Workflow(
         "“写个计算器/实现一个工具”这类一般编程请求不属于本 Workflow，"
         "由通用 Planner 处理。"
     ),
-    version="3.1",
+    version="3.2",
     metadata={
         "capability": {
             "required_bindings": ["question_path", "output_path"],
+            # question_path is an input the workflow reads: it must already
+            # exist in the Run workspace.  output_path is a write target and
+            # is deliberately not listed here.
+            "required_input_paths": ["question_path"],
             "defaults": {"output_path": "output/solution.py"},
             "required_artifacts": [],
             "required_capabilities": [

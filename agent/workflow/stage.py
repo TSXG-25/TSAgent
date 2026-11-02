@@ -58,24 +58,6 @@ class Stage:
         if spec is not None and hasattr(spec, "to_dict"):
             budget_dict = spec.to_dict()
 
-        # 确定 verb：优先从 goal 推断，回退到 READ（确定性读取）
-        # 注意：Verb 枚举没有 design/verify，开放式分析/验证统一映射到 EXPLAIN
-        verb = Verb.READ
-        goal_lower = (goal or self.description or "").lower()
-        verb_hints = {
-            "write": ["写入", "写", "创建", "输出", "保存", "write", "create"],
-            "modify": ["修改", "编辑", "更新", "更改", "重构", "优化", "modify", "edit", "update"],
-            "execute": ["运行", "执行", "run", "execute"],
-            "search": ["搜索", "查找", "查询", "search", "find"],
-            "explain": ["解释", "说明", "总结", "分析", "设计", "规划", "验证", "测试", "检查", "explain", "analyze", "design", "plan", "verify", "test", "check", "summarize"],
-        }
-        for v, hints in verb_hints.items():
-            if any(h in goal_lower for h in hints):
-                verb = Verb(v)
-                break
-        if verb == Verb.READ and executor_name == "llm":
-            verb = Verb.EXPLAIN
-
         # Preserve Stage argument bindings at the canonical Task boundary.
         # WorkflowExecutor resolves artifact references before compilation.
         input_bindings: Dict[str, Any] = {}
@@ -84,6 +66,33 @@ class Stage:
                 input_bindings[argument.param] = {"constant": argument.constant}
             elif argument.artifact:
                 input_bindings[argument.param] = {"artifact": argument.artifact}
+
+        # 确定 verb。A bound tool stage's verb comes from its declared tool
+        # policy — the same dispatch the Compiler's bound-tool lowering
+        # applies — never from NLP hints over the rendered prompt (prompt
+        # prose like "输出格式" is not an effect declaration, and the
+        # Verifier keys on task.verb).
+        verb: Optional[Verb] = None
+        if plan_executor == "tool" and tool_policy and input_bindings:
+            from agent.compiler.tool_selector import bound_tool_verb
+
+            verb = bound_tool_verb(tool_policy["allow"], set(input_bindings))
+        if verb is None:
+            verb = Verb.READ
+            goal_lower = (goal or self.description or "").lower()
+            verb_hints = {
+                "write": ["写入", "写", "创建", "输出", "保存", "write", "create"],
+                "modify": ["修改", "编辑", "更新", "更改", "重构", "优化", "modify", "edit", "update"],
+                "execute": ["运行", "执行", "run", "execute"],
+                "search": ["搜索", "查找", "查询", "search", "find"],
+                "explain": ["解释", "说明", "总结", "分析", "设计", "规划", "验证", "测试", "检查", "explain", "analyze", "design", "plan", "verify", "test", "check", "summarize"],
+            }
+            for v, hints in verb_hints.items():
+                if any(h in goal_lower for h in hints):
+                    verb = Verb(v)
+                    break
+            if verb == Verb.READ and executor_name == "llm":
+                verb = Verb.EXPLAIN
 
         return Task(
             id=self.id,

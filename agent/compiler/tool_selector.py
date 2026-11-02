@@ -66,6 +66,51 @@ class Rule(ABC):
         """
 
 
+def bound_tool_dispatch(allowed, params) -> Optional[str]:
+    """Canonical bound-tool branch order shared by Stage → Task projection.
+
+    Returns the registry tool name of the first applicable branch, or None.
+    ``allowed`` is the Stage tool policy's allow list; ``params`` is the set
+    of resolved input parameter names.  ``Stage.to_task`` derives the Task
+    verb from this same dispatch so the verb always matches the plan the
+    policy actually lowers to.
+    """
+    allowed = set(allowed)
+    params = set(params)
+    if "read_file" in allowed and "path" in params:
+        return "read_file"
+    if "run_python" in allowed and "code" in params:
+        return "run_python"
+    if "web_search" in allowed and ({"query", "path"} & params):
+        return "web_search"
+    if "write_file" in allowed and {"path", "content"} <= params:
+        return "write_file"
+    if "copy_file" in allowed and {"source", "destination"} <= params:
+        return "copy_file"
+    if "move_file" in allowed and {"source", "destination"} <= params:
+        return "move_file"
+    if "delete_file" in allowed and "path" in params:
+        return "delete_file"
+    return None
+
+
+_BOUND_TOOL_VERBS = {
+    "read_file": Verb.READ,
+    "run_python": Verb.EXECUTE,
+    "web_search": Verb.SEARCH,
+    "write_file": Verb.WRITE,
+    "copy_file": Verb.COPY,
+    "move_file": Verb.MOVE,
+    "delete_file": Verb.DELETE,
+}
+
+
+def bound_tool_verb(allowed, params) -> Optional[Verb]:
+    """The Task verb implied by a bound tool policy, or None."""
+    branch = bound_tool_dispatch(allowed, params)
+    return _BOUND_TOOL_VERBS.get(branch) if branch else None
+
+
 class Compiler:
     """Stateless compiler (pure function).
 
@@ -209,7 +254,12 @@ class Compiler:
         def value(name: str):
             return inputs.get(name)
 
-        if "read_file" in allowed and value("path") is not None:
+        branch = bound_tool_dispatch(
+            allowed,
+            {name for name in inputs if value(name) is not None},
+        )
+
+        if branch == "read_file":
             return ExecutionPlan(
                 task=task,
                 steps=[ExecutionStep(
@@ -218,7 +268,7 @@ class Compiler:
                     outputs=["content"],
                 )],
             )
-        if "run_python" in allowed and value("code") is not None:
+        if branch == "run_python":
             return ExecutionPlan(
                 task=task,
                 steps=[ExecutionStep(
@@ -227,9 +277,7 @@ class Compiler:
                     outputs=["result"],
                 )],
             )
-        if "web_search" in allowed and (
-            value("query") is not None or value("path") is not None
-        ):
+        if branch == "web_search":
             query = value("query") if value("query") is not None else value("path")
             args = {"query": str(query)}
             if value("timeliness") is not None:
@@ -242,7 +290,7 @@ class Compiler:
                     outputs=["results"],
                 )],
             )
-        if "write_file" in allowed and value("path") is not None and value("content") is not None:
+        if branch == "write_file":
             return ExecutionPlan(
                 task=task,
                 steps=[
@@ -262,7 +310,7 @@ class Compiler:
                     ),
                 ],
             )
-        if "copy_file" in allowed and value("source") is not None and value("destination") is not None:
+        if branch == "copy_file":
             return ExecutionPlan(
                 task=task,
                 steps=[
@@ -277,7 +325,7 @@ class Compiler:
                     ),
                 ],
             )
-        if "move_file" in allowed and value("source") is not None and value("destination") is not None:
+        if branch == "move_file":
             return ExecutionPlan(
                 task=task,
                 steps=[
@@ -292,7 +340,7 @@ class Compiler:
                     ),
                 ],
             )
-        if "delete_file" in allowed and value("path") is not None:
+        if branch == "delete_file":
             return ExecutionPlan(
                 task=task,
                 steps=[

@@ -327,6 +327,119 @@ def _normalize_continuation_target(target: str) -> str:
     return str(target or "").strip().replace("\\", "/").casefold().rstrip("/")
 
 
+def _missing_required_input_files(
+    projection: WorkflowDefinitionProjection,
+    bindings: Mapping[str, Any],
+    workspace: Any,
+) -> list[str]:
+    """Return ``name=path`` entries for declared input files that do not exist.
+
+    The Selector can only check binding completeness; whether a declared
+    input path names a real file is decidable only where the Run workspace
+    is reachable.  A missing file makes the Workflow "not a match" — the
+    caller falls back to the generic Planner instead of running a doomed
+    read.  When no workspace is bound there is nothing to resolve against,
+    so no entry is reported.
+    """
+    missing: list[str] = []
+    if workspace is None:
+        return missing
+    for name in projection.required_input_paths:
+        bound = str(bindings[name])
+        resolved = None
+        try:
+            resolved = workspace.resolve_path(bound)
+        except (OSError, ValueError):
+            resolved = None
+        if resolved is None or not resolved.is_file():
+            missing.append(f"{name}={bound}")
+    return missing
+
+
+def _record_workflow_execution_evidence(
+    state: AgentState,
+    *,
+    workflow: Any,
+    projection: WorkflowDefinitionProjection,
+    bindings: Mapping[str, Any],
+    workspace: Any,
+) -> None:
+    """Project a completed Workflow's verified file effects into Run evidence.
+
+    The generic task path records evidence per Task via
+    ``record_execution_evidence``.  A Workflow completes through the same
+    verified boundary — its stages passed their own validators and the
+    coordinator's terminal-output gate — so its declared input and output
+    file bindings are recorded with the same evidence shape.  Declared
+    ``required_input_paths`` count as FILE_READ; every other bound value
+    that resolves to a real workspace file counts as FILE_MUTATION and a
+    produced artifact.
+    """
+    if workspace is None:
+        return
+    from agent.executor.verifier import snapshot_outputs
+
+    producers = {
+        str(argument.artifact): stage.id
+        for stage in getattr(workflow, "stages", ()) or ()
+        for argument in getattr(stage, "arguments", ()) or ()
+        if getattr(argument, "artifact", None)
+    }
+    input_names = set(projection.required_input_paths)
+    evidence = [
+        dict(item)
+        for item in state.get("execution_evidence") or ()
+        if isinstance(item, Mapping)
+    ]
+    file_evidence = [
+        dict(item)
+        for item in state.get("file_artifact_evidence") or ()
+        if isinstance(item, Mapping)
+    ]
+    recorded = {
+        (str(item.get("outcome", "")), str(item.get("target", "")))
+        for item in evidence
+    }
+    recorded_paths = {str(item.get("path", "")) for item in file_evidence}
+    for name, bound in bindings.items():
+        try:
+            resolved = workspace.resolve_path(str(bound))
+        except (OSError, ValueError):
+            continue
+        if not resolved.is_file():
+            continue
+        relative = workspace.relative_path(resolved)
+        outcome = (
+            "FILE_READ" if name in input_names else "FILE_MUTATION"
+        )
+        source = (
+            "WorkflowExecutor:filesystem.read"
+            if name in input_names
+            else "WorkflowExecutor:filesystem.write"
+        )
+        identity = (outcome, relative)
+        if identity not in recorded:
+            evidence.append({
+                "outcome": outcome,
+                "status": "VERIFIED",
+                "source": source,
+                "target": relative,
+            })
+            recorded.add(identity)
+        if outcome == "FILE_MUTATION" and relative not in recorded_paths:
+            for path, digest in snapshot_outputs([relative], workspace).items():
+                file_evidence.append({
+                    "path": path,
+                    "digest": digest,
+                    "producer_task_id": producers.get(
+                        name, getattr(workflow, "id", "")
+                    ),
+                })
+                recorded_paths.add(path)
+    state["execution_evidence"] = evidence
+    state["file_artifact_evidence"] = file_evidence
+
+
 def _record_contract_diagnostic(
     state: AgentState,
     operation: str,
@@ -995,12 +1108,41 @@ class PlannerStage:
                     )
                 wf_obj = selected_workflow
                 wf_name = wf_obj.id
+                # A Workflow whose declared input file does not exist in the
+                # Run workspace is not a match: fall back to the generic
+                # Planner instead of running a doomed read.
+                selected_projection = next(
+                    projection
+                    for projection in workflow_projections
+                    if projection.id == workflow_decision.workflow_id
+                )
+                run_context = getattr(self._orch, "run_context", None)
+                missing_inputs = _missing_required_input_files(
+                    selected_projection,
+                    workflow_decision.bindings,
+                    getattr(run_context, "workspace", None),
+                )
+                if missing_inputs:
+                    print(
+                        f"  ⚠️ Workflow {wf_name} 所需输入文件不存在: "
+                        f"{', '.join(missing_inputs)}，使用通用 Planner"
+                    )
+                    return await self._fallback_to_generic_planner(
+                        user_input=user_input,
+                        context=context,
+                        repo_context=repo_context,
+                        skill_hint=skill_hint,
+                        planner_context=planner_context,
+                        intent=intent,
+                        state=state,
+                        planning_memory=planning_memory,
+                        started_at=t0,
+                    )
                 print(f"\n{'='*50}\n🚀 路由到 Workflow: {wf_name}\n{'='*50}")
                 # Every Workflow enters through the Run-level coordinator so
                 # activation and its first checkpoint are durable before any
                 # stage can cause an effect.
                 state["workflow"] = wf_name
-                run_context = getattr(self._orch, "run_context", None)
                 durable_view = (
                     run_context.durable_store_view
                     if run_context is not None
@@ -1107,6 +1249,13 @@ class PlannerStage:
                     and result.outputs.get("_summary")
                     and bool((result.metadata or {}).get("terminal_outputs_verified", False))
                 ):
+                    _record_workflow_execution_evidence(
+                        state,
+                        workflow=wf_obj,
+                        projection=selected_projection,
+                        bindings=workflow_decision.bindings,
+                        workspace=getattr(run_context, "workspace", None),
+                    )
                     best_answer = result.outputs["_summary"]
                     return state, "FINISH", best_answer
                 reason = (

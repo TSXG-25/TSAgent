@@ -34,9 +34,25 @@ class WorkflowDefinitionProjection(BaseModel):
     description: str
     required_bindings: tuple[str, ...] = ()
     defaults: dict[str, Any] = Field(default_factory=dict)
+    # Required bindings whose bound value must name an input file that
+    # already exists in the Run workspace.  Existence is verified at the
+    # Run boundary (orchestrator), not here: the Selector has no fs.
+    required_input_paths: tuple[str, ...] = ()
     required_artifacts: tuple[str, ...] = ()
     required_capabilities: tuple[str, ...] = ()
     output_types: tuple[str, ...] = ()
+
+    @model_validator(mode="after")
+    def _input_paths_are_required_bindings(
+        self,
+    ) -> "WorkflowDefinitionProjection":
+        undeclared = set(self.required_input_paths) - set(self.required_bindings)
+        if undeclared:
+            raise ValueError(
+                "required_input_paths must name required bindings: "
+                f"{sorted(undeclared)}"
+            )
+        return self
 
     @classmethod
     def from_workflow(cls, workflow: Any) -> "WorkflowDefinitionProjection":

@@ -12,7 +12,7 @@ class RunBudget:
     """Mutable per-run counters with one owner for runtime limits."""
 
     max_seconds: float = 120.0
-    max_transitions: int = 24
+    max_transitions: int = 48
     max_goal_rounds: int = 10
     max_recoveries: int = 2
     transitions: int = 0
@@ -23,7 +23,7 @@ class RunBudget:
     def from_env(cls) -> "RunBudget":
         return cls(
             max_seconds=float(os.getenv("TSAGENT_MAX_RUNTIME_SECONDS", "120")),
-            max_transitions=int(os.getenv("TSAGENT_MAX_STATE_TRANSITIONS", "24")),
+            max_transitions=int(os.getenv("TSAGENT_MAX_STATE_TRANSITIONS", "48")),
             max_goal_rounds=int(os.getenv("TSAGENT_MAX_GOAL_ROUNDS", "10")),
             max_recoveries=int(os.getenv("TSAGENT_MAX_RECOVERIES", "2")),
         )

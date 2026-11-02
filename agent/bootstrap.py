@@ -132,10 +132,9 @@ def load_tool_modules(module_names: tuple[str, ...] | None = None):
 
 def load_all_skills():
     _ensure_project_root()
-    import skills as skills_pkg
+    from agent.skills import load_project_skills
 
-    for _, module_name, _ in pkgutil.iter_modules(skills_pkg.__path__):
-        importlib.import_module(f"skills.{module_name}")
+    load_project_skills()
 
 
 def load_all_workflows():

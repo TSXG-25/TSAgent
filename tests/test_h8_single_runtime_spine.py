@@ -313,12 +313,6 @@ def test_runtime_dispatches_replan_from_observed_action_failure(monkeypatch) -> 
     agent._wall_total_seconds = 0.0
     agent._print_timing_summary = lambda: {}
 
-    monkeypatch.setattr(
-        runtime_module.skill_registry,
-        "select",
-        lambda _value: SimpleNamespace(planner_hint=""),
-    )
-
     answer = asyncio.run(agent._run_in_context("读取 missing.txt"))
 
     assert answer == "partial result"

@@ -18,7 +18,6 @@ from pathlib import Path
 from typing import Any, Optional
 
 from agent.event_bus import Subscription
-from agent.registry.skill_registry import skill_registry
 from agent.state import AgentState
 from agent.effect_truth import enforce_completion_gate, execution_truth
 from agent.goal import GoalState, GoalStatus, GoalVerifier

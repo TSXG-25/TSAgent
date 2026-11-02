@@ -81,12 +81,6 @@ def _get_memory_service():
     return MemoryService
 
 
-def _get_skill_registry():
-    from agent.registry.skill_registry import skill_registry
-
-    return skill_registry
-
-
 def _get_intent_engine():
     from agent.cognition.intent_engine import engine
 
@@ -103,15 +97,7 @@ class _LazyIntentEngine:
         return await _get_intent_engine().analyze_async(*args, **kwargs)
 
 
-class _LazySkillRegistry:
-    """Patchable registry handle with lazy embedding/skill imports."""
-
-    def select(self, *args, **kwargs):
-        return _get_skill_registry().select(*args, **kwargs)
-
-
 intent_engine = _LazyIntentEngine()
-skill_registry = _LazySkillRegistry()
 
 
 class _PlanAuthorizationViolation(ValueError):
@@ -583,13 +569,6 @@ class PlannerStage:
                 messages.append(HumanMessage(content=reference_text))
             messages.append(HumanMessage(content=request))
             return messages
-
-        skill = skill_registry.select(user_input)
-        if skill:
-            skill_prompt = skill.get_system_prompt()
-            if skill_prompt:
-                system_content += f"\n\n{skill_prompt}"
-            skill_hint = skill.planner_hint
 
         planning_memory = "\n\n".join(
             part for part in (context.get("long_term", ""), context.get("facts", ""))

@@ -213,7 +213,6 @@ def test_question_workflow_uses_selected_generic_bindings_once(
         )
 
     monkeypatch.setattr(planner_module.intent_engine, "analyze_async", analyze_async)
-    monkeypatch.setattr(planner_module.skill_registry, "select", lambda _input: None)
     monkeypatch.setattr(
         planner_module,
         "_tool_registry",

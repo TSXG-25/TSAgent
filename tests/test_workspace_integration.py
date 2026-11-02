@@ -122,7 +122,7 @@ class TestCase2_Directory:
             f"Expected 3+ registry files, got {len(matches)}: {names}"
 
         # Should include key registry files
-        expected = {"tool_registry.py", "workflow_registry.py", "skill_registry.py"}
+        expected = {"tool_registry.py", "workflow_registry.py"}
         found = expected & names
         assert len(found) >= 2, \
             f"Expected at least 2 of {expected}, found {found}"

@@ -61,7 +61,6 @@ def test_runtime_passes_only_retrieved_memory_in_context(monkeypatch) -> None:
         return agent, orchestrator
 
     monkeypatch.setattr("agent.runtime._build_repo_context", lambda *_args: "")
-    monkeypatch.setattr("agent.runtime.skill_registry.select", lambda _value: None)
 
     agent, orchestrator = build_agent()
     answer = asyncio.run(agent._run_in_context("把它改成红色背景"))

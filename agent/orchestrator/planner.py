@@ -515,6 +515,57 @@ class PlannerStage:
     def __init__(self, orchestrator):
         self._orch = orchestrator
 
+    async def _resolve_conversation(self, run_context):
+        """Durable history: summary + verbatim tail inside the char budget.
+
+        When history exceeds the budget one LLM call merges the durable
+        summary with the newly compacted pairs and persists it, so later
+        turns (and later processes) still see the whole conversation.
+        """
+        view = (
+            getattr(run_context, "durable_store_view", None)
+            if run_context is not None
+            else None
+        )
+        if view is None:
+            return [], []
+        from agent.context.conversation import (
+            derive_pairs,
+            flatten_pairs,
+            render_conversation_text,
+            split_pairs_for_budget,
+            SUMMARY_CHAR_CAP,
+        )
+
+        record = view.session_summary() or {}
+        summary = str(record.get("summary", "") or "")
+        run_results = view.conversation_results()
+        pairs = derive_pairs(run_results)
+        compact, kept = split_pairs_for_budget(pairs, summary)
+        if compact:
+            from agent.llm import llm
+
+            prior = f"已有摘要：{summary}\n\n" if summary else ""
+            render = prior + render_conversation_text(flatten_pairs(compact))
+            response = await llm.ainvoke([
+                SystemMessage(content=(
+                    "把下面的对话历史压缩成一段不超过 "
+                    f"{SUMMARY_CHAR_CAP} 字的摘要。必须保留：事实与数值、"
+                    "文件路径与产物名、做过的决定、未完成的任务。"
+                    "只输出摘要文本。"
+                )),
+                HumanMessage(content=render),
+            ])
+            summary = str(getattr(response, "content", "") or "")[:SUMMARY_CHAR_CAP]
+            last = compact[-1]
+            if last["run_id"]:
+                view.save_session_summary(
+                    summary,
+                    through_run_id=last["run_id"],
+                    through_updated_at=last["updated_at"],
+                )
+        return run_results, flatten_pairs(kept, summary)
+
     def _memory_view(self):
         session_context = getattr(self._orch, "session_context", None)
         return getattr(session_context, "memory_view", None)
@@ -611,12 +662,17 @@ class PlannerStage:
         # Planner receives only ContextBuilder's narrow fields; it never sees
         # the raw checkpoint payload.
         context_state = runtime_state if runtime_state is not None else state
+        run_results, conversation = await self._resolve_conversation(
+            getattr(self._orch, "run_context", None)
+        )
         planner_context = self._orch._context_builder.build(
             user_input=user_input,
             user_id=user_id,
             context=context,
             repo_context=repo_context,
             state=context_state,
+            run_results=run_results,
+            conversation=conversation,
         )
         print(f"  🧠 规划上下文: {planner_context.short_summary()}")
 

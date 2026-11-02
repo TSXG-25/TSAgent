@@ -99,16 +99,32 @@ def test_derive_conversation_falls_back_to_goal_and_caps_answer() -> None:
     assert len(messages[1]["content"]) == ANSWER_CHAR_CAP
 
 
-def test_derive_conversation_budget_drops_oldest_pairs() -> None:
-    runs = [
-        _run(request=f"q{i}", answer="答" * 2500) for i in range(10)
-    ]
-    messages = derive_conversation(runs)
+def test_split_pairs_for_budget_marks_oldest_for_compaction() -> None:
+    from agent.context.conversation import derive_pairs, split_pairs_for_budget
+
+    pairs = derive_pairs(
+        [_run(request=f"q{i}", answer="答" * 2500) for i in range(10)]
+    )
+    compact, kept = split_pairs_for_budget(pairs)
 
     # Each pair is ~2004 chars (answers capped at 2000); the oldest three
-    # pairs are dropped to fit the 16000-char budget.
-    assert messages[0]["content"] == "q3"
-    assert len(messages) == 14
+    # pairs are marked for compaction to fit the 16000-char budget.
+    assert [pair["user"] for pair in compact] == ["q0", "q1", "q2"]
+    assert kept[0]["user"] == "q3"
+    assert len(kept) == 7
+
+
+def test_flatten_pairs_renders_summary_prefix() -> None:
+    from agent.context.conversation import derive_pairs, flatten_pairs
+
+    messages = flatten_pairs(
+        derive_pairs([_run(request="新问题", answer="新回答")]),
+        summary="早前要点记录",
+    )
+    assert messages[0]["role"] == "user"
+    assert "[早前对话摘要] 早前要点记录" in messages[0]["content"]
+    assert messages[2] == {"role": "user", "content": "新问题"}
+    assert messages[3]["content"] == "新回答"
 
 
 def test_derive_conversation_keeps_newest_pair_over_budget() -> None:

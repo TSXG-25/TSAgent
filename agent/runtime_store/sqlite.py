@@ -341,6 +341,16 @@ class SqliteRuntimeStore:
                     PRIMARY KEY (tenant_id, run_id)
                 );
 
+                CREATE TABLE IF NOT EXISTS session_summaries (
+                    tenant_id TEXT NOT NULL,
+                    session_id TEXT NOT NULL,
+                    through_updated_at TEXT NOT NULL,
+                    through_run_id TEXT NOT NULL,
+                    summary TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    PRIMARY KEY (tenant_id, session_id)
+                );
+
                 CREATE TABLE IF NOT EXISTS run_resume_revisions (
                     tenant_id TEXT NOT NULL,
                     session_id TEXT NOT NULL,
@@ -4027,18 +4037,86 @@ class SqliteRuntimeStore:
                     self._connection.execute("ROLLBACK")
                 raise
 
+    def read_session_summary(
+        self, tenant_id: str, session_id: str
+    ) -> dict[str, str] | None:
+        """Return the durable cross-turn summary for one session."""
+        with self._lock:
+            self._ensure_open()
+            row = self._connection.execute(
+                "SELECT through_updated_at, through_run_id, summary "
+                "FROM session_summaries WHERE tenant_id = ? AND session_id = ?",
+                (tenant_id, session_id),
+            ).fetchone()
+            if row is None:
+                return None
+            return {
+                "through_updated_at": str(row["through_updated_at"]),
+                "through_run_id": str(row["through_run_id"]),
+                "summary": str(row["summary"]),
+            }
+
+    def write_session_summary(
+        self,
+        tenant_id: str,
+        session_id: str,
+        *,
+        through_updated_at: str,
+        through_run_id: str,
+        summary: str,
+    ) -> None:
+        """Persist one session summary covering runs up to the cutoff."""
+        with self._lock:
+            self._ensure_open()
+            self._connection.execute(
+                "INSERT INTO session_summaries "
+                "(tenant_id, session_id, through_updated_at, through_run_id, "
+                " summary, created_at) VALUES (?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT (tenant_id, session_id) DO UPDATE SET "
+                "through_updated_at = excluded.through_updated_at, "
+                "through_run_id = excluded.through_run_id, "
+                "summary = excluded.summary, "
+                "created_at = excluded.created_at",
+                (
+                    tenant_id,
+                    session_id,
+                    through_updated_at,
+                    through_run_id,
+                    summary,
+                    _now(),
+                ),
+            )
+            self._connection.commit()
+
     def recent_terminal_run_ids(
-        self, tenant_id: str, session_id: str, *, exclude_run_id: str, limit: int = 10,
+        self,
+        tenant_id: str,
+        session_id: str,
+        *,
+        exclude_run_id: str,
+        limit: int = 50,
+        after_updated_at: str | None = None,
+        after_run_id: str | None = None,
     ) -> tuple[str, ...]:
         """Bounded conversation read, strictly inside the owning session."""
+        cutoff = ""
+        params: list[object] = [tenant_id, session_id, exclude_run_id]
+        if after_updated_at and after_run_id:
+            cutoff = (
+                "AND (updated_at > ? OR (updated_at = ? AND run_id > ?)) "
+            )
+            params.extend([after_updated_at, after_updated_at, after_run_id])
+        params.append(limit)
         with self._lock:
             self._ensure_open()
             rows = self._connection.execute(
                 "SELECT run_id FROM run_heads WHERE tenant_id = ? AND session_id = ? "
-                "AND run_id <> ? AND run_status IN "
+                "AND run_id <> ? "
+                + cutoff
+                + "AND run_status IN "
                 "('COMPLETED', 'FAILED_TERMINAL', 'BLOCKED', 'CANCELLED', 'TIMED_OUT') "
                 "ORDER BY updated_at DESC, run_id DESC LIMIT ?",
-                (tenant_id, session_id, exclude_run_id, limit),
+                tuple(params),
             ).fetchall()
             return tuple(str(row["run_id"]) for row in reversed(rows))
 

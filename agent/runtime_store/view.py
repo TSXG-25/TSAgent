@@ -259,12 +259,39 @@ class DurableRuntimeStoreView:
             artifacts=artifacts,
         )
 
+    def session_summary(self) -> dict[str, str] | None:
+        """Return the durable summary covering this session's oldest runs."""
+        self._ensure_open()
+        return self._store.read_session_summary(self.tenant_id, self.session_id)
+
+    def save_session_summary(
+        self,
+        summary: str,
+        *,
+        through_run_id: str,
+        through_updated_at: str,
+    ) -> None:
+        """Persist the summary covering runs up to the given cutoff."""
+        self._ensure_open()
+        self._store.write_session_summary(
+            self.tenant_id,
+            self.session_id,
+            through_updated_at=through_updated_at,
+            through_run_id=through_run_id,
+            summary=summary,
+        )
+
     def conversation_results(self) -> list[dict[str, Any]]:
         """Project committed goals, output and evidence, never another Run's live state."""
         self._ensure_open()
+        cutoff = self._store.read_session_summary(self.tenant_id, self.session_id)
         results = []
         for run_id in self._store.recent_terminal_run_ids(
-            self.tenant_id, self.session_id, exclude_run_id=self.run_id,
+            self.tenant_id,
+            self.session_id,
+            exclude_run_id=self.run_id,
+            after_updated_at=(cutoff or {}).get("through_updated_at"),
+            after_run_id=(cutoff or {}).get("through_run_id"),
         ):
             snapshot = self._store.read_run_snapshot(
                 self.tenant_id, run_id, session_id=self.session_id,
@@ -273,6 +300,7 @@ class DurableRuntimeStoreView:
             continuation = payload.get("continuation", {})
             results.append({
                 "run_id": run_id,
+                "updated_at": str(snapshot.head.updated_at),
                 "status": snapshot.head.run_status,
                 "request": continuation.get("request", ""),
                 "goal": continuation.get("goal", ""),

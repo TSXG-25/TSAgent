@@ -134,6 +134,9 @@ class ContextBuilder:
         context: dict,
         repo_context: str,
         state: AgentState,
+        *,
+        run_results: Optional[list] = None,
+        conversation: Optional[list] = None,
     ) -> PlannerContext:
         """构建 PlannerContext（认知层统一入口）。
 
@@ -154,12 +157,15 @@ class ContextBuilder:
         use_memory = True
 
         # Model-visible conversation history derives solely from the durable
-        # run log; there is no second history source.
-        run_results = []
-        if run_context is not None and run_context.durable_store_view is not None:
-            run_results = run_context.durable_store_view.conversation_results()
-        from agent.context.conversation import derive_conversation
-        conversation = derive_conversation(run_results)
+        # run log; there is no second history source.  Callers that already
+        # resolved a summary-aware projection pass it in.
+        if run_results is None:
+            run_results = []
+            if run_context is not None and run_context.durable_store_view is not None:
+                run_results = run_context.durable_store_view.conversation_results()
+        if conversation is None:
+            from agent.context.conversation import derive_conversation
+            conversation = derive_conversation(run_results)
 
         # 当前 plan / task
         plan = state.get("plan", [])

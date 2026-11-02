@@ -1,10 +1,11 @@
 """Durable-run conversation derivation.
 
 The SQLite run log is the single source of model-visible conversation
-history.  ``derive_conversation`` is the one pure projection from terminal
-run projections (``DurableRuntimeStoreView.conversation_results``) to
-role/content message pairs; ``render_conversation_text`` renders the same
-messages as untrusted prompt text.
+history.  ``derive_pairs`` projects terminal run projections
+(``DurableRuntimeStoreView.conversation_results``) into user/assistant
+pairs; ``flatten_pairs`` renders them (plus an optional durable summary)
+into role/content messages.  ``split_pairs_for_budget`` chooses which
+oldest pairs a durable summary must cover so nothing is dropped silently.
 """
 from __future__ import annotations
 
@@ -14,6 +15,7 @@ HISTORY_CHAR_BUDGET = 16000
 ANSWER_CHAR_CAP = 2000
 OBSERVATION_LIMIT = 5
 OBSERVATION_CHAR_CAP = 300
+SUMMARY_CHAR_CAP = 4000
 
 
 def _observation_text(observation: Mapping[str, Any]) -> str:
@@ -26,11 +28,11 @@ def _observation_text(observation: Mapping[str, Any]) -> str:
     return str(observation.get("summary", "") or observation.get("content", "") or "")
 
 
-def derive_conversation(
+def derive_pairs(
     run_results: Sequence[Mapping[str, Any]],
 ) -> list[dict[str, str]]:
-    """Project terminal runs into user/assistant message pairs, oldest first."""
-    pairs: list[list[dict[str, str]]] = []
+    """Project terminal runs into user/assistant pairs, oldest first."""
+    pairs: list[dict[str, str]] = []
     for run in run_results:
         user_text = str(run.get("request", "") or run.get("goal", "") or "")
         parts = [str(run.get("answer", "") or "")[:ANSWER_CHAR_CAP]]
@@ -57,18 +59,73 @@ def derive_conversation(
             missing = [str(item) for item in run.get("missing", []) or []]
             if missing:
                 parts.append("\n未完成: " + ", ".join(missing))
-        pairs.append([
-            {"role": "user", "content": user_text},
-            {"role": "assistant", "content": "".join(parts)},
-        ])
+        pairs.append({
+            "run_id": str(run.get("run_id", "") or ""),
+            "updated_at": str(run.get("updated_at", "") or ""),
+            "user": user_text,
+            "assistant": "".join(parts),
+        })
+    return pairs
 
-    def total_chars() -> int:
-        return sum(len(message["content"]) for pair in pairs for message in pair)
 
-    while len(pairs) > 1 and total_chars() > HISTORY_CHAR_BUDGET:
-        pairs.pop(0)
+def _pair_chars(pair: Mapping[str, str]) -> int:
+    return len(pair["user"]) + len(pair["assistant"])
 
-    return [message for pair in pairs for message in pair]
+
+def split_pairs_for_budget(
+    pairs: Sequence[Mapping[str, str]],
+    summary: str = "",
+    budget: int = HISTORY_CHAR_BUDGET,
+) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
+    """Return (pairs the summary must cover, pairs kept verbatim).
+
+    The kept tail always fits the budget after subtracting the summary.
+    At least the newest pair is kept verbatim.
+    """
+    kept: list[dict[str, str]] = [dict(pair) for pair in pairs]
+    compact: list[dict[str, str]] = []
+
+    def total() -> int:
+        return min(len(summary), SUMMARY_CHAR_CAP) + sum(
+            _pair_chars(pair) for pair in kept
+        )
+
+    while len(kept) > 1 and total() > budget:
+        compact.append(kept.pop(0))
+    return compact, kept
+
+
+def flatten_pairs(
+    pairs: Sequence[Mapping[str, str]],
+    summary: str = "",
+) -> list[dict[str, str]]:
+    """Render summary + pairs into role/content messages, oldest first."""
+    messages: list[dict[str, str]] = []
+    if summary.strip():
+        messages.append({
+            "role": "user",
+            "content": f"[早前对话摘要] {summary[:SUMMARY_CHAR_CAP]}",
+        })
+        messages.append({
+            "role": "assistant",
+            "content": "（摘要记录了更早的对话要点）",
+        })
+    for pair in pairs:
+        messages.append({"role": "user", "content": pair["user"]})
+        messages.append({"role": "assistant", "content": pair["assistant"]})
+    return messages
+
+
+def derive_conversation(
+    run_results: Sequence[Mapping[str, Any]],
+    summary: str = "",
+) -> list[dict[str, str]]:
+    """Full history projection: summary prefix + verbatim pairs.
+
+    No budget truncation happens here; callers that need bounded history
+    use ``split_pairs_for_budget`` and persist a summary for the prefix.
+    """
+    return flatten_pairs(derive_pairs(run_results), summary)
 
 
 def render_conversation_text(messages: Sequence[Mapping[str, str]]) -> str:

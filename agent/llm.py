@@ -393,9 +393,13 @@ async def _deepseek_achat(
     }
     if "max_tokens" in kwargs:
         payload["max_tokens"] = kwargs["max_tokens"]
-    api_key = (
-        getattr(provider, "openai_api_key", None) or DEEPSEEK_API_KEY
-    )
+    api_key = getattr(provider, "openai_api_key", None) or DEEPSEEK_API_KEY
+    # LangChain stores the key as SecretStr; str() renders the '**********'
+    # mask, which the API then rejects as an invalid key.
+    get_secret = getattr(api_key, "get_secret_value", None)
+    if callable(get_secret):
+        api_key = get_secret()
+    api_key = str(api_key)
     base_url = (
         getattr(provider, "openai_api_base", None) or DEEPSEEK_BASE_URL
     ).rstrip("/")

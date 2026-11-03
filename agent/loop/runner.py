@@ -432,6 +432,23 @@ class AgentLoop:
                         error_code="UNKNOWN_SKILL",
                     )
                 return _tool_message(call, skill.body)
+            if call.name == "reme_search":
+                from agent.mcp.reme import reme_search
+
+                try:
+                    text = await reme_search(
+                        str(call.arguments.get("query", "")),
+                        limit=int(call.arguments.get("limit") or 8),
+                    )
+                except Exception as exc:
+                    return _tool_message(
+                        call,
+                        "长期记忆检索不可用: "
+                        + stable_error_message(exc, fallback="reme service unreachable"),
+                        ok=False,
+                        error_code="MEMORY_UNAVAILABLE",
+                    )
+                return _tool_message(call, text or "未找到相关长期记忆")
             if call.name == "run_workflow":
                 ok, message = await run_workflow_tool(
                     state,

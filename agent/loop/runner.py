@@ -8,6 +8,7 @@ model — acceptance failures never drive repair.
 """
 from __future__ import annotations
 
+import asyncio
 import time
 from typing import Any, Mapping, Sequence
 
@@ -40,6 +41,7 @@ _VERIFICATION_FEEDBACK_LITERALS = frozenset({
 # Feedback loops are strictly bounded: two concrete nudges, then the Run
 # reports the honest gap instead of burning the whole budget.
 MAX_VERIFICATION_FEEDBACK_ROUNDS = 2
+_MAX_PARALLEL_TOOL_CALLS = 4
 
 _GAP_TOOL_HINTS = {
     "deliverable": "write_file(path, content) 或 edit_file(path, old_string, new_string)",
@@ -280,19 +282,12 @@ class AgentLoop:
                     for call in turn.tool_calls
                 ],
             })
-            for call in turn.tool_calls:
-                call_index += 1
-                transcript.append(
-                    await self._dispatch(
-                        call,
-                        tools,
-                        state,
-                        index=call_index,
-                        run_context=run_context,
-                        user_id=user_id,
-                        user_input=user_input,
-                    )
-                )
+            messages, call_index = await self._dispatch_step_calls(
+                list(turn.tool_calls), tools, state,
+                index=call_index, run_context=run_context,
+                user_id=user_id, user_input=user_input,
+            )
+            transcript.extend(messages)
             _compact_transcript(transcript)
 
     def _verification_gaps(self, state: AgentState, answer: str) -> list[str]:
@@ -336,6 +331,58 @@ class AgentLoop:
         )
         state["inbox"] = inbox.to_dict()
         return True
+
+    async def _dispatch_step_calls(
+        self,
+        calls: list[ToolCall],
+        tools: Mapping[str, LoopTool],
+        state: AgentState,
+        *,
+        index: int,
+        run_context,
+        user_id: str,
+        user_input: str,
+    ) -> tuple[list[dict[str, Any]], int]:
+        """Execute one step's tool calls.
+
+        Consecutive concurrency-safe calls overlap in a bounded pool; every
+        other call is an exclusive barrier.  Results always commit in model
+        order regardless of completion order (DeepSeek-harness scheduling).
+        """
+        messages: list[dict[str, Any]] = []
+        cursor = 0
+        while cursor < len(calls):
+            tool = tools.get(calls[cursor].name)
+            if tool is not None and tool.concurrency_safe:
+                end = cursor
+                while (
+                    end < len(calls)
+                    and end - cursor < _MAX_PARALLEL_TOOL_CALLS
+                    and (next_tool := tools.get(calls[end].name)) is not None
+                    and next_tool.concurrency_safe
+                ):
+                    end += 1
+                results = await asyncio.gather(*(
+                    self._dispatch(
+                        call, tools, state,
+                        index=index + offset + 1,
+                        run_context=run_context, user_id=user_id,
+                        user_input=user_input,
+                    )
+                    for offset, call in enumerate(calls[cursor:end])
+                ))
+                messages.extend(results)
+                index += end - cursor
+                cursor = end
+                continue
+            index += 1
+            messages.append(await self._dispatch(
+                calls[cursor], tools, state, index=index,
+                run_context=run_context, user_id=user_id,
+                user_input=user_input,
+            ))
+            cursor += 1
+        return messages, index
 
     async def _dispatch(
         self,

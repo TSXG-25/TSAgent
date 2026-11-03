@@ -23,6 +23,9 @@ class LoopTool:
     executor_tool: str | None
     verb: str
     spec: dict[str, Any]
+    # Opt-in parallel scheduling: safe calls may overlap siblings in one
+    # assistant step; everything else stays an exclusive barrier.
+    concurrency_safe: bool = False
 
 
 def _fs_spec(
@@ -124,8 +127,10 @@ def build_toolset(
     for name, executor_tool, verb, spec in _FILESYSTEM_TOOLS:
         if name in _MUTATION_TOOL_NAMES and not authorization.allows_file_mutation:
             continue
-        tools[name] = LoopTool(name=name, executor_tool=executor_tool,
-                               verb=verb, spec=spec)
+        tools[name] = LoopTool(
+            name=name, executor_tool=executor_tool, verb=verb, spec=spec,
+            concurrency_safe=name in {"read_file", "list_directory"},
+        )
 
     def add_registry(name: str, verb: str, *, declares_outputs: bool = False) -> None:
         spec = _registry_spec(name)
@@ -148,8 +153,10 @@ def build_toolset(
                         },
                     },
                 }
-            tools[name] = LoopTool(name=name, executor_tool=name,
-                                   verb=verb, spec=spec)
+            tools[name] = LoopTool(
+                name=name, executor_tool=name, verb=verb, spec=spec,
+                concurrency_safe=name in _WEB_TOOLS,
+            )
 
     if authorization.code_execution_allowed:
         for name in _CODE_EXECUTION_TOOLS:
@@ -194,6 +201,7 @@ def build_toolset(
             name="load_skill",
             executor_tool=None,
             verb="read",
+            concurrency_safe=True,
             spec=function_tool_spec("load_skill", (
                 "加载一个技能的完整操作说明。可用技能: " + available
             ), {

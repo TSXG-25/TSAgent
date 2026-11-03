@@ -282,6 +282,57 @@ def test_all_toolset_verbs_are_valid_task_verbs():
                 )
 
 
+def test_safe_calls_overlap_and_exclusive_calls_form_barriers(
+    monkeypatch, tmp_path,
+):
+    """DeepSeek-harness scheduling: consecutive concurrency_safe calls
+    share a bounded pool; exclusive calls drain the pool before running."""
+    orch = _orchestrator(tmp_path)
+    inflight = 0
+    peak = 0
+    solo: set[str] = set()
+
+    async def counting(state, task, plan, user_input=""):
+        nonlocal inflight, peak
+        inflight += 1
+        peak = max(peak, inflight)
+        if inflight == 1:
+            solo.add(str(task.get("id", "")))
+        await asyncio.sleep(0.01)
+        inflight -= 1
+        return SimpleNamespace(
+            success=True, text="ok", error="", metadata=None,
+            action_result=None,
+        )
+
+    monkeypatch.setattr(orch._executor, "execute_action", counting)
+    loop = AgentLoop(orch)
+    state = _mutation_state()
+    tools = build_toolset(EffectAuthorization.from_state(state, "读写"))
+    calls = [
+        ToolCall(id="c1", name="read_file", arguments={"path": "a.txt"}),
+        ToolCall(id="c2", name="read_file", arguments={"path": "b.txt"}),
+        ToolCall(
+            id="c3", name="write_file",
+            arguments={"path": "output/c.txt", "content": "x"},
+        ),
+        ToolCall(id="c4", name="read_file", arguments={"path": "d.txt"}),
+        ToolCall(id="c5", name="read_file", arguments={"path": "e.txt"}),
+    ]
+
+    messages, index = asyncio.run(
+        loop._dispatch_step_calls(
+            calls, tools, state, index=0,
+            run_context=orch.run_context, user_id="u", user_input="读写",
+        )
+    )
+
+    assert len(messages) == 5
+    assert index == 5
+    assert peak >= 2, "safe reads must overlap"
+    assert "loop-3" in solo, "write_file is exclusive and must run alone"
+
+
 def test_verifier_gap_feeds_back_twice_then_finalizes(monkeypatch, tmp_path):
     orch = _orchestrator(tmp_path)
     orch.verify_goal = lambda state, answer: SimpleNamespace(

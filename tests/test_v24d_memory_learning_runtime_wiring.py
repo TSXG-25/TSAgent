@@ -96,6 +96,7 @@ def test_runtime_turn_uses_provider_policy_and_commit_once(
     agent._timings = {}
     agent._wall_total_seconds = 0.0
     agent._session_context = SimpleNamespace(
+        session_id="test-session",
         conversation_tracker=SimpleNamespace(update=lambda **_kwargs: None),
         memory_scope="user",
     )

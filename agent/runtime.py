@@ -84,6 +84,44 @@ def _fact_capture_suffix(memory_action: str, facts: object) -> str:
 
 
 
+_REME_MEMORY_HINT = (
+    "只记录有长期价值的实质内容：用户偏好与个人事实、项目决策与结论、"
+    "可复用经验、当前进度与卡点。不记录：搜索与调试过程、临时路径、"
+    "工具报错原文、一次性约束、聊天过程本身。"
+)
+
+# §〇-style handoff budget: one screen, ~30 seconds to resume work.
+_HANDOFF_MAX_CHARS = 2000
+
+
+def _session_handoff(
+    state: AgentState, user_input: str, final_answer: str
+) -> str:
+    """Build the handoff entry: last work, outcome, next step, blocker.
+
+    Only turns with substantive tool effects or an open target produce a
+    handoff — the write-back criterion is "did this change something",
+    not "did we talk".  Persisted under the canonical `handoff.latest`
+    fact key so the newest handoff overwrites (latest-wins), matching
+    the §〇 semantics.
+    """
+    did_work = any(
+        task.get("observations") for task in (state.get("plan") or [])
+    )
+    pending = _runtime_pending_target(state)
+    if not did_work and not pending:
+        return ""
+    status = str(state.get("runtime_terminal_status", "") or "")
+    failure = str(state.get("runtime_failure_code", "") or "")
+    lines = [
+        f"上次: {str(user_input or '')[:120]}",
+        f"结果: {status or 'completed'} — {str(final_answer or '')[:300]}",
+        f"下一步: {pending or '无'}",
+        f"卡点: {failure or '无'}",
+    ]
+    return "\n".join(lines)[:_HANDOFF_MAX_CHARS]
+
+
 def _log_reme_task_result(task: "asyncio.Task[str]") -> None:
     if task.cancelled():
         return
@@ -1027,6 +1065,35 @@ class UniversalAgent:
             "CANCELLED",
             "TIMED_OUT",
         }:
+            # §〇-style handoff: a bounded "last work / outcome / next /
+            # blocker" entry under `handoff.latest` (latest-wins), read
+            # back through the same facts channel as other memory.
+            handoff = _session_handoff(state, user_input, final_answer)
+            if handoff:
+                try:
+                    await asyncio.wait_for(
+                        self._memory_view.learn_from_interaction(
+                            handoff,
+                            memory_action="remember",
+                            facts=[
+                                {
+                                    "category": "handoff",
+                                    "key": "latest",
+                                    "memory_type": "fact",
+                                    "value": handoff,
+                                }
+                            ],
+                            source_ref=self._memory_learning_source_ref(),
+                        ),
+                        timeout=FACT_EXTRACTION_TIMEOUT,
+                    )
+                except asyncio.TimeoutError:
+                    logger.warning("交接记忆写入超时，不影响当前回答")
+                except Exception as exc:
+                    logger.warning(
+                        "交接记忆写入失败，不影响当前回答: %s",
+                        stable_error_message(exc, fallback="handoff learn failed")[:200],
+                    )
             from agent.mcp.reme import reme_auto_memory
 
             reme_task = asyncio.create_task(
@@ -1041,6 +1108,7 @@ class UniversalAgent:
                         if self._run_context is not None
                         else ""
                     ),
+                    memory_hint=_REME_MEMORY_HINT,
                 )
             )
             reme_task.add_done_callback(_log_reme_task_result)

@@ -210,6 +210,7 @@ def test_a_runtime_exception_records_sanitized_failure_detail(monkeypatch):
     agent._timings = {}
     agent._wall_total_seconds = 0.0
     agent._session_context = SimpleNamespace(
+        session_id="test-session",
         conversation_tracker=SimpleNamespace(update=lambda **_k: None),
         memory_scope="user",
     )

@@ -41,6 +41,19 @@ from agent.execution_errors import (
 )
 
 
+# Memory injection red-line: the injected layer is paid for on every
+# planning turn, so no single memory channel may exceed ~4 KB — oversized
+# memory gets trimmed with a marker instead of bloating the prompt.
+_MEMORY_FIELD_CAP = 4096
+
+
+def _cap_memory_field(text: str) -> str:
+    text = str(text or "")
+    if len(text) <= _MEMORY_FIELD_CAP:
+        return text
+    return text[:_MEMORY_FIELD_CAP] + "\n…（记忆过长已截断）"
+
+
 def _build_repo_context(user_input: str, repository_indexer) -> str:
     """根据用户输入搜索相关代码片段。"""
     from agent.security import is_internal_storage_path
@@ -384,17 +397,26 @@ class PlannerStage:
                     memory_view.get_context,
                     user_input,
                 )
-                untrusted_context["long_term_memory"] = retrieved.get("long_term", "")
-                untrusted_context["user_facts"] = retrieved.get("facts", "")
-                planning_memory = "\n\n".join(
-                    part
-                    for part in (
-                        retrieved.get("session", ""),
-                        retrieved.get("short_term", ""),
-                        retrieved.get("long_term", ""),
-                        retrieved.get("facts", ""),
+                # Memory red-line: injected context is paid for every turn,
+                # so each channel is capped — oversized memory is trimmed,
+                # not silently unloaded into the prompt.
+                untrusted_context["long_term_memory"] = _cap_memory_field(
+                    retrieved.get("long_term", "")
+                )
+                untrusted_context["user_facts"] = _cap_memory_field(
+                    retrieved.get("facts", "")
+                )
+                planning_memory = _cap_memory_field(
+                    "\n\n".join(
+                        part
+                        for part in (
+                            retrieved.get("session", ""),
+                            retrieved.get("short_term", ""),
+                            retrieved.get("long_term", ""),
+                            retrieved.get("facts", ""),
+                        )
+                        if part
                     )
-                    if part
                 )
                 state["memory_context"] = planning_memory
         if needs.get("repository"):

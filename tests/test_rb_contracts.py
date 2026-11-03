@@ -47,6 +47,7 @@ def test_b_memory_action_remember_commit_and_miss(tmp_path, monkeypatch):
     agent._timings = {}
     agent._wall_total_seconds = 0.0
     agent._session_context = SimpleNamespace(
+        session_id="test-session",
         conversation_tracker=SimpleNamespace(update=lambda **_k: None),
         memory_scope="user")
     agent.orchestrator = Orchestrator()

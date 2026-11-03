@@ -86,9 +86,9 @@ async def call_reme_tool(
 ) -> str:
     """Open one MCP session against the ReMe service and call one tool."""
     await _ensure_service()
-    from mcp.client.streamable_http import streamablehttp_client
+    from mcp.client.streamable_http import streamable_http_client
 
-    async with streamablehttp_client(
+    async with streamable_http_client(
         REME_MCP_URL,
         timeout=timedelta(seconds=timeout),
     ) as (read_stream, write_stream, _):
@@ -129,17 +129,21 @@ async def reme_auto_memory(
     *,
     session_id: str = "",
     request_id: str = "",
+    memory_hint: str = "",
 ) -> str:
     """Submit completed turns for long-term distillation by the ReMe agent.
 
     ``request_id`` makes the batch idempotent so a retried submission does
-    not duplicate the daily-note update.
+    not duplicate the daily-note update.  ``memory_hint`` steers the
+    distilling agent toward what is worth keeping.
     """
     arguments: dict[str, object] = {"messages": messages}
     if session_id:
         arguments["session_id"] = session_id
     if request_id:
         arguments["request_id"] = request_id
+    if memory_hint:
+        arguments["memory_hint"] = memory_hint
     return await call_reme_tool(
         "auto_memory", arguments, timeout=_AUTO_MEMORY_TIMEOUT
     )

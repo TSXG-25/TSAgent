@@ -202,6 +202,7 @@ def test_runtime_dispatches_loop_from_plan_and_propagates_failure(monkeypatch) -
     agent._memory_view = MemoryView()
     agent._memory_namespace = "h8"
     agent._session_context = SimpleNamespace(
+        session_id="test-session",
         memory_scope="session",
         conversation_tracker=Tracker(),
     )

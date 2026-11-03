@@ -53,6 +53,7 @@ def test_runtime_passes_only_retrieved_memory_in_context(monkeypatch) -> None:
         agent._wall_total_seconds = 0.0
         agent.last_run_evidence = {}
         agent._session_context = SimpleNamespace(
+        session_id="test-session",
             conversation_tracker=SimpleNamespace(update=lambda **_kwargs: None),
             memory_scope="session",
         )

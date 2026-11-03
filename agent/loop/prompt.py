@@ -12,6 +12,7 @@ def build_system_prompt(
     workflows: Sequence[Mapping[str, Any]],
     freshness_required: bool,
     source_grounding_required: bool,
+    workspace_card: str = "",
 ) -> str:
     outcomes = [str(item) for item in authorization.requested_outcomes]
     scopes = list(authorization.write_scopes)
@@ -60,6 +61,12 @@ def build_system_prompt(
         "- 只能声称工具实际做过的事；不确定或信息不足时直接向用户提问，不要编造结果。",
         "- 所有路径是工作区相对路径；新建产物默认写到 output/ 目录，除非用户明确给出了路径。",
     ]
+    if workspace_card:
+        parts += [
+            "",
+            "## 工作区规则（AGENTS.md，本工作区作者的约定，须遵守）",
+            workspace_card,
+        ]
     if skills:
         lines = ["## 可用技能（需要时调用 load_skill 获取完整流程）"]
         lines += [f"- {name}: {skill.description}" for name, skill in sorted(skills.items())]

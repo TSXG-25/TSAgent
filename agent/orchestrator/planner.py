@@ -54,6 +54,24 @@ def _cap_memory_field(text: str) -> str:
     return text[:_MEMORY_FIELD_CAP] + "\n…（记忆过长已截断）"
 
 
+def _read_workspace_card(workspace: object) -> str:
+    """Read the workspace's 定位卡: ``<workspace>/AGENTS.md``.
+
+    The card is the workspace author's declaration of purpose, asset map,
+    and iron rules — it survives sessions and agents because it lives in
+    the repo, not in any conversation.
+    """
+    from pathlib import Path
+
+    try:
+        text = (
+            Path(str(workspace)) / "AGENTS.md"
+        ).read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+    return _cap_memory_field(text)
+
+
 def _build_repo_context(user_input: str, repository_indexer) -> str:
     """根据用户输入搜索相关代码片段。"""
     from agent.security import is_internal_storage_path
@@ -390,24 +408,27 @@ class PlannerStage:
         planner_context.query = user_input
 
         needs = getattr(intent, "context_needs", None) or {}
+        run_context = getattr(self._orch, "run_context", None)
+        workspace = getattr(run_context, "workspace", None)
+        # ② Private layer, unconditional: the workspace card (AGENTS.md)
+        # declares this territory's rules and the workspace-scoped §〇
+        # handoff is the resume anchor — both are tiny by contract and
+        # injected regardless of whether the intent asked for memory.
+        card = await asyncio.to_thread(_read_workspace_card, workspace)
+        if card:
+            untrusted_context["workspace_card"] = card
+            state["workspace_card"] = card
         memory_view = self._memory_view()
-        if memory_view is not None:
-            # ② Private layer: the workspace-scoped §〇 handoff is the
-            # unconditional resume anchor — tiny by contract, so it is
-            # injected on every planning turn regardless of whether the
-            # intent asked for memory retrieval.
-            run_context = getattr(self._orch, "run_context", None)
-            workspace = getattr(run_context, "workspace", None)
-            if workspace is not None:
-                from agent.services.memory_service import workspace_slug
+        if memory_view is not None and workspace is not None:
+            from agent.services.memory_service import workspace_slug
 
-                handoff = await asyncio.to_thread(
-                    memory_view.get_handoff, workspace_slug(workspace)
+            handoff = await asyncio.to_thread(
+                memory_view.get_handoff, workspace_slug(workspace)
+            )
+            if handoff:
+                untrusted_context["session_handoff"] = _cap_memory_field(
+                    handoff
                 )
-                if handoff:
-                    untrusted_context["session_handoff"] = _cap_memory_field(
-                        handoff
-                    )
         if needs.get("memory"):
             if memory_view is not None:
                 retrieved = await asyncio.to_thread(

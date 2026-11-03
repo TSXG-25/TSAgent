@@ -347,6 +347,67 @@ class ServiceCLI:
         return snapshot
 
 
+_HELP_TEXT = """\
+可用命令:
+  /help                          显示本帮助
+  /model                         查看当前模型与提供商
+  /model auto|deepseek|ollama    切换提供商模式
+  /apikey                        输入 DeepSeek API Key（隐藏输入，推荐）
+  /apikey <key>                  直接设置 API Key
+  /cancel [run_id]               取消当前或指定 Run
+  /resume <run_id> [JSON 证据]   续接等待用户的 Run
+  exit / quit                    退出\
+"""
+
+
+def _handle_model_command(parts: list[str]) -> None:
+    from agent import llm as llm_module
+
+    router = llm_module.llm
+    if len(parts) == 1:
+        try:
+            provider, name = router._get_active_provider()
+            model = getattr(provider, "model", None) or getattr(
+                provider, "model_name", ""
+            )
+            print(
+                f"当前: 模式={router._provider_mode} 活跃={name} 模型={model}"
+            )
+        except Exception as exc:
+            print(f"当前: 模式={router._provider_mode} (提供商暂不可用: {exc})")
+        print("切换: /model auto|deepseek|ollama")
+        return
+    mode = parts[1].lower()
+    if mode not in {"auto", "deepseek", "ollama"}:
+        print("用法: /model [auto|deepseek|ollama]")
+        return
+    router._provider_mode = mode
+    print(f"提供商模式已切换为 {mode}")
+
+
+async def _handle_apikey_command(parts: list[str]) -> None:
+    from agent import llm as llm_module
+
+    if len(parts) == 1:
+        import getpass
+
+        key = await asyncio.to_thread(
+            getpass.getpass, "DeepSeek API Key: "
+        )
+    else:
+        key = parts[1]
+    key = key.strip()
+    if not key:
+        print("API Key 为空，未修改。")
+        return
+    llm_module.DEEPSEEK_API_KEY = key
+    os.environ["OPENAI_API_KEY"] = key
+    # Reset the cached provider so the next request uses the new key.
+    llm_module.llm._deepseek = None
+    llm_module.llm._deepseek_available = True
+    print("DeepSeek API Key 已更新（仅本次会话有效，未写入磁盘）。")
+
+
 async def main() -> None:
     args = _parser().parse_args()
     # Bootstrap remains an application concern.  The CLI itself only talks to
@@ -433,6 +494,15 @@ async def main() -> None:
                     print("用法: /cancel 或 /cancel <run_id>")
                     continue
                 await cli.cancel_run(parts[1] if len(parts) == 2 else None)
+                continue
+            if parts[0] == "/help":
+                print(_HELP_TEXT)
+                continue
+            if parts[0] == "/model":
+                _handle_model_command(parts)
+                continue
+            if parts[0] == "/apikey":
+                await _handle_apikey_command(parts)
                 continue
 
             if active_task is not None and not active_task.done():

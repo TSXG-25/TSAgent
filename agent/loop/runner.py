@@ -212,10 +212,25 @@ class AgentLoop:
                     CancellationSafetyClass.BOUNDARY_ONLY,
                 )
             t_llm = time.perf_counter()
+            deltas: list[str] = []
+            event_bus = getattr(run_context, "event_bus", None)
+
+            def _flush_delta() -> None:
+                if deltas and event_bus is not None:
+                    event_bus.emit("assistant_delta", {"delta": "".join(deltas)})
+                    deltas.clear()
+
+            def _on_delta(text: str) -> None:
+                deltas.append(text)
+                if sum(len(part) for part in deltas) >= 80:
+                    _flush_delta()
+
             turn = await llm.achat(
                 transcript,
                 tool_specs,
+                on_delta=_on_delta if event_bus is not None else None,
             )
+            _flush_delta()
             self._orch._timings["loop_llm"] = round(
                 float(self._orch._timings.get("loop_llm", 0.0))
                 + (time.perf_counter() - t_llm),

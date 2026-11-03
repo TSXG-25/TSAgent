@@ -223,6 +223,7 @@ class EventType(str, Enum):
     STAGE_COMPLETED = "stage_completed"
     TASK_STARTED = "task_started"
     TASK_COMPLETED = "task_completed"
+    ASSISTANT_DELTA = "assistant_delta"
     ARTIFACT_PUBLISHED = "artifact_published"
     CHECKPOINT_COMMITTED = "checkpoint_committed"
     RESUME_DECIDED = "resume_decided"

@@ -267,19 +267,68 @@ class _OllamaHTTPProvider:
         self,
         messages: Sequence[Mapping[str, Any]],
         tools: Sequence[Mapping[str, Any]],
+        on_delta: Any = None,
         **kwargs: object,
     ) -> ChatTurn:
         import httpx
 
+        payload = self._chat_payload(messages, tools, kwargs)
+        if callable(on_delta):
+            payload["stream"] = True
         async with httpx.AsyncClient(
             timeout=self.timeout,
             trust_env=False,
         ) as client:
-            response = await client.post(
-                self._chat_url,
-                headers={"Authorization": "Bearer ollama"},
-                json=self._chat_payload(messages, tools, kwargs),
-            )
+            if not callable(on_delta):
+                response = await client.post(
+                    self._chat_url,
+                    headers={"Authorization": "Bearer ollama"},
+                    json=payload,
+                )
+            else:
+                async with client.stream(
+                    "POST",
+                    self._chat_url,
+                    headers={"Authorization": "Bearer ollama"},
+                    json=payload,
+                ) as stream_response:
+                    if stream_response.is_error:
+                        await stream_response.aread()
+                        raise RuntimeError(
+                            f"Ollama HTTP {stream_response.status_code}: "
+                            f"{stream_response.text[:200]}"
+                        )
+                    content_parts: list[str] = []
+                    tool_calls: tuple[ToolCall, ...] = ()
+                    async for line in stream_response.aiter_lines():
+                        if not line.strip():
+                            continue
+                        try:
+                            chunk = json.loads(line)
+                        except ValueError:
+                            continue
+                        message = chunk.get("message") or {}
+                        text = message.get("content")
+                        if isinstance(text, str) and text:
+                            content_parts.append(text)
+                            on_delta(text)
+                        calls = message.get("tool_calls")
+                        if calls:
+                            tool_calls = tuple(
+                                ToolCall(
+                                    id=str(call.get("id", f"call-{index}")),
+                                    name=str(
+                                        (call.get("function") or {}).get("name", "")
+                                    ),
+                                    arguments=_parse_tool_arguments(
+                                        (call.get("function") or {}).get("arguments")
+                                    ),
+                                )
+                                for index, call in enumerate(calls)
+                            )
+                    return ChatTurn(
+                        content="".join(content_parts), tool_calls=tool_calls
+                    )
         if response.is_error:
             raise RuntimeError(
                 f"Ollama HTTP {response.status_code}: {response.text[:200]}"
@@ -394,13 +443,14 @@ async def _deepseek_achat(
     """Native OpenAI-compatible tool calling against the DeepSeek endpoint."""
     import httpx
 
+    on_delta = kwargs.pop("on_delta", None)
     payload: dict[str, Any] = {
         "model": getattr(provider, "model_name", None) or DEEPSEEK_MODEL,
         "messages": _to_openai_messages(messages),
         "tools": [dict(tool) for tool in tools],
         "tool_choice": "auto",
         "temperature": kwargs.get("temperature", 0),
-        "stream": False,
+        "stream": callable(on_delta),
     }
     if "max_tokens" in kwargs:
         payload["max_tokens"] = kwargs["max_tokens"]
@@ -415,16 +465,66 @@ async def _deepseek_achat(
         getattr(provider, "openai_api_base", None) or DEEPSEEK_BASE_URL
     ).rstrip("/")
     async with httpx.AsyncClient(timeout=_request_timeout(provider)) as client:
-        response = await client.post(
+        if not callable(on_delta):
+            response = await client.post(
+                f"{base_url}/chat/completions",
+                headers={"Authorization": f"Bearer {api_key}"},
+                json=payload,
+            )
+            if response.is_error:
+                raise RuntimeError(
+                    f"DeepSeek HTTP {response.status_code}: {response.text[:200]}"
+                )
+            return _openai_turn(response.json())
+        async with client.stream(
+            "POST",
             f"{base_url}/chat/completions",
             headers={"Authorization": f"Bearer {api_key}"},
             json=payload,
-        )
-    if response.is_error:
-        raise RuntimeError(
-            f"DeepSeek HTTP {response.status_code}: {response.text[:200]}"
-        )
-    return _openai_turn(response.json())
+        ) as response:
+            if response.is_error:
+                await response.aread()
+                raise RuntimeError(
+                    f"DeepSeek HTTP {response.status_code}: {response.text[:200]}"
+                )
+            content_parts: list[str] = []
+            tool_acc: dict[int, dict[str, str]] = {}
+            async for line in response.aiter_lines():
+                if not line.startswith("data:"):
+                    continue
+                data = line[5:].strip()
+                if data == "[DONE]":
+                    break
+                try:
+                    chunk = json.loads(data)
+                except ValueError:
+                    continue
+                for choice in chunk.get("choices") or ():
+                    delta = choice.get("delta") or {}
+                    text = delta.get("content")
+                    if isinstance(text, str) and text:
+                        content_parts.append(text)
+                        on_delta(text)
+                    for call in delta.get("tool_calls") or ():
+                        acc = tool_acc.setdefault(
+                            int(call.get("index", 0)),
+                            {"id": "", "name": "", "arguments": ""},
+                        )
+                        function = call.get("function") or {}
+                        acc["id"] = str(call.get("id") or acc["id"])
+                        acc["name"] = str(function.get("name") or acc["name"])
+                        acc["arguments"] += str(function.get("arguments") or "")
+            return ChatTurn(
+                content="".join(content_parts),
+                tool_calls=tuple(
+                    ToolCall(
+                        id=acc["id"] or f"call-{index}",
+                        name=acc["name"],
+                        arguments=_parse_tool_arguments(acc["arguments"]),
+                    )
+                    for index, acc in sorted(tool_acc.items())
+                ),
+            )
 
 
 def _inject_time_to_transcript(

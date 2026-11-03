@@ -34,6 +34,7 @@ class RuntimeExecutionLauncher:
         "stage_completed",
         "task_started",
         "task_completed",
+        "assistant_delta",
     )
 
     def __init__(

@@ -6,6 +6,7 @@ import argparse
 import asyncio
 import json
 import os
+import sys
 import uuid
 from pathlib import Path
 
@@ -188,6 +189,12 @@ class ServiceCLI:
         iterator = stream.__aiter__()
         try:
             async for event in iterator:
+                if event.event_type is EventType.ASSISTANT_DELTA:
+                    sys.stdout.write(
+                        str((event.payload or {}).get("delta", ""))
+                    )
+                    sys.stdout.flush()
+                    continue
                 print(f"  • {event.sequence_number}: {event.event_type.value}")
                 self._print_event(event)
                 if event.is_terminal or event.event_type is EventType.RUN_WAITING_USER:

@@ -68,3 +68,34 @@ def test_project_skills_load_from_repo():
 
     loaded = load_project_skills()
     assert set(loaded) == {"coding", "research"}
+
+
+def test_workspace_skills_overlay_global_index(tmp_path):
+    from agent.skills import merged_skills, skills_index, workspace_skills
+
+    private = tmp_path / "skills" / "proj"
+    private.mkdir(parents=True)
+    (private / "SKILL.md").write_text(
+        "---\nname: proj\ndescription: private\n---\nworkspace body\n",
+        encoding="utf-8",
+    )
+    loaded = workspace_skills(tmp_path)
+    assert loaded["proj"].body == "workspace body"
+
+    merged = merged_skills(tmp_path)
+    assert set(merged) == set(skills_index()) | {"proj"}
+    # Same-name workspace skill wins (private layer owns its territory).
+    clash = tmp_path / "skills" / "coding"
+    clash.mkdir(parents=True)
+    (clash / "SKILL.md").write_text(
+        "---\nname: coding\ndescription: override\n---\nprivate coding\n",
+        encoding="utf-8",
+    )
+    assert merged_skills(tmp_path)["coding"].body == "private coding"
+
+
+def test_workspace_skills_absent_returns_empty(tmp_path):
+    from agent.skills import workspace_skills
+
+    assert workspace_skills(tmp_path) == {}
+    assert workspace_skills(None) == {}

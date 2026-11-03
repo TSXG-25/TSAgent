@@ -61,32 +61,84 @@ def _gap_hint(gap: str) -> str:
 
 
 def _tool_message(call: ToolCall, content: str, ok: bool = True,
-                  error_code: str = "") -> dict[str, Any]:
+                  error_code: str = "", workspace=None) -> dict[str, Any]:
     prefix = "" if ok else f"ERROR[{error_code or 'TOOL_ERROR'}]: "
+    full = prefix + content
+    if len(full) > TOOL_RESULT_CHAR_CAP:
+        pointer = _spill_tool_result(workspace, call.id, full)
+        note = f"…（完整结果已外置保存 {pointer}）" if pointer else "…"
+        full = full[:TOOL_RESULT_CHAR_CAP] + note
     return {
         "role": "tool",
         "tool_call_id": call.id,
         "name": call.name,
-        "content": prefix + content[:TOOL_RESULT_CHAR_CAP],
+        "content": full,
     }
 
 
-def _compact_transcript(messages: list[dict[str, Any]]) -> None:
-    """Mechanical in-run compaction; observations keep the full result."""
-    total = sum(len(str(m.get("content", ""))) for m in messages)
-    if total <= TRANSCRIPT_CHAR_BUDGET:
+def _spill_tool_result(workspace, tool_call_id: str, content: str) -> str:
+    """Persist a full tool result under .tsagent/spill for diagnosis.
+
+    Internal storage is excluded from workspace artifacts and protected
+    from tool reads, so the write bypasses record_edit: the spilled file
+    is Runtime evidence, not a user deliverable.  Returns the relative
+    pointer path, or "" when spilling is not possible.
+    """
+    if workspace is None or not content:
+        return ""
+    rel = f".tsagent/spill/{tool_call_id or 'result'}.txt"
+    try:
+        target = workspace.resolve_path(rel)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+    except Exception:
+        return ""
+    return rel
+
+
+def _compact_transcript(
+    messages: list[dict[str, Any]],
+    *,
+    workspace=None,
+    event_bus=None,
+) -> None:
+    """Graduated in-run compaction; observations keep the full result.
+
+    Oldest tool results are pruned first and only as many as the budget
+    requires — recent detail survives instead of blanket-squashing every
+    old result.  With a scoped workspace each pruned result spills to
+    ``.tsagent/spill/`` first, so the full content remains inspectable.
+    """
+    def _chars() -> int:
+        return sum(len(str(m.get("content", ""))) for m in messages)
+
+    if _chars() <= TRANSCRIPT_CHAR_BUDGET:
         return
     tool_indexes = [
         index for index, message in enumerate(messages)
         if message.get("role") == "tool"
     ]
+    pruned = spilled = 0
     for index in tool_indexes[:-COMPACT_KEEP_TAIL]:
+        if _chars() <= TRANSCRIPT_CHAR_BUDGET:
+            break
         message = messages[index]
         content = str(message.get("content", ""))
+        pointer = _spill_tool_result(
+            workspace, str(message.get("tool_call_id", "")), content
+        )
+        if pointer:
+            spilled += 1
+            pointer = f"（完整结果已外置保存 {pointer}）"
         messages[index] = {
             **message,
-            "content": f"[已压缩] {message.get('name', '')}: {content[:200]}…",
+            "content": f"[已压缩] {message.get('name', '')}: {content[:200]}…{pointer}",
         }
+        pruned += 1
+    if pruned and event_bus is not None:
+        event_bus.emit(
+            "transcript_compacted", {"pruned": pruned, "spilled": spilled}
+        )
 
 
 def _required_args(spec: Mapping[str, Any]) -> tuple[str, ...]:
@@ -163,16 +215,17 @@ class AgentLoop:
         workflows = workflow_projections() if (
             authorization.allows_file_mutation or authorization.requires_execution
         ) else []
-        tools = build_toolset(authorization, workflows=workflows)
+        from agent.skills import merged_skills
+
+        skills = merged_skills(getattr(run_context, "workspace", None))
+        tools = build_toolset(authorization, workflows=workflows, skills=skills)
         tool_specs = [tool.spec for tool in tools.values()]
 
         goal_state = GoalState.from_dict(state.get("goal_state"))
-        from agent.skills import skills_index
-
         system = build_system_prompt(
             authorization=authorization,
             goal_state=goal_state.to_dict(),
-            skills=skills_index(),
+            skills=skills,
             workflows=workflows,
             freshness_required=bool(state.get("freshness_required")),
             source_grounding_required=bool(state.get("source_grounding_required")),
@@ -288,7 +341,11 @@ class AgentLoop:
                 user_id=user_id, user_input=user_input,
             )
             transcript.extend(messages)
-            _compact_transcript(transcript)
+            _compact_transcript(
+                transcript,
+                workspace=getattr(run_context, "workspace", None),
+                event_bus=event_bus,
+            )
 
     def _verification_gaps(self, state: AgentState, answer: str) -> list[str]:
         """Mechanically checkable gaps worth feeding back to the model."""
@@ -395,6 +452,7 @@ class AgentLoop:
         user_id: str,
         user_input: str,
     ) -> dict[str, Any]:
+        workspace = getattr(run_context, "workspace", None)
         tool = tools.get(call.name)
         if tool is None:
             return _tool_message(
@@ -421,9 +479,11 @@ class AgentLoop:
 
         if tool.executor_tool is None:
             if call.name == "load_skill":
-                from agent.skills import skills_index
+                from agent.skills import merged_skills
 
-                skill = skills_index().get(str(call.arguments.get("name", "")))
+                skill = merged_skills(workspace).get(
+                    str(call.arguments.get("name", ""))
+                )
                 if skill is None:
                     return _tool_message(
                         call,
@@ -431,7 +491,7 @@ class AgentLoop:
                         ok=False,
                         error_code="UNKNOWN_SKILL",
                     )
-                return _tool_message(call, skill.body)
+                return _tool_message(call, skill.body, workspace=workspace)
             if call.name == "reme_search":
                 from agent.mcp.reme import reme_search
 
@@ -448,7 +508,9 @@ class AgentLoop:
                         ok=False,
                         error_code="MEMORY_UNAVAILABLE",
                     )
-                return _tool_message(call, text or "未找到相关长期记忆")
+                return _tool_message(
+                    call, text or "未找到相关长期记忆", workspace=workspace
+                )
             if call.name == "run_workflow":
                 ok, message = await run_workflow_tool(
                     state,
@@ -458,7 +520,7 @@ class AgentLoop:
                     workflow_id=str(call.arguments.get("workflow_id", "")),
                     bindings=call.arguments.get("bindings") or {},
                 )
-                return _tool_message(call, message, ok=ok)
+                return _tool_message(call, message, ok=ok, workspace=workspace)
             return _tool_message(call, "未实现的内置工具", ok=False)
 
         authorization = EffectAuthorization.from_state(state, user_input)
@@ -496,14 +558,18 @@ class AgentLoop:
         action_result: ActionResult | None = getattr(result, "action_result", None)
         if action_result is not None:
             if action_result.ok:
-                return _tool_message(call, action_result.content or "OK")
+                return _tool_message(
+                    call, action_result.content or "OK", workspace=workspace
+                )
             ok, content, error_code = (
                 False,
                 action_result.content or result.error or "执行失败",
                 action_result.error_code or "ACTION_EXECUTION_FAILED",
             )
         elif result.success:
-            return _tool_message(call, result.text or "OK")
+            return _tool_message(
+                call, result.text or "OK", workspace=workspace
+            )
         else:
             ok, content, error_code = (
                 False,
@@ -516,4 +582,6 @@ class AgentLoop:
         # "failed" task in plan would poison GoalVerifier's failed-task check
         # even after the model recovers (e.g. list on a missing dir then write).
         plan_tasks.remove(task_dict)
-        return _tool_message(call, content, ok=ok, error_code=error_code)
+        return _tool_message(
+            call, content, ok=ok, error_code=error_code, workspace=workspace
+        )

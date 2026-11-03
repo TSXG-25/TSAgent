@@ -121,6 +121,7 @@ def build_toolset(
     authorization,
     *,
     workflows: Sequence[Mapping[str, Any]] = (),
+    skills: Mapping[str, Any] | None = None,
 ) -> dict[str, LoopTool]:
     """Build the per-Run tool catalog under the intent-derived authorization."""
     tools: dict[str, LoopTool] = {}
@@ -215,10 +216,13 @@ def build_toolset(
         }),
     )
 
-    from agent.skills import skills_index
+    if skills is None:
+        from agent.skills import skills_index
 
-    if skills_index():
-        available = ", ".join(sorted(skills_index()))
+        skills = skills_index()
+
+    if skills:
+        available = ", ".join(sorted(skills))
         tools["load_skill"] = LoopTool(
             name="load_skill",
             executor_tool=None,

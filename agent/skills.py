@@ -78,3 +78,22 @@ def load_project_skills(root: Path | None = None) -> dict[str, Skill]:
 
 def skills_index() -> dict[str, Skill]:
     return _loaded
+
+
+def workspace_skills(workspace: object) -> dict[str, Skill]:
+    """Workspace-private skills at ``<workspace>/skills/<name>/SKILL.md``.
+
+    The private layer mirrors the scene-private skill idea: instructions
+    that belong to one workspace live beside the workspace, not in the
+    shared catalog.
+    """
+    if workspace is None:
+        return {}
+    return load_skills(Path(str(workspace)) / "skills")
+
+
+def merged_skills(workspace: object) -> dict[str, Skill]:
+    """Global index overlaid by workspace-private skills (same name wins)."""
+    merged = dict(_loaded)
+    merged.update(workspace_skills(workspace))
+    return merged

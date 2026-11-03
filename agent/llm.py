@@ -3,6 +3,7 @@
 提供与之前一致的 `llm.ainvoke(messages)` 接口，所有使用者无需修改。
 同时自动在所有请求中注入当前时间信息。
 """
+import asyncio
 import json
 import os
 import logging
@@ -17,7 +18,11 @@ load_dotenv()
 
 from langchain_core.messages import SystemMessage, BaseMessage
 from agent.interruption import RunInterruptionRequested, await_interruptibly
-from agent.execution_errors import ProviderError, stable_error_message
+from agent.execution_errors import (
+    ProviderError,
+    classify_execution_error,
+    stable_error_message,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -143,6 +148,9 @@ LLM_PROVIDER_COOLDOWN: Final[float] = float(
 )
 LLM_PROVIDER_RETRY_AFTER: Final[float] = float(
     os.getenv("TSAGENT_LLM_PROVIDER_RETRY_AFTER", "60")
+)
+LLM_PROVIDER_MAX_RETRIES: Final[int] = int(
+    os.getenv("TSAGENT_LLM_PROVIDER_RETRIES", "3")
 )
 _VALID_PROVIDER_MODES = {"auto", "deepseek", "ollama"}
 
@@ -463,6 +471,20 @@ def _request_timeout(provider) -> float:
     )
 
 
+def _retryable_provider_error(error: object) -> bool:
+    """Transient connectivity failures are worth retrying before fallback;
+    request-level errors (4xx/auth/validation) fail immediately."""
+    code = classify_execution_error(error)
+    if code in ("PROVIDER_TIMEOUT", "PROVIDER_NETWORK"):
+        return True
+    if code:
+        return False
+    text = str(error or "").upper()
+    if "HTTP 4" in text or "HTTP 5" in text:
+        return False
+    return True
+
+
 class LLMRouter:
     def __init__(self, *, provider_mode: str | None = None):
         raw_mode = (
@@ -611,11 +633,42 @@ class LLMRouter:
                 time.monotonic() + LLM_PROVIDER_COOLDOWN
             )
 
+    def _invoke_with_retries(self, provider, name, messages, kwargs):
+        """Retry transient connectivity failures before giving up on a
+        provider; 4xx/auth errors raise immediately."""
+        for attempt in range(LLM_PROVIDER_MAX_RETRIES + 1):
+            try:
+                return provider.invoke(messages, **kwargs)
+            except Exception as e:
+                if (
+                    attempt >= LLM_PROVIDER_MAX_RETRIES
+                    or not _retryable_provider_error(e)
+                ):
+                    raise
+                time.sleep(min(0.5 * (attempt + 1), 2.0))
+
+    async def _acall_with_retries(self, call, provider, name):
+        for attempt in range(LLM_PROVIDER_MAX_RETRIES + 1):
+            try:
+                return await await_interruptibly(
+                    call(provider, name),
+                    timeout=_request_timeout(provider),
+                )
+            except RunInterruptionRequested:
+                raise
+            except Exception as e:
+                if (
+                    attempt >= LLM_PROVIDER_MAX_RETRIES
+                    or not _retryable_provider_error(e)
+                ):
+                    raise
+                await asyncio.sleep(min(0.5 * (attempt + 1), 2.0))
+
     def invoke(self, messages: list[BaseMessage], **kwargs):
         messages = _inject_time_to_system(messages)
         provider, name = self._get_active_provider()
         try:
-            result = provider.invoke(messages, **kwargs)
+            result = self._invoke_with_retries(provider, name, messages, kwargs)
             self._on_success(name)
             return result
         except Exception as e:
@@ -631,7 +684,9 @@ class LLMRouter:
             if fallback_name != name:
                 attempted.add(fallback_name)
                 try:
-                    result = fallback_provider.invoke(messages, **kwargs)
+                    result = self._invoke_with_retries(
+                        fallback_provider, fallback_name, messages, kwargs
+                    )
                     self._on_success(fallback_name)
                     return result
                 except Exception as e2:
@@ -660,10 +715,7 @@ class LLMRouter:
         """Run one provider call with the shared fallback/timeout policy."""
         provider, name = self._get_active_provider()
         try:
-            result = await await_interruptibly(
-                call(provider, name),
-                timeout=_request_timeout(provider),
-            )
+            result = await self._acall_with_retries(call, provider, name)
             self._on_success(name)
             return result
         except RunInterruptionRequested:
@@ -681,9 +733,8 @@ class LLMRouter:
             if fallback_name != name:
                 attempted.add(fallback_name)
                 try:
-                    result = await await_interruptibly(
-                        call(fallback_provider, fallback_name),
-                        timeout=_request_timeout(fallback_provider),
+                    result = await self._acall_with_retries(
+                        call, fallback_provider, fallback_name
                     )
                     self._on_success(fallback_name)
                     return result

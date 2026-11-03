@@ -94,7 +94,8 @@ def test_intent_provider_failure_short_circuits_to_terminal_fail(monkeypatch) ->
     asyncio.run(scenario())
 
 
-def test_llm_router_does_not_retry_same_provider_in_one_request() -> None:
+def test_llm_router_does_not_retry_same_provider_in_one_request(monkeypatch) -> None:
+    monkeypatch.setattr("agent.llm.LLM_PROVIDER_MAX_RETRIES", 0)
     calls: list[str] = []
 
     class FailingProvider:

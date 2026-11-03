@@ -454,6 +454,119 @@ def test_resume_fence_cannot_overlap_another_run_in_the_session(
         store.close()
 
 
+def test_orphaned_running_run_is_converged_on_next_session_start(
+    tmp_path: Path,
+) -> None:
+    """A RUNNING head whose worker lease expired belongs to a dead worker;
+    the next session admission must converge it instead of blocking forever."""
+    path = tmp_path / "orphaned-run.sqlite"
+    store = _store(path)
+    try:
+        dead = store.reserve_service_start(
+            "tenant-a",
+            "session-a",
+            requested_run_id="run-dead",
+            request_id="request-dead",
+            request_digest="digest-dead",
+            writer_id="writer-dead",
+            external_reference="service-start:run-dead",
+        )
+        store.transition_run_with_event(
+            "tenant-a",
+            "session-a",
+            "run-dead",
+            run_status="RUNNING",
+            event_id="run-started:run-dead",
+            event_type="run_started",
+            timestamp="2026-09-27T00:00:00Z",
+            payload={"request_id": "request-dead"},
+            writer_id="writer-dead",
+            fence_token=dead.head.current_fence_token,
+            request_id="request-dead",
+            expected_status="CREATED",
+        )
+        # Worker died: heartbeat stopped and the lease expired.
+        store._connection.execute(
+            "UPDATE run_worker_leases SET expires_at = '2000-01-01T00:00:00Z'"
+        )
+
+        fresh = store.reserve_service_start(
+            "tenant-a",
+            "session-a",
+            requested_run_id="run-fresh",
+            request_id="request-fresh",
+            request_digest="digest-fresh",
+            writer_id="writer-fresh",
+            external_reference="service-start:run-fresh",
+        )
+        assert fresh.created is True
+
+        head = store.get_run_head(
+            "tenant-a", "run-dead", session_id="session-a"
+        )
+        assert str(head.run_status) == "FAILED_TERMINAL"
+        event = store._connection.execute(
+            "SELECT payload_json FROM run_events"
+            " WHERE run_id = 'run-dead' AND event_type = 'run_failed'"
+        ).fetchone()
+        assert event is not None
+        payload = json.loads(event["payload_json"])
+        assert payload["failure_code"] == "RUN_WORKER_LOST"
+        assert store._connection.execute(
+            "SELECT 1 FROM run_worker_leases WHERE run_id = 'run-dead'"
+        ).fetchone() is None
+    finally:
+        store.close()
+
+
+def test_live_worker_lease_still_blocks_new_run_in_session(
+    tmp_path: Path,
+) -> None:
+    """The orphan sweep must not touch a run whose lease is still alive."""
+    store = _store(tmp_path / "live-lease.sqlite")
+    try:
+        live = store.reserve_service_start(
+            "tenant-a",
+            "session-a",
+            requested_run_id="run-live",
+            request_id="request-live",
+            request_digest="digest-live",
+            writer_id="writer-live",
+            external_reference="service-start:run-live",
+        )
+        store.transition_run_with_event(
+            "tenant-a",
+            "session-a",
+            "run-live",
+            run_status="RUNNING",
+            event_id="run-started:run-live",
+            event_type="run_started",
+            timestamp="2026-09-27T00:00:00Z",
+            payload={"request_id": "request-live"},
+            writer_id="writer-live",
+            fence_token=live.head.current_fence_token,
+            request_id="request-live",
+            expected_status="CREATED",
+        )
+        with pytest.raises(DurableStoreError) as conflict:
+            store.reserve_service_start(
+                "tenant-a",
+                "session-a",
+                requested_run_id="run-new",
+                request_id="request-new",
+                request_digest="digest-new",
+                writer_id="writer-new",
+                external_reference="service-start:run-new",
+            )
+        assert conflict.value.code is StoreErrorCode.SESSION_RUN_ACTIVE
+        head = store.get_run_head(
+            "tenant-a", "run-live", session_id="session-a"
+        )
+        assert str(head.run_status) == "RUNNING"
+    finally:
+        store.close()
+
+
 def test_parent_digest_is_part_of_revision_cas(tmp_path: Path) -> None:
     store = _store(tmp_path / "digest.sqlite")
     try:

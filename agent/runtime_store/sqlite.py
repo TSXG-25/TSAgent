@@ -2245,39 +2245,130 @@ class SqliteRuntimeStore:
             ),
         )
 
-    @staticmethod
+    def _converge_orphaned_run_tx(
+        self,
+        connection: sqlite3.Connection,
+        tenant_id: str,
+        session_id: str,
+        row: Mapping[str, Any],
+        now: str,
+    ) -> None:
+        """Fail an active head whose worker is provably gone.
+
+        The worker lease is the liveness proof: an expired (or absent and
+        stale) lease on an active head means the process died mid-run and
+        the coroutine-level failure paths never ran.  Converging here —
+        inside the same writer transaction that guards session admission —
+        keeps a dead run from blocking the session forever.
+        """
+        run_id = str(row["run_id"])
+        revision = int(row["current_revision"])
+        payload = {
+            "request_id": "",
+            "failure_code": "RUN_WORKER_LOST",
+            "failure_class": "execution",
+            "failed_component": "runtime",
+            "retryable": False,
+            "continuation": {
+                "request": "",
+                "goal": "",
+                "missing": ["RUN_WORKER_LOST"],
+                "observations": [],
+            },
+        }
+        payload_json = _canonical_json(payload)
+        self._append_event_tx(
+            connection,
+            tenant_id=tenant_id,
+            session_id=session_id,
+            run_id=run_id,
+            event_id=f"run-failed:{run_id}:worker-lost:{revision}",
+            event_type_value="run_failed",
+            timestamp=now,
+            optional_ids={
+                "workflow_id": None,
+                "stage_id": None,
+                "task_id": None,
+            },
+            payload_json=payload_json,
+            payload_digest=_digest_text(payload_json),
+            run_revision=revision,
+        )
+        connection.execute(
+            """
+            UPDATE run_heads
+            SET run_status = 'FAILED_TERMINAL', updated_at = ?
+            WHERE tenant_id = ? AND run_id = ?
+            """,
+            (now, tenant_id, run_id),
+        )
+        connection.execute(
+            """
+            DELETE FROM run_worker_leases
+            WHERE tenant_id = ? AND run_id = ?
+            """,
+            (tenant_id, run_id),
+        )
+
     def _assert_session_run_available_tx(
+        self,
         connection: sqlite3.Connection,
         tenant_id: str,
         session_id: str,
         *,
         current_run_id: str = "",
     ) -> None:
-        active_run = connection.execute(
+        now = _now()
+        lease_grace = (
+            datetime.now(timezone.utc) - timedelta(seconds=WORKER_LEASE_SECONDS)
+        ).isoformat().replace("+00:00", "Z")
+        active_rows = connection.execute(
             """
-            SELECT run_id FROM run_heads
+            SELECT run_id, current_revision, updated_at FROM run_heads
             WHERE tenant_id = ? AND session_id = ? AND run_id <> ?
               AND run_status IN ('CREATED', 'RUNNING', 'CANCELLING')
             ORDER BY updated_at, run_id
-            LIMIT 1
             """,
             (tenant_id, session_id, current_run_id),
-        ).fetchone()
-        if active_run is None:
-            now = _now()
-            active_lease = connection.execute(
+        ).fetchall()
+        for row in active_rows:
+            run_id = str(row["run_id"])
+            lease = connection.execute(
                 """
-                SELECT run_id FROM run_worker_leases
-                WHERE tenant_id = ? AND session_id = ? AND run_id <> ?
-                  AND expires_at > ?
-                ORDER BY expires_at DESC, run_id
-                LIMIT 1
+                SELECT expires_at FROM run_worker_leases
+                WHERE tenant_id = ? AND run_id = ?
                 """,
-                (tenant_id, session_id, current_run_id, now),
+                (tenant_id, run_id),
             ).fetchone()
-            active_run = active_lease
-        if active_run is not None:
-            run_id = str(active_run["run_id"])
+            if lease is not None and str(lease["expires_at"]) > now:
+                raise DurableStoreError(
+                    StoreErrorCode.SESSION_RUN_ACTIVE,
+                    f"Run {run_id} is already active in this session",
+                    details={"active_run_id": run_id},
+                )
+            if lease is None and str(row["updated_at"]) > lease_grace:
+                # A just-created head may still be acquiring its worker
+                # lease; do not reap it out from under a live worker.
+                raise DurableStoreError(
+                    StoreErrorCode.SESSION_RUN_ACTIVE,
+                    f"Run {run_id} is already active in this session",
+                    details={"active_run_id": run_id},
+                )
+            self._converge_orphaned_run_tx(
+                connection, tenant_id, session_id, row, now
+            )
+        active_lease = connection.execute(
+            """
+            SELECT run_id FROM run_worker_leases
+            WHERE tenant_id = ? AND session_id = ? AND run_id <> ?
+              AND expires_at > ?
+            ORDER BY expires_at DESC, run_id
+            LIMIT 1
+            """,
+            (tenant_id, session_id, current_run_id, now),
+        ).fetchone()
+        if active_lease is not None:
+            run_id = str(active_lease["run_id"])
             raise DurableStoreError(
                 StoreErrorCode.SESSION_RUN_ACTIVE,
                 f"Run {run_id} is already active in this session",

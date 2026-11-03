@@ -136,7 +136,7 @@ DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
 # Ollama (local fallback)
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3:8b")
-LLM_REQUEST_TIMEOUT: Final[float] = float(os.getenv("TSAGENT_LLM_TIMEOUT", "45"))
+LLM_REQUEST_TIMEOUT: Final[float] = float(os.getenv("TSAGENT_LLM_TIMEOUT", "120"))
 OLLAMA_REQUEST_TIMEOUT: Final[float] = float(os.getenv("TSAGENT_OLLAMA_TIMEOUT", "120"))
 LLM_PROVIDER_COOLDOWN: Final[float] = float(
     os.getenv("TSAGENT_LLM_PROVIDER_COOLDOWN", "5")

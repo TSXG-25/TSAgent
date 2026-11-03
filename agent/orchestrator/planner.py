@@ -23,6 +23,7 @@ REPLAN：保留成功任务的 Facts，重新规划失败任务。
 Phase C.1：从 orchestrator.py 的 plan() / replan() / _print_plan() 迁移。
 """
 import asyncio
+import logging
 import time
 from datetime import datetime
 from typing import cast, Any, Dict, Mapping, Optional, Sequence, Tuple
@@ -37,8 +38,11 @@ from agent.cognition.intent_schema import (
     DOMAIN_MEMORY,
 )
 from agent.execution_errors import (
+
     classify_execution_error,
 )
+
+logger = logging.getLogger(__name__)
 
 
 # Memory injection red-line: the injected layer is paid for on every
@@ -419,16 +423,35 @@ class PlannerStage:
             untrusted_context["workspace_card"] = card
             state["workspace_card"] = card
         memory_view = self._memory_view()
-        if memory_view is not None and workspace is not None:
-            from agent.services.memory_service import workspace_slug
+        if memory_view is not None:
+            # Cross-session resolution memory: this turn just resolved a
+            # reference ("改那个文件" → a concrete target), so persist the
+            # utterance→target mapping; later turns retrieve it through
+            # get_context().resolutions.  Non-blocking like other learning.
+            original = str(state.get("original_request") or user_input)
+            if intent.target and state["resolved_request"] != original:
+                try:
+                    await memory_view.learn_resolution(
+                        original,
+                        intent.target,
+                        (
+                            "file"
+                            if ("/" in intent.target or "." in intent.target)
+                            else "topic"
+                        ),
+                    )
+                except Exception:
+                    logger.warning("指代解析记忆写入失败，不影响当前规划")
+            if workspace is not None:
+                from agent.services.memory_service import workspace_slug
 
-            handoff = await asyncio.to_thread(
-                memory_view.get_handoff, workspace_slug(workspace)
-            )
-            if handoff:
-                untrusted_context["session_handoff"] = _cap_memory_field(
-                    handoff
+                handoff = await asyncio.to_thread(
+                    memory_view.get_handoff, workspace_slug(workspace)
                 )
+                if handoff:
+                    untrusted_context["session_handoff"] = _cap_memory_field(
+                        handoff
+                    )
         if needs.get("memory"):
             if memory_view is not None:
                 retrieved = await asyncio.to_thread(
@@ -451,6 +474,7 @@ class PlannerStage:
                             retrieved.get("session", ""),
                             retrieved.get("short_term", ""),
                             retrieved.get("long_term", ""),
+                            retrieved.get("resolutions", ""),
                             retrieved.get("facts", ""),
                         )
                         if part

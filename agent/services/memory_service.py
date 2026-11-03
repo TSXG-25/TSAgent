@@ -369,7 +369,22 @@ class MemoryService:
             )
             or "",
             "facts": MemoryService.get_user_facts(user_id, scope=scope) or "",
+            "resolutions": MemoryService._resolutions_text(
+                user_id, n=8, scope=scope
+            ),
         }
+
+    @staticmethod
+    def _resolutions_text(
+        user_id: str, n: int = 8, *, scope: str = "user"
+    ) -> str:
+        entries = MemoryService.get_resolutions(user_id, n=n, scope=scope)
+        return "\n".join(
+            f"- {e.get('utterance', '')} → {e.get('resolved_target', '')}"
+            f" [{e.get('kind', '')}]"
+            for e in entries
+            if isinstance(e, dict)
+        )
 
     # ===== Durable learning from user interaction =====
 

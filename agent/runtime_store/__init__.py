@@ -30,6 +30,7 @@ _EXPORTS: dict[str, tuple[str, str]] = {
     "StoreErrorCode": ("errors", "StoreErrorCode"),
     "DEFAULT_BUSY_TIMEOUT_MS": ("sqlite", "DEFAULT_BUSY_TIMEOUT_MS"),
     "DEFAULT_WAL_AUTOCHECKPOINT": ("sqlite", "DEFAULT_WAL_AUTOCHECKPOINT"),
+    "WORKER_LEASE_SECONDS": ("sqlite", "WORKER_LEASE_SECONDS"),
     "SCHEMA_VERSION": ("sqlite", "SCHEMA_VERSION"),
     "SqliteRuntimeStore": ("sqlite", "SqliteRuntimeStore"),
     "DurableRuntimeStoreView": ("view", "DurableRuntimeStoreView"),

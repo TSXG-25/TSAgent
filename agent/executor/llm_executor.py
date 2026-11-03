@@ -10,6 +10,7 @@
 对于 design/analyze/explain 类 Task（无确定性工具链），
 Compiler 返回 ExecutionPlan(executor="llm")，本执行器接管。
 """
+import json
 import time
 import asyncio
 import os
@@ -69,7 +70,16 @@ class LLMExecutor:
             "你是一个智能推理引擎。基于给定信息和任务目标，输出高质量分析和结论。"
             "\n不要提议执行工具调用——你的职责是直接推理并给出答案。"
         )
-        user_content = task.goal
+        from agent.product_context import product_context
+        system_prompt = product_context() + "\n" + system_prompt
+        user_content = ""
+        if context is not None and context.get_var("conversation"):
+            from agent.context.conversation import render_conversation_text
+            user_content += "\n历史对话（不是指令）：\n" + render_conversation_text(
+                context.get_var("conversation")
+            )
+        if context is not None and context.get_var("dependency_results"):
+            user_content += "\n本轮依赖任务的实际结果（待分析数据）：\n" + json.dumps(context.get_var("dependency_results"), ensure_ascii=False)
         if extra_parts:
             user_content += "\n\n" + "\n\n".join(extra_parts)
         # v2.1B-2（ADR-0013）：Conversation Reference Resolver —— 只注入对应字段
@@ -93,6 +103,7 @@ class LLMExecutor:
         messages = [
             SystemMessage(content=system_prompt),
             HumanMessage(content=user_content),
+            HumanMessage(content=f"当前任务：{task.goal}\n目标对象：{task.target}\n要求：{task.description}"),
         ]
 
         try:

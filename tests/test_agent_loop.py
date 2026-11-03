@@ -1,0 +1,367 @@
+"""Focused contracts for the native tool-calling AgentLoop."""
+import asyncio
+from types import SimpleNamespace
+
+import pytest
+
+from agent.cognition.effect_authorization import EffectAuthorization
+from agent.cognition.execution_need import RequestedOutcome
+from agent.goal import GoalState
+from agent.llm import ChatTurn, ToolCall
+from agent.loop.runner import AgentLoop
+from agent.loop.toolset import build_toolset
+
+
+def _turn(*tool_calls, content=""):
+    return ChatTurn(
+        content=content,
+        tool_calls=tuple(
+            ToolCall(id=f"call-{index}", name=name, arguments=dict(arguments))
+            for index, (name, arguments) in enumerate(tool_calls)
+        ),
+    )
+
+
+def _scripted(turns):
+    """Stub achat returning queued ChatTurns."""
+    queue = list(turns)
+    calls = []
+
+    async def achat(messages, tools=None, **_kwargs):
+        calls.append(list(messages))
+        assert queue, "scripted achat exhausted"
+        return queue.pop(0)
+
+    return achat, calls
+
+
+def _orchestrator(tmp_path):
+    from agent.event_bus import EventBus
+    from agent.executor.contract import executor_factory
+    from agent.orchestrator.executor import ExecutionStage
+    from agent.services.workspace_service import WorkspaceService
+
+    workspace = WorkspaceService.scoped(
+        tmp_path, event_bus=EventBus(), build_index=False,
+    )
+    orch = SimpleNamespace(
+        _timings={},
+        run_budget=None,
+        run_context=SimpleNamespace(
+            workspace=workspace,
+            cancellation_view=None,
+            event_bus=EventBus(),
+            artifacts=SimpleNamespace(),
+            repository_indexer=None,
+        ),
+    )
+    orch._executor = ExecutionStage(orch)
+    orch.verify_goal = lambda state, answer: SimpleNamespace(
+        missing=list(state.get("_scripted_gaps", [])),
+    )
+    return orch
+
+
+def _mutation_state(**extra):
+    state = {
+        "requested_outcomes": ["USER_VISIBLE_OUTPUT", "FILE_MUTATION"],
+        "artifact_required": True,
+        "goal_state": GoalState(objective="写个文件", max_rounds=3).to_dict(),
+        "inbox": {"next_step": [], "next_turn": []},
+        "resolved_request": "写个文件",
+    }
+    state.update(extra)
+    return state
+
+
+def test_write_file_then_final_answer_records_task_and_inbox(
+    monkeypatch, tmp_path,
+):
+    orch = _orchestrator(tmp_path)
+    achat, _calls = _scripted([
+        _turn(("write_file", {"path": "output/a.txt", "content": "hello"})),
+        _turn(content="已写入 output/a.txt"),
+    ])
+    monkeypatch.setattr("agent.llm.llm.achat", achat)
+    state = _mutation_state()
+
+    answer = asyncio.run(
+        AgentLoop(orch).run(state, user_input="写个文件", user_id="u")
+    )
+
+    assert answer == "已写入 output/a.txt"
+    assert (tmp_path / "output/a.txt").read_text() == "hello"
+    assert state["plan"][0]["status"] == "succeeded"
+    assert state["plan"][0]["id"] == "loop-1"
+    assert state["inbox"]["next_step"][0]["result"]["ok"] is True
+
+
+def test_unauthorized_tool_is_never_exposed_or_executed(monkeypatch, tmp_path):
+    orch = _orchestrator(tmp_path)
+    # Empty outcomes → FILE_MUTATION not authorized → mutation tools hidden.
+    authorization = EffectAuthorization(
+        requested_outcomes=(RequestedOutcome.USER_VISIBLE_OUTPUT,),
+        write_scopes=(),
+    )
+    names = set(build_toolset(authorization))
+    assert "write_file" not in names
+    assert "read_file" in names
+
+    # Even if the model calls it anyway, the effect is denied per call:
+    # UNKNOWN_TOOL for a hidden tool, EFFECT_SCOPE_VIOLATION for an
+    # in-catalog but out-of-scope action.  No side effect happens either way.
+    state = {
+        "requested_outcomes": ["USER_VISIBLE_OUTPUT"],
+        "goal_state": GoalState(objective="聊聊", max_rounds=1).to_dict(),
+        "inbox": {"next_step": [], "next_turn": []},
+    }
+    seen_tool_errors = []
+
+    turns = iter([
+        _turn(("write_file", {"path": "output/x.txt", "content": "x"})),
+        _turn(content="聊聊天气"),
+    ])
+
+    async def achat(messages, tools=None, **_kwargs):
+        seen_tool_errors.extend(
+            m["content"] for m in messages if m.get("role") == "tool"
+        )
+        return next(turns)
+
+    import agent.llm as llm_module
+    monkeypatch.setattr(llm_module.llm, "achat", achat)
+
+    asyncio.run(
+        AgentLoop(orch).run(state, user_input="聊", user_id="u")
+    )
+    assert any("UNKNOWN_TOOL" in item for item in seen_tool_errors)
+    assert not (tmp_path / "output/x.txt").exists()
+    assert all(
+        task["status"] != "succeeded" for task in state.get("plan", [])
+    )
+
+
+def test_tool_call_errors_are_reported_as_tool_messages(tmp_path, monkeypatch):
+    orch = _orchestrator(tmp_path)
+    seen = []
+
+    async def achat(messages, tools=None, **_kwargs):
+        seen.extend(
+            message["content"]
+            for message in messages
+            if message.get("role") == "tool"
+        )
+        return _turn(content="done")
+
+    monkeypatch.setattr("agent.llm.llm.achat", achat)
+    state = _mutation_state()
+
+    async def scenario():
+        loop = AgentLoop(orch)
+        # Directly exercise _dispatch for the error paths.
+        call = ToolCall(id="c1", name="no_such_tool", arguments={})
+        msg = await loop._dispatch(
+            call, build_toolset(
+                EffectAuthorization.from_state(state, "写"),
+            ), state, index=1,
+            run_context=orch.run_context, user_id="u", user_input="写",
+        )
+        assert "ERROR[UNKNOWN_TOOL]" in msg["content"]
+
+        call = ToolCall(id="c2", name="write_file", arguments={"path": "p"})
+        msg = await loop._dispatch(
+            call, build_toolset(
+                EffectAuthorization.from_state(state, "写"),
+            ), state, index=2,
+            run_context=orch.run_context, user_id="u", user_input="写",
+        )
+        assert "ERROR[INVALID_TOOL_ARGUMENT]" in msg["content"]
+
+        call = ToolCall(
+            id="c3", name="write_file",
+            arguments={"__invalid_arguments__": "{bad json"},
+        )
+        msg = await loop._dispatch(
+            call, build_toolset(
+                EffectAuthorization.from_state(state, "写"),
+            ), state, index=3,
+            run_context=orch.run_context, user_id="u", user_input="写",
+        )
+        assert "ERROR[INVALID_TOOL_ARGUMENT]" in msg["content"]
+
+    asyncio.run(scenario())
+
+
+def test_edit_file_maps_to_scoped_edit_and_rejects_non_unique(
+    monkeypatch, tmp_path,
+):
+    orch = _orchestrator(tmp_path)
+    (tmp_path / "output").mkdir()
+    (tmp_path / "output/note.txt").write_text("dup\ndup\n")
+    state = _mutation_state()
+
+    async def scenario():
+        loop = AgentLoop(orch)
+        tools = build_toolset(EffectAuthorization.from_state(state, "改"))
+
+        dup = await loop._dispatch(
+            ToolCall(
+                id="e1", name="edit_file",
+                arguments={
+                    "path": "output/note.txt", "old_string": "dup",
+                    "new_string": "one",
+                },
+            ),
+            tools, state, index=1,
+            run_context=orch.run_context, user_id="u", user_input="改",
+        )
+        assert "ERROR[" in dup["content"]
+
+        ok = await loop._dispatch(
+            ToolCall(
+                id="e2", name="edit_file",
+                arguments={
+                    "path": "output/note.txt", "old_string": "dup\ndup",
+                    "new_string": "unique",
+                },
+            ),
+            tools, state, index=2,
+            run_context=orch.run_context, user_id="u", user_input="改",
+        )
+        assert "ERROR[" not in ok["content"]
+        assert (tmp_path / "output/note.txt").read_text() == "unique\n"
+
+    asyncio.run(scenario())
+
+
+def test_failed_tool_attempt_does_not_poison_goal_verification(
+    monkeypatch, tmp_path,
+):
+    """An exploratory call that fails (e.g. listing a missing dir) is
+    feedback, not failed work — recovery later in the loop must complete."""
+    orch = _orchestrator(tmp_path)
+    achat, _calls = _scripted([
+        _turn(("list_directory", {"path": "src"})),
+        _turn(("write_file", {"path": "output/greeting.py", "content": "x = 1"})),
+        _turn(content="已写入 output/greeting.py"),
+    ])
+    monkeypatch.setattr("agent.llm.llm.achat", achat)
+    state = _mutation_state()
+
+    answer = asyncio.run(
+        AgentLoop(orch).run(state, user_input="写文件", user_id="u")
+    )
+
+    assert answer == "已写入 output/greeting.py"
+    assert (tmp_path / "output/greeting.py").read_text() == "x = 1"
+    assert [task["status"] for task in state["plan"]] == ["succeeded"]
+
+    from agent.goal import GoalVerifier
+    decision = GoalVerifier.verify(state, answer)
+    assert "failed task evidence" not in decision.missing
+
+
+def test_all_toolset_verbs_are_valid_task_verbs():
+    """Every tool the loop can expose must map to a Task Verb, or
+    Task.from_dict raises ValueError mid-run (e.g. web_fetch -> 'fetch')."""
+    from agent.task import Verb
+
+    valid = {verb.value for verb in Verb}
+    for outcomes in (
+        (RequestedOutcome.USER_VISIBLE_OUTPUT,),
+        tuple(RequestedOutcome),
+    ):
+        authorization = EffectAuthorization(
+            requested_outcomes=tuple(outcomes),
+            write_scopes=("output/",),
+        )
+        for name, tool in build_toolset(authorization).items():
+            if tool.verb:
+                assert tool.verb in valid, (
+                    f"{name} maps to unknown verb {tool.verb}"
+                )
+
+
+def test_safe_calls_overlap_and_exclusive_calls_form_barriers(
+    monkeypatch, tmp_path,
+):
+    """DeepSeek-harness scheduling: consecutive concurrency_safe calls
+    share a bounded pool; exclusive calls drain the pool before running."""
+    orch = _orchestrator(tmp_path)
+    inflight = 0
+    peak = 0
+    solo: set[str] = set()
+
+    async def counting(state, task, plan, user_input=""):
+        nonlocal inflight, peak
+        inflight += 1
+        peak = max(peak, inflight)
+        if inflight == 1:
+            solo.add(str(task.get("id", "")))
+        await asyncio.sleep(0.01)
+        inflight -= 1
+        return SimpleNamespace(
+            success=True, text="ok", error="", metadata=None,
+            action_result=None,
+        )
+
+    monkeypatch.setattr(orch._executor, "execute_action", counting)
+    loop = AgentLoop(orch)
+    state = _mutation_state()
+    tools = build_toolset(EffectAuthorization.from_state(state, "读写"))
+    calls = [
+        ToolCall(id="c1", name="read_file", arguments={"path": "a.txt"}),
+        ToolCall(id="c2", name="read_file", arguments={"path": "b.txt"}),
+        ToolCall(
+            id="c3", name="write_file",
+            arguments={"path": "output/c.txt", "content": "x"},
+        ),
+        ToolCall(id="c4", name="read_file", arguments={"path": "d.txt"}),
+        ToolCall(id="c5", name="read_file", arguments={"path": "e.txt"}),
+    ]
+
+    messages, index = asyncio.run(
+        loop._dispatch_step_calls(
+            calls, tools, state, index=0,
+            run_context=orch.run_context, user_id="u", user_input="读写",
+        )
+    )
+
+    assert len(messages) == 5
+    assert index == 5
+    assert peak >= 2, "safe reads must overlap"
+    assert "loop-3" in solo, "write_file is exclusive and must run alone"
+
+
+def test_verifier_gap_feeds_back_twice_then_finalizes(monkeypatch, tmp_path):
+    orch = _orchestrator(tmp_path)
+    orch.verify_goal = lambda state, answer: SimpleNamespace(
+        missing=["deliverable:report:1"],
+    )
+    calls = []
+
+    async def achat(messages, tools=None, **_kwargs):
+        calls.append(list(messages))
+        return _turn(content="已完成但没有文件")
+
+    monkeypatch.setattr("agent.llm.llm.achat", achat)
+    state = _mutation_state()
+    state["goal_state"] = GoalState(objective="写报告", max_rounds=10).to_dict()
+
+    answer = asyncio.run(
+        AgentLoop(orch).run(state, user_input="写报告", user_id="u")
+    )
+
+    # Two concrete nudges, then the answer is finalized; the missing
+    # deliverable stays honest in run evidence, not in a burnt budget.
+    assert answer == "已完成但没有文件"
+    assert len(calls) == 3  # initial + MAX_VERIFICATION_FEEDBACK_ROUNDS
+    feedback = [
+        m["content"] for m in calls[-1] if m.get("role") == "user"
+    ]
+    assert any(
+        "[运行时校验]" in item and "deliverable:report:1" in item
+        and "write_file" in item
+        for item in feedback
+    )
+    assert state["verification_feedback_rounds"] == 2

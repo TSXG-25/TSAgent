@@ -1,0 +1,46 @@
+🤖 TSAgent AgentService CLI 启动（输入 exit 退出）
+
+你: 我叫 TS
+
+你: 
+📌 Run: run-9b5ebe72958846b894ce905b3f87105d
+📡 处理中...
+  • 1: run_created
+  • 2: run_started
+  🧠 规划上下文: 无上下文
+  🔍 引用消歧: 无需消歧
+  🧠 意图: Intent(domain=memory, action=query, target='TS', entities=[], current_file='', conf=0.85, exec=False)
+deepseek 调用失败: Connection error.
+ollama 调用失败: All connection attempts failed
+Ollama 也失败了，进入 5.0s Provider 冷却窗口
+回答后的事实抽取失败，不影响当前回答: 所有 LLM 提供商暂时不可用，请稍后重试
+
+==================================================
+⏱️  启动耗时 Profile
+==================================================
+  tools_import           0.05s  █████████████████░░░ 86%
+  skills_import          0.01s  ██░░░░░░░░░░░░░░░░░░ 14%
+  capabilities_register   0.00s  ░░░░░░░░░░░░░░░░░░░░ 0%
+  TOTAL                  0.06s
+==================================================
+
+==================================================
+⚡ 执行耗时 Profile
+==================================================
+  answer_llm            51.97s  █████████████░░░░░░░ 67%
+  intent_route           0.01s  ░░░░░░░░░░░░░░░░░░░░ 0%
+  init                   0.01s  ░░░░░░░░░░░░░░░░░░░░ 0%
+  fact_extraction_post   0.00s  ░░░░░░░░░░░░░░░░░░░░ 0%
+  EXCLUSIVE TOTAL       51.99s
+  WALL TOTAL            77.37s
+==================================================
+
+  • 3: run_failed
+❌ Run 失败
+🤖 状态: FAILED_TERMINAL
+
+📝 输出:
+目标尚未完成，缺少可验证证据：PROVIDER_UNAVAILABLE。本次不会报告为成功。
+
+⚠️ PROVIDER_UNAVAILABLE: A required provider was unavailable
+exit

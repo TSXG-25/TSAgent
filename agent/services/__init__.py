@@ -1,6 +1,5 @@
 _SERVICES = {
     "MemoryService": ".memory_service",
-    "RepositoryService": ".repository_service",
     "ArtifactService": ".artifact_service",
     "ToolService": ".tool_service",
 }

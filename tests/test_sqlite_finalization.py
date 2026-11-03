@@ -229,13 +229,12 @@ def test_finalization_commits_all_facts_once_and_retries_idempotently(
         assert head is not None
         assert head.current_revision == 2
         assert head.current_digest == result.run_index_digest
-        assert head.run_status == "COMPLETED"
+        assert head.run_status == "RUNNING"
 
         events = store.read_events("tenant-a", "run-1", session_id="session-a")
         assert [event.event_type for event in events] == [
             "checkpoint_committed",
             "workflow_completed",
-            "run_completed",
         ]
         assert all(event.run_revision == result.run_revision for event in events)
 

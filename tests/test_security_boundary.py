@@ -67,6 +67,7 @@ def test_sensitive_values_are_redacted():
     assert "REDACTED" in redacted
 
 
+
 def test_office_binary_writes_are_explicitly_rejected():
     from tools.filesystem import write_file
 

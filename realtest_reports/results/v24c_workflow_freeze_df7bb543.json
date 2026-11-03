@@ -1,0 +1,68 @@
+{
+  "version": "v2.4C",
+  "status": "PASS",
+  "integration_head": "df7bb543161ec1bd83d804e49877cf793a7f66b5",
+  "real_baseline_head": "a040c48aab4b0abb2fcdb31beb902a5758c0e5c8",
+  "dataset": {
+    "version": "v2.4C-workflow-capability-v1",
+    "hash": "43338803cbe9192c19a2957887a8013c17058a6dbea9e7bb6cb66c06d60fbd69",
+    "cases": 24,
+    "golden_self_check": "24/24"
+  },
+  "selector_contract": {
+    "projection_hash": "283c02fca3ef07aab5cac01806b677d2ec24dcb75dccf052b1533601c8c84e14",
+    "prompt_hash": "23324d6bf8ff0f2ef083fff5d80a4433117a1a80c5818c4f9f125390d5e40880",
+    "baseline_and_integration_hash_match": true
+  },
+  "real_provider_baseline": {
+    "provider": "deepseek",
+    "mechanical_pass": 22,
+    "evaluable": 24,
+    "capability_rate": 0.9166666666666666,
+    "schema_validity": 1.0,
+    "decision_kind_accuracy": 0.9583333333333334,
+    "workflow_accuracy": 1.0,
+    "binding_accuracy": 0.9583333333333334,
+    "safe_decision_rate": 1.0,
+    "provider_errors": 0,
+    "contract_errors": 0,
+    "oracle_errors": 0,
+    "integration_errors": 0,
+    "format_path": "STRUCTURED_TO_RAW_FALLBACK",
+    "provider_fallback": false
+  },
+  "semantic_attribution": {
+    "systemic_selector_gap_proven": false,
+    "prompt_improvement_justified": false,
+    "residuals": {
+      "C002": "P-MEASUREMENT:FREE_TEXT_BINDING_SPAN",
+      "C019": "P-CON:COMPLETED_WORKFLOW_DECLINE_ASK_BOUNDARY"
+    }
+  },
+  "runtime_integration": {
+    "production_selector_integrated": true,
+    "workflow_metadata_projection": "PASS",
+    "generic_binding_materialization": "PASS",
+    "workflow_executor_calls_for_selected_workflow": 1,
+    "selector_calls_for_selected_workflow": 1,
+    "planner_hardcoded_binding_count": 0,
+    "preflight_blockers": 0,
+    "integration_watchlist": 0,
+    "workflow_executor_rewrite": false,
+    "resume_policy_rewrite": false
+  },
+  "hard_invariant_violations": {
+    "false_workflow_selection": 0,
+    "unsafe_workflow_reuse": 0,
+    "missed_workflow": 0,
+    "unavailable_workflow_execution": 0,
+    "missing_binding_execution": 0,
+    "planner_hardcoded_workflow_binding": 0,
+    "resume_policy_duplication": 0
+  },
+  "clean_checkout": {
+    "related_tests_passed": 106,
+    "failed": 0,
+    "full_repository_suite_claimed": false
+  }
+}

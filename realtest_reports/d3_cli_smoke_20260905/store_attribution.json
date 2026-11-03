@@ -1,0 +1,138 @@
+{
+  "name": {
+    "namespace": "d3-smoke-20260905_100842:name",
+    "facts": [
+      {
+        "id": 255,
+        "user_id": "d3-smoke-20260905_100842:name",
+        "category": "personal",
+        "key": "name",
+        "value": "TS",
+        "scope": "user",
+        "evidence_id": "interaction-7bcaee334b2fa315680debb348750ba2cfaefeb6766eb8f5ec2a470c03d0f368",
+        "source_kind": "user_statement",
+        "source_ref": "run:run-0235195d7a4648eca549f89802924ccf",
+        "revision": 1,
+        "created_at": "2026-09-05 02:09:27"
+      }
+    ],
+    "short_term_file_exists": true,
+    "short_term": [
+      {
+        "user": "我叫 TS",
+        "assistant": "你好，TS！很高兴认识你。我是DeepSeek，可以这样称呼我。有什么我可以帮你的吗？无论是学习、工作、生活还是技术问题，都可以问我。期待为你提供帮助！😊",
+        "timestamp": "2026-09-05T10:09:24.591187"
+      },
+      {
+        "user": "我叫 TS",
+        "assistant": "你好，TS！很高兴认识你。我是DeepSeek，可以这样称呼我。有什么我可以帮你的吗？无论是学习、工作、生活还是技术问题，都可以问我。期待为你提供帮助！😊",
+        "timestamp": "2026-09-05T10:09:24.593866"
+      },
+      {
+        "user": "我叫什么？",
+        "assistant": "你叫 TS。",
+        "timestamp": "2026-09-05T10:11:20.772825"
+      },
+      {
+        "user": "我叫什么？",
+        "assistant": "你叫 TS。",
+        "timestamp": "2026-09-05T10:11:20.775473"
+      }
+    ]
+  },
+  "secret": {
+    "namespace": "d3-smoke-20260905_100842:secret",
+    "facts": [],
+    "short_term_file_exists": true,
+    "short_term": [
+      {
+        "user": "我的 API key 是 sk-test-human-acceptance-123",
+        "assistant": "请不要在这里分享你的 API key。虽然你提供的是测试格式的 key，但真实密钥一旦泄露可能造成安全风险。请妥善保管，必要时可立即在后台重置。",
+        "timestamp": "2026-09-05T10:11:34.421284"
+      },
+      {
+        "user": "我的 API key 是 sk-test-human-acceptance-123",
+        "assistant": "请不要在这里分享你的 API key。虽然你提供的是测试格式的 key，但真实密钥一旦泄露可能造成安全风险。请妥善保管，必要时可立即在后台重置。",
+        "timestamp": "2026-09-05T10:11:34.423088"
+      },
+      {
+        "user": "你记得我的 API key 吗？",
+        "assistant": "以下是您可以直接使用或转述给用户的说明：\n\n---\n\n**关于无法回忆您的 API Key 的说明**\n\n尊敬的 [用户/开发者]：\n\n非常抱歉，我目前无法回忆起您此前使用或提供的 API Key。这并非疏忽，而是由于以下几个原因：\n\n1. **对话上下文不连续**：每次会话都是独立运行的，我不会在跨会话的情况下持久记忆您此前提供过的敏感信息。\n2. **安全设计原则**：API Key 属于高敏感凭证。为了最大程度降低泄露风险，系统设计上刻意避免将其写入模型记忆或可供后续会话回溯的上下文中。\n3. **技术限制**：我的能力范围仅限于当前对话中呈现的信息。过去会话中的内容不会被自动保留或加载",
+        "timestamp": "2026-09-05T10:12:38.404554"
+      },
+      {
+        "user": "你记得我的 API key 吗？",
+        "assistant": "以下是您可以直接使用或转述给用户的说明：\n\n---\n\n**关于无法回忆您的 API Key 的说明**\n\n尊敬的 [用户/开发者]：\n\n非常抱歉，我目前无法回忆起您此前使用或提供的 API Key。这并非疏忽，而是由于以下几个原因：\n\n1. **对话上下文不连续**：每次会话都是独立运行的，我不会在跨会话的情况下持久记忆您此前提供过的敏感信息。\n2. **安全设计原则**：API Key 属于高敏感凭证。为了最大程度降低泄露风险，系统设计上刻意避免将其写入模型记忆或可供后续会话回溯的上下文中。\n3. **技术限制**：我的能力范围仅限于当前对话中呈现的信息。过去会话中的内容不会被自动保留或加载",
+        "timestamp": "2026-09-05T10:12:38.406348"
+      }
+    ]
+  },
+  "language": {
+    "namespace": "d3-smoke-20260905_100842:language",
+    "facts": [
+      {
+        "id": 256,
+        "user_id": "d3-smoke-20260905_100842:language",
+        "category": "programming",
+        "key": "language",
+        "value": "Python",
+        "scope": "user",
+        "evidence_id": "interaction-48993117038fde937ad298448b3bb04950dd6ba883dd21ed88ec54095977a1b0",
+        "source_kind": "user_statement",
+        "source_ref": "run:run-e403dc4151e944098a8e57b0493a91ac",
+        "revision": 1,
+        "created_at": "2026-09-05 02:12:53"
+      }
+    ],
+    "short_term_file_exists": true,
+    "short_term": [
+      {
+        "user": "我最喜欢的编程语言是 Python",
+        "assistant": "Python 是很棒的选择！它的语法简洁、生态丰富，适合很多场景。你是主要用它做什么呢？比如数据分析、Web 开发、自动化脚本，还是其他方向？",
+        "timestamp": "2026-09-05T10:12:50.881138"
+      },
+      {
+        "user": "我最喜欢的编程语言是 Python",
+        "assistant": "Python 是很棒的选择！它的语法简洁、生态丰富，适合很多场景。你是主要用它做什么呢？比如数据分析、Web 开发、自动化脚本，还是其他方向？",
+        "timestamp": "2026-09-05T10:12:50.883188"
+      },
+      {
+        "user": "我喜欢什么编程语言？",
+        "assistant": "根据我们的记录，你最喜欢的编程语言是 Python。",
+        "timestamp": "2026-09-05T10:13:06.951332"
+      },
+      {
+        "user": "我喜欢什么编程语言？",
+        "assistant": "根据我们的记录，你最喜欢的编程语言是 Python。",
+        "timestamp": "2026-09-05T10:13:06.954191"
+      }
+    ]
+  },
+  "uv": {
+    "namespace": "d3-smoke-20260905_100842:uv",
+    "facts": [],
+    "short_term_file_exists": true,
+    "short_term": [
+      {
+        "user": "以后 Python 项目优先用 uv",
+        "assistant": "好的，已记录：以后 Python 项目优先使用 uv 进行依赖管理和环境管理。有需要时我也会同步说明相关命令。",
+        "timestamp": "2026-09-05T10:13:21.286793"
+      },
+      {
+        "user": "以后 Python 项目优先用 uv",
+        "assistant": "好的，已记录：以后 Python 项目优先使用 uv 进行依赖管理和环境管理。有需要时我也会同步说明相关命令。",
+        "timestamp": "2026-09-05T10:13:21.289862"
+      },
+      {
+        "user": "我平时 Python 项目偏好用什么？",
+        "assistant": "根据我们的会话记录，我还没有了解到你平时 Python 项目的具体偏好。你可以告诉我你的常用工具、风格或习惯，我会记住并供以后参考。",
+        "timestamp": "2026-09-05T10:13:36.912209"
+      },
+      {
+        "user": "我平时 Python 项目偏好用什么？",
+        "assistant": "根据我们的会话记录，我还没有了解到你平时 Python 项目的具体偏好。你可以告诉我你的常用工具、风格或习惯，我会记住并供以后参考。",
+        "timestamp": "2026-09-05T10:13:36.915248"
+      }
+    ]
+  }
+}

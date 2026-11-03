@@ -81,5 +81,5 @@ class TestRuntimeContract:
         from agent.orchestrator import ExecutionOrchestrator
 
         orch = ExecutionOrchestrator()
-        for method in ("plan", "execute", "replan", "finalize", "get_timings", "reset_timings"):
+        for method in ("plan", "run_loop", "finalize", "verify_goal", "get_timings", "reset_timings"):
             assert callable(getattr(orch, method)), f"missing {method}"

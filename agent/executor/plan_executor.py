@@ -16,7 +16,10 @@ import os
 import re
 from typing import Any, Dict, Optional
 
+from pydantic import ValidationError
+
 from agent.task import ExecutionPlan, ExecutionStep
+from agent.tool_identity import CANONICAL_TOOL_ALIASES, registry_tool_name
 from agent.security import redact_sensitive_text
 from agent.execution_errors import classify_execution_error, stable_error_message
 from agent.registry.tool_registry import registry as tool_registry
@@ -32,6 +35,15 @@ from agent.interruption import (
 logger = logging.getLogger(__name__)
 LLM_STEP_TIMEOUT = float(os.getenv("TSAGENT_LLM_TIMEOUT", "45"))
 
+_RESEARCH_TOOLS = frozenset({
+    "web_search",
+    "web_news_search",
+    "web_deep_search",
+    "web_fetch",
+})
+
+_SOURCE_URL_PATTERN = re.compile(r"https?://[^\s\]\[<>()\"']+")
+
 
 class PlanExecutor:
     """ExecutionPlan 执行器。
@@ -45,6 +57,7 @@ class PlanExecutor:
         plan: ExecutionPlan,
         workspace: Optional[WorkspaceService] = None,
         cancellation_view: CancellationView | None = None,
+        repository_indexer=None,
     ) -> Dict[str, Any]:
         """执行 plan 的所有 steps。
 
@@ -58,7 +71,11 @@ class PlanExecutor:
             执行失败时不抛异常，在 outputs 中包含 "_error" 键。
         """
         if not plan or not plan.steps:
-            return {"_last_output": "", "_error": "空 plan，无步骤可执行"}
+            return {
+                "_last_output": "",
+                "_error": "空 plan，无步骤可执行",
+                "_side_effect_state": "NONE",
+            }
 
         try:
             self._validate_tools(plan)
@@ -71,6 +88,7 @@ class PlanExecutor:
                 "_files_written": [],
                 "_file_operations": [],
                 "_tools_called": [],
+                "_side_effect_state": "NONE",
             }
 
         variables: Dict[str, Any] = {}
@@ -78,6 +96,7 @@ class PlanExecutor:
         files_written: list = []
         file_operations: list[dict[str, str]] = []
         tools_called: list[str] = []
+        research_sources: list[str] = []
 
         for step_idx, step in enumerate(plan.steps):
             tool_name = step.tool
@@ -94,6 +113,13 @@ class PlanExecutor:
             try:
                 if tool_name == "workspace":
                     result = await self._exec_workspace(step, args, workspace, variables)
+                elif tool_name == "repository":
+                    result = await self._exec_tool(
+                        tool_name,
+                        args,
+                        cancellation_view=cancellation_view,
+                        repository_indexer=repository_indexer,
+                    )
                 else:
                     if tool_name == "filesystem.write":
                         args = self._prepare_write_args(args)
@@ -130,10 +156,16 @@ class PlanExecutor:
                                 cancellation_view=cancellation_view,
                             )
 
+                # Structured research results carry their source URLs so the
+                # fresh-evidence gate can verify them without reading prose.
+                for source in result.get("_sources") or ():
+                    if source not in research_sources:
+                        research_sources.append(source)
+
                 # ── 收集世界状态痕迹（Verifier 的唯一输入，ADR-0012）──
                 # 写入是否真正生效由 ExecutionVerifier 在 Pipeline 末端判定，
                 # Tool 的返回字符串不代表成功。
-                if tool_name == "filesystem.write":
+                if tool_name in {"filesystem.write", "filesystem.edit"}:
                     files_written.append(str(args.get("path", "")))
                 elif tool_name in {
                     "filesystem.copy",
@@ -161,9 +193,9 @@ class PlanExecutor:
 
                 # 记录文本摘要
                 if isinstance(result, dict):
-                    last_output = str(result.get("content", result.get("text", str(result))))[:300]
+                    last_output = str(result.get("content", result.get("text", str(result))))
                 else:
-                    last_output = str(result)[:300]
+                    last_output = str(result)
 
                 if cancellation_view is not None:
                     try:
@@ -188,7 +220,16 @@ class PlanExecutor:
                     f"{stable_error_message(e, fallback='tool step failed')}"
                 )
                 logger.error(error_msg)
-                error_code = classify_execution_error(e)
+                invalid_arguments = isinstance(e, ValidationError)
+                error_code = (
+                    "INVALID_TOOL_ARGUMENT"
+                    if invalid_arguments
+                    else classify_execution_error(e)
+                )
+                no_tool_effect = (
+                    invalid_arguments
+                    or error_code == "EXECUTION_ENVIRONMENT_UNAVAILABLE"
+                ) and step_idx == 0
                 return {
                     "_last_output": last_output,
                     "_error": error_msg,
@@ -198,6 +239,8 @@ class PlanExecutor:
                     "_files_written": files_written,
                     "_file_operations": file_operations,
                     "_tools_called": tools_called,
+                    "_sources": research_sources,
+                    "_side_effect_state": "NONE" if no_tool_effect else "UNKNOWN",
                     **variables,
                 }
 
@@ -207,6 +250,7 @@ class PlanExecutor:
             "_files_written": files_written,
             "_file_operations": file_operations,
             "_tools_called": tools_called,
+            "_sources": research_sources,
             **variables,
         }
 
@@ -269,18 +313,6 @@ class PlanExecutor:
 
         before = functions(original_tree)
         requested = set(
-            re.findall(r"([A-Za-z_]\w*)\s*(?:函数|方法)", instruction)
-        )
-        requested.update(
-            re.findall(
-                r"(?:给|修改|修复|新增|增加|添加|改成|改为)\s+([A-Za-z_]\w*)",
-                instruction,
-            )
-        )
-        # Some Chinese constructions put the symbol after punctuation (for
-        # example ``：给 f 增加``), so use the original AST as a bounded
-        # vocabulary rather than relying only on word-boundary regexes.
-        requested.update(
             name for name in before if name and name in instruction
         )
         if not requested:
@@ -313,14 +345,6 @@ class PlanExecutor:
             "text.materialize_research",
             "text.transform_upper",
         }
-        filesystem = {
-            "filesystem.read": "read_file",
-            "filesystem.write": "write_file",
-            "filesystem.list": "list_directory",
-            "filesystem.delete": "delete_file",
-            "filesystem.move": "move_file",
-            "filesystem.copy": "copy_file",
-        }
         lazy_modules = {
             "web_search": "web",
             "web_fetch": "web",
@@ -329,7 +353,6 @@ class PlanExecutor:
             "query_memory": "memory",
             "get_user_preference": "memory",
             "save_fact": "memory",
-            "get_session_info": "memory",
             "propose_patch": "patch",
             "apply_patch": "patch",
             "list_all_tools": "meta",
@@ -348,9 +371,9 @@ class PlanExecutor:
 
             load_tool_modules(modules_to_load)
         for step in plan.steps:
-            if step.tool in builtin or step.tool in filesystem:
+            if step.tool in builtin or step.tool in CANONICAL_TOOL_ALIASES:
                 continue
-            actual = filesystem.get(step.tool, step.tool)
+            actual = registry_tool_name(step.tool)
             if step.tool.startswith("knowledge."):
                 actual = step.tool.split(".", 1)[1]
             if tool_registry.get(actual) is None and tool_registry.get(step.tool) is None:
@@ -400,6 +423,7 @@ class PlanExecutor:
         *,
         workspace: Optional[WorkspaceService] = None,
         cancellation_view: CancellationView | None = None,
+        repository_indexer=None,
     ) -> Dict[str, Any]:
         """通过 ToolRegistry 调用工具。
 
@@ -511,14 +535,15 @@ class PlanExecutor:
                 content = f"# {title}\n\n{source}\n"
             return {"content": content, "text": content}
 
-        # ── 特殊处理：repository 语义搜索（RepositoryService）──
+        # ── Run-scoped repository semantic search ──
         if tool_name == "repository":
-            from agent.services import RepositoryService
-
+            if repository_indexer is None:
+                raise RuntimeError("REPOSITORY_INDEX_UNAVAILABLE: Run has no workspace index")
             query = str(args.get("query", args.get("spec", "")))
             k = int(args.get("k", 5))
+            await asyncio.to_thread(repository_indexer.ensure_built)
             hits = await asyncio.to_thread(
-                RepositoryService.search_similar,
+                repository_indexer.search_similar,
                 query,
                 k,
             )
@@ -547,6 +572,7 @@ class PlanExecutor:
             name_map = {
                 "read": "read_file",
                 "write": "write_file",
+                "edit": "edit_file",
                 "list": "list_directory",
                 "delete": "delete_file",
                 "move": "move_file",
@@ -578,7 +604,25 @@ class PlanExecutor:
             result = await asyncio.to_thread(tool_obj.invoke, str_args)
 
         # 统一返回格式
-        if hasattr(result, 'content'):
+        research = tool_name in _RESEARCH_TOOLS
+        structured_items: Optional[list[dict]] = None
+        if research and isinstance(result, list):
+            # tools.web returns canonical SearchResult items; the rendered
+            # text projection happens once, here at the text-consumer edge.
+            from tools.web import TIME_FILTER_NOTICE, render_search_results
+
+            structured_items = [
+                item.model_dump() if hasattr(item, "model_dump") else dict(item)
+                for item in result
+            ]
+            notice = (
+                TIME_FILTER_NOTICE
+                if tool_name == "web_news_search"
+                or str(args.get("timeliness", "any")) != "any"
+                else ""
+            )
+            content = render_search_results(structured_items, notice=notice)
+        elif hasattr(result, 'content'):
             content = str(result.content)
         else:
             content = str(result)
@@ -595,7 +639,21 @@ class PlanExecutor:
         # cannot be true for an operation that actually failed.
         if content.lstrip().startswith(("错误:", "错误：", "Error:", "ERROR:")):
             raise RuntimeError(content)
-        return {"content": content}
+
+        if not research:
+            return {"content": content}
+        if structured_items is not None:
+            sources = [
+                url
+                for item in structured_items
+                if (url := str(item.get("url", "")).strip())
+            ]
+        elif tool_name == "web_fetch":
+            fetched = str(args.get("url", "")).strip()
+            sources = [fetched] if fetched else []
+        else:
+            sources = list(dict.fromkeys(_SOURCE_URL_PATTERN.findall(content)))
+        return {"content": content, "_sources": sources}
 
     @staticmethod
     async def _exec_scoped_filesystem(
@@ -627,6 +685,12 @@ class PlanExecutor:
                 )
             if operation == "delete":
                 return workspace.delete_file(str(args.get("path", "")))
+            if operation == "edit":
+                return workspace.edit_text(
+                    str(args.get("path", "")),
+                    str(args.get("old_string", "")),
+                    str(args.get("new_string", "")),
+                )
             if operation == "list":
                 return workspace.list_directory(str(args.get("path", ".")))
             raise ValueError(f"UNKNOWN_TOOL: 未知 filesystem operation: {operation}")

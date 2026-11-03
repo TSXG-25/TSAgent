@@ -41,10 +41,14 @@ class AgentState(TypedDict, total=False):
     # Context
     memory_context: Optional[str]
     repo_context: Optional[str]
-    skill_hint: str
-    context_policy: str
     retries: int
     workflow: Optional[str]
+    artifact_required: bool
+    verified_artifact_paths: List[str]
+    original_request: str
+    resolved_request: str
+    run_results: List[Dict[str, Any]]
+    conversation: List[Dict[str, str]]
     conversation_intent: str
     reflection: Optional[Dict]
     decision: Optional[Dict]
@@ -61,6 +65,7 @@ class AgentState(TypedDict, total=False):
     runtime_failure_code: str
     runtime_failure_class: str
     runtime_failure_retryable: bool
+    runtime_failure_side_effect_state: str
     runtime_failure_kind: str
     runtime_failure_source: str
     runtime_failure: Dict[str, Any]
@@ -68,6 +73,7 @@ class AgentState(TypedDict, total=False):
     recovery_directive: Dict[str, Any]
     structural_recovery_count: int
     action_retry_count: int
+    replan_fingerprints: List[str]
     budget_exhausted: bool
     replan_skipped_verified_effects: int
     # v2.3H2: deterministic world-effect truth projected by Runtime.
@@ -89,13 +95,18 @@ class AgentState(TypedDict, total=False):
     # v2.3H4a/b: facts derived from the original request, never from Planner prose.
     requested_outcomes: List[str]
     authorized_write_scopes: List[str]
+    file_artifact_evidence: List[Dict[str, str]]
+    intent_target: str
     execution_evidence: List[Dict[str, Any]]
     unresolved_requested_outcomes: List[str]
     # Goal/Action projections. These are ephemeral Runtime inputs/evidence;
     # durable Run facts remain in the Store/Event/Checkpoint contracts.
+    selector_facts: Dict[str, Any]
+    completed_outcomes: List[str]
     goal_state: Dict[str, Any]
     goal_evidence: List[Dict[str, Any]]
     goal_missing: List[str]
+    acceptance_evidence: List[Dict[str, Any]]
     inbox: Dict[str, Any]
-    next_action: Dict[str, Any]
+    last_action_result: Dict[str, Any]
     execution_mode: str

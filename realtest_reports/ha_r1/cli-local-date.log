@@ -1,0 +1,63 @@
+🤖 TSAgent AgentService CLI 启动（输入 exit 退出）
+
+你: 
+你: 
+📌 Run: run-c1f59c0dbe574ff6a91d43ac9d877b55
+📡 处理中...
+  • 1: run_created
+输入已结束，等待当前 Run 完成后退出。
+  • 2: run_started
+  🧠 规划上下文: 无上下文
+  🔍 引用消歧: 无需消歧
+  🧠 意图: Intent(domain=operation, action=execute, target='date', entities=[], current_file='', conf=0.99, exec=True)
+
+============================================================
+📋 执行计划（Task 分解）
+============================================================
+  task-1: execute date
+============================================================
+
+  🔀 Compiler: task-1 → tool_executor
+  • 3: stage_started
+  ↳ 正在规划任务...
+  • 4: stage_completed
+  ↳ 任务规划完成
+  • 5: stage_started
+  ↳ 正在执行任务...
+  • 6: task_started
+  ↳ 开始任务 task-1 (tool)
+
+==================================================
+⏱️  启动耗时 Profile
+==================================================
+  tools_import           0.02s  ███████████████░░░░░ 76%
+  skills_import          0.01s  ████░░░░░░░░░░░░░░░░ 24%
+  capabilities_register   0.00s  ░░░░░░░░░░░░░░░░░░░░ 0%
+  TOTAL                  0.02s
+==================================================
+
+==================================================
+⚡ 执行耗时 Profile
+==================================================
+  executor               0.33s  ██████████████████░░ 94%
+  init                   0.00s  ░░░░░░░░░░░░░░░░░░░░ 1%
+  intent_route           0.00s  ░░░░░░░░░░░░░░░░░░░░ 1%
+  EXCLUSIVE TOTAL        0.33s
+  WALL TOTAL             0.34s
+==================================================
+
+  • 7: task_completed
+  ↳ 任务 task-1: succeeded
+  • 8: stage_completed
+  ↳ 任务执行阶段完成
+  • 9: stage_started
+  ↳ 正在整理结果...
+  • 10: stage_completed
+  ↳ 结果整理完成
+  • 11: run_completed
+✅ Run 完成
+🤖 状态: COMPLETED
+
+📝 输出:
+已执行 date，真实输出：
+Tue Sep  8 12:51:41 HKT 2026

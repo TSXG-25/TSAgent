@@ -1,0 +1,73 @@
+{
+  "version": "v2.4B-3-residual-audit-v1",
+  "baseline_head": "fc1835a8fd776dadbf23cf4b23f0fa3fc83fbca7",
+  "candidate_head": "b25d85fd8b61acbef43b03b9e42306e328117bfc",
+  "dataset_version": "v2.4B-tool-selection-v1",
+  "dataset_hash": "bc0baa5afcf68ba68a787387edd7297a4c22bea6334e1e0afd06c61136952409",
+  "provider_runs_per_head": 1,
+  "automatic_reruns": 0,
+  "decision_table": [
+    {
+      "case_id": "B014",
+      "baseline": "FAIL",
+      "candidate": "FAIL",
+      "classification": "P-CAP:PROJECTED_FACT_BINDING",
+      "finding": "persistent capability gap",
+      "evidence": "Both raw outputs claim prepared content is absent although state.facts.content and observation.last_result.content contain it."
+    },
+    {
+      "case_id": "B018",
+      "baseline": "PASS",
+      "candidate": "FAIL",
+      "classification": "P-CON:ACTION_CLASS_PRECEDENCE / P-MEASUREMENT:ROUND_VARIANCE_UNRESOLVED",
+      "finding": "new mechanical regression; no specific B-3 rule proven causal",
+      "evidence": "The input is unchanged. Baseline selected run_python_file for verification; candidate selected ask. Retry and verification rules existed in both prompts, while the contract did not formally distinguish their action identity."
+    },
+    {
+      "case_id": "B021",
+      "baseline": "PASS",
+      "candidate": "FAIL",
+      "classification": "P-CON:ACTION_CLASS_PRECEDENCE / P-MEASUREMENT:ROUND_VARIANCE_UNRESOLVED",
+      "finding": "new mechanical regression; no specific B-3 rule proven causal",
+      "evidence": "The input is unchanged. Baseline switched to the task target as a new query; candidate asked. The contract did not formally distinguish changed-argument switch from same-action retry."
+    },
+    {
+      "case_id": "B017",
+      "baseline": "FAIL",
+      "candidate": "PASS",
+      "classification": "P-CON:TOOL_ARGUMENT_SCHEMA",
+      "finding": "mechanical pass with unresolved ownership",
+      "evidence": "The projection exposes filesystem.read but not its path argument schema. Provider success cannot replace an observable contract."
+    }
+  ],
+  "paired_prompt_diff": {
+    "canonical_envelopes_added": true,
+    "answer_ready_authority_added": true,
+    "argument_non_invention_wording_strengthened": true,
+    "retry_rule_changed": false,
+    "verification_rule_changed": false,
+    "specific_regression_causing_rule_proven": false
+  },
+  "tool_argument_schema_ownership": {
+    "decision": "RUNTIME_COMPOSITION_PROJECTION",
+    "source_of_truth": "Tool Registry args_schema after canonical identity/alias resolution",
+    "selector_reads_registry": false,
+    "selector_reads_compiler": false,
+    "projection": "available_actions with canonical tool name and read-only canonical args schema",
+    "dataset_v1_reinterpretation_allowed": false,
+    "required_before_runtime_integration": true
+  },
+  "action_identity_contract": {
+    "retry": "same tool + task_id + args after failure; requires retryable=true and Runtime budget",
+    "verify": "machine-evidence action after ok=true and verified=false; must be explicitly projected as allowed",
+    "switch": "different tool or args selected from observation; not a retry but still policy constrained"
+  },
+  "closeout_decision": {
+    "additional_prompt_candidate_justified": false,
+    "b3_main_improvement_retained": true,
+    "b3_mechanical_result": "21/24",
+    "documented_residual_accepted_for_review": true,
+    "runtime_integration_ready": false,
+    "next_required_work": "implement and test canonical available_actions projection before Runtime integration"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "path": "/Users/tsxg/Desktop/TSAgent/output/ha_r1_cli_probe_1788843450741103000.py",
+  "source": "print(\"HUMAN-PROBE-OK\")",
+  "verified_stdout": "HUMAN-PROBE-OK\n",
+  "cli_completed": true,
+  "sha256": "1b201d936c405e36011982b1b73716a78531c7d85a629204a14d64cf6b182c77"
+}

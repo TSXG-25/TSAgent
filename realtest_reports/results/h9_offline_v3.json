@@ -1,0 +1,462 @@
+{
+  "manifest_version": "h9-runtime-spine-v3",
+  "manifest_hash": "73542bbc53099e63a7220e70b3375938cf012b2d1567b2b84e52ca7657916974",
+  "mode": "offline",
+  "provider": "deterministic-local",
+  "records": [
+    {
+      "case_id": "H901",
+      "category": "chat",
+      "capability_outcome": "PASS",
+      "runtime_correctness": "PASS",
+      "case_result": "PASS",
+      "terminal_status": "COMPLETED",
+      "duration_ms": 0.0,
+      "llm_calls": 0,
+      "tool_calls": [],
+      "plan_calls": 0,
+      "replan_calls": 0,
+      "failure_code": "",
+      "answer": "deterministic answer",
+      "evidence": {
+        "goal_status": "COMPLETE",
+        "effect_truth_ok": true,
+        "terminal_outputs_verified": true
+      },
+      "detail": ""
+    },
+    {
+      "case_id": "H902",
+      "category": "analysis",
+      "capability_outcome": "PASS",
+      "runtime_correctness": "PASS",
+      "case_result": "PASS",
+      "terminal_status": "COMPLETED",
+      "duration_ms": 0.0,
+      "llm_calls": 0,
+      "tool_calls": [],
+      "plan_calls": 0,
+      "replan_calls": 0,
+      "failure_code": "",
+      "answer": "deterministic answer",
+      "evidence": {
+        "goal_status": "COMPLETE",
+        "effect_truth_ok": true,
+        "terminal_outputs_verified": true
+      },
+      "detail": ""
+    },
+    {
+      "case_id": "H903",
+      "category": "command",
+      "capability_outcome": "PASS",
+      "runtime_correctness": "PASS",
+      "case_result": "PASS",
+      "terminal_status": "COMPLETED",
+      "duration_ms": 0.0,
+      "llm_calls": 0,
+      "tool_calls": [],
+      "plan_calls": 0,
+      "replan_calls": 0,
+      "failure_code": "",
+      "answer": "deterministic answer",
+      "evidence": {
+        "goal_status": "COMPLETE",
+        "effect_truth_ok": true,
+        "terminal_outputs_verified": true
+      },
+      "detail": ""
+    },
+    {
+      "case_id": "H904",
+      "category": "code_execution",
+      "capability_outcome": "PASS",
+      "runtime_correctness": "PASS",
+      "case_result": "PASS",
+      "terminal_status": "COMPLETED",
+      "duration_ms": 0.0,
+      "llm_calls": 0,
+      "tool_calls": [],
+      "plan_calls": 0,
+      "replan_calls": 0,
+      "failure_code": "",
+      "answer": "deterministic answer",
+      "evidence": {
+        "goal_status": "COMPLETE",
+        "effect_truth_ok": true,
+        "terminal_outputs_verified": true
+      },
+      "detail": ""
+    },
+    {
+      "case_id": "H905",
+      "category": "file_write",
+      "capability_outcome": "PASS",
+      "runtime_correctness": "PASS",
+      "case_result": "PASS",
+      "terminal_status": "COMPLETED",
+      "duration_ms": 0.0,
+      "llm_calls": 0,
+      "tool_calls": [
+        "filesystem.write",
+        "filesystem.copy",
+        "filesystem.move",
+        "filesystem.delete"
+      ],
+      "plan_calls": 0,
+      "replan_calls": 0,
+      "failure_code": "",
+      "answer": "deterministic local tool result",
+      "evidence": {
+        "goal_status": "COMPLETE",
+        "effect_truth_ok": true,
+        "terminal_outputs_verified": true
+      },
+      "detail": ""
+    },
+    {
+      "case_id": "H906",
+      "category": "file_and_execution",
+      "capability_outcome": "PASS",
+      "runtime_correctness": "PASS",
+      "case_result": "PASS",
+      "terminal_status": "COMPLETED",
+      "duration_ms": 0.0,
+      "llm_calls": 0,
+      "tool_calls": [],
+      "plan_calls": 0,
+      "replan_calls": 0,
+      "failure_code": "",
+      "answer": "deterministic answer",
+      "evidence": {
+        "goal_status": "COMPLETE",
+        "effect_truth_ok": true,
+        "terminal_outputs_verified": true
+      },
+      "detail": ""
+    },
+    {
+      "case_id": "H907",
+      "category": "file_read",
+      "capability_outcome": "PASS",
+      "runtime_correctness": "PASS",
+      "case_result": "PASS",
+      "terminal_status": "COMPLETED",
+      "duration_ms": 0.0,
+      "llm_calls": 0,
+      "tool_calls": [],
+      "plan_calls": 0,
+      "replan_calls": 0,
+      "failure_code": "",
+      "answer": "deterministic answer",
+      "evidence": {
+        "goal_status": "COMPLETE",
+        "effect_truth_ok": true,
+        "terminal_outputs_verified": true
+      },
+      "detail": ""
+    },
+    {
+      "case_id": "H908",
+      "category": "directory",
+      "capability_outcome": "PASS",
+      "runtime_correctness": "PASS",
+      "case_result": "PASS",
+      "terminal_status": "COMPLETED",
+      "duration_ms": 0.0,
+      "llm_calls": 0,
+      "tool_calls": [],
+      "plan_calls": 0,
+      "replan_calls": 0,
+      "failure_code": "",
+      "answer": "deterministic answer",
+      "evidence": {
+        "goal_status": "COMPLETE",
+        "effect_truth_ok": true,
+        "terminal_outputs_verified": true
+      },
+      "detail": ""
+    },
+    {
+      "case_id": "H909",
+      "category": "copy",
+      "capability_outcome": "PASS",
+      "runtime_correctness": "PASS",
+      "case_result": "PASS",
+      "terminal_status": "COMPLETED",
+      "duration_ms": 0.0,
+      "llm_calls": 0,
+      "tool_calls": [
+        "filesystem.write",
+        "filesystem.copy",
+        "filesystem.move",
+        "filesystem.delete"
+      ],
+      "plan_calls": 0,
+      "replan_calls": 0,
+      "failure_code": "",
+      "answer": "deterministic local tool result",
+      "evidence": {
+        "goal_status": "COMPLETE",
+        "effect_truth_ok": true,
+        "terminal_outputs_verified": true
+      },
+      "detail": ""
+    },
+    {
+      "case_id": "H910",
+      "category": "move",
+      "capability_outcome": "PASS",
+      "runtime_correctness": "PASS",
+      "case_result": "PASS",
+      "terminal_status": "COMPLETED",
+      "duration_ms": 0.0,
+      "llm_calls": 0,
+      "tool_calls": [
+        "filesystem.write",
+        "filesystem.copy",
+        "filesystem.move",
+        "filesystem.delete"
+      ],
+      "plan_calls": 0,
+      "replan_calls": 0,
+      "failure_code": "",
+      "answer": "deterministic local tool result",
+      "evidence": {
+        "goal_status": "COMPLETE",
+        "effect_truth_ok": true,
+        "terminal_outputs_verified": true
+      },
+      "detail": ""
+    },
+    {
+      "case_id": "H911",
+      "category": "delete",
+      "capability_outcome": "PASS",
+      "runtime_correctness": "PASS",
+      "case_result": "PASS",
+      "terminal_status": "COMPLETED",
+      "duration_ms": 0.0,
+      "llm_calls": 0,
+      "tool_calls": [
+        "filesystem.write",
+        "filesystem.copy",
+        "filesystem.move",
+        "filesystem.delete"
+      ],
+      "plan_calls": 0,
+      "replan_calls": 0,
+      "failure_code": "",
+      "answer": "deterministic local tool result",
+      "evidence": {
+        "goal_status": "COMPLETE",
+        "effect_truth_ok": true,
+        "terminal_outputs_verified": true
+      },
+      "detail": ""
+    },
+    {
+      "case_id": "H912",
+      "category": "repository",
+      "capability_outcome": "PASS",
+      "runtime_correctness": "PASS",
+      "case_result": "PASS",
+      "terminal_status": "COMPLETED",
+      "duration_ms": 0.0,
+      "llm_calls": 0,
+      "tool_calls": [],
+      "plan_calls": 0,
+      "replan_calls": 0,
+      "failure_code": "",
+      "answer": "deterministic answer",
+      "evidence": {
+        "goal_status": "COMPLETE",
+        "effect_truth_ok": true,
+        "terminal_outputs_verified": true
+      },
+      "detail": ""
+    },
+    {
+      "case_id": "H913",
+      "category": "multi_goal",
+      "capability_outcome": "PASS",
+      "runtime_correctness": "PASS",
+      "case_result": "PASS",
+      "terminal_status": "COMPLETED",
+      "duration_ms": 0.0,
+      "llm_calls": 0,
+      "tool_calls": [],
+      "plan_calls": 0,
+      "replan_calls": 0,
+      "failure_code": "",
+      "answer": "deterministic answer",
+      "evidence": {
+        "goal_status": "COMPLETE",
+        "effect_truth_ok": true,
+        "terminal_outputs_verified": true
+      },
+      "detail": ""
+    },
+    {
+      "case_id": "H914",
+      "category": "unsupported",
+      "capability_outcome": "N/A",
+      "runtime_correctness": "PASS",
+      "case_result": "PASS",
+      "terminal_status": "BLOCKED",
+      "duration_ms": 0.0,
+      "llm_calls": 0,
+      "tool_calls": [],
+      "plan_calls": 0,
+      "replan_calls": 0,
+      "failure_code": "UNSUPPORTED_CAPABILITY",
+      "answer": "当前没有可用能力，未执行该操作。",
+      "evidence": {
+        "goal_status": "BLOCKED",
+        "effect_truth_ok": false,
+        "terminal_outputs_verified": false
+      },
+      "detail": ""
+    },
+    {
+      "case_id": "H915",
+      "category": "unsupported",
+      "capability_outcome": "N/A",
+      "runtime_correctness": "PASS",
+      "case_result": "PASS",
+      "terminal_status": "BLOCKED",
+      "duration_ms": 0.0,
+      "llm_calls": 0,
+      "tool_calls": [],
+      "plan_calls": 0,
+      "replan_calls": 0,
+      "failure_code": "UNSUPPORTED_CAPABILITY",
+      "answer": "当前没有可用能力，未执行该操作。",
+      "evidence": {
+        "goal_status": "BLOCKED",
+        "effect_truth_ok": false,
+        "terminal_outputs_verified": false
+      },
+      "detail": ""
+    },
+    {
+      "case_id": "H916",
+      "category": "freshness",
+      "capability_outcome": "DEFERRED",
+      "runtime_correctness": "PASS",
+      "case_result": "DEFERRED",
+      "terminal_status": "BLOCKED",
+      "duration_ms": 0.0,
+      "llm_calls": 0,
+      "tool_calls": [],
+      "plan_calls": 0,
+      "replan_calls": 0,
+      "failure_code": "RESEARCH_TOOL_UNAVAILABLE",
+      "answer": "没有新鲜来源，未生成当前信息。",
+      "evidence": {
+        "goal_status": "BLOCKED",
+        "effect_truth_ok": false,
+        "terminal_outputs_verified": false
+      },
+      "detail": ""
+    },
+    {
+      "case_id": "H917",
+      "category": "memory",
+      "capability_outcome": "PASS",
+      "runtime_correctness": "PASS",
+      "case_result": "PASS",
+      "terminal_status": "COMPLETED",
+      "duration_ms": 0.0,
+      "llm_calls": 0,
+      "tool_calls": [],
+      "plan_calls": 0,
+      "replan_calls": 0,
+      "failure_code": "",
+      "answer": "deterministic answer",
+      "evidence": {
+        "goal_status": "COMPLETE",
+        "effect_truth_ok": true,
+        "terminal_outputs_verified": true
+      },
+      "detail": ""
+    },
+    {
+      "case_id": "H918",
+      "category": "conversation",
+      "capability_outcome": "PASS",
+      "runtime_correctness": "PASS",
+      "case_result": "PASS",
+      "terminal_status": "COMPLETED",
+      "duration_ms": 0.0,
+      "llm_calls": 0,
+      "tool_calls": [],
+      "plan_calls": 0,
+      "replan_calls": 0,
+      "failure_code": "",
+      "answer": "deterministic answer",
+      "evidence": {
+        "goal_status": "COMPLETE",
+        "effect_truth_ok": true,
+        "terminal_outputs_verified": true
+      },
+      "detail": ""
+    },
+    {
+      "case_id": "H919",
+      "category": "multi_artifact",
+      "capability_outcome": "PASS",
+      "runtime_correctness": "PASS",
+      "case_result": "PASS",
+      "terminal_status": "COMPLETED",
+      "duration_ms": 0.0,
+      "llm_calls": 0,
+      "tool_calls": [],
+      "plan_calls": 0,
+      "replan_calls": 0,
+      "failure_code": "",
+      "answer": "deterministic answer",
+      "evidence": {
+        "goal_status": "COMPLETE",
+        "effect_truth_ok": true,
+        "terminal_outputs_verified": true
+      },
+      "detail": ""
+    },
+    {
+      "case_id": "H920",
+      "category": "action_failure",
+      "capability_outcome": "PASS",
+      "runtime_correctness": "PASS",
+      "case_result": "PASS",
+      "terminal_status": "FAILED_TERMINAL",
+      "duration_ms": 0.0,
+      "llm_calls": 0,
+      "tool_calls": [],
+      "plan_calls": 0,
+      "replan_calls": 0,
+      "failure_code": "FILE_NOT_FOUND",
+      "answer": "文件不存在，未伪造读取结果。",
+      "evidence": {
+        "goal_status": "FAILED",
+        "effect_truth_ok": false,
+        "terminal_outputs_verified": false
+      },
+      "detail": ""
+    }
+  ],
+  "metrics": {
+    "cases": 20,
+    "case_pass": 19,
+    "goal_completion_rate": 0.8,
+    "false_completion_rate": 0.0,
+    "recoverable_error_survival": null,
+    "structural_recovery_success": null,
+    "llm_calls_per_completed_goal": 0.0,
+    "unnecessary_replan_rate": 0.0,
+    "median_completion_latency_ms": 0.0,
+    "runtime_failures": 0,
+    "provider_errors": 0
+  },
+  "status": "PASS"
+}

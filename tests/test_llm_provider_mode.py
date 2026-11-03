@@ -6,14 +6,24 @@ import time
 import pytest
 
 from agent.llm import LLMRouter, _OllamaHTTPProvider
+from agent.execution_errors import ProviderError
 from langchain_core.messages import HumanMessage, SystemMessage
 
 
 class _Provider:
-    def __init__(self, name: str, *, error: Exception | None = None) -> None:
+    def __init__(
+        self,
+        name: str,
+        *,
+        error: Exception | None = None,
+        model: str = "",
+        base_url: str = "",
+    ) -> None:
         self.name = name
         self.error = error
         self.calls = 0
+        self.model = model
+        self.base_url = base_url
 
     async def ainvoke(self, _messages, **_kwargs):
         self.calls += 1
@@ -22,7 +32,36 @@ class _Provider:
         return f"{self.name}-result"
 
 
-def test_strict_ollama_mode_does_not_fallback_to_deepseek() -> None:
+class _EmptyError(Exception):
+    def __str__(self) -> str:
+        return ""
+
+
+def test_provider_timeout_preserves_structured_category() -> None:
+    router = LLMRouter(provider_mode="deepseek")
+    router._deepseek = _Provider("deepseek", error=TimeoutError())
+    with pytest.raises(ProviderError) as caught:
+        asyncio.run(router.ainvoke([]))
+    assert caught.value.code == "PROVIDER_TIMEOUT"
+    assert isinstance(caught.value.__cause__, TimeoutError)
+
+
+def test_empty_provider_errors_have_a_non_empty_diagnostic() -> None:
+    router = LLMRouter(provider_mode="ollama")
+    provider = _Provider("ollama", error=_EmptyError())
+    router._ollama = provider  # type: ignore[assignment]
+
+    with pytest.raises(RuntimeError) as caught:
+        asyncio.run(router.ainvoke([]))
+
+    message = str(caught.value)
+    assert "指定的 LLM Provider 不可用 (ollama)" in message
+    assert "EmptyError: ollama request failed" in message
+    assert router.status["last_error"] == "_EmptyError: ollama request failed"
+
+
+def test_strict_ollama_mode_does_not_fallback_to_deepseek(monkeypatch) -> None:
+    monkeypatch.setattr("agent.llm.LLM_PROVIDER_MAX_RETRIES", 0)
     router = LLMRouter(provider_mode="ollama")
     ollama = _Provider("ollama", error=ConnectionError("ollama unavailable"))
     deepseek = _Provider("deepseek")
@@ -36,7 +75,8 @@ def test_strict_ollama_mode_does_not_fallback_to_deepseek() -> None:
     assert deepseek.calls == 0
 
 
-def test_auto_mode_keeps_provider_fallback() -> None:
+def test_auto_mode_keeps_provider_fallback(monkeypatch) -> None:
+    monkeypatch.setattr("agent.llm.LLM_PROVIDER_MAX_RETRIES", 0)
     router = LLMRouter(provider_mode="auto")
     deepseek = _Provider("deepseek", error=ConnectionError("deepseek unavailable"))
     ollama = _Provider("ollama")
@@ -48,7 +88,8 @@ def test_auto_mode_keeps_provider_fallback() -> None:
     assert ollama.calls == 1
 
 
-def test_auto_mode_cools_down_after_both_providers_fail() -> None:
+def test_auto_mode_cools_down_after_both_providers_fail(monkeypatch) -> None:
+    monkeypatch.setattr("agent.llm.LLM_PROVIDER_MAX_RETRIES", 0)
     router = LLMRouter(provider_mode="auto")
     deepseek = _Provider("deepseek", error=ConnectionError("deepseek unavailable"))
     ollama = _Provider("ollama", error=ConnectionError("ollama unavailable"))
@@ -71,9 +112,108 @@ def test_auto_mode_cools_down_after_both_providers_fail() -> None:
     assert (deepseek.calls, ollama.calls) == (2, 1)
 
 
+def test_auto_mode_probes_deepseek_again_after_retry_window(monkeypatch) -> None:
+    monkeypatch.setattr("agent.llm.LLM_PROVIDER_MAX_RETRIES", 0)
+    router = LLMRouter(provider_mode="auto")
+    deepseek = _Provider("deepseek", error=ConnectionError("deepseek flaky"))
+    ollama = _Provider("ollama")
+    router._deepseek = deepseek  # type: ignore[assignment]
+    router._ollama = ollama  # type: ignore[assignment]
+
+    assert asyncio.run(router.ainvoke([])) == "ollama-result"
+    assert (deepseek.calls, ollama.calls) == (1, 1)
+
+    # Inside the retry window calls stay on the fallback instead of paying
+    # a DeepSeek timeout on every request.
+    assert asyncio.run(router.ainvoke([])) == "ollama-result"
+    assert (deepseek.calls, ollama.calls) == (1, 2)
+
+    # Once the window expires the next call probes DeepSeek; on success it
+    # becomes the active provider again for later calls.
+    deepseek.error = None
+    router._deepseek_retry_at = time.monotonic() - 1
+    assert asyncio.run(router.ainvoke([])) == "deepseek-result"
+    assert (deepseek.calls, ollama.calls) == (2, 2)
+    assert asyncio.run(router.ainvoke([])) == "deepseek-result"
+    assert ollama.calls == 2
+
+
+def test_transient_errors_retry_before_fallback(monkeypatch) -> None:
+    monkeypatch.setattr("agent.llm.LLM_PROVIDER_MAX_RETRIES", 3)
+    router = LLMRouter(provider_mode="auto")
+    deepseek = _Provider("deepseek", error=ConnectionError("flaky link"))
+    ollama = _Provider("ollama")
+    router._deepseek = deepseek  # type: ignore[assignment]
+    router._ollama = ollama  # type: ignore[assignment]
+
+    assert asyncio.run(router.ainvoke([])) == "ollama-result"
+    # Initial attempt + 3 retries on the transient error, then fallback.
+    assert (deepseek.calls, ollama.calls) == (4, 1)
+
+
+def test_transient_error_recovering_mid_retry_skips_fallback(monkeypatch) -> None:
+    monkeypatch.setattr("agent.llm.LLM_PROVIDER_MAX_RETRIES", 3)
+    router = LLMRouter(provider_mode="auto")
+
+    class FlakyDeepSeek(_Provider):
+        async def ainvoke(self, _messages, **_kwargs):
+            self.calls += 1
+            if self.calls < 3:
+                raise ConnectionError("flaky link")
+            return "deepseek-result"
+
+    deepseek = FlakyDeepSeek("deepseek")
+    ollama = _Provider("ollama")
+    router._deepseek = deepseek  # type: ignore[assignment]
+    router._ollama = ollama  # type: ignore[assignment]
+
+    assert asyncio.run(router.ainvoke([])) == "deepseek-result"
+    assert (deepseek.calls, ollama.calls) == (3, 0)
+
+
+def test_request_level_errors_fail_without_retry(monkeypatch) -> None:
+    monkeypatch.setattr("agent.llm.LLM_PROVIDER_MAX_RETRIES", 3)
+    router = LLMRouter(provider_mode="auto")
+    deepseek = _Provider(
+        "deepseek", error=RuntimeError("DeepSeek HTTP 401: invalid key")
+    )
+    ollama = _Provider("ollama")
+    router._deepseek = deepseek  # type: ignore[assignment]
+    router._ollama = ollama  # type: ignore[assignment]
+
+    assert asyncio.run(router.ainvoke([])) == "ollama-result"
+    # A 401 is not a connectivity failure — retrying it is wasted latency.
+    assert (deepseek.calls, ollama.calls) == (1, 1)
+
+
 def test_provider_mode_rejects_unknown_value() -> None:
     with pytest.raises(ValueError, match="TSAGENT_LLM_PROVIDER"):
         LLMRouter(provider_mode="qwen")
+
+
+def test_structured_output_disable_is_scoped_to_provider_endpoint(monkeypatch) -> None:
+    router = LLMRouter(provider_mode="auto")
+
+    first = _Provider(
+        "first",
+        model="model-a",
+        base_url="https://provider-a.example/v1",
+    )
+    second = _Provider(
+        "second",
+        model="model-b",
+        base_url="https://provider-b.example/v1",
+    )
+    active = [first, "provider-a"]
+
+    monkeypatch.setattr(router, "_get_active_provider", lambda: tuple(active))
+
+    assert router.supports_structured_output is True
+    router.disable_structured_output()
+    assert router.supports_structured_output is False
+
+    active[:] = [second, "provider-b"]
+    assert router.supports_structured_output is True
 
 
 def test_ollama_http_provider_builds_openai_compatible_messages() -> None:
@@ -105,7 +245,7 @@ def test_ollama_http_provider_bypasses_system_proxy(monkeypatch) -> None:
 
         @staticmethod
         def json() -> dict:
-            return {"choices": [{"message": {"content": "ok"}}]}
+            return {"message": {"role": "assistant", "content": "ok"}}
 
     class Client:
         def __init__(self, **kwargs: object) -> None:

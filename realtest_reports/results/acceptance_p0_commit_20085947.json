@@ -1,0 +1,38 @@
+{
+  "suite": "Real API Acceptance Suite v0.1 - P0",
+  "snapshot_commit": "20085947e560659f4532174fd86f3f3e34cd1e7b",
+  "snapshot": "/private/tmp/tsagent-p0-20085947 (clean git checkout, git status clean)",
+  "date": "2026-08-07",
+  "provider": "deepseek-v4-flash",
+  "provenance_note": "此前 acceptance_p0_round1.json（20/24）测的是 HEAD=20085947 + 未提交工作区改动；本文件为纯 commit 20085947 的干净快照结果。",
+  "summary": {
+    "total": 24,
+    "pass": 15,
+    "fail": 9,
+    "pass_rate": 0.625,
+    "groups": {
+      "A_terminal": "4/4",
+      "B_routing": "3/4",
+      "C_multi_goal": "1/4",
+      "D_agent_service": "3/4",
+      "E_resume": "1/4",
+      "F_provider_perf": "3/4"
+    }
+  },
+  "failures": {
+    "B02": "write output/q.py：created=False（工作区版通过；纯 commit 写链失败）",
+    "C01": "market.md 未生成（web=True 但 writes=0）",
+    "C03": "calc.py 未生成",
+    "C04": "summary.md/sources.json 未生成",
+    "D01": "同 run_id + run_started=1 幂等成立，但简单任务 status=FAILED_TERMINAL（纯 commit 运行时无法完成简单请求）",
+    "E01": "resume_spec_exec=1：恢复时 A 被重跑（工作区版=0），completed=[]",
+    "E03": "简单任务 FAILED_TERMINAL，无法验证 resume COMPLETED",
+    "E04": "HARNESS_ERR: AttributeError: ServiceErrorCode.RUN_ALREADY_ACTIVE 未定义（agent/service/service.py 引用了不存在的枚举成员，任何服务错误映射路径都会崩）",
+    "F04": "简单任务 FAILED_TERMINAL + llm=7（工作区版 COMPLETED + llm=3）"
+  },
+  "pure_commit_bugs_found": [
+    "1. ServiceErrorCode.RUN_ALREADY_ACTIVE 在 agent/service/service.py 中被引用但该 commit 枚举未定义 -> _store_error 构造 code_map 时 AttributeError（E04 触发）",
+    "2. 简单真实任务（写一句话/创建 hello.txt）在纯 commit 上快速 FAILED_TERMINAL（D01/E03/F04），LLM/规划路径依赖未提交的工作区修复",
+    "3. v2.2C 恢复在纯 commit 上 A 被重跑（E01 resume_spec_exec=1），依赖未提交的 runtime 修复"
+  ]
+}

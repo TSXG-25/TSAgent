@@ -130,7 +130,14 @@ class TestRealErrorMapping:
         # 结构异常同样不把异常对象带进 checkpoint
         assert isinstance(json.loads(serialize_checkpoint(cp))["failure_event"]["failure"], str)
 
-    def test_side_effect_status_recorded(self):
+    def test_side_effect_status_recorded(self, monkeypatch):
+        monkeypatch.setattr(
+            httpx.Client,
+            "get",
+            lambda *_a, **_k: (_ for _ in ()).throw(
+                httpx.TimeoutException("scripted timeout")
+            ),
+        )
         with httpx.Client(timeout=0.5) as c:
             with pytest.raises(httpx.TimeoutException):
                 c.get(f"{DS_BASE}/models", headers={"Authorization": f"Bearer {_DS_KEY}"})

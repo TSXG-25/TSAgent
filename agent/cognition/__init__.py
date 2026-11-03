@@ -2,17 +2,12 @@
 
 包含：
 - CognitiveContext: 统一上下文数据模型
-- ConversationState: 跨轮对话状态
-- ResolvedQuery: 消歧后的查询
-- ReferenceResolver: 上下文引用消歧引擎
 - IntentEngine: 意图理解引擎
 - IntentResult: 结构化意图结果
 """
 from .cognitive_context import (
     CognitiveContext,
     PlannerContext,
-    ConversationState,
-    ResolvedQuery,
 )
 from .intent_schema import IntentResult, ALL_DOMAINS, DOMAIN_DESCRIPTIONS
 
@@ -24,7 +19,6 @@ from .intent_schema import IntentResult, ALL_DOMAINS, DOMAIN_DESCRIPTIONS
 # two runtime engines only when they are actually requested.
 _LAZY_EXPORTS = {
     "IntentEngine": (".intent_engine", "IntentEngine"),
-    "ReferenceResolver": (".reference_resolver", "ReferenceResolver"),
 }
 
 
@@ -40,7 +34,7 @@ def __getattr__(name: str):
     return value
 
 __all__ = [
-    "CognitiveContext", "PlannerContext", "ConversationState", "ResolvedQuery",
+    "CognitiveContext", "PlannerContext",
     "IntentResult", "ALL_DOMAINS", "DOMAIN_DESCRIPTIONS",
     "IntentEngine", "ReferenceResolver",
 ]

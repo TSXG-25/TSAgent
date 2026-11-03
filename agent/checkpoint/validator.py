@@ -5,11 +5,13 @@ never reads a file, calls a tool, queries a database, or asks an LLM.
 """
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Iterable
 
 from .compatibility import CompatibilityRegistry, assess_compatibility
 from .contracts import (
     ExternalStateGuard,
+    NoEffectConfirmation,
     ResumeContext,
     ResumeDecision,
     RunCheckpoint,
@@ -135,6 +137,7 @@ def validate_resume(
     checkpoint: RunCheckpoint,
     current_context: ResumeContext,
     external_state_evidence: Iterable[ExternalStateGuard] | None = None,
+    no_effect_confirmation: NoEffectConfirmation | None = None,
     compatibility_registry: CompatibilityRegistry | None = None,
 ) -> ResumeDecision:
     """Return a deterministic decision from a checkpoint and current facts.
@@ -246,37 +249,209 @@ def validate_resume(
             evidence,
             "Checkpoint 依赖的外部状态尚未重新确认，请先完成状态校验。",
         )
-    for guard in guards:
-        if guard.status is GuardStatus.MISMATCH:
+    if checkpoint.external_state_guards:
+        guards_by_identity: dict[tuple[str, str], ExternalStateGuard] = {}
+        for guard in guards:
+            identity = (guard.resource_id, guard.guard_type)
+            if identity in guards_by_identity:
+                evidence.append(_evidence(
+                    "external_state_guard",
+                    expected="one observation per required resource and guard type",
+                    observed="duplicate observation",
+                    status="MISMATCH",
+                    detail=f"{guard.guard_type}:{guard.resource_id}",
+                ))
+                return _reject(
+                    checkpoint,
+                    ResumeReasonCode.EXTERNAL_STATE_MISMATCH,
+                    evidence,
+                )
+            guards_by_identity[identity] = guard
+
+        required_identities = {
+            (guard.resource_id, guard.guard_type)
+            for guard in checkpoint.external_state_guards
+        }
+        unexpected = set(guards_by_identity) - required_identities
+        if unexpected:
+            resource_id, guard_type = sorted(unexpected)[0]
             evidence.append(_evidence(
                 "external_state_guard",
-                expected=guard.expected_value,
-                observed=guard.observed_value,
+                expected="checkpoint-bound resource and guard type",
+                observed=f"{guard_type}:{resource_id}",
                 status="MISMATCH",
-                detail=f"{guard.guard_type}:{guard.resource_id}",
             ))
-            return _reject(checkpoint, ResumeReasonCode.EXTERNAL_STATE_MISMATCH, evidence)
-    unknown_guards = [
-        guard for guard in guards
-        if guard.status in {GuardStatus.UNKNOWN, GuardStatus.MISSING}
-    ]
-    if unknown_guards:
-        evidence.extend(
-            _evidence(
-                "external_state_guard",
-                expected=guard.expected_value,
-                observed=guard.observed_value,
-                status=guard.status.value,
-                detail=f"{guard.guard_type}:{guard.resource_id}",
+            return _reject(
+                checkpoint,
+                ResumeReasonCode.EXTERNAL_STATE_MISMATCH,
+                evidence,
             )
-            for guard in unknown_guards
-        )
-        return _clarify(
-            checkpoint,
-            ResumeReasonCode.EXTERNAL_STATE_UNKNOWN,
-            evidence,
-            "恢复所需的外部状态无法确认，请先确认资源状态后再继续。",
-        )
+
+        for expected_guard in checkpoint.external_state_guards:
+            identity = (expected_guard.resource_id, expected_guard.guard_type)
+            observed_guard = guards_by_identity.get(identity)
+            if observed_guard is None:
+                evidence.append(_evidence(
+                    "external_state_guard",
+                    expected=expected_guard.expected_value,
+                    observed="missing matching resource observation",
+                    status="MISSING",
+                    detail=f"{expected_guard.guard_type}:{expected_guard.resource_id}",
+                ))
+                return _clarify(
+                    checkpoint,
+                    ResumeReasonCode.EXTERNAL_STATE_UNKNOWN,
+                    evidence,
+                    "恢复所需的外部状态尚未针对原资源重新确认。",
+                )
+            if observed_guard.status is GuardStatus.MISMATCH:
+                evidence.append(_evidence(
+                    "external_state_guard",
+                    expected=expected_guard.expected_value,
+                    observed=observed_guard.observed_value,
+                    status="MISMATCH",
+                    detail=f"{expected_guard.guard_type}:{expected_guard.resource_id}",
+                ))
+                return _reject(
+                    checkpoint,
+                    ResumeReasonCode.EXTERNAL_STATE_MISMATCH,
+                    evidence,
+                )
+            if observed_guard.status in {GuardStatus.UNKNOWN, GuardStatus.MISSING}:
+                evidence.append(_evidence(
+                    "external_state_guard",
+                    expected=expected_guard.expected_value,
+                    observed=observed_guard.observed_value,
+                    status=observed_guard.status.value,
+                    detail=f"{expected_guard.guard_type}:{expected_guard.resource_id}",
+                ))
+                return _clarify(
+                    checkpoint,
+                    ResumeReasonCode.EXTERNAL_STATE_UNKNOWN,
+                    evidence,
+                    "恢复所需的外部状态无法确认，请先确认资源状态后再继续。",
+                )
+            if not expected_guard.expected_value:
+                evidence.append(_evidence(
+                    "external_state_guard",
+                    expected="checkpoint-bound expected value",
+                    observed="missing expected value",
+                    status="MISSING",
+                    detail=f"{expected_guard.guard_type}:{expected_guard.resource_id}",
+                ))
+                return _clarify(
+                    checkpoint,
+                    ResumeReasonCode.EXTERNAL_STATE_UNKNOWN,
+                    evidence,
+                    "Checkpoint 没有足够的预期状态信息，请先补充明确的外部状态确认。",
+                )
+            if observed_guard.expected_value != expected_guard.expected_value:
+                evidence.append(_evidence(
+                    "external_state_guard",
+                    expected=expected_guard.expected_value,
+                    observed=observed_guard.expected_value,
+                    status="MISMATCH",
+                    detail=f"{expected_guard.guard_type}:{expected_guard.resource_id}",
+                ))
+                return _reject(
+                    checkpoint,
+                    ResumeReasonCode.EXTERNAL_STATE_MISMATCH,
+                    evidence,
+                )
+
+            try:
+                checked_at = datetime.fromisoformat(
+                    observed_guard.checked_at.replace("Z", "+00:00")
+                )
+                previous_check = (
+                    datetime.fromisoformat(
+                        expected_guard.checked_at.replace("Z", "+00:00")
+                    )
+                    if expected_guard.checked_at
+                    else None
+                )
+                current_is_fresh = checked_at.tzinfo is not None and (
+                    previous_check is None
+                    or (
+                        previous_check.tzinfo is not None
+                        and checked_at > previous_check
+                    )
+                )
+            except ValueError:
+                current_is_fresh = False
+            if not current_is_fresh:
+                evidence.append(_evidence(
+                    "external_state_guard",
+                    expected="fresh timezone-aware observation after checkpoint",
+                    observed=observed_guard.checked_at or "missing timestamp",
+                    status="UNKNOWN",
+                    detail=f"{expected_guard.guard_type}:{expected_guard.resource_id}",
+                ))
+                return _clarify(
+                    checkpoint,
+                    ResumeReasonCode.EXTERNAL_STATE_UNKNOWN,
+                    evidence,
+                    "恢复所需的外部状态证据缺失有效的新鲜检查时间。",
+                )
+            if observed_guard.observed_value != expected_guard.expected_value:
+                evidence.append(_evidence(
+                    "external_state_guard",
+                    expected=expected_guard.expected_value,
+                    observed=observed_guard.observed_value,
+                    status="MISMATCH",
+                    detail=f"{expected_guard.guard_type}:{expected_guard.resource_id}",
+                ))
+                return _reject(
+                    checkpoint,
+                    ResumeReasonCode.EXTERNAL_STATE_MISMATCH,
+                    evidence,
+                )
+            evidence.append(_evidence(
+                "external_state_guard",
+                expected=expected_guard.expected_value,
+                observed=observed_guard.observed_value,
+                status="VERIFIED",
+                detail=(
+                    f"{expected_guard.guard_type}:{expected_guard.resource_id};"
+                    f"checked_at={observed_guard.checked_at}"
+                ),
+            ))
+    else:
+        for guard in guards:
+            if guard.status is GuardStatus.MISMATCH:
+                evidence.append(_evidence(
+                    "external_state_guard",
+                    expected=guard.expected_value,
+                    observed=guard.observed_value,
+                    status="MISMATCH",
+                    detail=f"{guard.guard_type}:{guard.resource_id}",
+                ))
+                return _reject(
+                    checkpoint,
+                    ResumeReasonCode.EXTERNAL_STATE_MISMATCH,
+                    evidence,
+                )
+        unknown_guards = [
+            guard for guard in guards
+            if guard.status in {GuardStatus.UNKNOWN, GuardStatus.MISSING}
+        ]
+        if unknown_guards:
+            evidence.extend(
+                _evidence(
+                    "external_state_guard",
+                    expected=guard.expected_value,
+                    observed=guard.observed_value,
+                    status=guard.status.value,
+                    detail=f"{guard.guard_type}:{guard.resource_id}",
+                )
+                for guard in unknown_guards
+            )
+            return _clarify(
+                checkpoint,
+                ResumeReasonCode.EXTERNAL_STATE_UNKNOWN,
+                evidence,
+                "恢复所需的外部状态无法确认，请先确认资源状态后再继续。",
+            )
 
     assessment = assess_compatibility(checkpoint, current_context, registry)
     evidence.extend(assessment.evidence)
@@ -286,6 +461,18 @@ def validate_resume(
         return _reject(checkpoint, ResumeReasonCode.CONTRACT_INCOMPATIBLE, evidence)
 
     requested = current_context.requested_action
+    if (
+        no_effect_confirmation is not None
+        and requested is not ResumeAction.RESUME_EXACT
+    ):
+        evidence.append(_evidence(
+            "no_effect_confirmation",
+            expected=ResumeAction.RESUME_EXACT.value,
+            observed=requested.value if requested else "unspecified action",
+            status="MISMATCH",
+        ))
+        return _reject(checkpoint, ResumeReasonCode.UNKNOWN_SIDE_EFFECT, evidence)
+
     # Explicit abandon is a user-selected action, but it still cannot revive a
     # terminal checkpoint (handled above) or bypass unknown external facts.
     if requested is ResumeAction.ABANDON_AND_RESTART:
@@ -443,6 +630,108 @@ def validate_resume(
         record for record in checkpoint.task_effect_records
         if record.effect_state in _UNKNOWN_EFFECTS
     ]
+    if no_effect_confirmation is not None:
+        if not unsafe_effects:
+            evidence.append(_evidence(
+                "no_effect_confirmation",
+                expected="one matching uncertain active task effect",
+                observed="no uncertain effect",
+                status="MISMATCH",
+            ))
+            return _reject(checkpoint, ResumeReasonCode.UNKNOWN_SIDE_EFFECT, evidence)
+        if len(unsafe_effects) != 1 or unsafe_effects[0].task_id != checkpoint.active_task_id:
+            evidence.append(_evidence(
+                "no_effect_confirmation",
+                expected=f"one uncertain effect for active task {checkpoint.active_task_id}",
+                observed=",".join(record.task_id for record in unsafe_effects),
+                status="MISMATCH",
+            ))
+            return _clarify(
+                checkpoint,
+                ResumeReasonCode.UNKNOWN_SIDE_EFFECT,
+                evidence,
+                "存在多个或非当前任务的未决副作用；本次确认无法覆盖它们，请先分别核对并处理。",
+            )
+
+        record = unsafe_effects[0]
+        expected_binding = (
+            record.task_id,
+            record.idempotency_key,
+            record.external_reference,
+        )
+        observed_binding = (
+            no_effect_confirmation.task_id,
+            no_effect_confirmation.idempotency_key,
+            no_effect_confirmation.external_reference,
+        )
+        if not record.idempotency_key or not record.external_reference:
+            evidence.append(_evidence(
+                "no_effect_confirmation",
+                expected="checkpoint effect with idempotency key and external reference",
+                observed="effect binding is incomplete",
+                status="MISSING",
+                detail=record.task_id,
+            ))
+            return _clarify(
+                checkpoint,
+                ResumeReasonCode.UNKNOWN_SIDE_EFFECT,
+                evidence,
+                "Checkpoint 缺少可绑定确认的幂等键或外部引用，不能安全续跑；请先通过原系统核实并补全副作用记录。",
+            )
+        if observed_binding != expected_binding:
+            evidence.append(_evidence(
+                "no_effect_confirmation",
+                expected="|".join(expected_binding),
+                observed="|".join(observed_binding),
+                status="MISMATCH",
+            ))
+            return _reject(checkpoint, ResumeReasonCode.UNKNOWN_SIDE_EFFECT, evidence)
+
+        try:
+            checked_at = datetime.fromisoformat(
+                no_effect_confirmation.checked_at.replace("Z", "+00:00")
+            )
+            checkpoint_updated_at = datetime.fromisoformat(
+                checkpoint.updated_at.replace("Z", "+00:00")
+            )
+            timestamp_is_fresh = (
+                checked_at.tzinfo is not None
+                and checked_at.utcoffset() is not None
+                and checkpoint_updated_at.tzinfo is not None
+                and checkpoint_updated_at.utcoffset() is not None
+                and checked_at > checkpoint_updated_at
+            )
+        except ValueError:
+            timestamp_is_fresh = False
+        if not timestamp_is_fresh:
+            evidence.append(_evidence(
+                "no_effect_confirmation",
+                expected="timezone-aware checked_at after checkpoint.updated_at",
+                observed=no_effect_confirmation.checked_at,
+                status="STALE_OR_INVALID",
+                detail=checkpoint.updated_at,
+            ))
+            return _clarify(
+                checkpoint,
+                ResumeReasonCode.UNKNOWN_SIDE_EFFECT,
+                evidence,
+                "请先重新核验该副作用，并提交晚于当前 Checkpoint 的带时区 checked_at。",
+            )
+
+        evidence.append(_evidence(
+            "no_effect_confirmation",
+            expected="effect not committed",
+            observed="caller confirmed no effect",
+            status="ATTESTED",
+            detail=(
+                f"task_id={record.task_id};"
+                f"idempotency_key={record.idempotency_key};"
+                f"external_reference={record.external_reference};"
+                f"checked_at={no_effect_confirmation.checked_at}"
+            ),
+        ))
+        unsafe_effects = []
+
     if unsafe_effects:
         state_names = ",".join(sorted({record.effect_state.value for record in unsafe_effects}))
         evidence.append(_evidence(
@@ -463,7 +752,21 @@ def validate_resume(
             checkpoint,
             reason,
             evidence,
-            "上一次副作用的最终状态无法确认，请先确认外部结果后再恢复。",
+            (
+                "上一次副作用状态无法确认。请先在对应外部系统核实；若确认未发生，"
+                "可提交 no_effect_confirmation，绑定 task_id="
+                f"{unsafe_effects[0].task_id}、"
+                f"idempotency_key={unsafe_effects[0].idempotency_key}、"
+                f"external_reference={unsafe_effects[0].external_reference}，"
+                "并提供晚于当前 Checkpoint 的带时区 checked_at。"
+                "若效果已发生或仍不确定，请勿确认。"
+                if len(unsafe_effects) == 1
+                and unsafe_effects[0].idempotency_key
+                and unsafe_effects[0].external_reference
+                else "当前副作用记录缺少幂等键或外部引用，无法绑定安全确认；请先在原系统核实并补全记录。"
+                if len(unsafe_effects) == 1
+                else "存在多个未决副作用，请先分别核实外部结果；未能确定每个副作用的状态前不要续跑。"
+            ),
         )
 
     return _make_decision(

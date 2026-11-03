@@ -13,9 +13,10 @@ Pipeline:
 全部注册进 ExecutionVerifier registry，作为 Execution Runtime 的统一验证层。
 """
 import os
+import hashlib
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 
 @dataclass
@@ -40,6 +41,132 @@ class VerificationResult:
     verifier: str = ""
     detail: str = ""
     checks: List[str] = field(default_factory=list)
+
+
+def snapshot_outputs(paths: List[str], workspace: Any) -> Dict[str, str]:
+    """Snapshot declared files/directories, never the entire workspace.
+
+    Declarations are observation scopes, not evidence that an effect occurred.
+    Directory declarations expand into individual canonical file identities.
+    """
+    snapshots: Dict[str, str] = {}
+    for value in paths:
+        root = workspace.resolve_path(value)
+        candidates = root.rglob('*') if root.is_dir() else (root,)
+        for candidate in candidates:
+            resolved = workspace.resolve_path(str(candidate))
+            if resolved.is_file() and resolved.stat().st_size:
+                snapshots[workspace.relative_path(resolved)] = hashlib.sha256(resolved.read_bytes()).hexdigest()
+    return snapshots
+
+
+def verify_file_acceptance(state: Mapping[str, Any], workspace: Any) -> list[dict[str, Any]]:
+    """Verify supported, explicit text and distinctness criteria on delivered files."""
+    from agent.goal import GoalState, GoalVerifier
+
+    goal = GoalState.from_dict(state.get("goal_state"))
+    requirements = {item.id: item for item in goal.delivery_requirements}
+    assignments = GoalVerifier.delivery_paths(state)
+    all_paths = tuple(
+        item
+        for requirement in goal.delivery_requirements
+        for item in assignments[requirement.id]
+    )
+    content_by_path: dict[str, str | None] = {}
+
+    def content(path: str) -> str | None:
+        if path not in content_by_path:
+            if workspace is None:
+                content_by_path[path] = None
+            else:
+                try:
+                    content_by_path[path] = workspace.read_text(path)
+                except (OSError, PermissionError, ValueError):
+                    content_by_path[path] = None
+        return content_by_path[path]
+
+    def check(criterion, files: tuple[Mapping[str, Any], ...]) -> tuple[bool, str] | None:
+        if criterion.kind == "files_distinct":
+            return (
+                len(files) > 1 and len({str(item["digest"]) for item in files}) == len(files),
+                "verified file digests are distinct",
+            )
+        if criterion.kind == "reply_mentions_artifact_path":
+            # The Finalizer always discloses verified artifact paths in the
+            # output; presence of a verified artifact satisfies this criterion.
+            return bool(files), "deliverable has a verified artifact"
+        if criterion.kind == "file_contains":
+            texts = [content(str(item["path"])) for item in files]
+            verified = bool(texts) and all(
+                text is not None and criterion.text in text
+                for text in texts
+            )
+            return verified, "required text is present in every assigned file"
+        return None
+
+    results = []
+    for criterion in goal.acceptance_criteria:
+        outcome = check(criterion, all_paths)
+        if outcome is None:
+            continue
+        verified, detail = outcome
+        results.append({
+            "deliverable_id": "",
+            "criterion": criterion.key(),
+            "verified": verified,
+            "detail": detail,
+        })
+    for requirement in goal.delivery_requirements:
+        files = assignments[requirement.id]
+        for criterion in requirement.acceptance_criteria:
+            outcome = check(criterion, files)
+            if outcome is None:
+                continue
+            verified, detail = outcome
+            results.append({
+                "deliverable_id": requirement.id,
+                "criterion": criterion.key(),
+                "verified": verified,
+                "detail": detail,
+            })
+    return results
+
+
+def verified_file_effects(artifacts: ExecutionArtifacts, workspace: Any) -> List[Dict[str, str]]:
+    """Verify actual tool receipts, independent of the enclosing Task status."""
+    candidates = list(artifacts.files_written)
+    for operation in artifacts.file_operations:
+        name = operation['operation']
+        if name in {'copy', 'move'}:
+            verifier = CopyVerification() if name == 'copy' else MoveVerification()
+            if verifier.verify(ExecutionArtifacts(file_operations=[operation]), workspace=workspace).success:
+                candidates.append(operation['destination'])
+    if not candidates:
+        return []
+    if workspace is None:
+        return []  # Durable file publication requires a scoped workspace.
+    from agent.security import is_internal_storage_path
+    return [
+        {'path': path, 'digest': digest}
+        for path, digest in snapshot_outputs(candidates, workspace).items()
+        if not is_internal_storage_path(path)
+    ]
+
+
+def verified_consumed_files(artifacts: ExecutionArtifacts, workspace: Any) -> List[str]:
+    """Retire earlier file receipts only after a verified delete or move."""
+    if workspace is None:
+        return []
+    consumed = []
+    for operation in artifacts.file_operations:
+        name = operation['operation']
+        if name not in {'delete', 'move'}:
+            continue
+        verifier = DeleteVerification() if name == 'delete' else MoveVerification()
+        if verifier.verify(ExecutionArtifacts(file_operations=[operation]), workspace=workspace).success:
+            path = operation['path'] if name == 'delete' else operation['source']
+            consumed.append(workspace.relative_path(workspace.resolve_path(path)))
+    return consumed
 
 
 # ── 基础核验原语（纯函数，以文件系统为准） ──
@@ -233,6 +360,7 @@ class ExecutionVerifier:
     def __init__(self) -> None:
         self._registry: Dict[str, BaseVerification] = {}
         self.register(WriteVerification())
+        self._registry['modify'] = self._registry['write']
         self.register(DeleteVerification())
         self.register(CopyVerification())
         self.register(MoveVerification())

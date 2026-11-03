@@ -1,0 +1,20 @@
+[
+  {
+    "case": "name",
+    "record_id": 255,
+    "run_id": "run-0235195d7a4648eca549f89802924ccf",
+    "source_ref_matches": true,
+    "evidence_id_matches": true,
+    "scope": "user",
+    "revision": 1
+  },
+  {
+    "case": "language",
+    "record_id": 256,
+    "run_id": "run-e403dc4151e944098a8e57b0493a91ac",
+    "source_ref_matches": true,
+    "evidence_id_matches": true,
+    "scope": "user",
+    "revision": 1
+  }
+]

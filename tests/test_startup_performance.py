@@ -45,9 +45,9 @@ def test_web_dependencies_are_not_imported_during_registration() -> None:
     assert result.returncode == 0, result.stderr
 
 
-def test_skill_registry_does_not_import_numpy_until_semantic_selection() -> None:
+def test_skill_loader_does_not_import_numpy() -> None:
     code = (
-        "import sys; import agent.registry.skill_registry; "
+        "import sys; import agent.skills; "
         "assert 'numpy' not in sys.modules"
     )
     result = subprocess.run(

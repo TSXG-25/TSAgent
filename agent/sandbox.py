@@ -11,6 +11,7 @@ import os
 import platform
 import signal
 from pathlib import Path
+from agent.failure.taxonomy import FailureCode
 from agent.security import is_sensitive_command, redact_sensitive_text
 
 SANDBOX_IMAGE = "agent-sandbox"
@@ -73,7 +74,8 @@ def _run_local(
 
     if not local_execution_allowed():
         return (
-            "错误：没有可用的隔离执行环境；本地执行默认关闭。"
+            f"错误：{FailureCode.EXECUTION_ENVIRONMENT_UNAVAILABLE.value}: "
+            "没有可用的隔离执行环境；本地执行默认关闭。"
             f"请启动 Docker，或仅在受信任的开发环境显式设置 {LOCAL_EXECUTION_ENV}=1。"
         )
 
@@ -113,12 +115,11 @@ def _run_local(
         if returncode != 0:
             stderr = stderr.strip()
             stdout = stdout.strip()
-            if stderr:
-                return redact_sensitive_text(f"命令执行失败 (code {returncode}):\n{stderr}")
-            if stdout:
-                return redact_sensitive_text(f"命令执行失败 (code {returncode}):\n{stdout}")
-            return f"命令执行失败（返回码 {returncode}）"
-        return redact_sensitive_text(stdout.strip())
+            detail = "\n".join(part for part in (stdout, stderr) if part)
+            return redact_sensitive_text(
+                f"错误：COMMAND_NONZERO_EXIT: 命令执行失败 (code {returncode}):\n{detail}"
+            )
+        return redact_sensitive_text(stdout)
     except subprocess.TimeoutExpired:
         if process is not None:
             try:
@@ -170,7 +171,7 @@ def _run_docker(
         if result.returncode != 0:
             # Docker failed — likely image not found. Return None to trigger fallback.
             return None
-        return redact_sensitive_text(result.stdout.strip())
+        return redact_sensitive_text(result.stdout)
     except subprocess.TimeoutExpired:
         return None  # fallback
     except FileNotFoundError:

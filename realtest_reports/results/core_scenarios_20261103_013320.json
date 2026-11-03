@@ -1,0 +1,2447 @@
+{
+  "manifest": "core-scenarios-v1",
+  "run_id": "core_scenarios_20261103_013320",
+  "provider": "auto",
+  "model": "deepseek-flash",
+  "started_at": "2026-11-03T01:33:20.484896+00:00",
+  "cases_file": "core_scenarios_cases.json",
+  "workspace_root": "/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_013320_workspace",
+  "cases": [
+    {
+      "id": "CS01",
+      "title": "greeting stays a cheap chat turn (latency sanity)",
+      "result": "PASS",
+      "skip_reason": "",
+      "workspace": "/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_013320_workspace/cs01",
+      "duration_ms": 16375.4,
+      "error": "",
+      "turns": [
+        {
+          "turn": 1,
+          "request": "你好",
+          "status": "COMPLETED",
+          "output": "你好！很高兴见到你 😊 有什么我可以帮你的吗？",
+          "artifacts": [],
+          "provider_calls": 2,
+          "plan_calls": 1,
+          "replan_calls": 0,
+          "tool_calls": [],
+          "intent": {
+            "domain": "chat",
+            "action": "greet",
+            "target": "",
+            "confidence": 0.98,
+            "summary": "用户只是打招呼，回复一句问候即可。",
+            "requires_execution": false,
+            "artifact_required": false,
+            "requested_outcomes": [
+              "USER_VISIBLE_OUTPUT"
+            ],
+            "delivery_requirements": [],
+            "acceptance_criteria": [],
+            "write_targets": [],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "new_request",
+            "resolved_request": "用户打招呼说“你好”，希望得到一句友好的问候回应。",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": ""
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "run_completed"
+          ],
+          "failure_summary": null,
+          "error": "",
+          "duration_ms": 16342.8
+        }
+      ],
+      "checks": [
+        {
+          "check": "status",
+          "passed": true,
+          "detail": "expected COMPLETED got COMPLETED",
+          "turn": 1
+        },
+        {
+          "check": "provider_calls_max",
+          "passed": true,
+          "detail": "2 calls > 3",
+          "turn": 1
+        },
+        {
+          "check": "no_tool_calls",
+          "passed": true,
+          "detail": "tools used: []",
+          "turn": 1
+        },
+        {
+          "check": "intent.domain",
+          "passed": true,
+          "detail": "expected 'chat' got 'chat'",
+          "turn": 1
+        }
+      ],
+      "files": {}
+    },
+    {
+      "id": "CS02",
+      "title": "artifact without explicit path lands under output/",
+      "result": "PASS",
+      "skip_reason": "",
+      "workspace": "/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_013320_workspace/cs02",
+      "duration_ms": 16701.8,
+      "error": "",
+      "turns": [
+        {
+          "turn": 1,
+          "request": "帮我写一个 Python 待办事项管理脚本，能添加和列出任务",
+          "status": "COMPLETED",
+          "output": "已生成/更新本地文件：\n/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_013320_workspace/cs02/output/todo.py\n\n📁 ./ (3 项)\nruntime.sqlite\nruntime.sqlite-shm\nruntime.sqlite-wal",
+          "artifacts": [
+            {
+              "artifact_id": "artifact-1203134e2f1e6bda070a5b50",
+              "artifact_type": "file",
+              "digest": "a7cdb4df8fdb942cfa779508c9cc1ddb896b79a7de7681bd163beac30ff9fb56",
+              "reference": "artifact://core-scenarios/run-744ffcb0b32d4e72a8056a8df1819d10/artifact-1203134e2f1e6bda070a5b50",
+              "exists": true,
+              "verified": true,
+              "run_id": "run-744ffcb0b32d4e72a8056a8df1819d10",
+              "display_name": "artifact-1203134e2f1e6bda070a5b50",
+              "size": null,
+              "producer_workflow_id": "runtime-execution",
+              "producer_stage_id": "task:loop-3",
+              "created_revision": 1,
+              "created_at": ""
+            }
+          ],
+          "provider_calls": 1,
+          "plan_calls": 1,
+          "replan_calls": 1,
+          "tool_calls": [
+            {
+              "tool": "filesystem.list",
+              "args": {
+                "path": "."
+              }
+            },
+            {
+              "tool": "filesystem.write",
+              "args": {
+                "path": "output/todo.py",
+                "content": "#!/usr/bin/env python3\n\"\"\"待办事项管理脚本\n\n功能：\n    add  <任务内容>  添加任务\n    list             列出所有任务\n    done <任务编号>  将任务标记为完成（可选扩展）\n    del  <任务编号>  删除任务（可选扩展）\n\n数据保存在脚本同目"
+              }
+            }
+          ],
+          "intent": {
+            "domain": "development",
+            "action": "create a Python todo CLI script",
+            "target": "",
+            "confidence": 0.95,
+            "summary": "用户需要交付一个可添加和列出任务的 Python 待办事项管理脚本文件",
+            "requires_execution": true,
+            "artifact_required": true,
+            "requested_outcomes": [
+              "FILE_MUTATION",
+              "USER_VISIBLE_OUTPUT"
+            ],
+            "delivery_requirements": [
+              {
+                "id": "todo_script",
+                "kind": "file",
+                "quantity": 1,
+                "target": "",
+                "acceptance_criteria": []
+              }
+            ],
+            "acceptance_criteria": [],
+            "write_targets": [],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "new_request",
+            "resolved_request": "用 Python 编写一个待办事项管理脚本，支持添加任务和列出已有任务，并保存为本地脚本文件。",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": ""
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "stage_started",
+            "task_started",
+            "task_completed",
+            "task_started",
+            "task_completed",
+            "stage_completed",
+            "run_completed"
+          ],
+          "failure_summary": null,
+          "error": "",
+          "duration_ms": 16691.7
+        }
+      ],
+      "checks": [
+        {
+          "check": "status",
+          "passed": true,
+          "detail": "expected COMPLETED got COMPLETED",
+          "turn": 1
+        },
+        {
+          "check": "artifact_exists",
+          "passed": true,
+          "detail": "'output/**/*.py' matched ['/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_013320_workspace/cs02/output/todo.py']",
+          "turn": 1
+        },
+        {
+          "check": "artifact_absent",
+          "passed": true,
+          "detail": "'src/**/*.py' unexpectedly matched []",
+          "turn": 1
+        },
+        {
+          "check": "artifact_absent",
+          "passed": true,
+          "detail": "'*.py' unexpectedly matched []",
+          "turn": 1
+        },
+        {
+          "check": "intent.artifact_required",
+          "passed": true,
+          "detail": "expected True got True",
+          "turn": 1
+        }
+      ],
+      "files": {
+        "output/todo.py": "#!/usr/bin/env python3\n\"\"\"待办事项管理脚本\n\n功能：\n    add  <任务内容>  添加任务\n    list             列出所有任务\n    done <任务编号>  将任务标记为完成（可选扩展）\n    del  <任务编号>  删除任务（可选扩展）\n\n数据保存在脚本同目录下的 todos.json 中。\n\n用法示例：\n    python todo.py add \"写周报\"\n    python todo.py list\n    python todo.py done 1\n\"\"\"\n\nimport argparse\nimport json\nimport os\nimport sys\nfrom datetime import datetime\n\nDATA_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), \"todos.json\")\n\n\ndef load_tasks():\n    \"\"\"从数据文件读取任务列表，文件不存在或损坏时返回空列表。\"\"\"\n    if not os.path.exists(DATA_FILE):\n        return []\n    try:\n        with open(DATA_FILE, \"r\", encoding=\"utf-8\") as f:\n            data = json.load(f)\n        return data if isinstance(data, list) else []\n    except (json.JSONDecodeError, OSError):\n        return []\n\n\ndef save_tasks(tasks):\n    \"\"\"把任务列表写回数据文件。\"\"\"\n    with open(DATA_FILE, \"w\", encoding=\"utf-8\") as f:\n        json.dump(tasks, f, ensure_ascii=False, indent=2)\n\n\ndef add_task(content):\n    \"\"\"添加一条新任务。\"\"\"\n    content = content.strip()\n    if not content:\n        print(\"任务内容不能为空。\")\n        return 1\n\n    tasks = load_tasks()\n    tasks.append({\n        \"content\": content,\n        \"done\": False,\n        \"created_at\": datetime.now().strftime(\"%Y-%m-%d %H:%M:%S\"),\n    })\n    save_tasks(tasks)\n    print(\"已添加任务 #{}: {}\".format(len(tasks), content))\n    return 0\n\n\ndef list_tasks():\n    \"\"\"列出所有任务。\"\"\"\n    tasks = load_tasks()\n    if not tasks:\n        print(\"暂无待办事项，使用 add 命令添加一条吧。\")\n        return 0\n\n    done_count = sum(1 for t in tasks if t.get(\"done\"))\n    print(\"待办事项（共 {} 条，已完成 {} 条）：\".format(len(tasks), done_count))\n    print(\"-\" * 48)\n    for i, task in enumerate(tasks, 1):\n        mark = \"[x]\" if task.get(\"done\") else \"[ ]\"\n        print(\"{:>2}. {} {}  ({})\".format(i, mark, task.get(\"content\", \"\"),\n                                           task.get(\"created_at\", \"\")))\n    print(\"-\" * 48)\n    return 0\n\n\ndef set_done(index):\n    \"\"\"把指定编号的任务标记为已完成。\"\"\"\n    tasks = load_tasks()\n    if not _valid_index(index, tasks):\n        return 1\n    tasks[index - 1][\"done\"] = True\n    save_tasks(tasks)\n    print(\"任务 #{} 已标记为完成: {}\".format(index, tasks[index - 1][\"content\"]))\n    return 0\n\n\ndef delete_task(index):\n    \"\"\"删除指定编号的任务。\"\"\"\n    tasks = load_tasks()\n    if not _valid_index(index, tasks):\n        return 1\n    removed = tasks.pop(index - 1)\n    save_tasks(tasks)\n    print(\"已删除任务 #{}: {}\".format(index, removed[\"content\"]))\n    return 0\n\n\ndef _valid_index(index, tasks):\n    if not tasks:\n        print(\"当前没有任务。\")\n        return False\n    if index < 1 or index > len(tasks):\n        print(\"编号超出范围，当前共有 {} 条任务。\".format(len(tasks)))\n        return False\n    return True\n\n\ndef build_parser():\n    parser = argparse.ArgumentParser(description=\"简单的命令行待办事项管理工具\")\n    sub = parser.add_subparsers(dest=\"command\")\n\n    p_add = sub.add_parser(\"add\", help=\"添加任务\")\n    p_add.add_argument(\"content\", nargs=\"+\", help=\"任务内容，可包含空格\")\n\n    sub.add_parser(\"list\", help=\"列出所有任务\")\n\n    p_done = sub.add_parser(\"done\", help=\"标记任务为已完成\")\n    p_done.add_argument(\"index\", type=int, help=\"任务编号\")\n\n    p_del = sub.add_parser(\"del\", help=\"删除任务\")\n    p_del.add_argument(\"index\", type=int, help=\"任务编号\")\n\n    return parser\n\n\ndef main(argv=None):\n    parser = build_parser()\n    args = parser.parse_args(argv)\n\n    if args.command == \"add\":\n        return add_task(\" \".join(args.content))\n    if args.command == \"list\":\n        return list_tasks()\n    if args.command == \"done\":\n        return set_done(args.index)\n    if args.command == \"del\":\n        return delete_task(args.index)\n\n    # 未指定子命令时直接展示任务列表\n    return list_tasks()\n\n\nif __name__ == \"__main__\":\n    sys.exit(main())\n"
+      }
+    },
+    {
+      "id": "CS03",
+      "title": "explicit src/ path is honored over the output/ default",
+      "result": "PASS",
+      "skip_reason": "",
+      "workspace": "/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_013320_workspace/cs03",
+      "duration_ms": 14118.4,
+      "error": "",
+      "turns": [
+        {
+          "turn": 1,
+          "request": "写一个函数 render_greeting(name) 返回问候字符串，保存到 src/greeting.py",
+          "status": "COMPLETED",
+          "output": "已生成/更新本地文件：\n/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_013320_workspace/cs03/src/greeting.py\n\n📁 ./ (3 项)\nruntime.sqlite\nruntime.sqlite-shm\nruntime.sqlite-wal\n\n\"\"\"问候语生成模块。\"\"\"\n\n\ndef render_greeting(name: str) -> str:\n    \"\"\"根据名字返回一句问候语。\n\n    Args:\n        name: 被问候者的名字。\n\n    Returns:\n        形如 \"Hello, Alice!\" 的问候字符串。\n        若 name 为 None 或空白字符串，则问候语不带名字，返回 \"Hello!\"。\n    \"\"\"\n    cleaned = name.strip() if isinstance(name, str) else \"\"\n    if not cleaned:\n        return \"Hello!\"\n    return f\"Hello, {cleaned}!\"\n",
+          "artifacts": [
+            {
+              "artifact_id": "artifact-52c5a1e42dcfccd4e55d1841",
+              "artifact_type": "file",
+              "digest": "7df8186eb48d76f6f8670bf0a55964cfe0394e7bbe3d15f4eaed807c0faa6149",
+              "reference": "artifact://core-scenarios/run-f53b1d9924634509be5a78753dfd499a/artifact-52c5a1e42dcfccd4e55d1841",
+              "exists": true,
+              "verified": true,
+              "run_id": "run-f53b1d9924634509be5a78753dfd499a",
+              "display_name": "artifact-52c5a1e42dcfccd4e55d1841",
+              "size": null,
+              "producer_workflow_id": "runtime-execution",
+              "producer_stage_id": "task:loop-4",
+              "created_revision": 1,
+              "created_at": ""
+            }
+          ],
+          "provider_calls": 1,
+          "plan_calls": 1,
+          "replan_calls": 1,
+          "tool_calls": [
+            {
+              "tool": "filesystem.list",
+              "args": {
+                "path": "."
+              }
+            },
+            {
+              "tool": "filesystem.read",
+              "args": {
+                "path": "src/greeting.py"
+              }
+            },
+            {
+              "tool": "filesystem.write",
+              "args": {
+                "path": "src/greeting.py",
+                "content": "\"\"\"问候语生成模块。\"\"\"\n\n\ndef render_greeting(name: str) -> str:\n    \"\"\"根据名字返回一句问候语。\n\n    Args:\n        name: 被问候者的名字。\n\n    Returns:\n        形如 \"Hello, Alice!\" 的问候字符串。\n "
+              }
+            },
+            {
+              "tool": "filesystem.read",
+              "args": {
+                "path": "src/greeting.py"
+              }
+            }
+          ],
+          "intent": {
+            "domain": "development",
+            "action": "write function to file",
+            "target": "src/greeting.py",
+            "confidence": 0.96,
+            "summary": "在 src/greeting.py 中实现并保存 render_greeting(name) 函数，返回问候字符串",
+            "requires_execution": true,
+            "artifact_required": true,
+            "requested_outcomes": [
+              "FILE_MUTATION"
+            ],
+            "delivery_requirements": [
+              {
+                "id": "greeting_py",
+                "kind": "file",
+                "quantity": 1,
+                "target": "src/greeting.py",
+                "acceptance_criteria": []
+              }
+            ],
+            "acceptance_criteria": [],
+            "write_targets": [
+              "src/greeting.py"
+            ],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "new_request",
+            "resolved_request": "编写一个函数 render_greeting(name)，返回问候字符串，并将其保存到 src/greeting.py 文件中。",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": ""
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "stage_started",
+            "task_started",
+            "task_completed",
+            "task_started",
+            "task_completed",
+            "task_started",
+            "task_completed",
+            "task_started",
+            "task_completed",
+            "stage_completed",
+            "run_completed"
+          ],
+          "failure_summary": null,
+          "error": "",
+          "duration_ms": 14107.9
+        }
+      ],
+      "checks": [
+        {
+          "check": "status",
+          "passed": true,
+          "detail": "expected COMPLETED got COMPLETED",
+          "turn": 1
+        },
+        {
+          "check": "artifact_exists",
+          "passed": true,
+          "detail": "'src/greeting.py' matched ['/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_013320_workspace/cs03/src/greeting.py']",
+          "turn": 1
+        },
+        {
+          "check": "artifact_absent",
+          "passed": true,
+          "detail": "'output/**/greeting.py' unexpectedly matched []",
+          "turn": 1
+        },
+        {
+          "check": "file_contains:src/greeting.py",
+          "passed": true,
+          "detail": "tokens ['def render_greeting'] in 'src/greeting.py': found in /Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_013320_workspace/cs03/src/greeting.py",
+          "turn": 1
+        },
+        {
+          "check": "intent.write_targets_contains",
+          "passed": true,
+          "detail": "'src/greeting.py' in write_targets=['src/greeting.py']",
+          "turn": 1
+        }
+      ],
+      "files": {
+        "src/greeting.py": "\"\"\"问候语生成模块。\"\"\"\n\n\ndef render_greeting(name: str) -> str:\n    \"\"\"根据名字返回一句问候语。\n\n    Args:\n        name: 被问候者的名字。\n\n    Returns:\n        形如 \"Hello, Alice!\" 的问候字符串。\n        若 name 为 None 或空白字符串，则问候语不带名字，返回 \"Hello!\"。\n    \"\"\"\n    cleaned = name.strip() if isinstance(name, str) else \"\"\n    if not cleaned:\n        return \"Hello!\"\n    return f\"Hello, {cleaned}!\"\n"
+      }
+    },
+    {
+      "id": "CS04",
+      "title": "calculator creation discloses where the artifact was saved",
+      "result": "PASS",
+      "skip_reason": "",
+      "workspace": "/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_013320_workspace/cs04",
+      "duration_ms": 102738.5,
+      "error": "",
+      "turns": [
+        {
+          "turn": 1,
+          "request": "帮我写个汇率转换计算器，写完告诉我放在哪了",
+          "status": "COMPLETED",
+          "output": "已生成/更新本地文件：\n/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_013320_workspace/cs04/output/exchange_rate_calculator.py\n\n📁 ./ (3 项)\nruntime.sqlite\nruntime.sqlite-shm\nruntime.sqlite-wal",
+          "artifacts": [
+            {
+              "artifact_id": "artifact-971536cda6ebe6eecd82a429",
+              "artifact_type": "file",
+              "digest": "9149d31738c8f93604083bd261c0c74da29a24edaca4b451670977d025f1e583",
+              "reference": "artifact://core-scenarios/run-74a5e53a85554ce8b8e0e1c91fedc8bd/artifact-971536cda6ebe6eecd82a429",
+              "exists": true,
+              "verified": true,
+              "run_id": "run-74a5e53a85554ce8b8e0e1c91fedc8bd",
+              "display_name": "artifact-971536cda6ebe6eecd82a429",
+              "size": null,
+              "producer_workflow_id": "runtime-execution",
+              "producer_stage_id": "task:loop-3",
+              "created_revision": 1,
+              "created_at": ""
+            }
+          ],
+          "provider_calls": 1,
+          "plan_calls": 1,
+          "replan_calls": 1,
+          "tool_calls": [
+            {
+              "tool": "filesystem.list",
+              "args": {
+                "path": "."
+              }
+            },
+            {
+              "tool": "filesystem.write",
+              "args": {
+                "path": "output/exchange_rate_calculator.py",
+                "content": "def convert_currency(amount, from_currency, to_currency, exchange_rate):\n    try:\n        converted_amount = amount * exchange_rate\n        return converted_amo",
+                "mode": "overwrite"
+              }
+            }
+          ],
+          "intent": {
+            "domain": "development",
+            "action": "implement currency converter calculator",
+            "target": "",
+            "confidence": 0.95,
+            "summary": "用户要一个汇率转换计算器的可运行实现，交付为本地文件，并在回复中告知文件所在位置。",
+            "requires_execution": true,
+            "artifact_required": true,
+            "requested_outcomes": [
+              "FILE_MUTATION",
+              "USER_VISIBLE_OUTPUT"
+            ],
+            "delivery_requirements": [
+              {
+                "id": "currency_converter",
+                "kind": "file",
+                "quantity": 1,
+                "target": "",
+                "acceptance_criteria": [
+                  {
+                    "kind": "reply_mentions_artifact_path"
+                  }
+                ]
+              }
+            ],
+            "acceptance_criteria": [],
+            "write_targets": [],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "new_request",
+            "resolved_request": "编写一个汇率转换计算器（可在本地运行的代码产物），完成后在回复中明确告知该产物的存放路径。",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": ""
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "stage_started",
+            "task_started",
+            "task_completed",
+            "task_started",
+            "task_completed",
+            "stage_completed",
+            "run_completed"
+          ],
+          "failure_summary": null,
+          "error": "",
+          "duration_ms": 102726.4
+        }
+      ],
+      "checks": [
+        {
+          "check": "status",
+          "passed": true,
+          "detail": "expected COMPLETED got COMPLETED",
+          "turn": 1
+        },
+        {
+          "check": "output_contains",
+          "passed": true,
+          "detail": "'output/' missing from output",
+          "turn": 1
+        },
+        {
+          "check": "artifact_exists_any",
+          "passed": true,
+          "detail": "no match for any of ['output/**/*.py', 'output/**/*.html']",
+          "turn": 1
+        },
+        {
+          "check": "intent.artifact_required",
+          "passed": true,
+          "detail": "expected True got True",
+          "turn": 1
+        }
+      ],
+      "files": {
+        "output/exchange_rate_calculator.py": "def convert_currency(amount, from_currency, to_currency, exchange_rate):\n    try:\n        converted_amount = amount * exchange_rate\n        return converted_amount\n    except Exception as e:\n        return f\"Error: {str(e)}\"\n\nif __name__ == \"__main__\":\n    amount = float(input(\"Enter amount: \"))\n    from_currency = input(\"Enter from currency (e.g., USD): \").upper()\n    to_currency = input(\"Enter to currency (e.g., EUR): \").upper()\n    exchange_rate = float(input(\"Enter exchange rate (e.g., 0.85 for 1 USD = 0.85 EUR): \"))\n    result = convert_currency(amount, from_currency, to_currency, exchange_rate)\n    print(f\"{amount} {from_currency} = {result} {to_currency}\")"
+      }
+    },
+    {
+      "id": "CS05",
+      "title": "follow-up '把它改成…' modifies the artifact created in turn 1",
+      "result": "PASS",
+      "skip_reason": "",
+      "workspace": "/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_013320_workspace/cs05",
+      "duration_ms": 180556.5,
+      "error": "",
+      "turns": [
+        {
+          "turn": 1,
+          "request": "写一个汇率换算函数 convert(amount, rate)，保存到 output/calculator.py",
+          "status": "COMPLETED",
+          "output": "已生成/更新本地文件：\n/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_013320_workspace/cs05/output/calculator.py\n\n未自动验证：文件内容应满足：def convert(amount, rate):",
+          "artifacts": [
+            {
+              "artifact_id": "artifact-5f48cf25e37791a1819546cd",
+              "artifact_type": "file",
+              "digest": "4d0fd66eaeb74cb722cca6d0562514cb1824a8bf7c195becdf7eb48b8ccfa11c",
+              "reference": "artifact://core-scenarios/run-d21d155843124e5bb8ec3f7d11ba6819/artifact-5f48cf25e37791a1819546cd",
+              "exists": true,
+              "verified": true,
+              "run_id": "run-d21d155843124e5bb8ec3f7d11ba6819",
+              "display_name": "artifact-5f48cf25e37791a1819546cd",
+              "size": null,
+              "producer_workflow_id": "runtime-execution",
+              "producer_stage_id": "task:loop-1",
+              "created_revision": 1,
+              "created_at": ""
+            }
+          ],
+          "provider_calls": 1,
+          "plan_calls": 1,
+          "replan_calls": 1,
+          "tool_calls": [
+            {
+              "tool": "filesystem.write",
+              "args": {
+                "path": "output/calculator.py",
+                "content": "def convert(amount, rate):\n    return amount * rate",
+                "mode": "overwrite"
+              }
+            }
+          ],
+          "intent": {
+            "domain": "development",
+            "action": "code",
+            "target": "output/calculator.py",
+            "confidence": 0.95,
+            "summary": "用户要求写一个汇率换算函数并保存到指定文件",
+            "requires_execution": true,
+            "artifact_required": true,
+            "requested_outcomes": [
+              "FILE_MUTATION"
+            ],
+            "delivery_requirements": [
+              {
+                "id": "1",
+                "kind": "file",
+                "quantity": 1,
+                "target": "output/calculator.py",
+                "acceptance_criteria": [
+                  {
+                    "kind": "unverifiable",
+                    "description": "文件内容应满足：def convert(amount, rate):"
+                  }
+                ]
+              }
+            ],
+            "acceptance_criteria": [],
+            "write_targets": [
+              "output/calculator.py"
+            ],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "new_request",
+            "resolved_request": "写一个汇率换算函数 convert(amount, rate)，保存到 output/calculator.py",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": ""
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "stage_started",
+            "task_started",
+            "task_completed",
+            "stage_completed",
+            "run_completed"
+          ],
+          "failure_summary": null,
+          "error": "",
+          "duration_ms": 64999.1
+        },
+        {
+          "turn": 2,
+          "request": "把它改成再加一个 HKD 到 JPY 的换算示例",
+          "status": "COMPLETED",
+          "output": "已生成/更新本地文件：\n/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_013320_workspace/cs05/output/calculator.py\n\n未自动验证：文件内容应满足：def convert(amount, rate):\n未自动验证：文件内容应满足：    return amount * rate\n未自动验证：文件内容应满足：HKD 到 JPY 的换算示例",
+          "artifacts": [
+            {
+              "artifact_id": "artifact-e85cb20c008101e08f842dd6",
+              "artifact_type": "file",
+              "digest": "183b08d3fe72d29aba9fdad6e5d56f4f44d55e222ffe677efd77dff6820f7b90",
+              "reference": "artifact://core-scenarios/run-c38a69f110054a538245e876f1e01e37/artifact-e85cb20c008101e08f842dd6",
+              "exists": true,
+              "verified": true,
+              "run_id": "run-c38a69f110054a538245e876f1e01e37",
+              "display_name": "artifact-e85cb20c008101e08f842dd6",
+              "size": null,
+              "producer_workflow_id": "runtime-execution",
+              "producer_stage_id": "task:loop-1",
+              "created_revision": 1,
+              "created_at": ""
+            }
+          ],
+          "provider_calls": 2,
+          "plan_calls": 1,
+          "replan_calls": 1,
+          "tool_calls": [
+            {
+              "tool": "filesystem.edit",
+              "args": {
+                "path": "output/calculator.py",
+                "old_string": "def convert(amount, rate):",
+                "new_string": "def convert(amount, rate):\n    # HKD to JPY conversion example\n    hkd_to_jpy_rate = 1.46\n    return amount * hkd_to_jpy_rate"
+              }
+            }
+          ],
+          "intent": {
+            "domain": "development",
+            "action": "modify",
+            "target": "output/calculator.py",
+            "confidence": 0.95,
+            "summary": "修改已有的汇率换算函数，添加 HKD 到 JPY 的换算示例",
+            "requires_execution": true,
+            "artifact_required": true,
+            "requested_outcomes": [
+              "FILE_MUTATION"
+            ],
+            "delivery_requirements": [
+              {
+                "id": "req_001",
+                "kind": "file",
+                "quantity": 1,
+                "target": "output/calculator.py",
+                "acceptance_criteria": [
+                  {
+                    "kind": "unverifiable",
+                    "description": "文件内容应满足：def convert(amount, rate):"
+                  },
+                  {
+                    "kind": "unverifiable",
+                    "description": "文件内容应满足：    return amount * rate"
+                  },
+                  {
+                    "kind": "unverifiable",
+                    "description": "文件内容应满足：HKD 到 JPY 的换算示例"
+                  }
+                ]
+              }
+            ],
+            "acceptance_criteria": [],
+            "write_targets": [
+              "output/calculator.py"
+            ],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "correction",
+            "resolved_request": "将 HKD 到 JPY 的换算示例添加到 output/calculator.py 文件中的 convert 函数中",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": ""
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "stage_started",
+            "task_started",
+            "task_completed",
+            "stage_completed",
+            "run_completed"
+          ],
+          "failure_summary": null,
+          "error": "",
+          "duration_ms": 115544.2
+        }
+      ],
+      "checks": [
+        {
+          "check": "status",
+          "passed": true,
+          "detail": "expected COMPLETED got COMPLETED",
+          "turn": 1
+        },
+        {
+          "check": "artifact_exists",
+          "passed": true,
+          "detail": "'output/calculator.py' matched ['/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_013320_workspace/cs05/output/calculator.py']",
+          "turn": 1
+        },
+        {
+          "check": "status",
+          "passed": true,
+          "detail": "expected COMPLETED got COMPLETED",
+          "turn": 2
+        },
+        {
+          "check": "file_contains:output/calculator.py",
+          "passed": true,
+          "detail": "tokens ['convert', 'HKD', 'JPY'] in 'output/calculator.py': found in /Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_013320_workspace/cs05/output/calculator.py",
+          "turn": 2
+        },
+        {
+          "check": "intent.conversation_relation_in",
+          "passed": true,
+          "detail": "expected one of ['reference', 'correction'] got 'correction'",
+          "turn": 2
+        },
+        {
+          "check": "intent.resolved_request_contains",
+          "passed": true,
+          "detail": "'calculator' in resolved_request='将 HKD 到 JPY 的换算示例添加到 output/calculator.py 文件中的 convert 函数中'",
+          "turn": 2
+        }
+      ],
+      "files": {
+        "output/calculator.py": "def convert(amount, rate):\n    # HKD to JPY conversion example\n    hkd_to_jpy_rate = 1.46\n    return amount * hkd_to_jpy_rate\n    return amount * rate"
+      }
+    },
+    {
+      "id": "CS06",
+      "title": "'总结一下上面' resolves against the previous answer",
+      "result": "PASS",
+      "skip_reason": "",
+      "workspace": "/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_013320_workspace/cs06",
+      "duration_ms": 115084.7,
+      "error": "",
+      "turns": [
+        {
+          "turn": 1,
+          "request": "解释一下 Python 的上下文管理器是什么",
+          "status": "COMPLETED",
+          "output": "Python 的上下文管理器（Context Manager）是一种用于管理资源的机制，它确保在使用资源（如文件、网络连接、数据库连接等）时，资源能够被正确地获取和释放。上下文管理器通过 `with` 语句来使用，它提供了一种简洁且安全的方式来处理需要清理的资源。\n\n### 核心功能\n1. **资源获取**：在进入 `with` 语句块之前，上下文管理器会执行 `__enter__()` 方法，用于获取资源。\n2. **资源释放**：在退出 `with` 语句块时，上下文管理器会执行 `__exit__()` 方法，用于释放资源。\n\n### 示例\n```python\nwith open('example.txt', 'r') as file:\n    content = file.read()\n    print(content)\n```\n\n在这个例子中：\n- `open('example.txt', 'r')` 是一个上下文管理器。\n- `__enter__()` 返回文件对象 `file`，并将其赋值给变量 `file`。\n- 在 `with` 语句块执行完毕后，`__exit__()` 会被调用，自动关闭文件，即使在读取过程中发生异常，文件也会被正确关闭。\n\n### 自定义上下文管理器\n你可以通过实现 `__enter__()` 和 `__exit__()` 方法来创建自定义的上下文管理器：\n\n```python\nclass MyContextManager:\n    def __enter__(self):\n        print(\"Entering the context\")\n        return self\n\n    def __exit__(self, exc_type, exc_val, exc_tb):\n        print(\"Exiting the context\")\n\n# 使用自定义上下文管理器\nwith MyContextManager() as manager:\n    print(\"Inside the context\")\n```\n\n### 优点\n- **资源安全**：确保资源在使用后被正确释放，避免资源泄漏。\n- **代码简洁**：通过 `with` 语句简化资源管理的代码。\n- **异常处理**：即使在 `with` 语句块中发生异常，资源也会被正确释放。\n\n### 总结\nPython 的上下文管理器是一种强大的工具，用于管理需要获取和释放的资源，确保代码的健壮性和简洁性。通过 `with` 语句，开发者可以安全地处理各种资源，如文件、网络连接等。",
+          "artifacts": [],
+          "provider_calls": 2,
+          "plan_calls": 1,
+          "replan_calls": 0,
+          "tool_calls": [],
+          "intent": {
+            "domain": "knowledge",
+            "action": "explain",
+            "target": "Python 的上下文管理器",
+            "confidence": 0.95,
+            "summary": "解释 Python 的上下文管理器是什么",
+            "requires_execution": false,
+            "artifact_required": false,
+            "requested_outcomes": [
+              "USER_VISIBLE_OUTPUT"
+            ],
+            "delivery_requirements": [],
+            "acceptance_criteria": [],
+            "write_targets": [],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "new_request",
+            "resolved_request": "解释 Python 的上下文管理器是什么",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": ""
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "run_completed"
+          ],
+          "failure_summary": null,
+          "error": "",
+          "duration_ms": 70953.8
+        },
+        {
+          "turn": 2,
+          "request": "总结一下上面说的，用一句话",
+          "status": "COMPLETED",
+          "output": "Python 的上下文管理器是一种通过 `with` 语句管理资源（如文件、网络连接等）的机制，确保资源在使用后被正确释放。",
+          "artifacts": [],
+          "provider_calls": 2,
+          "plan_calls": 1,
+          "replan_calls": 0,
+          "tool_calls": [],
+          "intent": {
+            "domain": "knowledge",
+            "action": "summarize",
+            "target": "Python 上下文管理器",
+            "confidence": 0.95,
+            "summary": "用户要求用一句话总结之前关于 Python 上下文管理器的解释",
+            "requires_execution": false,
+            "artifact_required": false,
+            "requested_outcomes": [
+              "USER_VISIBLE_OUTPUT"
+            ],
+            "delivery_requirements": [],
+            "acceptance_criteria": [],
+            "write_targets": [],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "reference",
+            "resolved_request": "用一句话总结 Python 的上下文管理器是什么",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": ""
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "run_completed"
+          ],
+          "failure_summary": null,
+          "error": "",
+          "duration_ms": 44112.8
+        }
+      ],
+      "checks": [
+        {
+          "check": "status",
+          "passed": true,
+          "detail": "expected COMPLETED got COMPLETED",
+          "turn": 1
+        },
+        {
+          "check": "status",
+          "passed": true,
+          "detail": "expected COMPLETED got COMPLETED",
+          "turn": 2
+        },
+        {
+          "check": "intent.conversation_relation",
+          "passed": true,
+          "detail": "expected 'reference' got 'reference'",
+          "turn": 2
+        }
+      ],
+      "files": {}
+    },
+    {
+      "id": "CS07",
+      "title": "'再加一个' continues the previous generation in-session",
+      "result": "PASS",
+      "skip_reason": "",
+      "workspace": "/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_013320_workspace/cs07",
+      "duration_ms": 73870.7,
+      "error": "",
+      "turns": [
+        {
+          "turn": 1,
+          "request": "给我讲三个关于程序员的冷笑话",
+          "status": "COMPLETED",
+          "output": "1. 为什么程序员总是分不清万圣节和圣诞节？  \n因为 Oct 31 == Dec 25！（Oct 是八进制，Dec 是十进制）\n\n2. 为什么程序员喜欢用黑暗模式？  \n因为光线太亮，容易看不清 bug。\n\n3. 为什么程序员不喜欢去海边？  \n因为那里有太多“浪”（像浪一样多的代码）。",
+          "artifacts": [],
+          "provider_calls": 2,
+          "plan_calls": 1,
+          "replan_calls": 0,
+          "tool_calls": [],
+          "intent": {
+            "domain": "creation",
+            "action": "generate",
+            "target": "冷笑话",
+            "confidence": 0.95,
+            "summary": "用户希望收到三个关于程序员的冷笑话",
+            "requires_execution": false,
+            "artifact_required": false,
+            "requested_outcomes": [
+              "USER_VISIBLE_OUTPUT"
+            ],
+            "delivery_requirements": [],
+            "acceptance_criteria": [],
+            "write_targets": [],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "new_request",
+            "resolved_request": "给我讲三个关于程序员的冷笑话",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": ""
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "run_completed"
+          ],
+          "failure_summary": null,
+          "error": "",
+          "duration_ms": 36983.9
+        },
+        {
+          "turn": 2,
+          "request": "再加一个",
+          "status": "COMPLETED",
+          "output": "当然！这里再来一个程序员的冷笑话：\n\n4. 为什么程序员总是在冬天里穿很多衣服？  \n因为这样他们就可以在“代码”（code）里“保暖”（warm）了！（code 和 warm 发音相近）",
+          "artifacts": [],
+          "provider_calls": 2,
+          "plan_calls": 1,
+          "replan_calls": 0,
+          "tool_calls": [],
+          "intent": {
+            "domain": "chat",
+            "action": "generate",
+            "target": "冷笑话",
+            "confidence": 0.95,
+            "summary": "用户希望再添加一个关于程序员的冷笑话",
+            "requires_execution": false,
+            "artifact_required": false,
+            "requested_outcomes": [
+              "USER_VISIBLE_OUTPUT"
+            ],
+            "delivery_requirements": [],
+            "acceptance_criteria": [],
+            "write_targets": [],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "reference",
+            "resolved_request": "再讲一个关于程序员的冷笑话",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": ""
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "run_completed"
+          ],
+          "failure_summary": null,
+          "error": "",
+          "duration_ms": 36871.7
+        }
+      ],
+      "checks": [
+        {
+          "check": "status",
+          "passed": true,
+          "detail": "expected COMPLETED got COMPLETED",
+          "turn": 1
+        },
+        {
+          "check": "status",
+          "passed": true,
+          "detail": "expected COMPLETED got COMPLETED",
+          "turn": 2
+        },
+        {
+          "check": "intent.conversation_relation",
+          "passed": true,
+          "detail": "expected 'reference' got 'reference'",
+          "turn": 2
+        }
+      ],
+      "files": {}
+    },
+    {
+      "id": "CS08",
+      "title": "memory remember then recall across turns",
+      "result": "PASS",
+      "skip_reason": "",
+      "workspace": "/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_013320_workspace/cs08",
+      "duration_ms": 71295.6,
+      "error": "",
+      "turns": [
+        {
+          "turn": 1,
+          "request": "记住：我的项目代号是 NEBULA-7",
+          "status": "COMPLETED",
+          "output": "已记录您的项目代号为 NEBULA-7。\n未保存到记忆：没有可确认写入长期记忆的事实。",
+          "artifacts": [],
+          "provider_calls": 2,
+          "plan_calls": 1,
+          "replan_calls": 0,
+          "tool_calls": [],
+          "intent": {
+            "domain": "memory",
+            "action": "remember",
+            "target": "项目代号",
+            "confidence": 0.95,
+            "summary": "记住用户的项目代号 NEBULA-7",
+            "requires_execution": false,
+            "artifact_required": false,
+            "requested_outcomes": [
+              "USER_VISIBLE_OUTPUT"
+            ],
+            "delivery_requirements": [],
+            "acceptance_criteria": [],
+            "write_targets": [],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "new_request",
+            "resolved_request": "记住：我的项目代号是 NEBULA-7",
+            "memory_action": "remember",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": ""
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "run_completed"
+          ],
+          "failure_summary": null,
+          "error": "",
+          "duration_ms": 38285.0
+        },
+        {
+          "turn": 2,
+          "request": "我的项目代号是什么？",
+          "status": "COMPLETED",
+          "output": "您的项目代号为 NEBULA-7。",
+          "artifacts": [],
+          "provider_calls": 2,
+          "plan_calls": 1,
+          "replan_calls": 0,
+          "tool_calls": [],
+          "intent": {
+            "domain": "memory",
+            "action": "recall",
+            "target": "项目代号",
+            "confidence": 0.95,
+            "summary": "告知用户其项目代号",
+            "requires_execution": false,
+            "artifact_required": false,
+            "requested_outcomes": [
+              "USER_VISIBLE_OUTPUT"
+            ],
+            "delivery_requirements": [],
+            "acceptance_criteria": [],
+            "write_targets": [],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "reference",
+            "resolved_request": "告知用户其项目代号为 NEBULA-7",
+            "memory_action": "recall",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": ""
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "run_completed"
+          ],
+          "failure_summary": null,
+          "error": "",
+          "duration_ms": 32996.7
+        }
+      ],
+      "checks": [
+        {
+          "check": "status",
+          "passed": true,
+          "detail": "expected COMPLETED got COMPLETED",
+          "turn": 1
+        },
+        {
+          "check": "intent.memory_action",
+          "passed": true,
+          "detail": "expected 'remember' got 'remember'",
+          "turn": 1
+        },
+        {
+          "check": "status",
+          "passed": true,
+          "detail": "expected COMPLETED got COMPLETED",
+          "turn": 2
+        },
+        {
+          "check": "output_contains",
+          "passed": true,
+          "detail": "'NEBULA-7' missing from output",
+          "turn": 2
+        }
+      ],
+      "files": {}
+    },
+    {
+      "id": "CS09",
+      "title": "genuinely vague request clarifies instead of guessing",
+      "result": "PASS",
+      "skip_reason": "",
+      "workspace": "/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_013320_workspace/cs09",
+      "duration_ms": 32185.1,
+      "error": "",
+      "turns": [
+        {
+          "turn": 1,
+          "request": "帮我弄一下那个东西",
+          "status": "COMPLETED",
+          "output": "请具体说明你需要我帮你弄什么，这样我才能更好地协助你。",
+          "artifacts": [],
+          "provider_calls": 2,
+          "plan_calls": 1,
+          "replan_calls": 0,
+          "tool_calls": [],
+          "intent": {
+            "domain": "unknown",
+            "action": "ask_for_clarification",
+            "target": "",
+            "confidence": 0.5,
+            "summary": "用户需要帮助处理某个未明确指定的物品或任务",
+            "requires_execution": false,
+            "artifact_required": false,
+            "requested_outcomes": [
+              "USER_VISIBLE_OUTPUT"
+            ],
+            "delivery_requirements": [],
+            "acceptance_criteria": [],
+            "write_targets": [],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "new_request",
+            "resolved_request": "帮我弄一下那个东西",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": ""
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "run_completed"
+          ],
+          "failure_summary": null,
+          "error": "",
+          "duration_ms": 32171.4
+        }
+      ],
+      "checks": [
+        {
+          "check": "status_in",
+          "passed": true,
+          "detail": "expected one of ['COMPLETED', 'BLOCKED', 'WAITING_USER'] got COMPLETED",
+          "turn": 1
+        },
+        {
+          "check": "artifact_absent",
+          "passed": true,
+          "detail": "'output/**' unexpectedly matched []",
+          "turn": 1
+        },
+        {
+          "check": "artifact_absent",
+          "passed": true,
+          "detail": "'src/**' unexpectedly matched []",
+          "turn": 1
+        },
+        {
+          "check": "artifact_absent",
+          "passed": true,
+          "detail": "'*.py' unexpectedly matched []",
+          "turn": 1
+        },
+        {
+          "check": "artifact_absent",
+          "passed": true,
+          "detail": "'*.txt' unexpectedly matched []",
+          "turn": 1
+        },
+        {
+          "check": "artifact_absent",
+          "passed": true,
+          "detail": "'*.md' unexpectedly matched []",
+          "turn": 1
+        },
+        {
+          "check": "no_tool_calls",
+          "passed": true,
+          "detail": "tools used: []",
+          "turn": 1
+        }
+      ],
+      "files": {}
+    },
+    {
+      "id": "CS10",
+      "title": "search then write a source-backed report file",
+      "result": "FAIL",
+      "skip_reason": "",
+      "workspace": "/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_013320_workspace/cs10",
+      "duration_ms": 139592.0,
+      "error": "",
+      "turns": [
+        {
+          "turn": 1,
+          "request": "搜索一下 FastAPI 近期的版本更新，把带来源链接的总结保存到 output/fastapi_notes.md",
+          "status": "FAILED_TERMINAL",
+          "output": "目标尚未完成，缺少可验证证据：RUNTIME_TIME_BUDGET_EXHAUSTED。本次不会报告为成功。 已完成并保留的文件：output/fastapi_notes.md。 已完成的步骤：loop-1（search FastAPI 近期版本更新）、loop-2（write output/fastapi_notes.md）。",
+          "artifacts": [
+            {
+              "artifact_id": "artifact-bd62c272d286249136caf4b0",
+              "artifact_type": "file",
+              "digest": "27fa41eac64b5b3e041565263dfcd7b2a4bd1fbd7f3acf8c390e860eccf1cbe5",
+              "reference": "artifact://core-scenarios/run-f23b33a7bb0d4bf39c850ed810f167ba/artifact-bd62c272d286249136caf4b0",
+              "exists": true,
+              "verified": true,
+              "run_id": "run-f23b33a7bb0d4bf39c850ed810f167ba",
+              "display_name": "artifact-bd62c272d286249136caf4b0",
+              "size": null,
+              "producer_workflow_id": "runtime-execution",
+              "producer_stage_id": "task:loop-2",
+              "created_revision": 1,
+              "created_at": ""
+            }
+          ],
+          "provider_calls": 2,
+          "plan_calls": 1,
+          "replan_calls": 1,
+          "tool_calls": [
+            {
+              "tool": "web_search",
+              "args": {
+                "query": "FastAPI 近期版本更新",
+                "max_results": "5",
+                "timeliness": "month"
+              }
+            },
+            {
+              "tool": "filesystem.write",
+              "args": {
+                "path": "output/fastapi_notes.md",
+                "content": "## FastAPI 近期版本更新总结\n\n1. [Release Notes - FastAPI](https://fastapi.tiangolo.com/zh/release-notes/)\n   - 包含 FastAPI 的版本更新说明，涵盖多种语言版本（如简体中文、英文等）。\n\n2. [Bitget API -",
+                "mode": "overwrite"
+              }
+            }
+          ],
+          "intent": {
+            "domain": "development",
+            "action": "search",
+            "target": "output/fastapi_notes.md",
+            "confidence": 0.95,
+            "summary": "搜索 FastAPI 近期版本更新并保存到 output/fastapi_notes.md",
+            "requires_execution": true,
+            "artifact_required": true,
+            "requested_outcomes": [
+              "FILE_MUTATION"
+            ],
+            "delivery_requirements": [
+              {
+                "id": "file1",
+                "kind": "file",
+                "quantity": 1,
+                "target": "output/fastapi_notes.md",
+                "acceptance_criteria": [
+                  {
+                    "kind": "unverifiable",
+                    "description": "文件内容应满足：FastAPI 近期版本更新"
+                  },
+                  {
+                    "kind": "unverifiable",
+                    "description": "文件内容应满足：来源链接"
+                  }
+                ]
+              }
+            ],
+            "acceptance_criteria": [],
+            "write_targets": [
+              "output/fastapi_notes.md"
+            ],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "new_request",
+            "resolved_request": "搜索 FastAPI 近期的版本更新，把带来源链接的总结保存到 output/fastapi_notes.md",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "FastAPI 近期版本更新",
+            "search_timeliness": "any",
+            "failure_code": ""
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "stage_started",
+            "task_started",
+            "task_completed",
+            "task_started",
+            "task_completed",
+            "stage_completed",
+            "run_failed"
+          ],
+          "failure_summary": {
+            "code": "RUNTIME_TIME_BUDGET_EXHAUSTED",
+            "message": "The Run did not complete successfully",
+            "retryable": false,
+            "details": {
+              "failure_class": "execution",
+              "failed_component": "runtime"
+            }
+          },
+          "error": "",
+          "duration_ms": 139580.9
+        }
+      ],
+      "checks": [
+        {
+          "check": "status",
+          "passed": false,
+          "detail": "expected COMPLETED got FAILED_TERMINAL",
+          "turn": 1
+        },
+        {
+          "check": "artifact_exists",
+          "passed": true,
+          "detail": "'output/fastapi_notes.md' matched ['/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_013320_workspace/cs10/output/fastapi_notes.md']",
+          "turn": 1
+        },
+        {
+          "check": "file_contains:output/fastapi_notes.md",
+          "passed": true,
+          "detail": "tokens ['http'] in 'output/fastapi_notes.md': found in /Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_013320_workspace/cs10/output/fastapi_notes.md",
+          "turn": 1
+        },
+        {
+          "check": "tools_any",
+          "passed": true,
+          "detail": "none of ['web_search', 'web_news_search', 'web_deep_search'] used (tools: ['filesystem.write', 'web_search'])",
+          "turn": 1
+        }
+      ],
+      "files": {
+        "output/fastapi_notes.md": "## FastAPI 近期版本更新总结\n\n1. [Release Notes - FastAPI](https://fastapi.tiangolo.com/zh/release-notes/)\n   - 包含 FastAPI 的版本更新说明，涵盖多种语言版本（如简体中文、英文等）。\n\n2. [Bitget API - 2026 年 11 月](https://www.bitget.com/zh-CN/docs/uta/changelog/2026-11)\n   - FastAPI 的请求签名算法由 MD5withRSA 升级为 SHA256withRSA。例如，在 Java 中，将 `Signature.getInstance(\"MD5withRSA\")` 替换为 `Signature.getInstance(\"SHA256withRSA\")`。\n\n3. [FastAPI 发行说明](https://fastapi.org.cn/release-notes/)\n   - 提供 FastAPI 的版本更新信息，包括社区活动和最新动态。\n\n4. [GitHub - fastapi/fastapi](https://github.com/fastapi/fastapi/commits)\n   - FastAPI 的 GitHub 仓库，包含最新的代码提交记录。\n\n5. [FastAPI 版本信息](https://fastapi.tiangolo.com/zh/deployment/versions/)\n   - 说明 FastAPI 的版本历史，包括其在生产环境中的使用情况和持续改进。\n\n以上信息来源于网络搜索，具体版本详情请参考官方文档。"
+      }
+    },
+    {
+      "id": "CS11",
+      "title": "explicit command request executes for real",
+      "result": "SKIP",
+      "skip_reason": "no_execution_environment: Docker is unavailable and TSAGENT_ALLOW_LOCAL_EXECUTION is not set",
+      "workspace": "",
+      "duration_ms": 0.0,
+      "error": "",
+      "turns": [],
+      "checks": [],
+      "files": {}
+    },
+    {
+      "id": "CS12",
+      "title": "'不要运行' prohibition blocks execution tools",
+      "result": "PASS",
+      "skip_reason": "",
+      "workspace": "/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_013320_workspace/cs12",
+      "duration_ms": 75937.3,
+      "error": "",
+      "turns": [
+        {
+          "turn": 1,
+          "request": "写一个打印前 10 个斐波那契数的脚本，保存到 output/fib.py，但不要运行它",
+          "status": "COMPLETED",
+          "output": "已生成/更新本地文件：\n/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_013320_workspace/cs12/output/fib.py\n\n按你的要求，本次未运行生成的程序；运行效果尚未验证。\n\n未自动验证：用户未明确要求文件包含特定文字内容\n未自动验证：用户未明确要求文件包含特定文字内容",
+          "artifacts": [
+            {
+              "artifact_id": "artifact-1fb7f206fe9dec6bc93caf91",
+              "artifact_type": "file",
+              "digest": "c7f76ec72897ff82900a34cc02d8d973b8555f0c03cf0c53dbb58e40a5ee6ff6",
+              "reference": "artifact://core-scenarios/run-f3fe4f53368347f983652aa8ef0938df/artifact-1fb7f206fe9dec6bc93caf91",
+              "exists": true,
+              "verified": true,
+              "run_id": "run-f3fe4f53368347f983652aa8ef0938df",
+              "display_name": "artifact-1fb7f206fe9dec6bc93caf91",
+              "size": null,
+              "producer_workflow_id": "runtime-execution",
+              "producer_stage_id": "task:loop-1",
+              "created_revision": 1,
+              "created_at": ""
+            }
+          ],
+          "provider_calls": 1,
+          "plan_calls": 1,
+          "replan_calls": 1,
+          "tool_calls": [
+            {
+              "tool": "filesystem.write",
+              "args": {
+                "path": "output/fib.py",
+                "content": "def print_fibonacci(n):\n    a, b = 0, 1\n    for _ in range(n):\n        print(a, end=' ')\n        a, b = b, a + b\n\nprint_fibonacci(10)",
+                "mode": "overwrite"
+              }
+            }
+          ],
+          "intent": {
+            "domain": "development",
+            "action": "code",
+            "target": "output/fib.py",
+            "confidence": 0.95,
+            "summary": "用户要求生成一个打印前10个斐波那契数的脚本，并保存到指定路径，但不运行它",
+            "requires_execution": true,
+            "artifact_required": true,
+            "requested_outcomes": [
+              "FILE_MUTATION"
+            ],
+            "delivery_requirements": [
+              {
+                "id": "1",
+                "kind": "file",
+                "quantity": 1,
+                "target": "output/fib.py",
+                "acceptance_criteria": [
+                  {
+                    "kind": "unverifiable",
+                    "description": "用户未明确要求文件包含特定文字内容"
+                  }
+                ]
+              }
+            ],
+            "acceptance_criteria": [
+              {
+                "kind": "unverifiable",
+                "description": "用户未明确要求文件包含特定文字内容"
+              }
+            ],
+            "write_targets": [
+              "output/fib.py"
+            ],
+            "prohibited_effects": [
+              "CODE_EXECUTION",
+              "COMMAND_EXECUTION"
+            ],
+            "external_effects": [],
+            "conversation_relation": "new_request",
+            "resolved_request": "写一个打印前 10 个斐波那契数的脚本，保存到 output/fib.py，但不要运行它",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": ""
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "stage_started",
+            "task_started",
+            "task_completed",
+            "stage_completed",
+            "run_completed"
+          ],
+          "failure_summary": null,
+          "error": "",
+          "duration_ms": 75925.1
+        }
+      ],
+      "checks": [
+        {
+          "check": "status",
+          "passed": true,
+          "detail": "expected COMPLETED got COMPLETED",
+          "turn": 1
+        },
+        {
+          "check": "artifact_exists",
+          "passed": true,
+          "detail": "'output/fib.py' matched ['/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_013320_workspace/cs12/output/fib.py']",
+          "turn": 1
+        },
+        {
+          "check": "no_tools",
+          "passed": true,
+          "detail": "'shell' was invoked (tools: ['filesystem.write'])",
+          "turn": 1
+        },
+        {
+          "check": "no_tools",
+          "passed": true,
+          "detail": "'run_python' was invoked (tools: ['filesystem.write'])",
+          "turn": 1
+        },
+        {
+          "check": "no_tools",
+          "passed": true,
+          "detail": "'run_python_file' was invoked (tools: ['filesystem.write'])",
+          "turn": 1
+        },
+        {
+          "check": "intent.prohibited_effects_contains",
+          "passed": true,
+          "detail": "'CODE_EXECUTION' in ['CODE_EXECUTION', 'COMMAND_EXECUTION']",
+          "turn": 1
+        },
+        {
+          "check": "intent.prohibited_effects_contains",
+          "passed": true,
+          "detail": "'COMMAND_EXECUTION' in ['CODE_EXECUTION', 'COMMAND_EXECUTION']",
+          "turn": 1
+        }
+      ],
+      "files": {
+        "output/fib.py": "def print_fibonacci(n):\n    a, b = 0, 1\n    for _ in range(n):\n        print(a, end=' ')\n        a, b = b, a + b\n\nprint_fibonacci(10)"
+      }
+    },
+    {
+      "id": "CS13",
+      "title": "session continuity survives a service restart on the same sqlite",
+      "result": "PASS",
+      "skip_reason": "",
+      "workspace": "/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_013320_workspace/cs13",
+      "duration_ms": 198951.4,
+      "error": "",
+      "turns": [
+        {
+          "turn": 1,
+          "request": "写一个记账脚本保存到 output/ledger.py，支持添加记录",
+          "status": "COMPLETED",
+          "output": "已生成/更新本地文件：\n/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_013320_workspace/cs13/output/ledger.py\n\n未自动验证：文件内容应满足：支持添加记录\n未自动验证：文件内容应满足：支持添加记录",
+          "artifacts": [
+            {
+              "artifact_id": "artifact-afcd12ccd8574086715cb439",
+              "artifact_type": "file",
+              "digest": "f9d8b4d6b3c0b474d44fe761dd7455a46cece1c5b9752d300abb4b71eb8b03cc",
+              "reference": "artifact://core-scenarios/run-e52618e83c654ece8a7682dedd135f2a/artifact-afcd12ccd8574086715cb439",
+              "exists": true,
+              "verified": true,
+              "run_id": "run-e52618e83c654ece8a7682dedd135f2a",
+              "display_name": "artifact-afcd12ccd8574086715cb439",
+              "size": null,
+              "producer_workflow_id": "runtime-execution",
+              "producer_stage_id": "task:loop-1",
+              "created_revision": 1,
+              "created_at": ""
+            }
+          ],
+          "provider_calls": 1,
+          "plan_calls": 1,
+          "replan_calls": 1,
+          "tool_calls": [
+            {
+              "tool": "filesystem.write",
+              "args": {
+                "path": "output/ledger.py",
+                "content": "class Ledger:\n    def __init__(self):\n        self.records = []\n\n    def add_record(self, description, amount):\n        self.records.append({\"description\": desc",
+                "mode": "overwrite"
+              }
+            }
+          ],
+          "intent": {
+            "domain": "development",
+            "action": "code",
+            "target": "output/ledger.py",
+            "confidence": 0.95,
+            "summary": "用户需要一个记账脚本，保存到 output/ledger.py，支持添加记录",
+            "requires_execution": true,
+            "artifact_required": true,
+            "requested_outcomes": [
+              "FILE_MUTATION"
+            ],
+            "delivery_requirements": [
+              {
+                "id": "1",
+                "kind": "file",
+                "quantity": 1,
+                "target": "output/ledger.py",
+                "acceptance_criteria": [
+                  {
+                    "kind": "unverifiable",
+                    "description": "文件内容应满足：支持添加记录"
+                  }
+                ]
+              }
+            ],
+            "acceptance_criteria": [
+              {
+                "kind": "unverifiable",
+                "description": "文件内容应满足：支持添加记录"
+              }
+            ],
+            "write_targets": [
+              "output/ledger.py"
+            ],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "new_request",
+            "resolved_request": "写一个记账脚本保存到 output/ledger.py，支持添加记录",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": ""
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "stage_started",
+            "task_started",
+            "task_completed",
+            "stage_completed",
+            "run_completed"
+          ],
+          "failure_summary": null,
+          "error": "",
+          "duration_ms": 88037.8
+        },
+        {
+          "turn": 2,
+          "request": "在它里面再加一个删除记录的函数",
+          "status": "COMPLETED",
+          "output": "已生成/更新本地文件：\n/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_013320_workspace/cs13/output/ledger.py\n\n未自动验证：文件内容应满足：删除记录的函数",
+          "artifacts": [
+            {
+              "artifact_id": "artifact-f2a2088698291c000b6a93bd",
+              "artifact_type": "file",
+              "digest": "78f81bce439e6b50c6dd0d8ccd2b0047359f0bafe33209937cc3e00eba33ba1a",
+              "reference": "artifact://core-scenarios/run-335325ea06f942b9a1a6ae4792c80b21/artifact-f2a2088698291c000b6a93bd",
+              "exists": true,
+              "verified": true,
+              "run_id": "run-335325ea06f942b9a1a6ae4792c80b21",
+              "display_name": "artifact-f2a2088698291c000b6a93bd",
+              "size": null,
+              "producer_workflow_id": "runtime-execution",
+              "producer_stage_id": "task:loop-1",
+              "created_revision": 1,
+              "created_at": ""
+            }
+          ],
+          "provider_calls": 2,
+          "plan_calls": 1,
+          "replan_calls": 1,
+          "tool_calls": [
+            {
+              "tool": "filesystem.edit",
+              "args": {
+                "path": "output/ledger.py",
+                "old_string": "def add_record(",
+                "new_string": "def add_record(\n    def delete_record(record_id):\n        \"\"\"\n        删除指定 ID 的记录。\n        \"\"\"\n        records = load_records()\n        for i, record in enumera"
+              }
+            }
+          ],
+          "intent": {
+            "domain": "development",
+            "action": "modify",
+            "target": "output/ledger.py",
+            "confidence": 0.95,
+            "summary": "在已有的记账脚本中添加一个删除记录的函数",
+            "requires_execution": true,
+            "artifact_required": true,
+            "requested_outcomes": [
+              "FILE_MUTATION"
+            ],
+            "delivery_requirements": [
+              {
+                "id": "req_001",
+                "kind": "file",
+                "quantity": 1,
+                "target": "output/ledger.py",
+                "acceptance_criteria": [
+                  {
+                    "kind": "unverifiable",
+                    "description": "文件内容应满足：删除记录的函数"
+                  }
+                ]
+              }
+            ],
+            "acceptance_criteria": [],
+            "write_targets": [
+              "output/ledger.py"
+            ],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "correction",
+            "resolved_request": "在 output/ledger.py 中添加一个删除记录的函数",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": ""
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "stage_started",
+            "task_started",
+            "task_completed",
+            "stage_completed",
+            "run_completed"
+          ],
+          "failure_summary": null,
+          "error": "",
+          "duration_ms": 110883.2
+        }
+      ],
+      "checks": [
+        {
+          "check": "status",
+          "passed": true,
+          "detail": "expected COMPLETED got COMPLETED",
+          "turn": 1
+        },
+        {
+          "check": "artifact_exists",
+          "passed": true,
+          "detail": "'output/ledger.py' matched ['/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_013320_workspace/cs13/output/ledger.py']",
+          "turn": 1
+        },
+        {
+          "check": "status",
+          "passed": true,
+          "detail": "expected COMPLETED got COMPLETED",
+          "turn": 2
+        },
+        {
+          "check": "file_contains:output/ledger.py",
+          "passed": true,
+          "detail": "tokens ['def'] in 'output/ledger.py': found in /Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_013320_workspace/cs13/output/ledger.py",
+          "turn": 2
+        },
+        {
+          "check": "intent.conversation_relation_in",
+          "passed": true,
+          "detail": "expected one of ['reference', 'correction'] got 'correction'",
+          "turn": 2
+        },
+        {
+          "check": "intent.resolved_request_contains",
+          "passed": true,
+          "detail": "'ledger' in resolved_request='在 output/ledger.py 中添加一个删除记录的函数'",
+          "turn": 2
+        }
+      ],
+      "files": {
+        "output/ledger.py": "class Ledger:\n    def __init__(self):\n        self.records = []\n\n    def add_record(\n    def delete_record(record_id):\n        \"\"\"\n        删除指定 ID 的记录。\n        \"\"\"\n        records = load_records()\n        for i, record in enumerate(records):\n            if record['id'] == record_id:\n                del records[i]\n                save_records(records)\n                return True\n        return Falseself, description, amount):\n        self.records.append({\"description\": description, \"amount\": amount})\n\n    def save(self, filename=\"ledger.json\"): \n        import json\n        with open(filename, \"w\") as f:\n            json.dump(self.records, f)\n\n    def load(self, filename=\"ledger.json\"): \n        import json\n        try:\n            with open(filename, \"r\") as f:\n                self.records = json.load(f)\n        except FileNotFoundError:\n            pass\n\n    def display_records(self):\n        for record in self.records:\n            print(f\"{record[\"description\"]}: {record[\"amount\"]}\")"
+      }
+    },
+    {
+      "id": "CS14",
+      "title": "correction '不对，我要的是本地文件' still delivers a real artifact",
+      "result": "PASS",
+      "skip_reason": "",
+      "workspace": "/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_013320_workspace/cs14",
+      "duration_ms": 178440.5,
+      "error": "",
+      "turns": [
+        {
+          "turn": 1,
+          "request": "帮我写个计算器",
+          "status": "COMPLETED",
+          "output": "已生成/更新本地文件：\n/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_013320_workspace/cs14/output/calculator.py",
+          "artifacts": [
+            {
+              "artifact_id": "artifact-b1a407c6963b0123eee82712",
+              "artifact_type": "file",
+              "digest": "1bdae79cdd87406dbd548c7da2bddd8fbab4085afeec002510157364e7d64786",
+              "reference": "artifact://core-scenarios/run-c523523ff1704b758c33c4afd3d7ec3d/artifact-b1a407c6963b0123eee82712",
+              "exists": true,
+              "verified": true,
+              "run_id": "run-c523523ff1704b758c33c4afd3d7ec3d",
+              "display_name": "artifact-b1a407c6963b0123eee82712",
+              "size": null,
+              "producer_workflow_id": "runtime-execution",
+              "producer_stage_id": "task:loop-1",
+              "created_revision": 1,
+              "created_at": ""
+            }
+          ],
+          "provider_calls": 1,
+          "plan_calls": 1,
+          "replan_calls": 1,
+          "tool_calls": [
+            {
+              "tool": "filesystem.write",
+              "args": {
+                "path": "output/calculator.py",
+                "content": "def add(x, y):\n    return x + y\n\ndef subtract(x, y):\n    return x - y\n\ndef multiply(x, y):\n    return x * y\n\ndef divide(x, y):\n    if y == 0:\n        return \"Er"
+              }
+            }
+          ],
+          "intent": {
+            "domain": "development",
+            "action": "code",
+            "target": "计算器程序",
+            "confidence": 0.95,
+            "summary": "用户需要一个计算器程序，要求交付可执行的产物",
+            "requires_execution": true,
+            "artifact_required": true,
+            "requested_outcomes": [
+              "FILE_MUTATION"
+            ],
+            "delivery_requirements": [
+              {
+                "id": "1",
+                "kind": "file",
+                "quantity": 1,
+                "target": "",
+                "acceptance_criteria": []
+              }
+            ],
+            "acceptance_criteria": [],
+            "write_targets": [],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "new_request",
+            "resolved_request": "帮我写个计算器",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": ""
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "stage_started",
+            "task_started",
+            "task_completed",
+            "stage_completed",
+            "run_completed"
+          ],
+          "failure_summary": null,
+          "error": "",
+          "duration_ms": 83343.2
+        },
+        {
+          "turn": 2,
+          "request": "不对，我要的是你在本地生成一个计算器脚本文件",
+          "status": "COMPLETED",
+          "output": "已生成/更新本地文件：\n/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_013320_workspace/cs14/output/calculator.py",
+          "artifacts": [
+            {
+              "artifact_id": "artifact-ead87a7f1b8bb86ccaa85b0b",
+              "artifact_type": "file",
+              "digest": "463d534d17ba2ad0f66c5f114dff3c2644e360a7a96b99860f823166d309e739",
+              "reference": "artifact://core-scenarios/run-97b957f933fa447bac15d15758982929/artifact-ead87a7f1b8bb86ccaa85b0b",
+              "exists": true,
+              "verified": true,
+              "run_id": "run-97b957f933fa447bac15d15758982929",
+              "display_name": "artifact-ead87a7f1b8bb86ccaa85b0b",
+              "size": null,
+              "producer_workflow_id": "runtime-execution",
+              "producer_stage_id": "task:loop-1",
+              "created_revision": 1,
+              "created_at": ""
+            }
+          ],
+          "provider_calls": 1,
+          "plan_calls": 1,
+          "replan_calls": 1,
+          "tool_calls": [
+            {
+              "tool": "filesystem.write",
+              "args": {
+                "path": "output/calculator.py",
+                "content": "def add(x, y):\n    return x + y\n\ndef subtract(x, y):\n    return x - y\n\ndef multiply(x, y):\n    return x * y\n\ndef divide(x, y):\n    if y == 0:\n        return \"Er",
+                "mode": "overwrite"
+              }
+            }
+          ],
+          "intent": {
+            "domain": "development",
+            "action": "code",
+            "target": "calculator.py",
+            "confidence": 0.95,
+            "summary": "用户要求生成一个计算器脚本文件",
+            "requires_execution": true,
+            "artifact_required": true,
+            "requested_outcomes": [
+              "FILE_MUTATION"
+            ],
+            "delivery_requirements": [
+              {
+                "id": "1",
+                "kind": "file",
+                "quantity": 1,
+                "target": "output/calculator.py",
+                "acceptance_criteria": []
+              }
+            ],
+            "acceptance_criteria": [],
+            "write_targets": [
+              "output/calculator.py"
+            ],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "correction",
+            "resolved_request": "在本地生成一个计算器脚本文件",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": ""
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "stage_started",
+            "task_started",
+            "task_completed",
+            "stage_completed",
+            "run_completed"
+          ],
+          "failure_summary": null,
+          "error": "",
+          "duration_ms": 95083.4
+        }
+      ],
+      "checks": [
+        {
+          "check": "status",
+          "passed": true,
+          "detail": "expected COMPLETED got COMPLETED",
+          "turn": 1
+        },
+        {
+          "check": "artifact_exists_any",
+          "passed": true,
+          "detail": "no match for any of ['output/**/*.py', 'output/**/*.html']",
+          "turn": 1
+        },
+        {
+          "check": "status",
+          "passed": true,
+          "detail": "expected COMPLETED got COMPLETED",
+          "turn": 2
+        },
+        {
+          "check": "artifact_exists_any",
+          "passed": true,
+          "detail": "no match for any of ['output/**/*.py', 'output/**/*.html']",
+          "turn": 2
+        },
+        {
+          "check": "intent.conversation_relation_in",
+          "passed": true,
+          "detail": "expected one of ['correction', 'reference'] got 'correction'",
+          "turn": 2
+        }
+      ],
+      "files": {
+        "output/calculator.py": "def add(x, y):\n    return x + y\n\ndef subtract(x, y):\n    return x - y\n\ndef multiply(x, y):\n    return x * y\n\ndef divide(x, y):\n    if y == 0:\n        return \"Error: Division by zero\"\n    return x / y\n\n# Example usage:\n# print(add(5, 3))  # Output: 8\n# print(subtract(10, 4))  # Output: 6\n# print(multiply(6, 7))  # Output: 42\n# print(divide(20, 5))  # Output: 4"
+      }
+    },
+    {
+      "id": "CS15",
+      "title": "three-turn reference chain in one session",
+      "result": "FAIL",
+      "skip_reason": "",
+      "workspace": "/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_013320_workspace/cs15",
+      "duration_ms": 105396.8,
+      "error": "",
+      "turns": [
+        {
+          "turn": 1,
+          "request": "1+1 等于几",
+          "status": "COMPLETED",
+          "output": "1+1 的结果是 2。",
+          "artifacts": [],
+          "provider_calls": 2,
+          "plan_calls": 1,
+          "replan_calls": 0,
+          "tool_calls": [],
+          "intent": {
+            "domain": "math",
+            "action": "calculate",
+            "target": "1+1",
+            "confidence": 0.95,
+            "summary": "用户询问 1+1 的结果",
+            "requires_execution": false,
+            "artifact_required": false,
+            "requested_outcomes": [
+              "USER_VISIBLE_OUTPUT"
+            ],
+            "delivery_requirements": [],
+            "acceptance_criteria": [],
+            "write_targets": [],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "new_request",
+            "resolved_request": "计算 1+1 的结果",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": ""
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "run_completed"
+          ],
+          "failure_summary": null,
+          "error": "",
+          "duration_ms": 34091.9
+        },
+        {
+          "turn": 2,
+          "request": "把它乘以 10 是多少",
+          "status": "COMPLETED",
+          "output": "请提供您希望乘以 10 的数值。",
+          "artifacts": [],
+          "provider_calls": 2,
+          "plan_calls": 1,
+          "replan_calls": 0,
+          "tool_calls": [],
+          "intent": {
+            "domain": "math",
+            "action": "calculate",
+            "target": "数值",
+            "confidence": 0.95,
+            "summary": "计算用户提供的数值乘以 10 的结果",
+            "requires_execution": false,
+            "artifact_required": false,
+            "requested_outcomes": [
+              "USER_VISIBLE_OUTPUT"
+            ],
+            "delivery_requirements": [],
+            "acceptance_criteria": [],
+            "write_targets": [],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "new_request",
+            "resolved_request": "将用户提供的数值乘以 10 并给出结果",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": ""
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "run_completed"
+          ],
+          "failure_summary": null,
+          "error": "",
+          "duration_ms": 34696.5
+        },
+        {
+          "turn": 3,
+          "request": "总结一下上面的对话",
+          "status": "COMPLETED",
+          "output": "用户和助手之间的对话内容如下：\n\n1. 用户询问“1+1 等于几”，助手回答“1+1 的结果是 2”。\n2. 用户接着询问“把它乘以 10 是多少”，助手请求用户提供希望乘以 10 的数值。",
+          "artifacts": [],
+          "provider_calls": 2,
+          "plan_calls": 1,
+          "replan_calls": 0,
+          "tool_calls": [],
+          "intent": {
+            "domain": "chat",
+            "action": "summarize",
+            "target": "对话内容",
+            "confidence": 0.95,
+            "summary": "总结用户和助手之间的对话内容",
+            "requires_execution": false,
+            "artifact_required": false,
+            "requested_outcomes": [
+              "USER_VISIBLE_OUTPUT"
+            ],
+            "delivery_requirements": [],
+            "acceptance_criteria": [],
+            "write_targets": [],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "new_request",
+            "resolved_request": "总结用户和助手之间的对话内容",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": ""
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "run_completed"
+          ],
+          "failure_summary": null,
+          "error": "",
+          "duration_ms": 36578.6
+        }
+      ],
+      "checks": [
+        {
+          "check": "status",
+          "passed": true,
+          "detail": "expected COMPLETED got COMPLETED",
+          "turn": 1
+        },
+        {
+          "check": "output_contains",
+          "passed": true,
+          "detail": "'2' missing from output",
+          "turn": 1
+        },
+        {
+          "check": "status",
+          "passed": true,
+          "detail": "expected COMPLETED got COMPLETED",
+          "turn": 2
+        },
+        {
+          "check": "output_contains",
+          "passed": false,
+          "detail": "'20' missing from output",
+          "turn": 2
+        },
+        {
+          "check": "intent.conversation_relation",
+          "passed": false,
+          "detail": "expected 'reference' got 'new_request'",
+          "turn": 2
+        },
+        {
+          "check": "status",
+          "passed": true,
+          "detail": "expected COMPLETED got COMPLETED",
+          "turn": 3
+        }
+      ],
+      "files": {}
+    },
+    {
+      "id": "CS16",
+      "title": "modifying a file preserves the untouched content",
+      "result": "PASS",
+      "skip_reason": "",
+      "workspace": "/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_013320_workspace/cs16",
+      "duration_ms": 213041.2,
+      "error": "",
+      "turns": [
+        {
+          "turn": 1,
+          "request": "创建 output/config.txt，写入三行：a=1、b=2、c=3",
+          "status": "COMPLETED",
+          "output": "已生成/更新本地文件：\n/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_013320_workspace/cs16/output/config.txt\n\n未自动验证：文件内容应满足：a=1\n未自动验证：文件内容应满足：b=2\n未自动验证：文件内容应满足：c=3",
+          "artifacts": [
+            {
+              "artifact_id": "artifact-b01c0fa22e97d67131ffc2cf",
+              "artifact_type": "file",
+              "digest": "1d826584804818c6b43d74fe3faf1c22016b789a487c56fab64b87c98ef8571a",
+              "reference": "artifact://core-scenarios/run-fbc2c3ab86ab43f49bb93dc5f5d06ef4/artifact-b01c0fa22e97d67131ffc2cf",
+              "exists": true,
+              "verified": true,
+              "run_id": "run-fbc2c3ab86ab43f49bb93dc5f5d06ef4",
+              "display_name": "artifact-b01c0fa22e97d67131ffc2cf",
+              "size": null,
+              "producer_workflow_id": "runtime-execution",
+              "producer_stage_id": "task:loop-1",
+              "created_revision": 1,
+              "created_at": ""
+            }
+          ],
+          "provider_calls": 2,
+          "plan_calls": 1,
+          "replan_calls": 1,
+          "tool_calls": [
+            {
+              "tool": "filesystem.write",
+              "args": {
+                "path": "output/config.txt",
+                "content": "a=1\nb=2\nc=3",
+                "mode": "overwrite"
+              }
+            }
+          ],
+          "intent": {
+            "domain": "file",
+            "action": "write",
+            "target": "output/config.txt",
+            "confidence": 0.95,
+            "summary": "创建 output/config.txt 文件并写入三行内容：a=1、b=2、c=3",
+            "requires_execution": true,
+            "artifact_required": true,
+            "requested_outcomes": [
+              "FILE_MUTATION"
+            ],
+            "delivery_requirements": [
+              {
+                "id": "file1",
+                "kind": "file",
+                "quantity": 1,
+                "target": "output/config.txt",
+                "acceptance_criteria": [
+                  {
+                    "kind": "unverifiable",
+                    "description": "文件内容应满足：a=1"
+                  },
+                  {
+                    "kind": "unverifiable",
+                    "description": "文件内容应满足：b=2"
+                  },
+                  {
+                    "kind": "unverifiable",
+                    "description": "文件内容应满足：c=3"
+                  }
+                ]
+              }
+            ],
+            "acceptance_criteria": [],
+            "write_targets": [
+              "output/config.txt"
+            ],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "new_request",
+            "resolved_request": "创建 output/config.txt，写入三行：a=1、b=2、c=3",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": ""
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "stage_started",
+            "task_started",
+            "task_completed",
+            "stage_completed",
+            "run_completed"
+          ],
+          "failure_summary": null,
+          "error": "",
+          "duration_ms": 107425.3
+        },
+        {
+          "turn": 2,
+          "request": "把 b=2 改成 b=42",
+          "status": "COMPLETED",
+          "output": "已生成/更新本地文件：\n/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_013320_workspace/cs16/output/config.txt\n\n未自动验证：文件内容应满足：b=42\n未自动验证：文件内容应满足：b=42",
+          "artifacts": [
+            {
+              "artifact_id": "artifact-67d70d9577ea0f0986571524",
+              "artifact_type": "file",
+              "digest": "4ba5ea749d84e8c6dbd8b3e0388edf661c19fe55c5ccf41f9321bd92c5c57431",
+              "reference": "artifact://core-scenarios/run-cdc16fa951674fdf9abb1e816ab8322f/artifact-67d70d9577ea0f0986571524",
+              "exists": true,
+              "verified": true,
+              "run_id": "run-cdc16fa951674fdf9abb1e816ab8322f",
+              "display_name": "artifact-67d70d9577ea0f0986571524",
+              "size": null,
+              "producer_workflow_id": "runtime-execution",
+              "producer_stage_id": "task:loop-1",
+              "created_revision": 1,
+              "created_at": ""
+            }
+          ],
+          "provider_calls": 2,
+          "plan_calls": 1,
+          "replan_calls": 1,
+          "tool_calls": [
+            {
+              "tool": "filesystem.edit",
+              "args": {
+                "path": "output/config.txt",
+                "old_string": "b=2",
+                "new_string": "b=42"
+              }
+            }
+          ],
+          "intent": {
+            "domain": "file",
+            "action": "modify",
+            "target": "output/config.txt",
+            "confidence": 0.95,
+            "summary": "修改 output/config.txt 中的 b=2 为 b=42",
+            "requires_execution": true,
+            "artifact_required": true,
+            "requested_outcomes": [
+              "FILE_MUTATION"
+            ],
+            "delivery_requirements": [
+              {
+                "id": "req_001",
+                "kind": "file",
+                "quantity": 1,
+                "target": "output/config.txt",
+                "acceptance_criteria": [
+                  {
+                    "kind": "unverifiable",
+                    "description": "文件内容应满足：b=42"
+                  }
+                ]
+              }
+            ],
+            "acceptance_criteria": [
+              {
+                "kind": "unverifiable",
+                "description": "文件内容应满足：b=42"
+              }
+            ],
+            "write_targets": [
+              "output/config.txt"
+            ],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "correction",
+            "resolved_request": "修改 output/config.txt 文件中的 b=2 为 b=42",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": ""
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "stage_started",
+            "task_started",
+            "task_completed",
+            "stage_completed",
+            "run_completed"
+          ],
+          "failure_summary": null,
+          "error": "",
+          "duration_ms": 105599.0
+        }
+      ],
+      "checks": [
+        {
+          "check": "status",
+          "passed": true,
+          "detail": "expected COMPLETED got COMPLETED",
+          "turn": 1
+        },
+        {
+          "check": "artifact_exists",
+          "passed": true,
+          "detail": "'output/config.txt' matched ['/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_013320_workspace/cs16/output/config.txt']",
+          "turn": 1
+        },
+        {
+          "check": "status",
+          "passed": true,
+          "detail": "expected COMPLETED got COMPLETED",
+          "turn": 2
+        },
+        {
+          "check": "file_contains:output/config.txt",
+          "passed": true,
+          "detail": "tokens ['a=1', 'b=42', 'c=3'] in 'output/config.txt': found in /Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_013320_workspace/cs16/output/config.txt",
+          "turn": 2
+        },
+        {
+          "check": "intent.conversation_relation_in",
+          "passed": true,
+          "detail": "expected one of ['reference', 'correction'] got 'correction'",
+          "turn": 2
+        }
+      ],
+      "files": {
+        "output/config.txt": "a=1\nb=42\nc=3"
+      }
+    }
+  ],
+  "summary": {
+    "total": 16,
+    "passed": 13,
+    "failed": 2,
+    "errors": 0,
+    "skipped": 1,
+    "provider_calls": 40
+  }
+}

@@ -1,0 +1,9 @@
+🤖 TSAgent AgentService CLI 启动（输入 exit 退出）
+
+你: 我叫什么？
+
+你: 
+📌 Run: run-7cb382573ee7476794bb4e404e26eb9b
+📡 处理中...
+  • 1: run_created
+  • 2: run_started

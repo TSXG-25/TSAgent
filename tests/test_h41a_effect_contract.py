@@ -1,33 +1,67 @@
-"""H4.1a contracts: capability requirements, internal effects and target binding."""
+"""H4.1a contracts: capability requirements, internal effects and write scopes."""
 
 from agent.cognition.effect_authorization import EffectAuthorization
 from agent.cognition.execution_need import EffectScope, RequestedOutcome
-from agent.cognition.resource_binding import extract_bound_targets, extract_explicit_paths
-from agent.orchestrator.planner import _extract_explicit_output_paths
 
 
-def test_directory_phrase_binds_the_full_persistent_target() -> None:
-    request = "在 output/ 下新建 probe_tool_test.py 并运行"
-    targets = extract_bound_targets(request)
+def _state(**values):
+    state = dict(
+        original_request=values.pop("original_request", ""),
+        resolved_request=values.pop("resolved_request", ""),
+        requested_outcomes=values.pop("requested_outcomes", ()),
+        artifact_required=values.pop("artifact_required", False),
+        intent_write_targets=values.pop("intent_write_targets", ()),
+        goal_state=values.pop("goal_state", {}),
+    )
+    state.update(values)
+    return state
 
-    assert [target.path for target in targets] == ["output/probe_tool_test.py"]
-    assert _extract_explicit_output_paths(request) == ["output/probe_tool_test.py"]
 
-
-def test_bound_target_preserves_explicit_write_scope() -> None:
-    authorization = EffectAuthorization.from_request(
-        "分析源码并把总结保存到 output/report.md"
+def test_declared_write_targets_scope_mutation() -> None:
+    authorization = EffectAuthorization.from_state(
+        _state(
+            original_request="把总结保存到 output/report.md",
+            requested_outcomes=["FILE_MUTATION"],
+            intent_write_targets=["output/report.md"],
+        ),
+        "把总结保存到 output/report.md",
     )
 
-    assert authorization.bound_targets[0].path == "output/report.md"
     assert authorization.allows_path("output/report.md") is True
     assert authorization.allows_path("report.md") is False
     assert authorization.allows_path("agent/runtime.py") is False
 
 
+def test_empty_write_targets_with_mutation_scopes_output_directory() -> None:
+    authorization = EffectAuthorization.from_state(
+        _state(requested_outcomes=["FILE_MUTATION"], artifact_required=True),
+        "写个计算器",
+    )
+
+    assert authorization.write_scopes == ("output/",)
+    assert authorization.allows_path("output/calculator.py") is True
+    assert authorization.allows_path("agent/runtime.py") is False
+
+
+def test_no_mutation_outcome_rejects_writes() -> None:
+    authorization = EffectAuthorization.from_state(
+        _state(requested_outcomes=["USER_VISIBLE_OUTPUT"]),
+        "解释一下",
+    )
+
+    assert authorization.allows_file_mutation is False
+    assert authorization.validate_task({
+        "verb": "write", "target": "output/a.txt", "target_type": "file",
+    }) is not None
+
+
 def test_execution_outcomes_declare_capability_requirements() -> None:
-    command = EffectAuthorization.from_request("执行 date 命令并原样贴输出")
-    code = EffectAuthorization.from_request("用 Python 算 1+2 并实际执行")
+    command = EffectAuthorization.from_state(
+        _state(requested_outcomes=["COMMAND_EXECUTION"]), "执行 date"
+    )
+    code = EffectAuthorization.from_state(
+        _state(requested_outcomes=["CODE_EXECUTION"]), "运行脚本"
+    )
 
     assert command.command_execution_allowed is True
     assert command.code_execution_allowed is False
@@ -38,8 +72,8 @@ def test_execution_outcomes_declare_capability_requirements() -> None:
 
 
 def test_internal_execution_effect_is_not_user_file_authorization() -> None:
-    authorization = EffectAuthorization.from_request(
-        "用 Python 算 1+2 并实际执行"
+    authorization = EffectAuthorization.from_state(
+        _state(requested_outcomes=["CODE_EXECUTION"]), "用 Python 算 1+2"
     )
     task = {
         "verb": "write",
@@ -53,11 +87,3 @@ def test_internal_execution_effect_is_not_user_file_authorization() -> None:
         **task,
         "target": "agent/runtime.py",
     }) is not None
-
-
-def test_explicit_paths_are_extracted_without_dropping_directory_prefix() -> None:
-    paths = extract_explicit_paths(
-        "读取 output/a.txt 和 output/b.txt，保存到 output/report.md"
-    )
-
-    assert paths == ("output/a.txt", "output/b.txt", "output/report.md")

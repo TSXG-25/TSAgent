@@ -1,5 +1,6 @@
 """Regression tests for the unified runtime and context/metric boundaries."""
 import asyncio
+from types import SimpleNamespace
 import pytest
 from langchain_core.messages import HumanMessage
 
@@ -9,7 +10,9 @@ from agent.context import (
     ReflectionContext,
     RuntimeContext,
 )
+from agent.orchestrator.context_builder import ContextBuilder
 from agent.cognition import CognitiveContext
+from agent.cognition.cognitive_context import CognitiveContext
 from agent.decision import DecisionInput
 from agent.executor.contract import executor_factory
 from agent.orchestrator.executor import ExecutionStage
@@ -46,55 +49,74 @@ class _FakeExecutor:
         )
 
 
-def test_execution_stage_compiles_state_and_uses_factory(monkeypatch):
-    monkeypatch.setitem(executor_factory._registry, "fake", lambda: _FakeExecutor())
-    state = {
+class _FakeOrchestrator:
+    _timings: dict = {}
+    run_context = None
+
+
+def _action_state(task_dict):
+    return {
         "messages": [HumanMessage(content="run task")],
-        "plan": [{
-            "id": "task-1",
-            "verb": "read",
-            "target": "example.py",
-            "target_type": "file",
-            "goal": "读取 example.py",
-            "status": "pending",
-            "observations": [],
-        }],
-        "execution_plans": [],
+        "plan": [task_dict],
+        "inbox": {"next_step": [], "next_turn": []},
     }
 
-    updated, next_state = asyncio.run(ExecutionStage(_Orchestrator()).run(state))
 
-    assert next_state == "NEXT_TASK"
-    assert updated["plan"][0]["status"] == "succeeded"
-    assert updated["execution_plans"][0].executor == "fake"
-    assert updated["plan"][0]["observations"][0]["action"] == "fake_executor"
-
-
-def test_execution_stage_rejects_unverified_file_write(monkeypatch):
-    monkeypatch.setitem(executor_factory._registry, "fake", lambda: _FakeExecutor())
-    state = {
-        "messages": [
-            HumanMessage(
-                content="创建 output/definitely_missing_from_test.py"
-            )
-        ],
-        "plan": [{
-            "id": "task-write",
-            "verb": "write",
-            "target": "output/definitely_missing_from_test.py",
-            "target_type": "file",
-            "goal": "创建测试文件",
-            "status": "pending",
-            "observations": [],
-        }],
-        "execution_plans": [],
+def test_execute_action_uses_factory_and_records_observation(monkeypatch):
+    monkeypatch.setitem(executor_factory._registry, "tool", lambda: _FakeExecutor())
+    task = {
+        "id": "task-1",
+        "verb": "read",
+        "target": "example.py",
+        "target_type": "file",
+        "goal": "读取 example.py",
+        "status": "pending",
+        "observations": [],
     }
+    state = _action_state(task)
+    plan = ExecutionPlan(
+        task=Task.from_dict(task),
+        steps=[ExecutionStep(tool="filesystem.read", args={}, outputs=["c"])],
+        executor="fake",
+    )
 
-    updated, next_state = asyncio.run(ExecutionStage(_Orchestrator()).run(state))
+    result = asyncio.run(
+        ExecutionStage(_FakeOrchestrator()).execute_action(state, task, plan)
+    )
 
-    assert next_state == "RECOVER"
-    assert updated["plan"][0]["status"] == "failed"
-    assert "UNVERIFIED" in updated["plan"][0]["error"]
+    assert result.success
+    assert task["status"] == "succeeded"
+    assert task["observations"][0]["action"] == "fake_executor"
+    assert state["inbox"]["next_step"][0]["result"]["ok"] is True
+
+
+def test_execute_action_rejects_unverified_file_write(monkeypatch):
+    monkeypatch.setitem(executor_factory._registry, "tool", lambda: _FakeExecutor())
+    task = {
+        "id": "task-write",
+        "verb": "write",
+        "target": "output/definitely_missing_from_test.py",
+        "target_type": "file",
+        "goal": "创建测试文件",
+        "status": "pending",
+        "observations": [],
+    }
+    state = _action_state(task)
+    state["requested_outcomes"] = ["USER_VISIBLE_OUTPUT", "FILE_MUTATION"]
+    plan = ExecutionPlan(
+        task=Task.from_dict(task),
+        steps=[ExecutionStep(tool="filesystem.write", args={}, outputs=["o"])],
+        executor="fake",
+    )
+
+    result = asyncio.run(
+        ExecutionStage(_FakeOrchestrator()).execute_action(state, task, plan)
+    )
+
+    assert not result.success
+    assert task["status"] == "failed"
+    assert "UNVERIFIED" in task["error"]
+    assert task["error_code"] == "UNVERIFIED_EFFECT"
 
 
 def test_context_views_are_frozen_snapshots():
@@ -125,6 +147,84 @@ def test_planner_context_is_the_named_compatible_planning_view():
     planner = PlannerContext(query="inspect")
     assert isinstance(planner, CognitiveContext)
     assert planner.short_summary() == "无上下文"
+
+
+def test_context_builder_projects_resume_state_without_runtime_payloads():
+    orchestrator = SimpleNamespace(
+        run_context=SimpleNamespace(
+            workspace=None,
+            durable_store_view=None,
+            repository_indexer=None,
+        ),
+        session_context=SimpleNamespace(memory_view=None),
+    )
+    state = {
+        "plan": [
+            {
+                "id": "task-read",
+                "verb": "read",
+                "target": "input/source.txt",
+                "target_type": "file",
+                "status": "succeeded",
+                "dependencies": [],
+                "description": "must not cross the planning boundary",
+                "inputs": {"secret": "not a planner fact"},
+                "observations": [{"summary": "source loaded"}],
+            },
+            {
+                "id": "task-write",
+                "verb": "write",
+                "target": "output/summary.md",
+                "target_type": "file",
+                "status": "pending",
+                "dependencies": ["task-read"],
+            },
+            {
+                "id": "task-verify",
+                "verb": "execute",
+                "target": "pytest",
+                "target_type": "text",
+                "status": "pending",
+                "dependencies": ["task-write"],
+            },
+        ],
+        "current_task_index": 1,
+        "artifacts": {
+            "artifact-a": {
+                "artifact_id": "artifact-a",
+                "path": "/private/secret/source.txt",
+            },
+        },
+        "goal_evidence": [{"detail": "read verified", "source": "verifier"}],
+    }
+
+    context = ContextBuilder(orchestrator).build(
+        user_input="继续完成摘要",
+        user_id="user-a",
+        context={"facts": ""},
+        repo_context="",
+        state=state,
+    )
+
+    assert context.completed_tasks == ({
+        "id": "task-read",
+        "verb": "read",
+        "target": "input/source.txt",
+        "target_type": "file",
+        "status": "succeeded",
+        "dependencies": [],
+    },)
+    assert [item["id"] for item in context.continuation_scope] == [
+        "task-write", "task-verify",
+    ]
+    assert context.continuation_scope[0]["dependencies"] == []
+    assert context.continuation_scope[1]["dependencies"] == ["task-write"]
+    assert context.established_facts == ("task-read: source loaded", "read verified")
+    assert context.available_artifacts == ("artifact-a",)
+    assert all(
+        key not in context.completed_tasks[0]
+        for key in ("description", "inputs", "observations", "error")
+    )
 
 
 def test_reflection_and_decision_consume_narrow_context_views():

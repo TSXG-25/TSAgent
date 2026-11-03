@@ -45,6 +45,8 @@ class ToolService:
         
         scored = []
         for name in all_names:
+            if not registry.get_availability(name).available:
+                continue
             score = 0
             
             # 读取类任务 → 优先 read_file

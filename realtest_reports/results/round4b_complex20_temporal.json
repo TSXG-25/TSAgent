@@ -1,0 +1,94 @@
+{
+  "round": "4b",
+  "suite": "complex-combined-intent-20-temporal-grounded",
+  "date": "2026-08-07",
+  "provider": "deepseek-v4-flash + DDGS",
+  "snapshot": "/private/tmp/tsagent-complex20b (clean data/output)",
+  "harness": "realtest_reports/harness/tsagent_harness_complex20.py (web tool registry instrumentation + TEMPORAL_NOT_GROUNDED check)",
+  "elapsed_min": 9.3,
+  "summary": {
+    "total": 20,
+    "pass": 5,
+    "warn": 10,
+    "bug": 5,
+    "provider": 0,
+    "raw_e2e_rate": 0.25,
+    "capability_rate": 0.25,
+    "provider_rate": 0.0,
+    "note": "5 BUG 全部为 TEMPORAL_NOT_GROUNDED：请求含时间限定词但未调用任何 web 工具读取当前时间外部数据"
+  },
+  "temporal_grounding_bugs": [
+    {
+      "id": "F01",
+      "input": "推荐些今天的股票",
+      "temporal_term": "今天",
+      "web_calls": "NONE",
+      "evidence": "拒绝推荐，声称'并不掌握实时行情'，未尝试 web 工具",
+      "verdict": "BUG"
+    },
+    {
+      "id": "F03",
+      "input": "今天有哪些值得关注的财经新闻",
+      "temporal_term": "今天",
+      "web_calls": "NONE",
+      "evidence": "回复'由于您没有提供具体的新闻条目…'，未调用 web；另一轮甚至谎称'我无法进行实时网络搜索'（实际具备 web_search/web_fetch）",
+      "verdict": "BUG"
+    },
+    {
+      "id": "R01",
+      "input": "搜索量子计算最新进展，写一篇 200 字左右的报告保存到 output/quantum.md",
+      "temporal_term": "最新",
+      "web_calls": "NONE",
+      "evidence": "quantum.md 已写（1083B）但无任何来源/日期/链接，纯模型记忆，未读取'最新'进展",
+      "verdict": "BUG"
+    },
+    {
+      "id": "R02",
+      "input": "搜索大语言模型最新动态，写一篇总结保存到 output/llm_news.md",
+      "temporal_term": "最新",
+      "web_calls": "NONE",
+      "evidence": "llm_news.md 已写（3355B）但无 URL/报道来源，'2026年8月初'为通用表述，未读取'最新'动态",
+      "verdict": "BUG"
+    },
+    {
+      "id": "M01",
+      "input": "搜索今天北京的天气，然后写一个根据温度给穿衣建议的 Python 脚本保存到 output/weather_advice.py",
+      "temporal_term": "今天",
+      "web_calls": "NONE",
+      "evidence": "weather_advice.py 已写（1262B）但用 input() 让用户输入温度，未读取'今天北京'真实天气",
+      "verdict": "BUG"
+    }
+  ],
+  "attempted_but_provider_degraded": [
+    {"id": "F02", "web_calls": {"web_fetch": 1}, "outcome": "内部错误回复"},
+    {"id": "F04", "web_calls": {"web_fetch": 1}, "outcome": "内部错误回复"},
+    {"id": "F05", "web_calls": {"web_fetch": 1}, "outcome": "内部错误回复"},
+    {"id": "F06", "web_calls": {"web_fetch": 1}, "outcome": "内部错误回复"},
+    {"id": "C01", "web_calls": {"web_fetch": 1}, "outcome": "fetch_stock.py 已写入(2373B)但回复'内部错误'（truthfulness bug）"}
+  ],
+  "search_intent_not_executed_observation": [
+    "C02/C03/C04 请求含'搜索'但 web_calls=NONE：文件已写（有效）但未执行搜索；时间接地判据不适用，作为搜索意图执行缺口观察项"
+  ],
+  "cases": [
+    {"id": "F01", "status": "BUG", "web": "NONE", "problem": "TEMPORAL_NOT_GROUNDED"},
+    {"id": "F02", "status": "WARN", "web": {"web_fetch": 1}, "problem": "内部错误"},
+    {"id": "F03", "status": "BUG", "web": "NONE", "problem": "TEMPORAL_NOT_GROUNDED"},
+    {"id": "F04", "status": "WARN", "web": {"web_fetch": 1}, "problem": "内部错误"},
+    {"id": "F05", "status": "WARN", "web": {"web_fetch": 1}, "problem": "内部错误"},
+    {"id": "F06", "status": "WARN", "web": {"web_fetch": 1}, "problem": "内部错误"},
+    {"id": "P01", "status": "PASS", "web": "NONE", "file": "stock_analyzer.py 10859B"},
+    {"id": "P02", "status": "PASS", "web": "NONE", "file": "ma.py 995B"},
+    {"id": "P03", "status": "PASS", "web": "NONE", "file": "fund_return.py 2657B"},
+    {"id": "P04", "status": "PASS", "web": "NONE", "file": "return_stats.py 3448B"},
+    {"id": "P05", "status": "PASS", "web": "NONE", "file": "kline.py 4689B"},
+    {"id": "C01", "status": "WARN", "web": {"web_fetch": 1}, "file": "fetch_stock.py 2373B 已写但回复内部错误"},
+    {"id": "C02", "status": "WARN", "web": "NONE", "file": "async_download.py 2985B；回复简短"},
+    {"id": "C03", "status": "WARN", "web": "NONE", "file": "data_clean.py 3966B；回复简短"},
+    {"id": "C04", "status": "WARN", "web": "NONE", "file": "kline_plot.py 3007B；回复简短"},
+    {"id": "R01", "status": "BUG", "web": "NONE", "file": "quantum.md 1083B（无来源）"},
+    {"id": "R02", "status": "BUG", "web": "NONE", "file": "llm_news.md 3355B（无来源）"},
+    {"id": "R03", "status": "WARN", "web": "NONE", "file": "lang_compare.md 9579B；回复简短"},
+    {"id": "M01", "status": "BUG", "web": "NONE", "file": "weather_advice.py 1262B（input() 而非真实天气）"},
+    {"id": "M02", "status": "WARN", "web": "NONE", "file": "stock_api_demo.py 5289B；回复简短"}
+  ]
+}

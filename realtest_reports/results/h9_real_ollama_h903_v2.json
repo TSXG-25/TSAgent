@@ -1,0 +1,42 @@
+{
+  "manifest_version": "h9-runtime-spine-v2",
+  "manifest_hash": "89c64bfc86ceb34fc0bb07424fdbc409252109006b705b867261a94dc83282fc",
+  "mode": "real",
+  "provider": "ollama",
+  "records": [
+    {
+      "case_id": "H903",
+      "category": "command",
+      "capability_outcome": "DEFERRED",
+      "runtime_correctness": "PROVIDER_ERROR",
+      "case_result": "DEFERRED",
+      "terminal_status": "",
+      "duration_ms": 0.0,
+      "llm_calls": 0,
+      "tool_calls": [],
+      "plan_calls": 0,
+      "replan_calls": 0,
+      "failure_code": "PROVIDER_TIMEOUT",
+      "answer": "",
+      "evidence": {
+        "hard_timeout": true,
+        "timeout_seconds": 120.0
+      },
+      "detail": "hard case timeout after 120.0s: Command '['/opt/anaconda3/bin/python', '-B', '/Users/tsxg/Desktop/TSAgent/realtest_reports/harness/h9_runtime_spine.py', '--mode', 'real', '--ids', 'H903', '--timeout', '120.0', '--results', '/var/folders/f9/7xmyhmdj4h3dwb_yd996y9180000gn/T/tsagent-h9-result-h903-7xijbasg/result.json']' timed out after 135.0 seconds"
+    }
+  ],
+  "metrics": {
+    "cases": 1,
+    "case_pass": 0,
+    "goal_completion_rate": 0.0,
+    "false_completion_rate": 0.0,
+    "recoverable_error_survival": null,
+    "structural_recovery_success": null,
+    "llm_calls_per_completed_goal": null,
+    "unnecessary_replan_rate": 0.0,
+    "median_completion_latency_ms": 0.0,
+    "runtime_failures": 0,
+    "provider_errors": 1
+  },
+  "status": "PARTIALLY_VERIFIED"
+}

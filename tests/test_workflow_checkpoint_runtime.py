@@ -11,12 +11,14 @@ from agent.checkpoint import (
     ExternalStateGuard,
     GuardStatus,
     InMemoryCheckpointStore,
+    NoEffectConfirmation,
     ResumeAction,
     ResumeContext,
     SideEffectState,
     TaskEffectRecord,
     WorkflowCheckpointRequest,
     append_checkpoint,
+    effect_state_for_task,
 )
 from agent.executor.contract import executor_factory
 from agent.executor.executors.workflow import WorkflowExecutor
@@ -41,7 +43,7 @@ class RecordingExecutor:
             return ExecutionResult(
                 success=False,
                 error=f"fake failure: {target.id}",
-                metadata={"executor": "fake"},
+                metadata={"executor": "fake", "side_effect_state": "NONE"},
             )
         return ExecutionResult(
             success=True,
@@ -83,6 +85,17 @@ def _workflow(*, first_description: str = "write output/checkpoint.txt", replaya
             ),
         ],
     )
+
+
+def test_failed_effectful_task_without_side_effect_evidence_is_unknown():
+    assert effect_state_for_task("write", success=False) is SideEffectState.UNKNOWN
+    assert effect_state_for_task("copy", success=False) is SideEffectState.UNKNOWN
+    assert effect_state_for_task(
+        "write",
+        success=False,
+        metadata={"side_effect_state": "NONE"},
+    ) is SideEffectState.NONE
+    assert effect_state_for_task("write", success=True) is SideEffectState.COMMITTED
 
 
 def _request_factory():
@@ -248,7 +261,13 @@ def test_committed_side_effect_blocks_duplicate_active_task(fake_executor):
         make_request(
             store,
             checkpoint=unsafe,
-            resume_context=_resume_context(),
+            resume_context=_resume_context(action=ResumeAction.RESUME_EXACT),
+            no_effect_confirmation=NoEffectConfirmation(
+                task_id="stage-1",
+                idempotency_key="run-workflow-1:stage-1",
+                external_reference="provider://invoice/18",
+                checked_at="2026-08-05T00:04:00Z",
+            ),
         ),
     )
 
@@ -300,6 +319,176 @@ def test_unknown_side_effect_requires_clarification_and_never_executes(fake_exec
     assert decision["disposition"] == "REQUIRE_CLARIFICATION"
     assert decision["resulting_status"] == "WAITING_USER"
     assert decision["reason_code"] == "UNKNOWN_SIDE_EFFECT"
+    assert fake_executor.calls == ["stage-1"]
+
+
+def test_exact_no_effect_confirmation_allows_resume_and_persists_attestation(fake_executor):
+    workflow = _workflow()
+    context = ExecutionContext(workflow_id=workflow.id)
+    store = InMemoryCheckpointStore()
+    make_request = _request_factory()
+    request = make_request(store, interrupt_after_stage_id="stage-1")
+
+    _run(workflow, context, request)
+    checkpoint = store.latest(request.run_id)
+    assert checkpoint is not None
+    unknown = append_checkpoint(
+        checkpoint,
+        checkpoint_id="run-workflow-1-confirmable-unknown",
+        updated_at="2026-08-05T00:02:00Z",
+        active_stage_id="stage-1",
+        active_task_id="stage-1",
+        completed_stage_ids=(),
+        completed_task_ids=(),
+        task_effect_records=(TaskEffectRecord(
+            task_id="stage-1",
+            operation_type="write",
+            idempotency_key="run-workflow-1:stage-1",
+            effect_state=SideEffectState.UNKNOWN,
+            external_reference="provider://invoice/18",
+        ),),
+        idempotency_keys=("run-workflow-1:stage-1",),
+    )
+    store.save(unknown)
+    confirmation = NoEffectConfirmation(
+        task_id="stage-1",
+        idempotency_key="run-workflow-1:stage-1",
+        external_reference="provider://invoice/18",
+        checked_at="2026-08-05T00:03:00Z",
+    )
+
+    resumed = _run(
+        workflow,
+        context,
+        make_request(
+            store,
+            checkpoint=unknown,
+            resume_context=_resume_context(action=ResumeAction.RESUME_EXACT),
+            no_effect_confirmation=confirmation,
+        ),
+    )
+    latest = store.latest(request.run_id)
+
+    assert resumed.success, resumed.error
+    assert fake_executor.calls == ["stage-1", "stage-1", "stage-2"]
+    assert latest is not None
+    assert latest.status is CheckpointStatus.COMPLETED
+    assert any(
+        item.kind == "no_effect_confirmation"
+        and item.status == "ATTESTED"
+        and "idempotency_key=run-workflow-1:stage-1" in item.detail
+        for item in latest.runtime_evidence
+    )
+
+
+@pytest.mark.parametrize(
+    ("confirmation", "expected_disposition", "other_effects"),
+    [
+        (
+            NoEffectConfirmation(
+                task_id="stage-1",
+                idempotency_key="wrong-key",
+                external_reference="provider://invoice/18",
+                checked_at="2026-08-05T00:03:00Z",
+            ),
+            "REJECT",
+            (),
+        ),
+        (
+            NoEffectConfirmation(
+                task_id="stage-1",
+                idempotency_key="run-workflow-1:stage-1",
+                external_reference="provider://invoice/19",
+                checked_at="2026-08-05T00:03:00Z",
+            ),
+            "REJECT",
+            (),
+        ),
+        (
+            NoEffectConfirmation(
+                task_id="stage-1",
+                idempotency_key="run-workflow-1:stage-1",
+                external_reference="provider://invoice/18",
+                checked_at="2026-08-05T00:01:00Z",
+            ),
+            "REQUIRE_CLARIFICATION",
+            (),
+        ),
+        (
+            NoEffectConfirmation(
+                task_id="stage-1",
+                idempotency_key="run-workflow-1:stage-1",
+                external_reference="provider://invoice/18",
+                checked_at="2026-08-05T00:03:00Z",
+            ),
+            "REQUIRE_CLARIFICATION",
+            (TaskEffectRecord(
+                task_id="another-task",
+                idempotency_key="run-workflow-1:another-task",
+                effect_state=SideEffectState.UNKNOWN,
+                external_reference="provider://invoice/other",
+            ),),
+        ),
+    ],
+    ids=[
+        "wrong-idempotency-key",
+        "wrong-external-reference",
+        "stale-check-time",
+        "other-unknown-effect",
+    ],
+)
+def test_invalid_no_effect_confirmation_never_executes(
+    fake_executor,
+    confirmation,
+    expected_disposition,
+    other_effects,
+):
+    workflow = _workflow()
+    context = ExecutionContext(workflow_id=workflow.id)
+    store = InMemoryCheckpointStore()
+    make_request = _request_factory()
+    request = make_request(store, interrupt_after_stage_id="stage-1")
+
+    _run(workflow, context, request)
+    checkpoint = store.latest(request.run_id)
+    assert checkpoint is not None
+    unknown = append_checkpoint(
+        checkpoint,
+        checkpoint_id="run-workflow-1-invalid-confirmation-unknown",
+        updated_at="2026-08-05T00:02:00Z",
+        active_stage_id="stage-1",
+        active_task_id="stage-1",
+        completed_stage_ids=(),
+        completed_task_ids=(),
+        task_effect_records=(TaskEffectRecord(
+            task_id="stage-1",
+            operation_type="write",
+            idempotency_key="run-workflow-1:stage-1",
+            effect_state=SideEffectState.UNKNOWN,
+            external_reference="provider://invoice/18",
+        ), *other_effects),
+        idempotency_keys=(
+            "run-workflow-1:stage-1",
+            *(item.idempotency_key for item in other_effects),
+        ),
+    )
+    store.save(unknown)
+
+    result = _run(
+        workflow,
+        context,
+        make_request(
+            store,
+            checkpoint=unknown,
+            resume_context=_resume_context(action=ResumeAction.RESUME_EXACT),
+            no_effect_confirmation=confirmation,
+        ),
+    )
+
+    assert not result.success
+    decision = result.metadata["resume_decision"]
+    assert decision["reason_code"] == "UNKNOWN_SIDE_EFFECT"
+    assert decision["disposition"] == expected_disposition
     assert fake_executor.calls == ["stage-1"]
 
 

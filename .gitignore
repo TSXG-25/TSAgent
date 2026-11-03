@@ -36,3 +36,4 @@ output/*
 !output/.gitkeep
 ~$*
 *.tmp
+core_scenarios_*_workspace/

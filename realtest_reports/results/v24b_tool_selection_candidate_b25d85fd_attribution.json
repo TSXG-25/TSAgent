@@ -1,0 +1,105 @@
+{
+  "version": "v2.4B-3-candidate-attribution-v1",
+  "baseline_head": "fc1835a8fd776dadbf23cf4b23f0fa3fc83fbca7",
+  "candidate_head": "b25d85fd8b61acbef43b03b9e42306e328117bfc",
+  "dataset_version": "v2.4B-tool-selection-v1",
+  "dataset_hash": "bc0baa5afcf68ba68a787387edd7297a4c22bea6334e1e0afd06c61136952409",
+  "baseline_evidence_sha256": "392ea56539906c00d832ce49824e9cc4298eb9909f3335100db497a28119676e",
+  "candidate_evidence_sha256": "5530f7dd483b6958dffbbdaa7ccef9fcdc39b08e9efee9883d8e811b7a850716",
+  "provider_runs": {
+    "candidate_official_runs": 1,
+    "automatic_reruns": 0,
+    "provider_path": "SINGLE_PROVIDER",
+    "format_path": "STRUCTURED_TO_RAW_FALLBACK",
+    "cross_provider_fallback": false
+  },
+  "frozen_during_candidate": {
+    "dataset": true,
+    "oracle": true,
+    "projection_contract": true,
+    "runtime": true,
+    "planner": true,
+    "tool_registry": true
+  },
+  "comparison": {
+    "mechanical_pass": {
+      "baseline": "11/24",
+      "candidate": "21/24",
+      "delta_cases": 10
+    },
+    "schema_validity": {
+      "baseline": 0.541667,
+      "candidate": 1.0
+    },
+    "action_kind_accuracy": {
+      "baseline": 0.5,
+      "candidate": 0.875
+    },
+    "tool_selection_accuracy": {
+      "baseline": 1.0,
+      "candidate": 1.0
+    },
+    "argument_binding_accuracy": {
+      "baseline": 0.923077,
+      "candidate": 1.0
+    },
+    "safe_action_rate": {
+      "baseline": 0.5,
+      "candidate": 1.0
+    }
+  },
+  "fixed_mechanical_cases": [
+    "B005",
+    "B006",
+    "B007",
+    "B010",
+    "B011",
+    "B012",
+    "B016",
+    "B017",
+    "B019",
+    "B020",
+    "B023",
+    "B024"
+  ],
+  "residual_failures": [
+    {
+      "case_id": "B014",
+      "attribution": "P-CAP:PROJECTED_FACT_BINDING",
+      "evidence": "state.facts.content and observation.last_result.content contain the required content, but the Selector chose ask and claimed the content was absent"
+    },
+    {
+      "case_id": "B018",
+      "attribution": "P-CAP:VERIFICATION_BRANCH",
+      "evidence": "the prior execution result is ok but unverified and run_python_file is available; the Selector chose ask instead of the declared verification action",
+      "round_status": "NEW_MECHANICAL_FAILURE"
+    },
+    {
+      "case_id": "B021",
+      "attribution": "P-CAP:OBSERVATION_SWITCH",
+      "evidence": "the prior query returned an empty result and the task target supplies the alternate official-documentation query; the Selector chose ask instead of switching query",
+      "round_status": "NEW_MECHANICAL_FAILURE"
+    }
+  ],
+  "contract_watchlist": [
+    {
+      "case_id": "B017",
+      "attribution": "P-CON:TOOL_ARGUMENT_SCHEMA",
+      "status": "WATCHLIST",
+      "evidence": "available_tools projects canonical tool names but no canonical argument schema; this candidate emitted path correctly, but one passing sample does not close the observability gap"
+    }
+  ],
+  "risk": {
+    "duplicate_verified_effect_count": 0,
+    "premature_answer_count": 0,
+    "dependency_violation_count": 0,
+    "semantic_safety_regression": 0
+  },
+  "decision": {
+    "canonical_envelope_cluster_closed": true,
+    "answer_ready_cases_passed": true,
+    "runtime_integration_authorized": false,
+    "additional_selector_change_in_this_round": false,
+    "next_step": "REVIEW_RESIDUAL_ATTRIBUTION_BEFORE_B4"
+  }
+}

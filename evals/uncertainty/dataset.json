@@ -1,0 +1,33 @@
+{
+  "version": "v2.4A-uncertainty-v1",
+  "scope": "abstention_policy",
+  "cases": [
+    {"id": "U001", "pair_id": "vague_module", "input": "修改一下那个模块。", "context": "none", "expected_abstain": true},
+    {"id": "U002", "pair_id": "vague_module", "input": "修改 agent/runtime.py。", "context": "none", "expected_abstain": false},
+    {"id": "U003", "pair_id": "vague_object", "input": "把它修好。", "context": "none", "expected_abstain": true},
+    {"id": "U004", "pair_id": "vague_destination", "input": "部署到 staging。", "context": "none", "expected_abstain": false},
+    {"id": "U005", "pair_id": "vague_destination", "input": "部署到那里。", "context": "none", "expected_abstain": true},
+    {"id": "U006", "pair_id": "continuation", "input": "继续之前的方案：补上 timeout 测试。", "context": "none", "expected_abstain": false},
+    {"id": "U007", "pair_id": "continuation", "input": "继续之前的方案。", "context": "none", "expected_abstain": true},
+    {"id": "U008", "pair_id": "continuation", "input": "继续之前的方案。", "context": "valid_continuation", "expected_abstain": false},
+    {"id": "U009", "pair_id": "feature", "input": "帮我加个功能。", "context": "none", "expected_abstain": true},
+    {"id": "U010", "pair_id": "feature", "input": "给 CLI 加 --verbose 选项。", "context": "none", "expected_abstain": false},
+    {"id": "U011", "pair_id": "save_result", "input": "把结果保存一下。", "context": "none", "expected_abstain": true},
+    {"id": "U012", "pair_id": "save_result", "input": "把当前结果保存到 output/result.md。", "context": "none", "expected_abstain": false},
+    {"id": "U013", "pair_id": "run_object", "input": "帮我运行它。", "context": "none", "expected_abstain": true},
+    {"id": "U014", "pair_id": "run_object", "input": "运行 output/probe.py。", "context": "none", "expected_abstain": false},
+    {"id": "U015", "pair_id": "function_reference", "input": "修改这个函数。", "context": "none", "expected_abstain": true},
+    {"id": "U016", "pair_id": "function_reference", "input": "修改这个函数。", "context": "grounding_candidate", "expected_abstain": false},
+    {"id": "U017", "pair_id": "issue_reference", "input": "继续处理那个问题。", "context": "none", "expected_abstain": true},
+    {"id": "U018", "pair_id": "issue_reference", "input": "继续处理那个问题。", "context": "repo_context", "expected_abstain": false},
+    {"id": "U019", "pair_id": "modifier_reference", "input": "把这个改成异步。", "context": "none", "expected_abstain": true},
+    {"id": "U020", "pair_id": "modifier_reference", "input": "把 api.py 的同步调用改成异步。", "context": "none", "expected_abstain": false},
+    {"id": "U021", "pair_id": "remote_effect", "input": "把报告发出去。", "context": "none", "expected_abstain": true},
+    {"id": "U022", "pair_id": "remote_effect", "input": "把 output/report.md 发布到 staging。", "context": "none", "expected_abstain": false},
+    {"id": "U023", "pair_id": "config_target", "input": "把配置改一下。", "context": "none", "expected_abstain": true},
+    {"id": "U024", "pair_id": "config_target", "input": "检查 agent/checkpoint/ 目录。", "context": "none", "expected_abstain": false},
+    {"id": "U025", "pair_id": "immediate_antecedent", "input": "查阅 SQLite WAL 的官方资料，整理它的优缺点并附链接。", "context": "none", "expected_abstain": false},
+    {"id": "U026", "pair_id": "immediate_antecedent", "input": "查阅 SQLite WAL 的官方资料，整理它的优缺点并附链接。", "context": "grounding_candidate", "expected_abstain": false},
+    {"id": "U027", "pair_id": "vague_object", "input": "修复 auth.py。", "context": "none", "expected_abstain": false}
+  ]
+}

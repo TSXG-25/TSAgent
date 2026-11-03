@@ -1,0 +1,72 @@
+{
+  "suite": "Real API Acceptance Suite v0.1 - P0 rerun",
+  "date": "2026-08-07",
+  "provider": "deepseek-v4-flash",
+  "rerun_ids": ["C02", "C03", "C04", "F04"],
+  "summary": {
+    "total": 4,
+    "pass": 0,
+    "fail": 4,
+    "conclusion": "首轮 4 例失败全部稳定复现；P0 维持 20/24，无法收口 24/24"
+  },
+  "results": {
+    "C02": {
+      "passed": false,
+      "classification": "RUNTIME_CONTRACT_FAILURE",
+      "tool_calls": ["filesystem.read", "filesystem.read", "llm", "filesystem.write"],
+      "ground_truth": "merged.txt 存在但 0 字节（空写入）；最后 explain 步骤 coroutine raised StopIteration -> 回复'内部错误'",
+      "evidence": "RuntimeError at task-4 llm_executor"
+    },
+    "C03": {
+      "passed": false,
+      "classification": "RUNTIME_CONTRACT_FAILURE",
+      "tool_calls": ["filesystem.read", "llm", "filesystem.write", "shell", "filesystem.read", "llm", "filesystem.write", "shell"],
+      "ground_truth": "calc.py 未生成（filesystem.write 2 次但落盘缺失）；StopIteration -> 回复'内部错误'",
+      "evidence": "RuntimeError at task-5 tool_executor"
+    },
+    "C04": {
+      "passed": false,
+      "classification": "MODEL_QUALITY_FAILURE",
+      "tool_calls": [],
+      "ground_truth": "summary.md / sources.json 均未生成；回复给出内容但让用户自行保存；自述无法实时检索互联网（搜索未执行）",
+      "evidence": "无任何工具调用，'请将以下两个文件保存至 output/ 目录'"
+    },
+    "F04": {
+      "passed": false,
+      "classification": "PERFORMANCE_REGRESSION",
+      "tool_calls": null,
+      "ground_truth": "hello.txt 创建成功且内容正确，但 LLM calls=3（门槛 <=2）、plan=1",
+      "evidence": "status=COMPLETED file_ok=True llm=3 plan=1"
+    }
+  },
+  "rerun_2": {
+    "date": "2026-08-07",
+    "summary": {"total": 4, "pass": 0, "fail": 4},
+    "results": {
+      "C02": {
+        "passed": false,
+        "classification": "RUNTIME_CONTRACT_FAILURE",
+        "detail": "writes=0（本轮 merged.txt 未写入）；tool_calls=[filesystem.read, filesystem.read, llm, filesystem.write]",
+        "cumulative": "4 次复跑均 FAIL"
+      },
+      "C03": {
+        "passed": false,
+        "classification": "RUNTIME_CONTRACT_FAILURE",
+        "detail": "filesystem.write x2 但 calc.py 未生成；StopIteration/RuntimeError",
+        "cumulative": "4 次复跑均 FAIL"
+      },
+      "C04": {
+        "passed": false,
+        "classification": "MODEL_QUALITY_FAILURE",
+        "detail": "summary.md/sources.json 未生成；无工具调用",
+        "cumulative": "4 次复跑均 FAIL"
+      },
+      "F04": {
+        "passed": false,
+        "classification": "PERFORMANCE_REGRESSION",
+        "detail": "hello.txt 成功但 llm=3（门槛 <=2）、plan=1",
+        "cumulative": "3 次复跑均 FAIL"
+      }
+    }
+  }
+}

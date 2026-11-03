@@ -1,0 +1,60 @@
+{
+  "session_isolation": {
+    "status": "RISK_CONFIRMED",
+    "same_namespace": true,
+    "raw_session_a_visible_in_b": true,
+    "short_term_a_visible_in_b": true
+  },
+  "volatile_summary": {
+    "status": "RISK_CONFIRMED",
+    "policy": {
+      "value": "用户今天在东京，当前汇率只是本轮的临时测试值。",
+      "action": "STORE",
+      "reason": "EXPLICIT_USER_FACT",
+      "source_kind": "conversation_summary",
+      "volatile": false,
+      "explicit_persist": true
+    },
+    "durable_write_performed": false
+  },
+  "assistant_summary_laundering": {
+    "status": "RISK_CONFIRMED",
+    "assistant_claim_in_compression_input": true,
+    "policy": {
+      "value": "用户倾向使用 C++。",
+      "action": "STORE",
+      "reason": "EXPLICIT_USER_FACT",
+      "source_kind": "conversation_summary",
+      "volatile": false,
+      "explicit_persist": true
+    },
+    "durable_write_performed": false,
+    "boundary": "scripted summarizer; production compression/summary projection and deterministic policy"
+  },
+  "short_term_secret": {
+    "status": "REDACTION_VERIFIED",
+    "raw_secret_persisted": false
+  },
+  "silent_context_failure": {
+    "status": "RISK_CONFIRMED",
+    "workspace_facts_lost": true,
+    "diagnostics": []
+  },
+  "repository_isolation": {
+    "status": "RISK_CONFIRMED",
+    "repo_b_returned_for_unscoped_repo_a_query": true
+  },
+  "prompt_trust": {
+    "status": "PROMPT_BOUNDARY_RISK_CONFIRMED",
+    "memory_payload_in_system_context_render": true,
+    "repo_payload_returned_unescaped": true,
+    "malicious_action_executed": false,
+    "boundary": "prompt construction only; no real-model exploit claim"
+  },
+  "command_artifact_projection": {
+    "status": "RISK_CONFIRMED",
+    "actual_nonempty_file": true,
+    "projected_artifacts": [],
+    "boundary": "real temporary subprocess effect; isolated Runtime artifact projection"
+  }
+}

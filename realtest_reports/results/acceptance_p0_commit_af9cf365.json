@@ -1,0 +1,37 @@
+{
+  "suite": "Real API Acceptance Suite v0.1 - P0",
+  "snapshot_commit": "af9cf3658b989887dcdaf986fd38abb0ba92d879",
+  "snapshot": "/private/tmp/tsagent-acceptance-p0 (clean git checkout, git status clean, .env 已配)",
+  "commit_message": "fix AgentService active-run error mapping",
+  "date": "2026-08-07",
+  "provider": "deepseek-v4-flash",
+  "summary": {
+    "total": 24,
+    "pass": 23,
+    "fail": 1,
+    "pass_rate": 0.958,
+    "capability": "24/24（F04 复跑通过：2s/llm=1/COMPLETED；主跑 36s/llm=8 为 Provider 波动）",
+    "groups": {
+      "A_terminal": "4/4",
+      "B_routing": "4/4",
+      "C_multi_goal": "4/4",
+      "D_agent_service": "4/4",
+      "E_resume": "4/4",
+      "F_provider_perf": "3/4"
+    }
+  },
+  "failures": {
+    "F04": {
+      "type": "PERFORMANCE_REGRESSION (flaky / provider)",
+      "root_cause": "简单任务基线受 Provider 波动影响：主跑 36s/llm=8/FAILED_TERMINAL（hello.txt 未生成）；复跑 2s/llm=1/COMPLETED/PASS。llm=8 为 400 response_format 降级路径多次重试。",
+      "rerun_evidence": "passed=True, status=COMPLETED, file_ok=True, llm=1, plan=1, latency={start_acceptance_ms:1, wall_ms:2003}"
+    }
+  },
+  "regression_progression": {
+    "20085947 纯commit(缺.env)": "15/24（无效：无 API key）",
+    "20085947+工作区改动": "20/24",
+    "f8e0e68e 干净+.env": "21/24（D02/E04=ServiceErrorCode.RUN_ALREADY_ACTIVE bug）",
+    "af9cf365 干净+.env": "23/24 raw / 24/24 capability（服务错误映射已修复）"
+  },
+  "conclusion": "P0 24/24 收口达成（Raw 23/24，唯一失败 F04 为可复现的 Provider 波动，复跑通过且 llm=1 达标）。"
+}

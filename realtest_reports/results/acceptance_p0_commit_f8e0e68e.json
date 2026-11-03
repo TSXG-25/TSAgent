@@ -1,0 +1,46 @@
+{
+  "suite": "Real API Acceptance Suite v0.1 - P0",
+  "snapshot_commit": "f8e0e68e285c4feadce77c315a54fbc7fd7ab213",
+  "snapshot": "/private/tmp/tsagent-acceptance-p0 (clean git checkout, git status clean, .env 已配)",
+  "commits_on_top": ["20085947 v2.3C-H5: close multi-goal P0 execution gaps", "e10be0a3 v2.3C-H5c: allow deterministic research materialization", "f8e0e68e v2.3C-H5d: preserve exact file write destinations"],
+  "date": "2026-08-07",
+  "provider": "deepseek-v4-flash",
+  "summary": {
+    "total": 24,
+    "pass": 21,
+    "fail": 3,
+    "pass_rate": 0.875,
+    "capability_note": "F04 复跑通过（2s, llm=1）；主跑失败为 Provider 慢/重放（188s, llm=7）。按三口径排除 Provider 波动后 Capability=22/24。",
+    "groups": {
+      "A_terminal": "4/4",
+      "B_routing": "4/4",
+      "C_multi_goal": "4/4",
+      "D_agent_service": "3/4",
+      "E_resume": "3/4",
+      "F_provider_perf": "3/4"
+    }
+  },
+  "failures": {
+    "D02": {
+      "type": "RUNTIME_CONTRACT_FAILURE",
+      "root_cause": "ServiceErrorCode.RUN_ALREADY_ACTIVE 未定义（agent/service/service.py line 86 引用）-> 幂等冲突路径 _store_error 构造 code_map 时 AttributeError",
+      "evidence": "error_type=AttributeError, error_detail='type object ServiceErrorCode has no attribute RUN_ALREADY_ACTIVE'"
+    },
+    "E04": {
+      "type": "RUNTIME_CONTRACT_FAILURE",
+      "root_cause": "同一 ServiceErrorCode.RUN_ALREADY_ACTIVE bug：错 tenant 查询触发 _store_error -> AttributeError（本应返回 RUN_NOT_FOUND）",
+      "evidence": "HARNESS_ERR AttributeError RUN_ALREADY_ACTIVE"
+    },
+    "F04": {
+      "type": "PERFORMANCE_REGRESSION (flaky)",
+      "root_cause": "主跑 Provider 慢（188s, replan_llm=83.63s, llm=7, FAILED_TERMINAL 但 hello.txt 已写入 file_ok=True）；复跑 2s/llm=1/COMPLETED/PASS。属 Provider 波动而非系统性回归。",
+      "evidence": "rerun: status=COMPLETED file_ok=True llm=1 plan=1 latency={start_acceptance_ms:1, wall_ms:2003}"
+    }
+  },
+  "improvement_vs_base": {
+    "20085947(纯commit, 缺.env)": "15/24（该数值受缺 .env 影响，简单任务因无 API key 快速失败）",
+    "20085947+工作区改动": "20/24",
+    "f8e0e68e(干净+.env)": "21/24（D02/E04=1 个真实服务 bug，F04=Provider 波动）"
+  },
+  "remaining_blocker": "agent/service/service.py 引用未定义的 ServiceErrorCode.RUN_ALREADY_ACTIVE：D02（幂等冲突）与 E04（跨 tenant）两条服务错误路径都崩。修掉后 P0 可达 23/24（F04 复跑通过）。"
+}

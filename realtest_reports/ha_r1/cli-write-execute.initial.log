@@ -1,0 +1,57 @@
+🤖 TSAgent AgentService CLI 启动（输入 exit 退出）
+
+你: 
+你: 
+📌 Run: run-25d875393e8640d19815ce702a13a93d
+📡 处理中...
+  • 1: run_created
+输入已结束，等待当前 Run 完成后退出。
+  • 2: run_started
+  🧠 规划上下文: 无上下文
+  🔍 引用消歧: LLM 消歧失败: 指定的 LLM Provider 不可用 (deepseek): Connection error.
+  🧠 意图: Intent(domain=operation, action=execute, target='output/ha_r1_cli_probe_1788843181378819000.py', entities=[], current_file='', conf=0.99, exec=True)
+
+============================================================
+📋 执行计划（Task 分解）
+============================================================
+  task-1: write output/ha_r1_cli_probe_1788843181378819000.py
+  task-2: execute output/ha_r1_cli_probe_1788843181378819000.py (依赖: ['task-1'])
+============================================================
+
+
+==================================================
+⏱️  启动耗时 Profile
+==================================================
+  tools_import           0.01s  █████████████████░░░ 88%
+  skills_import          0.00s  ██░░░░░░░░░░░░░░░░░░ 12%
+  capabilities_register   0.00s  ░░░░░░░░░░░░░░░░░░░░ 0%
+  TOTAL                  0.02s
+==================================================
+
+==================================================
+⚡ 执行耗时 Profile
+==================================================
+  init                   0.01s  ░░░░░░░░░░░░░░░░░░░░ 0%
+  intent_route           0.00s  ░░░░░░░░░░░░░░░░░░░░ 0%
+  EXCLUSIVE TOTAL        0.01s
+  WALL TOTAL             4.41s
+==================================================
+
+  • 3: stage_started
+  ↳ 正在规划任务...
+  • 4: stage_completed
+  ↳ 任务规划完成
+  • 5: stage_started
+  ↳ 正在执行任务...
+  • 6: stage_completed
+  ↳ 任务执行阶段完成
+  • 7: run_blocked
+⛔ Run 已阻塞
+🤖 状态: BLOCKED
+
+📝 输出:
+目标尚未完成，缺少可验证证据：failed task evidence、outcome:FILE_MUTATION、outcome:CODE_EXECUTION。本次不会报告为成功。
+
+⚠️ EFFECT_SCOPE_VIOLATION: The Run did not complete successfully
+
+deepseek 调用失败: Connection error.

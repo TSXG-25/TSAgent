@@ -155,6 +155,15 @@ def test_list_nonexistent():
     print(f"[PASS] test_list_nonexistent: {result}")
 
 
+def _skip_if_research_unavailable():
+    """The DuckDuckGo MCP server is an external binary; offline runs skip."""
+    from tools.web import _duckduckgo_availability
+
+    availability = _duckduckgo_availability()
+    if not availability.available:
+        pytest.skip(f"research tool unavailable: {availability.reason}")
+
+
 def test_web_search():
     """Test web search tool.
 
@@ -163,12 +172,16 @@ def test_web_search():
     from tools.web import web_search
     import asyncio
 
-    result = asyncio.run(web_search("Python programming language", max_results=2))
-    # Should get some result text back
-    assert len(result) > 20, f"Search result too short: {result[:100] if result else 'empty'}"
+    _skip_if_research_unavailable()
+    results = asyncio.run(web_search("Python programming language", max_results=2))
+    # Should get structured result items back
+    assert results, "expected non-empty structured search results"
+    for item in results:
+        assert item.title or item.url
     # Should mention Python or programming
-    has_relevant = any(term in result.lower() for term in ["python", "programming", "language"])
-    print(f"[PASS] test_web_search (relevant={has_relevant}, len={len(result)} chars)")
+    haystack = " ".join(f"{item.title} {item.snippet} {item.url}" for item in results).lower()
+    has_relevant = any(term in haystack for term in ["python", "programming", "language"])
+    print(f"[PASS] test_web_search (relevant={has_relevant}, items={len(results)})")
 
 
 def test_web_fetch():
@@ -179,6 +192,7 @@ def test_web_fetch():
     from tools.web import web_fetch
     import asyncio
 
+    _skip_if_research_unavailable()
     result = asyncio.run(web_fetch("https://example.com"))
     if result.startswith("获取网页失败:") and any(
         marker in result.lower()
@@ -200,6 +214,7 @@ def test_web_fetch_invalid():
     from tools.web import web_fetch
     import asyncio
 
+    _skip_if_research_unavailable()
     result = asyncio.run(web_fetch("https://this-domain-does-not-exist-123456.com"))
     assert "失败" in result or "error" in result.lower(), f"Expected error, got: {result[:100]}"
     print(f"[PASS] test_web_fetch_invalid: {result[:60]}")
@@ -260,16 +275,6 @@ def test_shell_pipeline():
     print(f"[PASS] test_shell_pipeline: {result.strip()} lines")
 
 
-def test_workflow_list():
-    """Test listing workflows (may be empty)."""
-    from tools.workflow import list_workflows
-
-    result = list_workflows()
-    # Should either list workflows or say none available
-    assert result is not None
-    print(f"[PASS] test_workflow_list: {result[:100] if result else 'empty'}")
-
-
 def test_memory_tools():
     """Test memory tools basic functionality."""
     from tools.memory import query_memory, save_fact, get_user_preference
@@ -308,7 +313,6 @@ def run_all_tests():
         ("meta get tool info", test_meta_get_tool_info),
         ("shell local", test_shell_local),
         ("shell pipeline", test_shell_pipeline),
-        ("workflow list", test_workflow_list),
         ("memory tools", test_memory_tools),
     ]
 

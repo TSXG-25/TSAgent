@@ -1,0 +1,690 @@
+{
+  "harness_version": "v2.4A-2c-uncertainty-baseline-v1",
+  "status": "DETERMINISTIC_POLICY_BASELINE",
+  "generated_at": "2026-08-29T08:04:20.038115+00:00",
+  "git_head": "6c1743078d67cf1644c22779f40649fb4b9880d2",
+  "working_tree_dirty": true,
+  "dataset_version": "v2.4A-uncertainty-v1",
+  "dataset_hash": "8f1479bdded0f00e20fd4d283082869d078b4fa217719dc768ae8a6afaaf1cdb",
+  "provider": "none",
+  "controls": {
+    "provider_calls": 0,
+    "automatic_case_retry": false,
+    "decision_repair": false,
+    "golden_decision_fallback": false,
+    "cases_per_run": 1
+  },
+  "summary": {
+    "case_count": 27,
+    "pass_count": 20,
+    "true_abstain": 6,
+    "false_abstain": 1,
+    "missed_abstention": 6,
+    "true_proceed": 14,
+    "abstain_precision": 0.8571428571428571,
+    "abstain_recall": 0.5,
+    "false_abstention_rate": 0.06666666666666667,
+    "missed_abstention_rate": 0.5,
+    "policy_status": "NEEDS_POLICY_WORK"
+  },
+  "cases": [
+    {
+      "case_id": "U001",
+      "pair_id": "vague_module",
+      "input": "修改一下那个模块。",
+      "context": "none",
+      "provider_status": "NOT_APPLICABLE",
+      "actual_abstain": true,
+      "oracle_result": {
+        "case_id": "U001",
+        "pair_id": "vague_module",
+        "expected_abstain": true,
+        "actual_abstain": true,
+        "passed": true,
+        "outcome": "TRUE_ABSTAIN"
+      },
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {
+        "production_rule": "agent.planner.constraint_extractor.detect_abstention",
+        "context": {
+          "type": "none"
+        }
+      }
+    },
+    {
+      "case_id": "U002",
+      "pair_id": "vague_module",
+      "input": "修改 agent/runtime.py。",
+      "context": "none",
+      "provider_status": "NOT_APPLICABLE",
+      "actual_abstain": false,
+      "oracle_result": {
+        "case_id": "U002",
+        "pair_id": "vague_module",
+        "expected_abstain": false,
+        "actual_abstain": false,
+        "passed": true,
+        "outcome": "TRUE_PROCEED"
+      },
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {
+        "production_rule": "agent.planner.constraint_extractor.detect_abstention",
+        "context": {
+          "type": "none"
+        }
+      }
+    },
+    {
+      "case_id": "U003",
+      "pair_id": "vague_object",
+      "input": "把它修好。",
+      "context": "none",
+      "provider_status": "NOT_APPLICABLE",
+      "actual_abstain": true,
+      "oracle_result": {
+        "case_id": "U003",
+        "pair_id": "vague_object",
+        "expected_abstain": true,
+        "actual_abstain": true,
+        "passed": true,
+        "outcome": "TRUE_ABSTAIN"
+      },
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {
+        "production_rule": "agent.planner.constraint_extractor.detect_abstention",
+        "context": {
+          "type": "none"
+        }
+      }
+    },
+    {
+      "case_id": "U004",
+      "pair_id": "vague_destination",
+      "input": "部署到 staging。",
+      "context": "none",
+      "provider_status": "NOT_APPLICABLE",
+      "actual_abstain": false,
+      "oracle_result": {
+        "case_id": "U004",
+        "pair_id": "vague_destination",
+        "expected_abstain": false,
+        "actual_abstain": false,
+        "passed": true,
+        "outcome": "TRUE_PROCEED"
+      },
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {
+        "production_rule": "agent.planner.constraint_extractor.detect_abstention",
+        "context": {
+          "type": "none"
+        }
+      }
+    },
+    {
+      "case_id": "U005",
+      "pair_id": "vague_destination",
+      "input": "部署到那里。",
+      "context": "none",
+      "provider_status": "NOT_APPLICABLE",
+      "actual_abstain": false,
+      "oracle_result": {
+        "case_id": "U005",
+        "pair_id": "vague_destination",
+        "expected_abstain": true,
+        "actual_abstain": false,
+        "passed": false,
+        "outcome": "MISSED_ABSTENTION"
+      },
+      "failure_category": "P-UNCERTAINTY",
+      "failure_subcategory": "MISSED_ABSTENTION",
+      "evidence": {
+        "production_rule": "agent.planner.constraint_extractor.detect_abstention",
+        "context": {
+          "type": "none"
+        }
+      }
+    },
+    {
+      "case_id": "U006",
+      "pair_id": "continuation",
+      "input": "继续之前的方案：补上 timeout 测试。",
+      "context": "none",
+      "provider_status": "NOT_APPLICABLE",
+      "actual_abstain": false,
+      "oracle_result": {
+        "case_id": "U006",
+        "pair_id": "continuation",
+        "expected_abstain": false,
+        "actual_abstain": false,
+        "passed": true,
+        "outcome": "TRUE_PROCEED"
+      },
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {
+        "production_rule": "agent.planner.constraint_extractor.detect_abstention",
+        "context": {
+          "type": "none"
+        }
+      }
+    },
+    {
+      "case_id": "U007",
+      "pair_id": "continuation",
+      "input": "继续之前的方案。",
+      "context": "none",
+      "provider_status": "NOT_APPLICABLE",
+      "actual_abstain": false,
+      "oracle_result": {
+        "case_id": "U007",
+        "pair_id": "continuation",
+        "expected_abstain": true,
+        "actual_abstain": false,
+        "passed": false,
+        "outcome": "MISSED_ABSTENTION"
+      },
+      "failure_category": "P-UNCERTAINTY",
+      "failure_subcategory": "MISSED_ABSTENTION",
+      "evidence": {
+        "production_rule": "agent.planner.constraint_extractor.detect_abstention",
+        "context": {
+          "type": "none"
+        }
+      }
+    },
+    {
+      "case_id": "U008",
+      "pair_id": "continuation",
+      "input": "继续之前的方案。",
+      "context": "valid_continuation",
+      "provider_status": "NOT_APPLICABLE",
+      "actual_abstain": false,
+      "oracle_result": {
+        "case_id": "U008",
+        "pair_id": "continuation",
+        "expected_abstain": false,
+        "actual_abstain": false,
+        "passed": true,
+        "outcome": "TRUE_PROCEED"
+      },
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {
+        "production_rule": "agent.planner.constraint_extractor.detect_abstention",
+        "context": {
+          "type": "grounding_candidates",
+          "candidates": [
+            "valid continuation"
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "U009",
+      "pair_id": "feature",
+      "input": "帮我加个功能。",
+      "context": "none",
+      "provider_status": "NOT_APPLICABLE",
+      "actual_abstain": false,
+      "oracle_result": {
+        "case_id": "U009",
+        "pair_id": "feature",
+        "expected_abstain": true,
+        "actual_abstain": false,
+        "passed": false,
+        "outcome": "MISSED_ABSTENTION"
+      },
+      "failure_category": "P-UNCERTAINTY",
+      "failure_subcategory": "MISSED_ABSTENTION",
+      "evidence": {
+        "production_rule": "agent.planner.constraint_extractor.detect_abstention",
+        "context": {
+          "type": "none"
+        }
+      }
+    },
+    {
+      "case_id": "U010",
+      "pair_id": "feature",
+      "input": "给 CLI 加 --verbose 选项。",
+      "context": "none",
+      "provider_status": "NOT_APPLICABLE",
+      "actual_abstain": false,
+      "oracle_result": {
+        "case_id": "U010",
+        "pair_id": "feature",
+        "expected_abstain": false,
+        "actual_abstain": false,
+        "passed": true,
+        "outcome": "TRUE_PROCEED"
+      },
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {
+        "production_rule": "agent.planner.constraint_extractor.detect_abstention",
+        "context": {
+          "type": "none"
+        }
+      }
+    },
+    {
+      "case_id": "U011",
+      "pair_id": "save_result",
+      "input": "把结果保存一下。",
+      "context": "none",
+      "provider_status": "NOT_APPLICABLE",
+      "actual_abstain": false,
+      "oracle_result": {
+        "case_id": "U011",
+        "pair_id": "save_result",
+        "expected_abstain": true,
+        "actual_abstain": false,
+        "passed": false,
+        "outcome": "MISSED_ABSTENTION"
+      },
+      "failure_category": "P-UNCERTAINTY",
+      "failure_subcategory": "MISSED_ABSTENTION",
+      "evidence": {
+        "production_rule": "agent.planner.constraint_extractor.detect_abstention",
+        "context": {
+          "type": "none"
+        }
+      }
+    },
+    {
+      "case_id": "U012",
+      "pair_id": "save_result",
+      "input": "把当前结果保存到 output/result.md。",
+      "context": "none",
+      "provider_status": "NOT_APPLICABLE",
+      "actual_abstain": false,
+      "oracle_result": {
+        "case_id": "U012",
+        "pair_id": "save_result",
+        "expected_abstain": false,
+        "actual_abstain": false,
+        "passed": true,
+        "outcome": "TRUE_PROCEED"
+      },
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {
+        "production_rule": "agent.planner.constraint_extractor.detect_abstention",
+        "context": {
+          "type": "none"
+        }
+      }
+    },
+    {
+      "case_id": "U013",
+      "pair_id": "run_object",
+      "input": "帮我运行它。",
+      "context": "none",
+      "provider_status": "NOT_APPLICABLE",
+      "actual_abstain": true,
+      "oracle_result": {
+        "case_id": "U013",
+        "pair_id": "run_object",
+        "expected_abstain": true,
+        "actual_abstain": true,
+        "passed": true,
+        "outcome": "TRUE_ABSTAIN"
+      },
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {
+        "production_rule": "agent.planner.constraint_extractor.detect_abstention",
+        "context": {
+          "type": "none"
+        }
+      }
+    },
+    {
+      "case_id": "U014",
+      "pair_id": "run_object",
+      "input": "运行 output/probe.py。",
+      "context": "none",
+      "provider_status": "NOT_APPLICABLE",
+      "actual_abstain": false,
+      "oracle_result": {
+        "case_id": "U014",
+        "pair_id": "run_object",
+        "expected_abstain": false,
+        "actual_abstain": false,
+        "passed": true,
+        "outcome": "TRUE_PROCEED"
+      },
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {
+        "production_rule": "agent.planner.constraint_extractor.detect_abstention",
+        "context": {
+          "type": "none"
+        }
+      }
+    },
+    {
+      "case_id": "U015",
+      "pair_id": "function_reference",
+      "input": "修改这个函数。",
+      "context": "none",
+      "provider_status": "NOT_APPLICABLE",
+      "actual_abstain": true,
+      "oracle_result": {
+        "case_id": "U015",
+        "pair_id": "function_reference",
+        "expected_abstain": true,
+        "actual_abstain": true,
+        "passed": true,
+        "outcome": "TRUE_ABSTAIN"
+      },
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {
+        "production_rule": "agent.planner.constraint_extractor.detect_abstention",
+        "context": {
+          "type": "none"
+        }
+      }
+    },
+    {
+      "case_id": "U016",
+      "pair_id": "function_reference",
+      "input": "修改这个函数。",
+      "context": "grounding_candidate",
+      "provider_status": "NOT_APPLICABLE",
+      "actual_abstain": false,
+      "oracle_result": {
+        "case_id": "U016",
+        "pair_id": "function_reference",
+        "expected_abstain": false,
+        "actual_abstain": false,
+        "passed": true,
+        "outcome": "TRUE_PROCEED"
+      },
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {
+        "production_rule": "agent.planner.constraint_extractor.detect_abstention",
+        "context": {
+          "type": "grounding_candidates",
+          "candidates": [
+            "grounding candidate"
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "U017",
+      "pair_id": "issue_reference",
+      "input": "继续处理那个问题。",
+      "context": "none",
+      "provider_status": "NOT_APPLICABLE",
+      "actual_abstain": true,
+      "oracle_result": {
+        "case_id": "U017",
+        "pair_id": "issue_reference",
+        "expected_abstain": true,
+        "actual_abstain": true,
+        "passed": true,
+        "outcome": "TRUE_ABSTAIN"
+      },
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {
+        "production_rule": "agent.planner.constraint_extractor.detect_abstention",
+        "context": {
+          "type": "none"
+        }
+      }
+    },
+    {
+      "case_id": "U018",
+      "pair_id": "issue_reference",
+      "input": "继续处理那个问题。",
+      "context": "repo_context",
+      "provider_status": "NOT_APPLICABLE",
+      "actual_abstain": false,
+      "oracle_result": {
+        "case_id": "U018",
+        "pair_id": "issue_reference",
+        "expected_abstain": false,
+        "actual_abstain": false,
+        "passed": true,
+        "outcome": "TRUE_PROCEED"
+      },
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {
+        "production_rule": "agent.planner.constraint_extractor.detect_abstention",
+        "context": {
+          "type": "repository_context",
+          "present": true
+        }
+      }
+    },
+    {
+      "case_id": "U019",
+      "pair_id": "modifier_reference",
+      "input": "把这个改成异步。",
+      "context": "none",
+      "provider_status": "NOT_APPLICABLE",
+      "actual_abstain": true,
+      "oracle_result": {
+        "case_id": "U019",
+        "pair_id": "modifier_reference",
+        "expected_abstain": true,
+        "actual_abstain": true,
+        "passed": true,
+        "outcome": "TRUE_ABSTAIN"
+      },
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {
+        "production_rule": "agent.planner.constraint_extractor.detect_abstention",
+        "context": {
+          "type": "none"
+        }
+      }
+    },
+    {
+      "case_id": "U020",
+      "pair_id": "modifier_reference",
+      "input": "把 api.py 的同步调用改成异步。",
+      "context": "none",
+      "provider_status": "NOT_APPLICABLE",
+      "actual_abstain": false,
+      "oracle_result": {
+        "case_id": "U020",
+        "pair_id": "modifier_reference",
+        "expected_abstain": false,
+        "actual_abstain": false,
+        "passed": true,
+        "outcome": "TRUE_PROCEED"
+      },
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {
+        "production_rule": "agent.planner.constraint_extractor.detect_abstention",
+        "context": {
+          "type": "none"
+        }
+      }
+    },
+    {
+      "case_id": "U021",
+      "pair_id": "remote_effect",
+      "input": "把报告发出去。",
+      "context": "none",
+      "provider_status": "NOT_APPLICABLE",
+      "actual_abstain": false,
+      "oracle_result": {
+        "case_id": "U021",
+        "pair_id": "remote_effect",
+        "expected_abstain": true,
+        "actual_abstain": false,
+        "passed": false,
+        "outcome": "MISSED_ABSTENTION"
+      },
+      "failure_category": "P-UNCERTAINTY",
+      "failure_subcategory": "MISSED_ABSTENTION",
+      "evidence": {
+        "production_rule": "agent.planner.constraint_extractor.detect_abstention",
+        "context": {
+          "type": "none"
+        }
+      }
+    },
+    {
+      "case_id": "U022",
+      "pair_id": "remote_effect",
+      "input": "把 output/report.md 发布到 staging。",
+      "context": "none",
+      "provider_status": "NOT_APPLICABLE",
+      "actual_abstain": false,
+      "oracle_result": {
+        "case_id": "U022",
+        "pair_id": "remote_effect",
+        "expected_abstain": false,
+        "actual_abstain": false,
+        "passed": true,
+        "outcome": "TRUE_PROCEED"
+      },
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {
+        "production_rule": "agent.planner.constraint_extractor.detect_abstention",
+        "context": {
+          "type": "none"
+        }
+      }
+    },
+    {
+      "case_id": "U023",
+      "pair_id": "config_target",
+      "input": "把配置改一下。",
+      "context": "none",
+      "provider_status": "NOT_APPLICABLE",
+      "actual_abstain": false,
+      "oracle_result": {
+        "case_id": "U023",
+        "pair_id": "config_target",
+        "expected_abstain": true,
+        "actual_abstain": false,
+        "passed": false,
+        "outcome": "MISSED_ABSTENTION"
+      },
+      "failure_category": "P-UNCERTAINTY",
+      "failure_subcategory": "MISSED_ABSTENTION",
+      "evidence": {
+        "production_rule": "agent.planner.constraint_extractor.detect_abstention",
+        "context": {
+          "type": "none"
+        }
+      }
+    },
+    {
+      "case_id": "U024",
+      "pair_id": "config_target",
+      "input": "检查 agent/checkpoint/ 目录。",
+      "context": "none",
+      "provider_status": "NOT_APPLICABLE",
+      "actual_abstain": false,
+      "oracle_result": {
+        "case_id": "U024",
+        "pair_id": "config_target",
+        "expected_abstain": false,
+        "actual_abstain": false,
+        "passed": true,
+        "outcome": "TRUE_PROCEED"
+      },
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {
+        "production_rule": "agent.planner.constraint_extractor.detect_abstention",
+        "context": {
+          "type": "none"
+        }
+      }
+    },
+    {
+      "case_id": "U025",
+      "pair_id": "immediate_antecedent",
+      "input": "查阅 SQLite WAL 的官方资料，整理它的优缺点并附链接。",
+      "context": "none",
+      "provider_status": "NOT_APPLICABLE",
+      "actual_abstain": true,
+      "oracle_result": {
+        "case_id": "U025",
+        "pair_id": "immediate_antecedent",
+        "expected_abstain": false,
+        "actual_abstain": true,
+        "passed": false,
+        "outcome": "FALSE_ABSTENTION"
+      },
+      "failure_category": "P-UNCERTAINTY",
+      "failure_subcategory": "FALSE_ABSTENTION",
+      "evidence": {
+        "production_rule": "agent.planner.constraint_extractor.detect_abstention",
+        "context": {
+          "type": "none"
+        }
+      }
+    },
+    {
+      "case_id": "U026",
+      "pair_id": "immediate_antecedent",
+      "input": "查阅 SQLite WAL 的官方资料，整理它的优缺点并附链接。",
+      "context": "grounding_candidate",
+      "provider_status": "NOT_APPLICABLE",
+      "actual_abstain": false,
+      "oracle_result": {
+        "case_id": "U026",
+        "pair_id": "immediate_antecedent",
+        "expected_abstain": false,
+        "actual_abstain": false,
+        "passed": true,
+        "outcome": "TRUE_PROCEED"
+      },
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {
+        "production_rule": "agent.planner.constraint_extractor.detect_abstention",
+        "context": {
+          "type": "grounding_candidates",
+          "candidates": [
+            "grounding candidate"
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "U027",
+      "pair_id": "vague_object",
+      "input": "修复 auth.py。",
+      "context": "none",
+      "provider_status": "NOT_APPLICABLE",
+      "actual_abstain": false,
+      "oracle_result": {
+        "case_id": "U027",
+        "pair_id": "vague_object",
+        "expected_abstain": false,
+        "actual_abstain": false,
+        "passed": true,
+        "outcome": "TRUE_PROCEED"
+      },
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {
+        "production_rule": "agent.planner.constraint_extractor.detect_abstention",
+        "context": {
+          "type": "none"
+        }
+      }
+    }
+  ]
+}

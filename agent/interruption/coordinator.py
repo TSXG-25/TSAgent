@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import datetime, timezone
-from typing import Callable
+from typing import Any, Callable, Mapping, Sequence
 
 from .contracts import (
     CancellationIntent,
@@ -125,6 +125,9 @@ class CancellationCoordinator:
         request_id: str,
         writer_id: str,
         fence_token: int,
+        terminal_payload: Mapping[str, Any] | None = None,
+        run_output: Mapping[str, Any] | None = None,
+        artifacts: Sequence[Any] = (),
     ) -> DurableInterruptionRecord:
         record = self.observe(
             tenant_id=tenant_id,
@@ -143,6 +146,9 @@ class CancellationCoordinator:
             request_id=request_id,
             writer_id=writer_id,
             fence_token=fence_token,
+            terminal_payload=terminal_payload,
+            run_output=run_output,
+            artifacts=artifacts,
         )
 
 

@@ -13,13 +13,21 @@ v2.3 Runtime Platform       已冻结
   Crash/Resume              ✅
   Workspace / Effect Truth  ✅
   Cancellation / Timeout    ✅
+  Orphaned Run Convergence  ✅（worker lease 过期自动收敛为 RUN_WORKER_LOST）
+
+Agent Loop（当前执行架构）
+  Native Tool Calling        ✅（DeepSeek OpenAI 兼容 / Ollama /api/chat）
+  Parallel Tool Scheduling   ✅（concurrency_safe 池化 + 排他屏障，保序提交）
+  Streaming Output           ✅（assistant_delta 事件流经 EventBus → run_events → CLI）
+  SKILL.md Progressive Load  ✅（load_skill 按需加载技能说明）
+  Workflow as Tool           ✅（run_workflow，专用工作流保持可恢复）
+  Provider Retry/Fallback    ✅（连接类错误重试 3 次后降级，60s 探测恢复）
 
 v2.4 Capability Development 进行中
   v2.4A Planner Contract / Dataset / Oracle  ✅ 冻结
-  v2.4A 真实 Planner Capability               待验收
-  v2.4B Tool Selection / ReAct                后续
-  v2.4C Workflow                             后续
-  v2.4D Memory Learning                      后续
+  v2.4B Tool Selection（并入 native tool loop）
+  v2.4C Workflow                             ✅
+  v2.4D Memory Learning                      进行中
 ```
 
 这里的“已冻结”表示对应合同和回归门禁已经建立；真实 Provider 的能力结果始终单独记录，
@@ -42,9 +50,13 @@ CLI / Desktop / future REST
 执行主链是：
 
 ```text
-Goal → NextAction → Task → Compiler → ExecutionPlan
-     → Executor → ActionResult → Verifier → next action / terminal state
+INIT → CONTRACT（意图分析与授权）→ LOOP（模型原生 tool calls）
+     → FINISH（goal/effect 机械校验后才允许声明完成）
 ```
+
+Loop 内每个 tool call 经 `EffectAuthorization` 按调用校验后走统一的
+Executor/Verifier/Effect-Truth 路径；同一轮里连续的只读/检索类调用并发执行
+（`concurrency_safe` 池化，上限 4），写与执行类调用做屏障串行，结果按模型顺序提交。
 
 普通动作失败不会偷偷启动第二套 Planner 循环；结构性失败经过统一的
 `FailurePolicy → RecoveryDirective`。所有成功声明都必须有对应的执行或 Artifact evidence。
@@ -55,7 +67,11 @@ Goal → NextAction → Task → Compiler → ExecutionPlan
 ## 目录职责
 
 ```text
-agent/              Runtime、Context、Service、Planner、Compiler、Executor
+agent/              Runtime、Context、Service、Orchestrator、Loop、Skills、
+                    Compiler、Executor、MCP 客户端
+agent/loop/         单 agent 原生 tool-calling 循环（toolset/runner/prompt/workflow_tool）
+agent/runtime_store/  Durable SQLite Store（run heads/events/leases/工件事实）
+skills/             SKILL.md 技能说明文件（load_skill 渐进加载）
 apps/desktop/       Desktop UI 与本地传输适配器
 benchmarks/         子系统合同与离线集成 Dataset / Oracle
 evals/              能力评测 Dataset、Oracle 和报告工具
@@ -73,8 +89,33 @@ tools/              受 Workspace/RunContext 约束的工具实现
 ```bash
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements-lock.txt
-.venv/bin/python -m pytest -q
+.venv/bin/python -m pytest -q \
+  --ignore=tests/test_tools_execution.py \
+  --ignore=tests/test_checkpoint_real_guard.py \
+  --ignore=tests/test_checkpoint_real_errors.py \
+  --ignore=tests/test_checkpoint_real_serialization.py \
+  --ignore=tests/test_checkpoint_no_live_objects.py
 ```
+
+该命令运行离线回归；被排除的工具执行/真实 Provider 测试可能访问公网、使用本机执行环境
+或调用真实 API，不属于默认离线验证。
+
+启动交互式 AgentService CLI：
+
+```bash
+source .venv/bin/activate
+TSAGENT_LLM_PROVIDER=ollama python main.py
+```
+
+此模式要求本机 Ollama 已启动，且配置模型（默认 `qwen3:8b`）可用；如使用默认
+`auto` 模式，可配置 `OPENAI_API_KEY` 使用 DeepSeek。CLI 每轮结束后会继续显示输入提示；
+`/cancel` 可请求取消当前 Run，`/resume <run_id> [JSON 证据对象]` 可续接等待用户的 Run，
+`exit` 退出。
+
+联网检索通过本地 DuckDuckGo MCP stdio server 提供，不需要搜索 API key；上面的依赖安装会
+安装 server，启动前需激活该虚拟环境以让其命令位于 `PATH`，首次检索时由 TSAgent 自动启动。
+检索仍需要网络连接。搜索免 API key 不等于整个 Agent 不需要模型：可使用本地 Ollama，或
+单独配置远程 LLM Provider。
 
 只运行 v2.4A Planner Dataset 的确定性自检：
 
@@ -99,10 +140,20 @@ ADR → Dataset → Oracle → implementation → offline regression → real-pr
 - Runtime Correctness：状态、权限、Artifact、事件和副作用是否符合合同；
 - Provider Error：外部服务不可达、超时或协议错误。
 
+## Provider 策略
+
+`auto` 模式默认 DeepSeek 优先、Ollama 兜底：
+
+- 连接类错误（timeout/network/传输层）重试最多 3 次（`TSAGENT_LLM_PROVIDER_RETRIES`），
+  4xx/认证类错误不重试直接降级；
+- 降级后每 `TSAGENT_LLM_PROVIDER_RETRY_AFTER`（默认 60s）探测一次 DeepSeek，成功即切回；
+- 单请求超时 `TSAGENT_LLM_TIMEOUT`（默认 120s），Ollama `TSAGENT_OLLAMA_TIMEOUT`（默认 120s）；
+- Run 预算 `TSAGENT_MAX_RUNTIME_SECONDS`（默认 300s）/
+  `TSAGENT_MAX_STATE_TRANSITIONS`（默认 48 次 loop 迭代）。
+
 ## 版本边界
 
-当前不在 v2.4A 中加入新的 Runtime 状态机、取消策略、分布式执行或 Provider fallback。
-这些变化必须通过新的 ADR 和 Dataset 进入工程循环。
+Runtime 状态机、取消策略、分布式执行的进一步变化必须通过新的 ADR 和 Dataset 进入工程循环。
 
 ## License
 

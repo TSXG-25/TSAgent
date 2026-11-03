@@ -20,6 +20,7 @@ from .contracts import (
     ArtifactSnapshot,
     ExternalStateGuard,
     FailureEventSnapshot,
+    NoEffectConfirmation,
     ResumeContext,
     ResumeDecision,
     RunCheckpoint,
@@ -27,7 +28,12 @@ from .contracts import (
     TaskEffectRecord,
 )
 from .lifecycle import advance_checkpoint, append_checkpoint
-from .reason_codes import CheckpointStatus, ResumeAction, SideEffectState
+from .reason_codes import (
+    CheckpointStatus,
+    ResumeAction,
+    ResumeDisposition,
+    SideEffectState,
+)
 from .store import CheckpointStore
 
 
@@ -109,8 +115,11 @@ def effect_state_for_task(
         except ValueError:
             # Invalid executor metadata must not become an unsafe allow.
             return SideEffectState.UNKNOWN
-    if str(task_verb).lower() in {"write", "modify", "delete", "move", "execute"}:
-        return SideEffectState.COMMITTED if success else SideEffectState.FAILED_BEFORE_COMMIT
+    if str(task_verb).lower() in {
+        "write", "modify", "delete", "move", "copy", "execute"
+    }:
+        # Failure alone cannot prove that an attempted effect did not commit.
+        return SideEffectState.COMMITTED if success else SideEffectState.UNKNOWN
     return SideEffectState.NONE
 
 
@@ -153,6 +162,7 @@ class WorkflowCheckpointRequest:
     checkpoint: RunCheckpoint | None = None
     resume_context: ResumeContext | None = None
     external_state_evidence: tuple[ExternalStateGuard, ...] = ()
+    no_effect_confirmation: NoEffectConfirmation | None = None
     compatibility_registry: CompatibilityRegistry = field(
         default_factory=CompatibilityRegistry
     )
@@ -177,6 +187,16 @@ class WorkflowCheckpointRequest:
                 for item in (self.external_state_evidence or ())
             ),
         )
+        if self.no_effect_confirmation is not None and not isinstance(
+            self.no_effect_confirmation, NoEffectConfirmation
+        ):
+            object.__setattr__(
+                self,
+                "no_effect_confirmation",
+                NoEffectConfirmation.from_dict(
+                    cast(Mapping[str, Any], self.no_effect_confirmation)
+                ),
+            )
 
 
 class CheckpointRecorder:
@@ -274,20 +294,59 @@ class CheckpointRecorder:
             CheckpointStatus.FAILED_RECOVERABLE,
             CheckpointStatus.WAITING_USER,
         }:
-            current = self._save_transition(current, status=CheckpointStatus.SUSPENDED)
+            current = self._save_transition(
+                current,
+                status=CheckpointStatus.SUSPENDED,
+                runtime_evidence=tuple(dict.fromkeys((
+                    *current.runtime_evidence,
+                    *decision.evidence,
+                ))),
+            )
         if current.status is CheckpointStatus.SUSPENDED:
             return self._save_transition(
                 current,
                 status=CheckpointStatus.RUNNING,
                 proposed_next_action=decision.action,
+                runtime_evidence=tuple(dict.fromkeys((
+                    *current.runtime_evidence,
+                    *decision.evidence,
+                ))),
             )
         if current.status is CheckpointStatus.RUNNING:
             return self._save_transition(
                 current,
                 status=CheckpointStatus.RUNNING,
                 proposed_next_action=decision.action,
+                runtime_evidence=tuple(dict.fromkeys((
+                    *current.runtime_evidence,
+                    *decision.evidence,
+                ))),
             )
         raise ValueError(f"Checkpoint 状态不可恢复: {current.status.value}")
+
+    def require_clarification(self, decision: ResumeDecision) -> RunCheckpoint:
+        current = self.current
+        if current is None:
+            raise ValueError("没有可等待用户确认的 Checkpoint")
+        if decision.run_id != current.run_id or decision.checkpoint_id != current.checkpoint_id:
+            raise ValueError("ResumeDecision 与 latest Checkpoint 不匹配")
+        if decision.disposition is not ResumeDisposition.REQUIRE_CLARIFICATION:
+            raise ValueError("只有 REQUIRE_CLARIFICATION 决定可以等待用户输入")
+        if current.status not in {
+            CheckpointStatus.RUNNING,
+            CheckpointStatus.SUSPENDED,
+            CheckpointStatus.WAITING_USER,
+            CheckpointStatus.FAILED_RECOVERABLE,
+        }:
+            raise ValueError(f"Checkpoint 状态不可等待用户确认: {current.status.value}")
+        return self._save_transition(
+            current,
+            status=CheckpointStatus.WAITING_USER,
+            runtime_evidence=tuple(dict.fromkeys((
+                *current.runtime_evidence,
+                *decision.evidence,
+            ))),
+        )
 
     def record_stage(
         self,

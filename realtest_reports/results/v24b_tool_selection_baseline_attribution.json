@@ -1,0 +1,75 @@
+{
+  "version": "v2.4B-2b-attribution-v1",
+  "evaluated_head": "fc1835a8fd776dadbf23cf4b23f0fa3fc83fbca7",
+  "source_report": "realtest_reports/results/v24b_tool_selection_baseline.json",
+  "source_report_sha256": "392ea56539906c00d832ce49824e9cc4298eb9909f3335100db497a28119676e",
+  "mechanical_result_unchanged": {
+    "pass": 11,
+    "evaluable": 24,
+    "capability_rate": 0.4583333333333333,
+    "failure_categories": {
+      "P-CAP": 13,
+      "P-CON": 0,
+      "P-ORACLE": 0,
+      "P-INT": 0,
+      "P-PROV": 0
+    }
+  },
+  "clusters": [
+    {
+      "name": "NON_TOOL_CANONICAL_ENVELOPE",
+      "outer_category": "P-CAP",
+      "cases": ["B005", "B007", "B010", "B011", "B012", "B016", "B020", "B023", "B024"],
+      "count": 9,
+      "evidence": "The semantic answer/ask kind is correct, but the raw object uses tool=null, carries answer/question data in args, or retains task_id. Canonical answer/ask requires tool='', args={}, task_id=''.",
+      "systemic": true
+    },
+    {
+      "name": "PROJECTED_FACT_BINDING",
+      "outer_category": "P-CAP",
+      "cases": ["B014"],
+      "count": 1,
+      "evidence": "The projected state contains facts.content, but the Selector asks for prepared content and also emits a non-canonical ask envelope.",
+      "systemic": false
+    },
+    {
+      "name": "STATE_PROJECTION_WATCHLIST",
+      "outer_category": "P-CON_WATCHLIST",
+      "cases": ["B019"],
+      "count": 1,
+      "evidence": "The frozen case input names Python list comprehensions, but the production Selector receives no task and only the generic state.goal '提供纯解释'. Asking for the missing topic is epistemically reasonable. Mechanical attribution remains P-CAP:SCHEMA_INVALID pending contract review.",
+      "systemic": false
+    },
+    {
+      "name": "ANSWER_READY_CONTINUATION",
+      "outer_category": "P-CAP",
+      "cases": ["B006"],
+      "count": 1,
+      "evidence": "The state is answer_ready=true, but the Selector chooses another web_fetch instead of answer.",
+      "systemic": false
+    },
+    {
+      "name": "CANONICAL_ARGUMENT_BINDING",
+      "outer_category": "P-CAP",
+      "cases": ["B017"],
+      "count": 1,
+      "evidence": "filesystem.read is selected correctly, but the path is bound as source instead of the canonical path argument.",
+      "systemic": false
+    }
+  ],
+  "provider_evidence": {
+    "provider_path": "SINGLE_PROVIDER",
+    "provider": "deepseek",
+    "format_path": "STRUCTURED_TO_RAW_FALLBACK",
+    "case_count": 24,
+    "structured_error": "HTTP 400: This response_format type is unavailable now",
+    "cross_provider_fallback": 0
+  },
+  "hard_risk_counts": {
+    "duplicate_verified_effect": 0,
+    "premature_answer": 0,
+    "dependency_violation": 0
+  },
+  "selector_or_contract_changes": 0,
+  "provider_reruns": 0
+}

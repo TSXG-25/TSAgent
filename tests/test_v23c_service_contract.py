@@ -10,8 +10,11 @@ from agent.service import (
     EventOrderingOracle,
     EventStreamRequest,
     EventType,
+    ExternalStateEvidence,
+    NoEffectConfirmation,
     ResumeAction,
     ResumeDisposition,
+    ResumeRunRequest,
     ResumeSummary,
     RunEvent,
     RunHandle,
@@ -41,6 +44,17 @@ def _event(sequence_number: int, event_type: EventType) -> RunEvent:
         payload={"nested": {"sequence": sequence_number}},
         run_revision=sequence_number,
     )
+
+
+def test_waiting_user_event_is_nonterminal_and_can_be_followed_by_resume() -> None:
+    events = (
+        _event(1, EventType.RUN_STARTED),
+        _event(2, EventType.RUN_WAITING_USER),
+        _event(3, EventType.RUN_RESUMED),
+    )
+
+    assert not events[1].is_terminal
+    assert EventOrderingOracle.validate(events) == events
 
 
 def test_public_dtos_round_trip_and_digest_are_stable() -> None:
@@ -96,6 +110,73 @@ def test_public_dtos_round_trip_and_digest_are_stable() -> None:
     )
     assert generated_id.request_digest == assigned_id.request_digest
     assert generated_id.request_digest != other_tenant.request_digest
+
+
+def test_resume_request_round_trips_structured_external_state_evidence() -> None:
+    evidence = ExternalStateEvidence(
+        resource_id="object:report-17",
+        guard_type="OBJECT_VERSION",
+        expected_value="v3",
+        observed_value="v3",
+        checked_at="2026-09-27T10:00:00Z",
+        status="VERIFIED",
+    )
+    request = ResumeRunRequest(
+        tenant_id="tenant-1",
+        user_id="user-1",
+        session_id="session-1",
+        run_id="run-1",
+        request_id="resume-1",
+        external_state_evidence=(evidence,),
+    )
+
+    restored = ResumeRunRequest.from_dict(request.to_dict())
+
+    assert restored == request
+    assert restored.request_digest == request.request_digest
+    assert ExternalStateEvidence.from_dict(evidence.to_dict()) == evidence
+    with pytest.raises(ValueError, match="known external guard status"):
+        ExternalStateEvidence(
+            resource_id="object:report-17",
+            guard_type="OBJECT_VERSION",
+            status="TRUSTED",
+        )
+
+
+def test_resume_request_digest_includes_bound_no_effect_confirmation() -> None:
+    confirmation = NoEffectConfirmation(
+        task_id="payment-task",
+        idempotency_key="run-1:payment-task",
+        external_reference="payment://txn/18",
+        checked_at="2026-09-27T10:00:00Z",
+    )
+    request = ResumeRunRequest(
+        tenant_id="tenant-1",
+        user_id="user-1",
+        session_id="session-1",
+        run_id="run-1",
+        request_id="resume-1",
+        no_effect_confirmation=confirmation,
+    )
+    changed_confirmation = ResumeRunRequest(
+        tenant_id="tenant-1",
+        user_id="user-1",
+        session_id="session-1",
+        run_id="run-1",
+        request_id="resume-1",
+        no_effect_confirmation=NoEffectConfirmation(
+            task_id="payment-task",
+            idempotency_key="run-1:payment-task",
+            external_reference="payment://txn/19",
+            checked_at="2026-09-27T10:00:00Z",
+        ),
+    )
+
+    restored = ResumeRunRequest.from_dict(request.to_dict())
+
+    assert restored == request
+    assert restored.request_digest == request.request_digest
+    assert changed_confirmation.request_digest != request.request_digest
 
 
 def test_public_dto_rejects_live_payload_objects() -> None:
@@ -209,6 +290,14 @@ def test_event_ordering_and_replay_oracle() -> None:
         EventOrderingOracle.validate(
             events + (_event(4, EventType.ARTIFACT_PUBLISHED),)
         )
+
+    blocked_then_resumed = (
+        _event(1, EventType.RUN_STARTED),
+        _event(2, EventType.RUN_BLOCKED),
+        _event(3, EventType.RUN_RESUMED),
+        _event(4, EventType.RUN_COMPLETED),
+    )
+    assert EventOrderingOracle.require_terminal(blocked_then_resumed) == blocked_then_resumed
 
 
 def test_event_stream_request_rejects_invalid_cursor() -> None:

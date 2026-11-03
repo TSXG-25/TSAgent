@@ -9,6 +9,7 @@ from agent.effect_truth import (
     enforce_completion_gate,
     record_execution_evidence,
 )
+from agent.action_result import ActionResult
 from agent.orchestrator.finalizer import Finalizer
 from agent.runtime import _build_run_evidence
 from agent.task import ExecutionPlan, ExecutionStep, Task
@@ -81,12 +82,76 @@ def test_only_tool_execution_creates_execution_evidence() -> None:
         plan,
         ExecutionResult(
             success=True,
+            action_result=ActionResult.success(verified=True),
             metadata={"executor": "tool", "verifier": "none"},
         ),
     )
 
     assert state["execution_evidence"][0]["outcome"] == "CODE_EXECUTION"
     assert state["execution_evidence"][0]["status"] == "VERIFIED"
+
+
+def test_file_mutation_evidence_requires_a_verified_file_receipt() -> None:
+    task = Task.from_dict({
+        "id": "task-1",
+        "verb": "write",
+        "target": "output/report.md",
+        "target_type": "file",
+    })
+    plan = ExecutionPlan(
+        task=task,
+        steps=[ExecutionStep(
+            tool="filesystem.write",
+            args={"path": "output/report.md", "content": "report"},
+        )],
+        executor="tool",
+    )
+    result = ExecutionResult(
+        success=True,
+        action_result=ActionResult.success(verified=True),
+        metadata={"executor": "tool", "verifier": "write", "verified_files": []},
+    )
+    state: dict = {}
+
+    record_execution_evidence(state, plan, result)
+
+    assert state["execution_evidence"] == []
+
+    result.metadata["verified_files"] = [{
+        "path": "output/report.md",
+        "digest": "sha256:report",
+    }]
+    record_execution_evidence(state, plan, result)
+
+    assert state["execution_evidence"] == [{
+        "outcome": "FILE_MUTATION",
+        "status": "VERIFIED",
+        "source": "ExecutionVerifier:file",
+        "target": "output/report.md",
+    }]
+
+
+def test_success_without_verified_action_does_not_create_execution_evidence() -> None:
+    task = Task.from_dict({
+        "id": "task-1",
+        "verb": "execute",
+        "target": "print(2)",
+        "target_type": "text",
+    })
+    plan = ExecutionPlan(
+        task=task,
+        steps=[ExecutionStep(tool="run_python", args={"code": "print(2)"})],
+        executor="tool",
+    )
+    result = ExecutionResult(
+        success=True,
+        metadata={"executor": "tool", "verifier": "none"},
+    )
+    state: dict = {}
+
+    record_execution_evidence(state, plan, result)
+
+    assert state.get("execution_evidence", []) == []
 
 
 def test_llm_plan_does_not_create_execution_evidence() -> None:
@@ -113,19 +178,13 @@ def test_llm_plan_does_not_create_execution_evidence() -> None:
 
 
 def test_finalizer_rejects_actual_execution_claim_without_evidence() -> None:
-    class Memory:
-        def __init__(self) -> None:
-            self.answers: list[str] = []
-
-        def record_full_exchange(self, _user_input: str, answer: str) -> None:
-            self.answers.append(answer)
-
-    memory = Memory()
     finalizer = Finalizer(SimpleNamespace(
-        session_context=SimpleNamespace(memory_view=memory),
+        session_context=SimpleNamespace(memory_view=None),
         _timings={},
     ))
-    state: dict = {}
+    state: dict = {
+        "requested_outcomes": ["USER_VISIBLE_OUTPUT", "COMMAND_EXECUTION"],
+    }
 
     answer = asyncio.run(finalizer.run(
         state,
@@ -137,7 +196,6 @@ def test_finalizer_rejects_actual_execution_claim_without_evidence() -> None:
     assert state["runtime_terminal_status"] == "FAILED_TERMINAL"
     assert state["runtime_failure_code"] == "EXECUTION_EVIDENCE_MISSING"
     assert "已执行 date" not in answer
-    assert memory.answers[-1] == answer
 
 
 def test_finalizer_does_not_claim_a_command_was_created() -> None:

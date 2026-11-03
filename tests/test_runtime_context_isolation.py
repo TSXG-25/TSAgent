@@ -9,10 +9,34 @@ from agent.runtime_context import (
     ApplicationContext,
     ContextClosedError,
 )
+from agent.executor.plan_executor import PlanExecutor
+from agent.task import ExecutionPlan, ExecutionStep, Task, Verb
 from agent.services.artifact_service import (
     ArtifactScopeClosedError,
 )
 from agent.workspace.manager import WorkspaceManager
+
+
+def _commit_terminal_run(run_context, request_text: str, answer: str) -> None:
+    view = run_context.durable_store_view
+    view.transition_run_with_event(
+        run_status="COMPLETED",
+        event_id=f"run-completed:{run_context.run_id}:{run_context.request_id}",
+        event_type="run_completed",
+        expected_status="RUNNING",
+        timestamp="2026-01-01T00:00:01Z",
+        payload={
+            "request_id": run_context.request_id,
+            "continuation": {
+                "request": request_text,
+                "goal": request_text,
+                "missing": [],
+                "observations": [],
+                "acceptance_evidence": [],
+            },
+        },
+        run_output={"text": answer, "evidence_ids": [], "artifact_ids": []},
+    )
 
 
 def test_run_artifacts_are_isolated_even_when_keys_match() -> None:
@@ -33,6 +57,64 @@ def test_run_artifacts_are_isolated_even_when_keys_match() -> None:
     app.close()
 
 
+def test_repository_indexers_are_owned_by_workspace_root(tmp_path) -> None:
+    root_a = tmp_path / "workspace-a"
+    root_b = tmp_path / "workspace-b"
+    root_a.mkdir()
+    root_b.mkdir()
+    app = ApplicationContext()
+    session_a = app.create_session("session-a")
+    session_b = app.create_session("session-b")
+
+    run_a = session_a.create_run("run-a", workspace=root_a)
+    run_b = session_b.create_run("run-b", workspace=root_b)
+    same_root_indexer = app.repository_indexer_for(root_a)
+
+    assert run_a.repository_indexer is same_root_indexer
+    assert run_b.repository_indexer is not run_a.repository_indexer
+    assert run_a.repository_indexer.repo_root == root_a.resolve()
+    assert run_b.repository_indexer.repo_root == root_b.resolve()
+
+    app.close()
+
+
+def test_repository_search_executes_through_the_run_owned_indexer() -> None:
+    class Indexer:
+        ensured = False
+
+        def ensure_built(self) -> None:
+            self.ensured = True
+
+        def search_similar(self, query: str, k: int):
+            assert query == "workspace A"
+            assert k == 5
+            return [{"path": "src/a.py", "content": "scoped result"}]
+
+    indexer = Indexer()
+    plan = ExecutionPlan(
+        task=Task(
+            id="search-a",
+            verb=Verb.SEARCH,
+            target="workspace A",
+            target_type="text",
+        ),
+        steps=[
+            ExecutionStep(
+                tool="repository",
+                args={"query": "workspace A", "k": 5},
+                outputs=["results"],
+            )
+        ],
+    )
+
+    result = asyncio.run(
+        PlanExecutor().execute(plan, repository_indexer=indexer)
+    )
+
+    assert indexer.ensured is True
+    assert result["results"] == "[src/a.py]\nscoped result"
+
+
 def test_event_delivery_is_limited_to_run_scope() -> None:
     app = ApplicationContext()
     session = app.create_session("session-a")
@@ -51,22 +133,11 @@ def test_event_delivery_is_limited_to_run_scope() -> None:
 
 
 def test_session_memory_namespaces_do_not_follow_shared_user_id() -> None:
-    from agent.memory.session import clear_session, get_session_context
-    from agent.services.memory_service import MemoryService
-
     app = ApplicationContext()
     session_a = app.create_session("session-a", user_id="same-user")
     session_b = app.create_session("session-b", user_id="same-user")
-    MemoryService.record_user_message(session_a.memory_namespace, "A-only")
-    MemoryService.record_user_message(session_b.memory_namespace, "B-only")
 
-    context_a = get_session_context(session_a.memory_namespace)
-    context_b = get_session_context(session_b.memory_namespace)
-    assert "A-only" in context_a and "B-only" not in context_a
-    assert "B-only" in context_b and "A-only" not in context_b
-
-    clear_session(session_a.memory_namespace)
-    clear_session(session_b.memory_namespace)
+    assert session_a.memory_namespace != session_b.memory_namespace
     app.close()
 
 
@@ -194,22 +265,106 @@ def test_memory_view_is_session_scoped_persistent_and_closed_with_session() -> N
         "session-a",
         user_id="same-user",
         tenant_id="tenant-a",
-        memory_namespace="tenant-a:same-user",
+        memory_namespace="tenant-a:session-a",
+        learning_namespace="tenant-a:same-user",
+        memory_scope="user",
     )
     session_b = app.create_session(
         "session-b",
         user_id="same-user",
         tenant_id="tenant-a",
-        memory_namespace="tenant-a:same-user",
+        memory_namespace="tenant-a:session-b",
+        learning_namespace="tenant-a:same-user",
+        memory_scope="user",
     )
 
-    session_a.memory_view.record_user_message("persistent fact")
-    assert "persistent fact" in session_b.memory_view.get_session_context()
+    session_a.memory_view.get_user_facts()
     session_a.close()
     with pytest.raises(RuntimeError):
-        session_a.memory_view.record_user_message("late write")
-    assert "persistent fact" in session_b.memory_view.get_session_context()
+        session_a.memory_view.get_user_facts()
     app.close()
+
+
+def test_service_sessions_isolate_conversation_and_share_learned_user_facts(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    from agent.memory import long_term
+    from agent.memory.learning import decide_memory_learning
+    from agent.memory.learning_provider import (
+        MemoryLearningProvider,
+        MemoryLearningSelection,
+        MemoryLearningSelectionEvidence,
+    )
+    from agent.runtime_store import SqliteRuntimeStore
+    from agent.service.context_factory import ServiceContextFactory
+    from agent.service.contracts import StartRunRequest
+
+    monkeypatch.setattr(long_term, "FACTS_DB_PATH", tmp_path / "facts.sqlite3")
+    long_term._init_facts_db()
+    async def select_with_evidence(self, evidence, _existing, policy):
+        decision = decide_memory_learning(evidence, policy)
+        return MemoryLearningSelection(
+            decision=decision,
+            evidence=MemoryLearningSelectionEvidence(
+                provider="offline-test",
+                provider_path="SINGLE_PROVIDER",
+                format_path="STRUCTURED_ONLY",
+                raw_output=decision.to_dict(),
+            ),
+        )
+
+    monkeypatch.setattr(
+        MemoryLearningProvider,
+        "select_with_evidence",
+        select_with_evidence,
+    )
+
+    store = SqliteRuntimeStore.open(tmp_path / "runtime.sqlite3")
+    factory = ServiceContextFactory(store, workspace_root=tmp_path / "workspace")
+
+    def request(session_id: str) -> StartRunRequest:
+        return StartRunRequest(
+            tenant_id="tenant-memory-isolation",
+            user_id="user-memory-isolation",
+            session_id=session_id,
+            run_id=f"run-{session_id}",
+            request_id=f"request-{session_id}",
+            request_text="test memory isolation",
+        )
+
+    run_a = factory.create_run(request("session-a"), run_id="run-session-a")
+    run_b = factory.create_run(request("session-b"), run_id="run-session-b")
+    view_a = run_a.session.memory_view
+    view_b = run_b.session.memory_view
+
+    assert view_a.namespace != view_b.namespace
+    assert view_a.learning_namespace == view_b.learning_namespace
+
+    # Conversation history derives solely from the durable run log; a
+    # terminal run committed in session-a is invisible to session-b.
+    _commit_terminal_run(run_a, "A-only request", "A-only answer")
+    run_a2 = factory.create_run(request("session-a"), run_id="run-session-a-2")
+    visible_a = run_a2.durable_store_view.conversation_results()
+    assert [item["request"] for item in visible_a] == ["A-only request"]
+    assert [item["answer"] for item in visible_a] == ["A-only answer"]
+    assert run_b.durable_store_view.conversation_results() == []
+
+    learned = asyncio.run(
+        view_a.learn_from_interaction(
+            "以后 Python 项目优先用 uv",
+            memory_action="remember",
+            facts=[{"category": "programming", "key": "python_environment",
+                    "memory_type": "preference", "value": "uv"}],
+            source_ref="run:session-a",
+        )
+    )
+
+    assert learned.committed is True
+    assert "python_environment: uv" in view_a.get_user_facts()
+    assert "python_environment: uv" in view_b.get_user_facts()
+
+    factory.close()
 
 
 def test_memory_reset_uses_the_calling_session_tracker_only(monkeypatch) -> None:
@@ -420,71 +575,3 @@ def test_close_then_resume_same_run_keeps_explicit_durable_views(tmp_path) -> No
     resumed.close()
     app.close()
 
-
-def test_session_runtime_start_and_resume_keep_logical_run_identity(monkeypatch, tmp_path) -> None:
-    from agent.memory.lifecycle import MemoryResetReport, MemoryRuntime
-    from agent.session_runtime import SessionRuntime
-
-    monkeypatch.setattr(
-        MemoryRuntime,
-        "reset",
-        lambda user_id, **kwargs: MemoryResetReport(
-            user_id=user_id,
-            conversation=kwargs.get("conversation", True),
-            facts=kwargs.get("facts", False),
-        ),
-    )
-    runtime = SessionRuntime.create(
-        session_id="session-a",
-        user_id="same-user",
-        tenant_id="tenant-a",
-        persistent=True,
-        workspace=tmp_path,
-    )
-
-    first = runtime.start_run("run-a")
-    assert first.run_id == "run-a"
-    assert first.tenant_id == "tenant-a"
-    assert runtime.context.memory_namespace == "tenant-a:same-user"
-    assert runtime.current_run is first
-
-    second = runtime.start_run("run-b")
-    assert runtime.current_run is second
-    assert not first.closed
-
-    resumed = runtime.resume_run("run-a")
-    assert resumed is first
-    assert resumed.run_id == "run-a"
-    assert runtime.current_run is first
-    runtime.destroy(purge_facts=False)
-
-
-def test_session_runtime_reset_detaches_but_does_not_delete_recoverable_run(
-    monkeypatch,
-    tmp_path,
-) -> None:
-    from agent.memory.lifecycle import MemoryResetReport, MemoryRuntime
-    from agent.session_runtime import SessionRuntime
-
-    monkeypatch.setattr(
-        MemoryRuntime,
-        "reset",
-        lambda user_id, **kwargs: MemoryResetReport(
-            user_id=user_id,
-            conversation=kwargs.get("conversation", True),
-            facts=kwargs.get("facts", False),
-        ),
-    )
-    runtime = SessionRuntime.create(
-        session_id="session-reset",
-        user_id="user-reset",
-        workspace=tmp_path,
-    )
-    old_run = runtime.start_run("run-old")
-    runtime.reset(runtime=True, conversation=True, facts=False)
-
-    assert old_run.closed is False
-    assert runtime.current_run is None
-    resumed = runtime.resume_run("run-old")
-    assert resumed is old_run
-    runtime.destroy(purge_facts=False)

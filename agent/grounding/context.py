@@ -3,7 +3,7 @@
 ADR-0004: Grounder reduces the search space, not the decision space。
 Grounder 给出 Top-N 候选（Candidate），决策权在 Planner。
 
-GroundingContext 是纯数据（Model），不负责 Prompt 渲染（View 在 PlannerPromptBuilder）。
+GroundingContext 是纯数据（Model），不负责 Prompt 渲染。
 """
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional

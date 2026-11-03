@@ -7,7 +7,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 def test_task_schema():
     """Test the new simplified Task Pydantic schema."""
-    from agent.planner.schemas import TaskList
     from agent.task import Observation, Task
 
     task = Task(
@@ -17,12 +16,6 @@ def test_task_schema():
     assert task.id == "task-1"
     assert task.goal == "测试目标"
     assert task.status == "pending"
-
-    tl = TaskList(
-        tasks=[task],
-        metadata={"reasoning": "测试", "estimated_steps": 1},
-    )
-    assert len(tl.tasks) == 1
 
     # Test Observation
     obs = Observation(

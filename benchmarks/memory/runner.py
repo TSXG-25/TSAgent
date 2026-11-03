@@ -27,14 +27,94 @@ os.environ["TRANSFORMERS_NO_TF"] = "1"
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
+from agent.api import _run_to_answer
 from agent.bootstrap import load_all
-from agent.session_runtime import SessionRuntime
+from agent.memory.lifecycle import MemoryRuntime
+from agent.runtime_store import SqliteRuntimeStore
+from agent.service import AgentService, StartRunRequest
+from agent.service.context_factory import ServiceContextFactory
+from agent.service.runtime_launcher import RuntimeExecutionLauncher
 from benchmarks.memory.cases import build_cases, build_continuation_cases, MemoryCase
 from benchmarks.memory.metadata import benchmark_metadata
 
 RESULTS_PATH = os.environ.get("MEMORY_RESULTS", "/private/tmp/memory_results.json")
 TURN_TIMEOUT = float(os.environ.get("MEMORY_TURN_TIMEOUT", "120"))
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+BENCHMARK_TENANT = "memory-benchmark"
+BENCHMARK_DB = Path(RESULTS_PATH).with_name("memory-benchmark-runtime.sqlite")
+
+
+class _BenchmarkSession:
+    """One AgentService session preserving the old SessionRuntime lifecycle.
+
+    The recording runtime factory keeps ``last_run_evidence`` reachable for
+    runtime_contract validation; the durable run log supplies conversation
+    history.  ServiceContextFactory assigns
+    ``memory_namespace = tenant:session``, ``learning_namespace = tenant:user``
+    and ``memory_scope = "user"``; fact purges target those namespaces.
+    """
+
+    def __init__(self, *, session_id: str, user_id: str, database_path: Path,
+                 workspace_root: Path) -> None:
+        self.session_id = session_id
+        self.user_id = user_id
+        self.tenant_id = BENCHMARK_TENANT
+        self._runtimes = []
+
+        def runtime_factory(*args, **kwargs):
+            from agent.runtime import UniversalAgent
+
+            runtime = UniversalAgent(*args, **kwargs)
+            self._runtimes.append(runtime)
+            return runtime
+
+        self._store = SqliteRuntimeStore.open(database_path)
+        self._service = AgentService(
+            runtime_store=self._store,
+            launcher=RuntimeExecutionLauncher(runtime_factory=runtime_factory),
+            context_factory=ServiceContextFactory(
+                self._store,
+                workspace_root=workspace_root,
+            ),
+        )
+
+    @property
+    def last_run_evidence(self) -> dict:
+        if not self._runtimes:
+            return {}
+        return dict(getattr(self._runtimes[-1], "last_run_evidence", {}) or {})
+
+    async def run(self, text: str) -> str:
+        import uuid
+
+        request = StartRunRequest(
+            tenant_id=self.tenant_id,
+            user_id=self.user_id,
+            session_id=self.session_id,
+            run_id=f"run-{uuid.uuid4().hex}",
+            request_id=f"request-{uuid.uuid4().hex}",
+            request_text=text,
+        )
+        return await _run_to_answer(
+            self._service,
+            request,
+            tenant_id=self.tenant_id,
+            user_id=self.user_id,
+            session_id=self.session_id,
+        )
+
+    def purge(self) -> None:
+        """Reset this session's conversation and learned-fact namespaces."""
+        MemoryRuntime.reset(
+            f"{self.tenant_id}:{self.session_id}",
+            conversation=True,
+            facts=True,
+            facts_namespace=f"{self.tenant_id}:{self.user_id}",
+            facts_scope="user",
+        )
+
+    async def close(self) -> None:
+        await self._service.close()
 
 
 # ── Output hygiene（v2.1B）：每 case 备份/恢复 output/，避免执行产物跨 case 累积 ──
@@ -380,22 +460,26 @@ async def run_case(
     case: MemoryCase,
     user_id: str,
     *,
-    session: SessionRuntime | None = None,
+    session: _BenchmarkSession | None = None,
     session_mode: str = "isolated",
     keep_output: bool = False,
 ) -> dict:
     """Run one case inside an explicit session lifecycle.
 
-    The default creates and destroys one isolated SessionRuntime per case.
+    The default creates and closes one isolated AgentService session per
+    case, purging the case's learned facts before and after the run.
     ``session`` is only supplied by the opt-in persistent benchmark mode.
     """
     owned_session = session is None
     backup_tmp = _backup_output() if (keep_output is False and owned_session) else None
-    active_session = session or SessionRuntime.create(
+    active_session = session or _BenchmarkSession(
         session_id=user_id,
         user_id=user_id,
-        persistent=False,
+        database_path=BENCHMARK_DB,
+        workspace_root=PROJECT_ROOT,
     )
+    if owned_session:
+        active_session.purge()
     out = ""
     dur = 0.0
     exc = None
@@ -417,16 +501,15 @@ async def run_case(
                     out = await asyncio.wait_for(
                         active_session.run(text), timeout=TURN_TIMEOUT
                     )
-                    evidence = dict(
-                        getattr(active_session.agent, "last_run_evidence", {}) or {}
-                    )
+                    evidence = active_session.last_run_evidence
                 except Exception as e:
                     exc = f"{type(e).__name__}: {e}"
                     break
                 dur += time.perf_counter() - t0
     finally:
         if owned_session:
-            active_session.destroy()
+            active_session.purge()
+            await active_session.close()
         teardown_reference_fixture(materialized_fixture)
         if backup_tmp:
             _restore_output(backup_tmp)
@@ -510,10 +593,11 @@ async def main() -> None:
     t_start = time.perf_counter()
     shared_session = None
     if args.session_mode == "persistent":
-        shared_session = SessionRuntime.create(
+        shared_session = _BenchmarkSession(
             session_id="memory-benchmark-persistent",
             user_id="memory-benchmark-persistent",
-            persistent=True,
+            database_path=BENCHMARK_DB,
+            workspace_root=PROJECT_ROOT,
         )
     try:
         for idx, case in enumerate(cases):
@@ -544,7 +628,7 @@ async def main() -> None:
             print(f"[{idx:03d}] {case.id} [{case.group}/{case.sub}] {mark} ({rec['dur']}s) {rec['detail'][:80]}", flush=True)
     finally:
         if shared_session is not None:
-            shared_session.destroy(purge_facts=False)
+            await shared_session.close()
 
     elapsed = time.perf_counter() - t_start
     with open(RESULTS_PATH, "w", encoding="utf-8") as f:

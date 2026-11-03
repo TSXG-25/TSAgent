@@ -1,0 +1,128 @@
+{
+  "version": "v2.4A-planner-aliases-v1.1",
+  "rules": [
+    {
+      "case_id": "PA018",
+      "unit_id": "g2",
+      "aliases": [
+        "Planner 到 PlanExecutor 的调用链及每层职责",
+        "Planner 与 PlanExecutor 的调用链及职责"
+      ]
+    },
+    {
+      "case_id": "PA021",
+      "unit_id": "g1",
+      "aliases": [
+        "Python 最新版本变化",
+        "Python 最新版本更新",
+        "Python latest version changes",
+        "Python latest version changelog"
+      ]
+    },
+    {
+      "case_id": "PA021",
+      "unit_id": "g2",
+      "aliases": [
+        "Python 最新版本变化摘要",
+        "Python latest version summary",
+        "Python latest version changes summary"
+      ]
+    },
+    {
+      "case_id": "PA023",
+      "unit_id": "g2",
+      "aliases": [
+        "Python 安全公告影响和修复方式",
+        "Python security advisory summary",
+        "Python security bulletin summary"
+      ]
+    },
+    {
+      "case_id": "PA024",
+      "unit_id": "g1",
+      "aliases": [
+        "PostgreSQL 与 SQLite 最新官方文档",
+        "latest official PostgreSQL and SQLite documentation"
+      ]
+    },
+    {
+      "case_id": "PA024",
+      "unit_id": "g2",
+      "aliases": [
+        "PostgreSQL 与 SQLite 适用场景比较",
+        "PostgreSQL and SQLite use cases"
+      ]
+    },
+    {
+      "case_id": "PA025",
+      "unit_id": "g1",
+      "aliases": [
+        "向量数据库最新对比",
+        "latest vector database comparison",
+        "vector database comparison 2025 2026"
+      ]
+    },
+    {
+      "case_id": "PA026",
+      "unit_id": "g1",
+      "aliases": [
+        "Ollama 官方接口文档",
+        "Ollama API documentation",
+        "Ollama official API documentation"
+      ]
+    },
+    {
+      "case_id": "PA028",
+      "unit_id": "g1",
+      "aliases": [
+        "今日 AI 新闻",
+        "AI news today",
+        "today's AI news"
+      ]
+    },
+    {
+      "case_id": "PA029",
+      "unit_id": "g1",
+      "aliases": [
+        "Python asyncio 超时处理官方文档",
+        "Python asyncio timeout handling official documentation",
+        "official guidance for handling asyncio timeouts in Python"
+      ]
+    },
+    {
+      "case_id": "PA030",
+      "unit_id": "g2",
+      "aliases": [
+        "JSON Schema compatibility best practices",
+        "JSON Schema 兼容性最佳实践"
+      ]
+    },
+    {
+      "case_id": "PA042",
+      "unit_id": "g1",
+      "aliases": [
+        "SQLite WAL 官方文档",
+        "SQLite Write-Ahead Logging 官方资料",
+        "SQLite Write-Ahead Logging official documentation"
+      ]
+    },
+    {
+      "case_id": "PA042",
+      "unit_id": "g2",
+      "aliases": [
+        "PostgreSQL MVCC 官方文档",
+        "PostgreSQL Multi-Version Concurrency Control 官方资料",
+        "PostgreSQL Multi-Version Concurrency Control official documentation"
+      ]
+    },
+    {
+      "case_id": "PA042",
+      "unit_id": "g3",
+      "aliases": [
+        "SQLite WAL 与 PostgreSQL MVCC 的对比",
+        "SQLite WAL vs PostgreSQL MVCC comparison",
+        "comparison of SQLite WAL and PostgreSQL MVCC"
+      ]
+    }
+  ]
+}

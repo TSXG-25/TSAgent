@@ -54,11 +54,10 @@ class ProjectKnowledge:
 
     def _scan_skills(self) -> None:
         try:
-            from agent.registry.skill_registry import skill_registry
-            skills = skill_registry.list_skills()
+            from agent.skills import skills_index
             self._skills = [
-                {"name": s.name, "description": s.description if hasattr(s, 'description') else ""}
-                for s in skills
+                {"name": s.name, "description": s.description}
+                for s in skills_index().values()
             ]
         except (ImportError, AttributeError):
             self._skills = []

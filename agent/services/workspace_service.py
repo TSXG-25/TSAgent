@@ -170,6 +170,33 @@ class WorkspaceService:
         self.record_edit(self.relative_path(full))
         return message
 
+    def edit_text(
+        self,
+        path: str | Path,
+        old_string: str,
+        new_string: str,
+    ) -> str:
+        """Replace exactly one occurrence of old_string; all else preserved."""
+        if not old_string:
+            raise ValueError("EDIT_MATCH_NOT_FOUND: old_string is empty")
+        self._guard(path, operation="write")
+        full = self.resolve_path(path, must_exist=True)
+        self._guard(full, operation="write")
+        text = full.read_text(encoding="utf-8")
+        occurrences = text.count(old_string)
+        if occurrences == 0:
+            raise ValueError(
+                f"EDIT_MATCH_NOT_FOUND: old_string 在 {path} 中不存在"
+            )
+        if occurrences > 1:
+            raise ValueError(
+                f"EDIT_MATCH_NOT_UNIQUE: old_string 在 {path} 中出现 {occurrences} 次，"
+                "请提供更长的唯一片段"
+            )
+        full.write_text(text.replace(old_string, new_string, 1), encoding="utf-8")
+        self.record_edit(self.relative_path(full))
+        return f"已编辑 {path}"
+
     def copy_file(self, source: str | Path, destination: str | Path) -> str:
         self._guard(source, operation="copy")
         self._guard(destination, operation="copy")

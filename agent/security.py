@@ -27,7 +27,6 @@ _INTERNAL_STORAGE_DIRS = {
     ".tsagent",
     "semantic_memory",
     "long_term_memory",
-    "short_term",
     "runtime_store",
     "checkpoint_store",
     "checkpoints",
@@ -72,7 +71,7 @@ def is_internal_storage_path(path: str | Path) -> bool:
 
 _SENSITIVE_VALUE_PATTERNS = (
     re.compile(
-        r"(?i)(\b(?:openai|deepseek|anthropic|google)?[_-]?api[_-]?key\s*[:=]\s*)([^\s,;\"']+)"
+        r"(?i)(\b(?:openai|deepseek|anthropic|google)?[_-]?api[_-]?key\s*(?:[:=]|is|是|为)\s*)([^\s,;\"']+)"
     ),
     re.compile(
         r"(?i)(\b(?:secret|access[_-]?token|password|auth[_-]?token)\s*[:=]\s*)([^\s,;\"']+)"

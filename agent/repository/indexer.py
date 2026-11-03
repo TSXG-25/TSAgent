@@ -290,16 +290,3 @@ class RepositoryIndexer:
             self._load_existing_index()
 
         return list(self.file_symbols.get(path, []))
-
-
-# 全局单例
-repository_indexer: Optional[RepositoryIndexer] = None
-
-
-def set_repository_indexer(indexer: RepositoryIndexer) -> None:
-    global repository_indexer
-    repository_indexer = indexer
-
-
-def get_repository_indexer() -> Optional[RepositoryIndexer]:
-    return repository_indexer

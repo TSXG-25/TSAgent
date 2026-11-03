@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from .contracts import RunEvent
+from .contracts import EventType, RunEvent
 from .errors import AgentServiceError, ServiceErrorCode
 
 
@@ -44,6 +44,7 @@ class EventOrderingOracle:
         previous_revision = -1
         seen_ids: set[str] = set()
         terminal_seen = False
+        previous_terminal: EventType | None = None
         for event in ordered:
             if event.event_id in seen_ids:
                 raise AgentServiceError(
@@ -84,12 +85,20 @@ class EventOrderingOracle:
                 )
             previous_revision = event.run_revision
             if terminal_seen:
-                raise AgentServiceError(
-                    ServiceErrorCode.EVENT_SEQUENCE_INVALID,
-                    "no event may follow a terminal Run event",
-                )
+                if (
+                    event.event_type is EventType.RUN_RESUMED
+                    and previous_terminal is EventType.RUN_BLOCKED
+                ):
+                    terminal_seen = False
+                    previous_terminal = None
+                else:
+                    raise AgentServiceError(
+                        ServiceErrorCode.EVENT_SEQUENCE_INVALID,
+                        "no event may follow a terminal Run event unless a blocked Run resumes",
+                    )
             if event.is_terminal:
                 terminal_seen = True
+                previous_terminal = event.event_type
 
         if require_terminal and not terminal_seen:
             raise AgentServiceError(

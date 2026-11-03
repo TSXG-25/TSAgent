@@ -1,0 +1,44 @@
+{
+  "version": "v2.4C-2b-attribution-v1",
+  "evaluated_head": "a040c48aab4b0abb2fcdb31beb902a5758c0e5c8",
+  "dataset_hash": "43338803cbe9192c19a2957887a8013c17058a6dbea9e7bb6cb66c06d60fbd69",
+  "mechanical_result": {
+    "passed": 22,
+    "evaluable": 24,
+    "rate": 0.9166666666666666,
+    "p_cap": 2,
+    "p_prov": 0,
+    "p_con": 0,
+    "p_oracle": 0,
+    "p_int": 0
+  },
+  "semantic_attribution": [
+    {
+      "case_id": "C002",
+      "mechanical_attribution": "P-CAP:ARGUMENT_BINDING",
+      "audited_attribution": "P-MEASUREMENT:FREE_TEXT_BINDING_SPAN",
+      "evidence": "The Selector chose research_report, preserved output/wal.md, remained safe, and bound the topic as 'SQLite WAL 的最新官方资料' instead of the Oracle's shorter but semantically equivalent 'SQLite WAL'.",
+      "planner_change_justified": false
+    },
+    {
+      "case_id": "C019",
+      "mechanical_attribution": "P-CAP:WRONG_KIND",
+      "audited_attribution": "P-CON:COMPLETED_WORKFLOW_DECLINE_ASK_BOUNDARY",
+      "evidence": "The Selector recognized that the completed data_cleanup Workflow could not be reused and chose safe ASK. The frozen expected decision is DECLINE; neither decision instantiates or reuses a Workflow.",
+      "planner_change_justified": false
+    }
+  ],
+  "hard_safety": {
+    "false_workflow_selection": 0,
+    "unsafe_reuse": 0,
+    "missed_workflow": 0,
+    "schema_validity": 1.0,
+    "safe_decision_rate": 1.0
+  },
+  "systemic_workflow_selector_gap_proven": false,
+  "prompt_improvement_justified": false,
+  "integration_watchlist": [
+    "WORKFLOW_INSTANTIATION_BOUNDARY_HARDCODED"
+  ],
+  "conclusion": "Freeze the baseline and preserve the frozen Oracle score. Do not modify the Selector prompt for these two residuals; proceed to Runtime integration with the hardcoded Planner binding boundary explicitly unresolved."
+}

@@ -1,0 +1,430 @@
+{
+  "version": "core-scenarios-v1",
+  "description": "Fixed real-provider multi-turn scenario set. Each case drives one durable AgentService session through the configured provider and scores turns with deterministic checks. See README_CORE_SCENARIOS.md for check semantics.",
+  "cases": [
+    {
+      "id": "CS01",
+      "title": "greeting stays a cheap chat turn (latency sanity)",
+      "turns": [
+        "你好"
+      ],
+      "checks": {
+        "turns": [
+          {
+            "status": "COMPLETED",
+            "provider_calls_max": 3,
+            "no_tool_calls": true,
+            "intent": {
+              "domain": "chat"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "CS02",
+      "title": "artifact without explicit path lands under output/",
+      "turns": [
+        "帮我写一个 Python 待办事项管理脚本，能添加和列出任务"
+      ],
+      "checks": {
+        "turns": [
+          {
+            "status": "COMPLETED",
+            "artifact_exists": "output/**/*.py",
+            "artifact_absent": [
+              "src/**/*.py",
+              "*.py"
+            ],
+            "intent": {
+              "artifact_required": true
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "CS03",
+      "title": "explicit src/ path is honored over the output/ default",
+      "turns": [
+        "写一个函数 render_greeting(name) 返回问候字符串，保存到 src/greeting.py"
+      ],
+      "checks": {
+        "turns": [
+          {
+            "status": "COMPLETED",
+            "artifact_exists": "src/greeting.py",
+            "artifact_absent": "output/**/greeting.py",
+            "file_contains": {
+              "src/greeting.py": [
+                "def render_greeting"
+              ]
+            },
+            "intent": {
+              "write_targets_contains": [
+                "src/greeting.py"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "CS04",
+      "title": "calculator creation discloses where the artifact was saved",
+      "turns": [
+        "帮我写个汇率转换计算器，写完告诉我放在哪了"
+      ],
+      "checks": {
+        "turns": [
+          {
+            "status": "COMPLETED",
+            "artifact_exists_any": [
+              "output/**/*.py",
+              "output/**/*.html"
+            ],
+            "output_contains": [
+              "output/"
+            ],
+            "intent": {
+              "artifact_required": true
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "CS05",
+      "title": "follow-up '把它改成…' modifies the artifact created in turn 1",
+      "turns": [
+        "写一个汇率换算函数 convert(amount, rate)，保存到 output/calculator.py",
+        "把它改成再加一个 HKD 到 JPY 的换算示例"
+      ],
+      "checks": {
+        "turns": [
+          {
+            "status": "COMPLETED",
+            "artifact_exists": "output/calculator.py"
+          },
+          {
+            "status": "COMPLETED",
+            "file_contains": {
+              "output/calculator.py": [
+                "convert",
+                "HKD",
+                "JPY"
+              ]
+            },
+            "intent": {
+              "conversation_relation_in": [
+                "reference",
+                "correction"
+              ],
+              "resolved_request_contains": [
+                "calculator"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "CS06",
+      "title": "'总结一下上面' resolves against the previous answer",
+      "turns": [
+        "解释一下 Python 的上下文管理器是什么",
+        "总结一下上面说的，用一句话"
+      ],
+      "checks": {
+        "turns": [
+          {
+            "status": "COMPLETED"
+          },
+          {
+            "status": "COMPLETED",
+            "intent": {
+              "conversation_relation": "reference"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "CS07",
+      "title": "'再加一个' continues the previous generation in-session",
+      "turns": [
+        "给我讲三个关于程序员的冷笑话",
+        "再加一个"
+      ],
+      "checks": {
+        "turns": [
+          {
+            "status": "COMPLETED"
+          },
+          {
+            "status": "COMPLETED",
+            "intent": {
+              "conversation_relation": "reference"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "CS08",
+      "title": "memory remember then recall across turns",
+      "turns": [
+        "记住：我的项目代号是 NEBULA-7",
+        "我的项目代号是什么？"
+      ],
+      "checks": {
+        "turns": [
+          {
+            "status": "COMPLETED",
+            "intent": {
+              "memory_action": "remember"
+            }
+          },
+          {
+            "status": "COMPLETED",
+            "output_contains": [
+              "NEBULA-7"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "CS09",
+      "title": "genuinely vague request clarifies instead of guessing",
+      "turns": [
+        "帮我弄一下那个东西"
+      ],
+      "checks": {
+        "turns": [
+          {
+            "status_in": [
+              "COMPLETED",
+              "BLOCKED",
+              "WAITING_USER"
+            ],
+            "no_tool_calls": true,
+            "artifact_absent": [
+              "output/**",
+              "src/**",
+              "*.py",
+              "*.txt",
+              "*.md"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "CS10",
+      "title": "search then write a source-backed report file",
+      "skip_if": "no_search_provider",
+      "turns": [
+        "搜索一下 FastAPI 近期的版本更新，把带来源链接的总结保存到 output/fastapi_notes.md"
+      ],
+      "checks": {
+        "turns": [
+          {
+            "status": "COMPLETED",
+            "artifact_exists": "output/fastapi_notes.md",
+            "file_contains": {
+              "output/fastapi_notes.md": [
+                "http"
+              ]
+            },
+            "tools_any": [
+              "web_search",
+              "web_news_search",
+              "web_deep_search"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "CS11",
+      "title": "explicit command request executes for real",
+      "skip_if": "no_execution_environment",
+      "turns": [
+        "执行 date 命令，并把真实命令输出贴出来"
+      ],
+      "checks": {
+        "turns": [
+          {
+            "status": "COMPLETED",
+            "tools_any": [
+              "shell",
+              "run_python",
+              "run_python_file"
+            ],
+            "intent": {
+              "requested_outcomes_contains": [
+                "COMMAND_EXECUTION"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "CS12",
+      "title": "'不要运行' prohibition blocks execution tools",
+      "turns": [
+        "写一个打印前 10 个斐波那契数的脚本，保存到 output/fib.py，但不要运行它"
+      ],
+      "checks": {
+        "turns": [
+          {
+            "status": "COMPLETED",
+            "artifact_exists": "output/fib.py",
+            "no_tools": [
+              "shell",
+              "run_python",
+              "run_python_file"
+            ],
+            "intent": {
+              "prohibited_effects_contains": [
+                "CODE_EXECUTION",
+                "COMMAND_EXECUTION"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "CS13",
+      "title": "session continuity survives a service restart on the same sqlite",
+      "restart_after_turn": 1,
+      "turns": [
+        "写一个记账脚本保存到 output/ledger.py，支持添加记录",
+        "在它里面再加一个删除记录的函数"
+      ],
+      "checks": {
+        "turns": [
+          {
+            "status": "COMPLETED",
+            "artifact_exists": "output/ledger.py"
+          },
+          {
+            "status": "COMPLETED",
+            "file_contains": {
+              "output/ledger.py": [
+                "def"
+              ]
+            },
+            "intent": {
+              "conversation_relation_in": [
+                "reference",
+                "correction"
+              ],
+              "resolved_request_contains": [
+                "ledger"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "CS14",
+      "title": "correction '不对，我要的是本地文件' still delivers a real artifact",
+      "turns": [
+        "帮我写个计算器",
+        "不对，我要的是你在本地生成一个计算器脚本文件"
+      ],
+      "checks": {
+        "turns": [
+          {
+            "status": "COMPLETED",
+            "artifact_exists_any": [
+              "output/**/*.py",
+              "output/**/*.html"
+            ]
+          },
+          {
+            "status": "COMPLETED",
+            "artifact_exists_any": [
+              "output/**/*.py",
+              "output/**/*.html"
+            ],
+            "intent": {
+              "conversation_relation_in": [
+                "correction",
+                "reference"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "CS15",
+      "title": "three-turn reference chain in one session",
+      "turns": [
+        "1+1 等于几",
+        "把它乘以 10 是多少",
+        "总结一下上面的对话"
+      ],
+      "checks": {
+        "turns": [
+          {
+            "status": "COMPLETED",
+            "output_contains": [
+              "2"
+            ]
+          },
+          {
+            "status": "COMPLETED",
+            "output_contains": [
+              "20"
+            ],
+            "intent": {
+              "conversation_relation": "reference"
+            }
+          },
+          {
+            "status": "COMPLETED"
+          }
+        ]
+      }
+    },
+    {
+      "id": "CS16",
+      "title": "modifying a file preserves the untouched content",
+      "turns": [
+        "创建 output/config.txt，写入三行：a=1、b=2、c=3",
+        "把 b=2 改成 b=42"
+      ],
+      "checks": {
+        "turns": [
+          {
+            "status": "COMPLETED",
+            "artifact_exists": "output/config.txt"
+          },
+          {
+            "status": "COMPLETED",
+            "file_contains": {
+              "output/config.txt": [
+                "a=1",
+                "b=42",
+                "c=3"
+              ]
+            },
+            "intent": {
+              "conversation_relation_in": [
+                "reference",
+                "correction"
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

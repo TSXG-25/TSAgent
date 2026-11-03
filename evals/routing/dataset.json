@@ -1,0 +1,38 @@
+{
+  "version": "v2.4A-routing-v1",
+  "scope": "execution_need_boundary",
+  "cases": [
+    {
+      "id": "PA001",
+      "source_planner_dataset": "v2.4A-planner-v1",
+      "input": "解释 Python 中列表和元组的区别，不要创建文件。",
+      "expected_route": "CHAT",
+      "planner_must_not_be_called": true,
+      "execution_required": false
+    },
+    {
+      "id": "PA002",
+      "source_planner_dataset": "v2.4A-planner-v1",
+      "input": "什么是 HTTP 里的幂等请求？",
+      "expected_route": "CHAT",
+      "planner_must_not_be_called": true,
+      "execution_required": false
+    },
+    {
+      "id": "PA003",
+      "source_planner_dataset": "v2.4A-planner-v1",
+      "input": "把“state ownership”翻译成中文并解释语境。",
+      "expected_route": "CHAT",
+      "planner_must_not_be_called": true,
+      "execution_required": false
+    },
+    {
+      "id": "PA004",
+      "source_planner_dataset": "v2.4A-planner-v1",
+      "input": "计算 37 乘以 24，并说明计算过程。",
+      "expected_route": "CHAT",
+      "planner_must_not_be_called": true,
+      "execution_required": false
+    }
+  ]
+}

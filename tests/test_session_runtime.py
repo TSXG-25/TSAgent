@@ -6,14 +6,35 @@ def _namespace() -> str:
     return f"test-session-{uuid.uuid4().hex}"
 
 
+def _commit_fact(user_id: str, value: str, *, scope: str = "user"):
+    from agent.memory.learning import InteractionEvidence, MemoryPolicyProjection
+    from agent.memory.learning import decide_memory_learning
+    from agent.memory.persistence import MemoryPersistenceBoundary
+
+    evidence = InteractionEvidence(
+        evidence_id=f"test-fact-{uuid.uuid4().hex}",
+        source_kind="user_statement",
+        source_ref="test:session-runtime",
+        text=f"我住在{value}",
+        memory_type="fact",
+        requested_scope=scope,
+        canonical_key="personal.location",
+        value=value,
+        explicit_persist=True,
+        sensitive=False,
+        secret=False,
+        volatile=False,
+    )
+    policy = MemoryPolicyProjection(scope=scope, namespace=user_id)
+    decision = decide_memory_learning(evidence, policy)
+    return MemoryPersistenceBoundary.commit(decision, policy)
+
+
 def test_memory_runtime_reset_is_scoped(monkeypatch):
     from agent.conversation import conversation_tracker
     from agent.memory import long_term
-    from agent.memory.long_term import get_facts, save_fact
-    from agent.memory.resolution import get_resolutions, record_resolution
+    from agent.memory.long_term import get_facts
     from agent.memory.lifecycle import MemoryRuntime
-    from agent.memory.session import get_session_context, add_user_message
-    from agent.memory.short_term import add_exchange, get_history
 
     user_id = _namespace()
     # Avoid opening a vector store in this unit test; the reset contract still
@@ -25,10 +46,7 @@ def test_memory_runtime_reset_is_scoped(monkeypatch):
         lambda value: cleared_summaries.append(value),
     )
 
-    add_user_message(user_id, "我住在北京")
-    add_exchange(user_id, "我住在北京", "已记录")
-    save_fact(user_id, "personal", "location", "北京")
-    record_resolution(user_id, "打开它", "output/a.py", "file")
+    assert _commit_fact(user_id, "北京").committed
     conversation_tracker.update(
         user_id=user_id,
         user_input="写 output/a.py",
@@ -41,10 +59,7 @@ def test_memory_runtime_reset_is_scoped(monkeypatch):
     assert report.user_id == user_id
     assert report.conversation is True and report.facts is True
     assert cleared_summaries == [user_id]
-    assert get_session_context(user_id) == ""
-    assert get_history(user_id) == ""
     assert get_facts(user_id) == {}
-    assert get_resolutions(user_id) == []
     assert conversation_tracker.get_state(user_id).turn_count == 0
     assert conversation_tracker.get_events(user_id) == []
     assert conversation_tracker.runtime_pending(user_id) is False
@@ -52,12 +67,12 @@ def test_memory_runtime_reset_is_scoped(monkeypatch):
 
 def test_memory_runtime_can_preserve_facts(monkeypatch):
     from agent.memory import long_term
-    from agent.memory.long_term import get_facts, save_fact
+    from agent.memory.long_term import get_facts
     from agent.memory.lifecycle import MemoryRuntime
 
     user_id = _namespace()
     monkeypatch.setattr(long_term, "clear_summaries", lambda value: None)
-    save_fact(user_id, "personal", "location", "上海")
+    assert _commit_fact(user_id, "上海").committed
 
     MemoryRuntime.reset(user_id, conversation=True, facts=False)
     assert get_facts(user_id)["personal"]["location"] == "上海"
@@ -66,32 +81,25 @@ def test_memory_runtime_can_preserve_facts(monkeypatch):
     assert get_facts(user_id) == {}
 
 
-def test_session_runtime_defaults_to_isolation(monkeypatch):
-    from agent.memory.lifecycle import MemoryResetReport, MemoryRuntime
-    from agent.session_runtime import SessionRuntime
+def test_memory_reset_clears_only_the_requested_fact_scope(tmp_path, monkeypatch):
+    from agent.memory import long_term
+    from agent.memory.lifecycle import MemoryRuntime
+    from agent.memory.long_term import get_fact
 
-    calls = []
+    namespace = _namespace()
+    monkeypatch.setattr(long_term, "FACTS_DB_PATH", tmp_path / "facts.sqlite3")
+    long_term._init_facts_db()
+    assert _commit_fact(namespace, "session-only", scope="session").committed
+    assert _commit_fact(namespace, "user-level", scope="user").committed
 
-    def fake_reset(user_id, **kwargs):
-        calls.append((user_id, kwargs))
-        return MemoryResetReport(
-            user_id=user_id,
-            conversation=kwargs.get("conversation", True),
-            facts=kwargs.get("facts", False),
-        )
-
-    monkeypatch.setattr(MemoryRuntime, "reset", fake_reset)
-    monkeypatch.setattr(SessionRuntime, "_new_agent", lambda self: object())
-
-    session = SessionRuntime.create(
-        session_id="isolated-case",
-        user_id="isolated-case",
+    MemoryRuntime.reset(
+        "session-a",
+        conversation=False,
+        facts=True,
+        facts_namespace=namespace,
+        facts_scope="session",
     )
-    assert session.persistent is False
-    assert calls[0][1]["facts"] is True
 
-    session.destroy()
-    session.destroy()  # idempotent
-    assert session.closed is True
-    assert len(calls) == 2
-    assert calls[-1][1]["facts"] is True
+    assert get_fact(namespace, "personal", "location", scope="session") is None
+    assert get_fact(namespace, "personal", "location", scope="user") == "user-level"
+

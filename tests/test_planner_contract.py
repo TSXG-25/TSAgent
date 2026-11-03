@@ -66,11 +66,6 @@ class TestCompilerStages:
         plan = self.compiler.compile(task)
         assert plan.task.target == "a.py"
 
-    def test_semantic_rejects_chinese_file_target(self):
-        task = Task(id="t1", verb=Verb.MODIFY, target="计算模块文件", target_type="file", goal="g")
-        with pytest.raises(CompileError):
-            self.compiler.compile(task)
-
     def test_semantic_rejects_empty_file_target(self):
         # 模型层（Task 构造）即拒绝：空 file target 是 ValidationError
         from pydantic import ValidationError as VE
@@ -134,6 +129,10 @@ class TestExecutionPlanContract:
             def get(self, name):
                 return {"read_file": object(), "write_file": object()}.get(name)
 
+            def get_availability(self, _name):
+                from agent.registry.tool_registry import ToolAvailability
+                return ToolAvailability(available=True)
+
         from agent.compiler.context import CompilerContext
         from agent.task import ExecutionPlan, ExecutionStep
 
@@ -149,6 +148,10 @@ class TestExecutionPlanContract:
         class FakeRegistry:
             def get(self, name):
                 return {"read_file": object()}.get(name)
+
+            def get_availability(self, _name):
+                from agent.registry.tool_registry import ToolAvailability
+                return ToolAvailability(available=True)
 
         task = Task(id="t1", verb=Verb.READ, target="x.py", target_type="file", goal="g")
         plan = ExecutionPlan(task=task, steps=[

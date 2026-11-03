@@ -1,0 +1,65 @@
+deepseek 调用失败: Error code: 503 - {'error': {'message': 'Service is too busy. We advise users to temporarily switch to alternative LLM API service providers.', 'type': 'service_unavailable_error', 'param': None, 'code': 'service_unavailable_error'}}
+事实抽取超时，继续执行主任务
+  📂 ProjectIndex: scanned 497 files in 0.244s
+  📁 Workspace ready: tsagent-run2 (497 files)
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]Loading weights: 100%|██████████| 103/103 [00:00<00:00, 6502.11it/s]
+  🧠 规划上下文: 对话轮次: 最近1轮
+  🔍 引用消歧: 无需消歧
+  🧠 意图: Intent(domain=development, action=code, target='output/squares.py', entities=['1到10', '平方'], current_file='', conf=0.95, exec=True)
+
+==================================================
+🚀 路由到 Workflow: code_generation
+==================================================
+
+==================================================
+🚀 工作流: code_generation
+==================================================
+  阶段: ['read_question', 'design_algorithm', 'generate_code', 'verify_code', 'write_output']
+==================================================
+
+  [1/5] read_question — 读取题目文件
+[DEBUG-PLAN] executor=tool steps=[{"tool": "filesystem.read", "args": {"path": "input/question.docx"}}]
+[DEBUG-STEP] 0 tool=filesystem.read args={'path': 'input/question.docx'} resolved={'path': 'input/question.docx'}
+     → [question_text] 给你一个长度为 n 的二进制字符串 s，其中：
+'1' 表示一个 活跃 区段。
+'0' 表示一个 非活跃 区段。
+你可以执行 最多一次操作 来最大化 s 中的活
+  [2/5] design_algorithm — 设计算法
+     ✗ 失败: 
+  [3/5] generate_code — 生成 Python 代码
+     ✗ 失败: 
+  [4/5] verify_code — 语法检查
+     ⏭️ 跳过（缺失依赖: ['python_code']）
+  [5/5] write_output — 写入输出文件
+     ⏭️ 跳过（缺失依赖: ['verified_code']）
+
+==================================================
+⚠️ 工作流完成: code_generation
+  问题已读取: 300 字符
+  ⚠️ [design_algorithm] 
+  ⚠️ [generate_code] 
+==================================================
+
+
+==================================================
+⏱️  启动耗时 Profile
+==================================================
+  workspace_init         0.24s  ████████████████░░░░ 84%
+  tools_import           0.04s  ██░░░░░░░░░░░░░░░░░░ 14%
+  workflows_import       0.00s  ░░░░░░░░░░░░░░░░░░░░ 1%
+  skills_import          0.00s  ░░░░░░░░░░░░░░░░░░░░ 0%
+  knowledge_build        0.00s  ░░░░░░░░░░░░░░░░░░░░ 0%
+  capabilities_register   0.00s  ░░░░░░░░░░░░░░░░░░░░ 0%
+  TOTAL                  0.29s
+==================================================
+
+==================================================
+⚡ 执行耗时 Profile
+==================================================
+  plan                 113.55s  █████████░░░░░░░░░░░ 45%
+  plan_llm             113.55s  █████████░░░░░░░░░░░ 45%
+  init                  24.59s  █░░░░░░░░░░░░░░░░░░░ 10%
+  TOTAL                251.68s
+==================================================
+
+FINAL: '工作流执行失败：[design_algorithm] ; [generate_code] '

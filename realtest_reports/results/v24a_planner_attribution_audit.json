@@ -1,0 +1,2579 @@
+{
+  "audit_version": "v2.4A-2b-attribution-audit-v1",
+  "status": "ATTRIBUTION_COMPLETE_NO_PRODUCTION_CHANGE",
+  "source_baseline": {
+    "path": "realtest_reports/results/v24a_planner_baseline.json",
+    "sha256": "5f1d4a6a02325b5973ba20014b791531959f5720d0c268cf986b0e0ffee6bbb1",
+    "harness_version": "v2.4A-2-real-planner-v1",
+    "git_head": "6c1743078d67cf1644c22779f40649fb4b9880d2",
+    "dataset_version": "v2.4A-planner-v1",
+    "dataset_hash": "7f5b28f608194a324f4244c860a8ed9101bcb7afa3b68e5129632ebfb0290291",
+    "planner_prompt_hash": "59ea5435e6e2d8b1db3e8889dadf13093ea93a8cbcd085c11827f7a83062dab3",
+    "provider": {
+      "provider": "deepseek",
+      "model": "deepseek-v4-flash",
+      "base_url": "https://api.deepseek.com/v1",
+      "structured_output": true
+    },
+    "case_count": 50,
+    "unchanged": true
+  },
+  "source_dataset": {
+    "path": "evals/planner/dataset.json",
+    "sha256": "f93e4f396128b8fdc6e60433c767ae75ebfe9038760950b94d52f66eda116e63",
+    "dataset_version": "v2.4A-planner-v1",
+    "case_count": 50,
+    "unchanged": true
+  },
+  "controls": {
+    "provider_calls": 0,
+    "automatic_case_retry": false,
+    "golden_plan_fallback": false,
+    "planner_changes": false,
+    "oracle_changes": false,
+    "dataset_changes": false,
+    "runtime_changes": false,
+    "raw_baseline_overwritten": false,
+    "note": "This report is derived from the existing baseline; it does not rerun a Provider."
+  },
+  "baseline_summary_unchanged": {
+    "case_count": 50,
+    "evaluable_case_count": 48,
+    "capability_pass_count": 20,
+    "capability_pass_rate": 0.4166666666666667,
+    "raw_case_pass_rate": 0.4,
+    "schema_validity": 0.8125,
+    "dependency_validity": 0.8125,
+    "executable_plan_rate": 0.4166666666666667,
+    "missing_task_rate": 0.3411764705882353,
+    "overplanning_rate": 0.6666666666666666,
+    "clarification_accuracy": 0.8958333333333334,
+    "unnecessary_planning_rate": 0.6666666666666666,
+    "average_task_count": 2.3125,
+    "p95_task_count": 6,
+    "average_latency_ms": 13218.3282,
+    "p95_latency_ms": 44176.855,
+    "provider_error_count": 2,
+    "runtime_integration_failure_count": 0,
+    "contract_or_oracle_failure_count": 0,
+    "failure_clusters": {
+      "P-CAP:OVER_PLAN": 4,
+      "P-CAP:UNDER_PLAN": 19,
+      "P-PROV:INTERNAL": 2,
+      "P-CAP:FALSE_CLARIFICATION": 1,
+      "P-CAP:MISSED_CLARIFICATION": 4
+    },
+    "failure_clusters_by_family": {
+      "P1": {
+        "P-CAP:OVER_PLAN": 4
+      },
+      "P3": {
+        "P-CAP:UNDER_PLAN": 2
+      },
+      "P4": {
+        "P-CAP:UNDER_PLAN": 3,
+        "P-PROV:INTERNAL": 1
+      },
+      "P5": {
+        "P-CAP:UNDER_PLAN": 2
+      },
+      "P6": {
+        "P-CAP:UNDER_PLAN": 3,
+        "P-CAP:FALSE_CLARIFICATION": 1
+      },
+      "P7": {
+        "P-CAP:UNDER_PLAN": 3
+      },
+      "P8": {
+        "P-CAP:UNDER_PLAN": 3,
+        "P-PROV:INTERNAL": 1
+      },
+      "P9": {
+        "P-CAP:MISSED_CLARIFICATION": 2
+      },
+      "P10": {
+        "P-CAP:MISSED_CLARIFICATION": 2
+      },
+      "P11": {
+        "P-CAP:UNDER_PLAN": 1
+      },
+      "P12": {
+        "P-CAP:UNDER_PLAN": 2
+      }
+    },
+    "oracle_aggregate": {
+      "case_count": 48,
+      "schema_validity": 0.8125,
+      "dependency_validity": 0.8125,
+      "plan_validity": 0.8125,
+      "dependency_accuracy": 0.524702380952381,
+      "task_granularity": 0.4791666666666667,
+      "unnecessary_task_rate": 0.4954954954954955,
+      "missing_task_rate": 0.3411764705882353,
+      "executable_plan_rate": 0.4166666666666667,
+      "overplanning_rate": 0.6666666666666666,
+      "critical_missing_task_rate": 0.4166666666666667
+    },
+    "metric_scopes": {
+      "capability_rates": "evaluable cases only; Provider/contract/runtime failures excluded",
+      "raw_case_pass_rate": "all submitted cases",
+      "clarification_accuracy": "evaluable cases; abstain matches expected_mode=abstain",
+      "unnecessary_planning_rate": "evaluable non-plan cases emitting one or more tasks",
+      "task_count": "evaluable cases"
+    }
+  },
+  "provider_attempt_audit": {
+    "call_kind_counts": {
+      "router_ainvoke": 52,
+      "structured_ainvoke": 1,
+      "structured_bind": 1
+    },
+    "outcome_counts": {
+      "ERROR": 3,
+      "SUCCESS": 51
+    },
+    "network_attempt_kinds": [
+      "router_ainvoke",
+      "router_invoke",
+      "structured_ainvoke"
+    ],
+    "production_internal_provider_attempt_count": 53,
+    "network_attempts_by_case": {
+      "PA001": 2,
+      "PA002": 1,
+      "PA003": 1,
+      "PA004": 1,
+      "PA005": 1,
+      "PA006": 1,
+      "PA007": 2,
+      "PA008": 1,
+      "PA009": 1,
+      "PA010": 1,
+      "PA011": 1,
+      "PA012": 1,
+      "PA013": 1,
+      "PA014": 1,
+      "PA015": 1,
+      "PA016": 1,
+      "PA017": 1,
+      "PA018": 2,
+      "PA019": 1,
+      "PA020": 1,
+      "PA021": 1,
+      "PA022": 0,
+      "PA023": 1,
+      "PA024": 1,
+      "PA025": 1,
+      "PA026": 1,
+      "PA027": 1,
+      "PA028": 1,
+      "PA029": 1,
+      "PA030": 1,
+      "PA031": 1,
+      "PA032": 1,
+      "PA033": 0,
+      "PA034": 2,
+      "PA035": 0,
+      "PA036": 2,
+      "PA037": 0,
+      "PA038": 2,
+      "PA039": 2,
+      "PA040": 0,
+      "PA041": 1,
+      "PA042": 1,
+      "PA043": 1,
+      "PA044": 1,
+      "PA045": 1,
+      "PA046": 1,
+      "PA047": 1,
+      "PA048": 1,
+      "PA049": 2,
+      "PA050": 1
+    },
+    "network_attempt_distribution": {
+      "0": 5,
+      "1": 37,
+      "2": 8
+    },
+    "structured_output_fallback_cases": [
+      "PA001"
+    ],
+    "harness_case_retry_count": 0
+  },
+  "production_boundary_evidence": {
+    "production_file": "agent/planner/planner.py",
+    "plan_with_metadata_has_expected_mode_parameter": false,
+    "planner_prompt_mentions_chat_mode": false,
+    "planner_output_has_mode_field": false,
+    "adr_declares_chat_mode": true,
+    "interpretation": "ADR-0029 currently declares chat as part of the Planner contract, while the production entry point/prompt do not expose a chat mode. PA001-PA004 remain P-CON pending an explicit ownership decision."
+  },
+  "uncertainty_detector_evidence": {
+    "PA022": {
+      "input": "查阅 SQLite WAL 的官方资料，整理它的优缺点并附链接。",
+      "deterministic_detector_without_context": true
+    },
+    "PA034": {
+      "input": "帮我加个功能。",
+      "deterministic_detector_without_context": false
+    },
+    "PA036": {
+      "input": "部署到那里。",
+      "deterministic_detector_without_context": false
+    },
+    "PA038": {
+      "input": "把结果保存一下。",
+      "deterministic_detector_without_context": false
+    },
+    "PA039": {
+      "input": "按之前的方案改。",
+      "deterministic_detector_without_context": false
+    }
+  },
+  "attribution_summary": {
+    "failed_record_count": 30,
+    "reviewed_record_count": 30,
+    "reviewed_categories": {
+      "P-CAP": 2,
+      "P-CON": 7,
+      "P-ORACLE": 14,
+      "P-PROV": 2,
+      "P-UNCERTAINTY": 5
+    },
+    "reviewed_subcategories": {
+      "FALSE_CLARIFICATION_POLICY": 1,
+      "GOAL_DRIFT": 2,
+      "GOAL_SCOPE_AMBIGUITY": 1,
+      "IMPLICIT_PREREQUISITE_AND_EXECUTION_EQUIVALENCE": 1,
+      "IMPLICIT_READ_AND_NEW_FILE_WRITE": 1,
+      "MISSED_CLARIFICATION": 4,
+      "MISSING_TARGET_CONTEXT": 1,
+      "MODE_OWNERSHIP_CONFLICT": 4,
+      "PARALLEL_SEARCH_DECOMPOSITION": 1,
+      "PLANNER_VS_FINAL_RESPONSE_BOUNDARY": 1,
+      "PROVIDER_INTERNAL": 2,
+      "RESUME_WRITE_VS_MODIFY": 1,
+      "SEARCH_GRANULARITY": 1,
+      "SEMANTIC_TEXT_TARGET": 6,
+      "SEMANTIC_TEXT_TARGET_AND_PREREQUISITE": 1,
+      "SEMANTIC_TEXT_TARGET_AND_TARGET_TYPE": 1,
+      "TARGET_TYPE_REPRESENTATION": 1
+    },
+    "confirmed_p_boundary_count": 0,
+    "boundary_candidates_pending_contract_decision": [
+      "PA001",
+      "PA002",
+      "PA003",
+      "PA004"
+    ],
+    "missing_and_unexpected_pair_count": 19,
+    "missing_and_unexpected_pair_case_ids": [
+      "PA011",
+      "PA012",
+      "PA013",
+      "PA014",
+      "PA016",
+      "PA017",
+      "PA018",
+      "PA021",
+      "PA023",
+      "PA024",
+      "PA025",
+      "PA026",
+      "PA028",
+      "PA029",
+      "PA030",
+      "PA031",
+      "PA042",
+      "PA046",
+      "PA049"
+    ],
+    "provider_error_case_ids": [
+      "PA015",
+      "PA032"
+    ]
+  },
+  "calibrated_views": {
+    "strict_frozen_oracle_view": {
+      "included_case_count": 48,
+      "pass_count": 20,
+      "pass_rate": 0.4166666666666667,
+      "description": "Unchanged v2.4A-2 Oracle result; this remains the official raw baseline."
+    },
+    "planner_decomposition_provisional": {
+      "name": "planner_decomposition_provisional",
+      "description": "Passes plus only manually retained P-CAP failures; contract, Oracle, uncertainty-policy and Provider layers are excluded.",
+      "included_case_count": 22,
+      "pass_count": 20,
+      "pass_rate": 0.9090909090909091,
+      "excluded_case_count": 26,
+      "excluded_by_attribution": {
+        "P-CON": 7,
+        "P-ORACLE": 14,
+        "P-UNCERTAINTY": 5
+      },
+      "status": "PROVISIONAL_VIEW_NOT_AN_ACCEPTANCE_SCORE"
+    },
+    "planner_plus_uncertainty_provisional": {
+      "name": "planner_plus_uncertainty_provisional",
+      "description": "Passes plus retained Planner capability and uncertainty-policy failures; only contract/Oracle attribution is excluded.",
+      "included_case_count": 27,
+      "pass_count": 20,
+      "pass_rate": 0.7407407407407407,
+      "excluded_case_count": 21,
+      "excluded_by_attribution": {
+        "P-CON": 7,
+        "P-ORACLE": 14
+      },
+      "status": "PROVISIONAL_VIEW_NOT_AN_ACCEPTANCE_SCORE"
+    }
+  },
+  "case_reviews": [
+    {
+      "case_id": "PA001",
+      "input": "解释 Python 中列表和元组的区别，不要创建文件。",
+      "family": "P1",
+      "expected_mode": "chat",
+      "baseline_provider_status": "SUCCESS_WITH_PROVIDER_FALLBACK",
+      "baseline_failure_category": "P-CAP",
+      "baseline_failure_subcategory": "OVER_PLAN",
+      "review": {
+        "category": "P-CON",
+        "subcategory": "MODE_OWNERSHIP_CONFLICT",
+        "confidence": "high",
+        "disposition": "exclude_from_decomposition_pending_contract_decision",
+        "note": "Dataset expects chat/tasks=[], while the production Planner contract and entry point only expose task decomposition; ownership is unresolved, not a confirmed Planner failure."
+      },
+      "expected_goal_units": [],
+      "actual_tasks": [
+        {
+          "id": "task-1",
+          "verb": "explain",
+          "target_type": "text",
+          "target": "Python 中列表和元组的区别",
+          "dependencies": []
+        }
+      ],
+      "oracle_observation": {
+        "missing_goal_units": [],
+        "unexpected_task_ids": [
+          "task-1"
+        ],
+        "predicted_task_count": 1,
+        "goal_unit_count": 0,
+        "unnecessary_task_count": 1,
+        "missing_task_count": 0,
+        "task_granularity": 0.0
+      }
+    },
+    {
+      "case_id": "PA002",
+      "input": "什么是 HTTP 里的幂等请求？",
+      "family": "P1",
+      "expected_mode": "chat",
+      "baseline_provider_status": "SUCCESS",
+      "baseline_failure_category": "P-CAP",
+      "baseline_failure_subcategory": "OVER_PLAN",
+      "review": {
+        "category": "P-CON",
+        "subcategory": "MODE_OWNERSHIP_CONFLICT",
+        "confidence": "high",
+        "disposition": "exclude_from_decomposition_pending_contract_decision",
+        "note": "Same chat-mode boundary as PA001: the production Planner emits a valid explain task, but the frozen Dataset requires no task."
+      },
+      "expected_goal_units": [],
+      "actual_tasks": [
+        {
+          "id": "task-1",
+          "verb": "explain",
+          "target_type": "text",
+          "target": "什么是 HTTP 里的幂等请求",
+          "dependencies": []
+        }
+      ],
+      "oracle_observation": {
+        "missing_goal_units": [],
+        "unexpected_task_ids": [
+          "task-1"
+        ],
+        "predicted_task_count": 1,
+        "goal_unit_count": 0,
+        "unnecessary_task_count": 1,
+        "missing_task_count": 0,
+        "task_granularity": 0.0
+      }
+    },
+    {
+      "case_id": "PA003",
+      "input": "把“state ownership”翻译成中文并解释语境。",
+      "family": "P1",
+      "expected_mode": "chat",
+      "baseline_provider_status": "SUCCESS",
+      "baseline_failure_category": "P-CAP",
+      "baseline_failure_subcategory": "OVER_PLAN",
+      "review": {
+        "category": "P-CON",
+        "subcategory": "MODE_OWNERSHIP_CONFLICT",
+        "confidence": "high",
+        "disposition": "exclude_from_decomposition_pending_contract_decision",
+        "note": "Translation/explanation is represented as a valid explain task; the disagreement is whether chat routing belongs in this Planner acceptance."
+      },
+      "expected_goal_units": [],
+      "actual_tasks": [
+        {
+          "id": "task-1",
+          "verb": "explain",
+          "target_type": "text",
+          "target": "state ownership",
+          "dependencies": []
+        }
+      ],
+      "oracle_observation": {
+        "missing_goal_units": [],
+        "unexpected_task_ids": [
+          "task-1"
+        ],
+        "predicted_task_count": 1,
+        "goal_unit_count": 0,
+        "unnecessary_task_count": 1,
+        "missing_task_count": 0,
+        "task_granularity": 0.0
+      }
+    },
+    {
+      "case_id": "PA004",
+      "input": "计算 37 乘以 24，并说明计算过程。",
+      "family": "P1",
+      "expected_mode": "chat",
+      "baseline_provider_status": "SUCCESS",
+      "baseline_failure_category": "P-CAP",
+      "baseline_failure_subcategory": "OVER_PLAN",
+      "review": {
+        "category": "P-CON",
+        "subcategory": "MODE_OWNERSHIP_CONFLICT",
+        "confidence": "high",
+        "disposition": "exclude_from_decomposition_pending_contract_decision",
+        "note": "The arithmetic explanation is represented by one explain task; the frozen chat expectation and the production task-only prompt disagree."
+      },
+      "expected_goal_units": [],
+      "actual_tasks": [
+        {
+          "id": "task-1",
+          "verb": "explain",
+          "target_type": "text",
+          "target": "37 乘以 24 的计算过程",
+          "dependencies": []
+        }
+      ],
+      "oracle_observation": {
+        "missing_goal_units": [],
+        "unexpected_task_ids": [
+          "task-1"
+        ],
+        "predicted_task_count": 1,
+        "goal_unit_count": 0,
+        "unnecessary_task_count": 1,
+        "missing_task_count": 0,
+        "task_granularity": 0.0
+      }
+    },
+    {
+      "case_id": "PA011",
+      "input": "修复 repository.py 的查询错误，同时更新 migration.sql 和 tests/test_repository.py，最后验证测试。",
+      "family": "P3",
+      "expected_mode": "plan",
+      "baseline_provider_status": "SUCCESS",
+      "baseline_failure_category": "P-CAP",
+      "baseline_failure_subcategory": "UNDER_PLAN",
+      "review": {
+        "category": "P-ORACLE",
+        "subcategory": "IMPLICIT_PREREQUISITE_AND_EXECUTION_EQUIVALENCE",
+        "confidence": "high",
+        "disposition": "exclude_from_strict_target_score",
+        "note": "Requested modifications are all present. The extra read prerequisites and executing the concrete test file instead of the text target pytest are not representable as equivalent minimal goal units."
+      },
+      "expected_goal_units": [
+        {
+          "id": "g1",
+          "verbs": [
+            "modify"
+          ],
+          "target_type": "file",
+          "target": "repository.py",
+          "critical": true,
+          "depends_on": []
+        },
+        {
+          "id": "g2",
+          "verbs": [
+            "modify"
+          ],
+          "target_type": "file",
+          "target": "migration.sql",
+          "critical": true,
+          "depends_on": [
+            "g1"
+          ]
+        },
+        {
+          "id": "g3",
+          "verbs": [
+            "modify"
+          ],
+          "target_type": "file",
+          "target": "tests/test_repository.py",
+          "critical": true,
+          "depends_on": [
+            "g1"
+          ]
+        },
+        {
+          "id": "g4",
+          "verbs": [
+            "execute"
+          ],
+          "target_type": "text",
+          "target": "pytest",
+          "critical": true,
+          "depends_on": [
+            "g2",
+            "g3"
+          ]
+        }
+      ],
+      "actual_tasks": [
+        {
+          "id": "task-1",
+          "verb": "read",
+          "target_type": "file",
+          "target": "repository.py",
+          "dependencies": []
+        },
+        {
+          "id": "task-2",
+          "verb": "read",
+          "target_type": "file",
+          "target": "migration.sql",
+          "dependencies": []
+        },
+        {
+          "id": "task-3",
+          "verb": "read",
+          "target_type": "file",
+          "target": "tests/test_repository.py",
+          "dependencies": []
+        },
+        {
+          "id": "task-4",
+          "verb": "modify",
+          "target_type": "file",
+          "target": "repository.py",
+          "dependencies": [
+            "task-1",
+            "task-2"
+          ]
+        },
+        {
+          "id": "task-5",
+          "verb": "modify",
+          "target_type": "file",
+          "target": "migration.sql",
+          "dependencies": [
+            "task-2",
+            "task-4"
+          ]
+        },
+        {
+          "id": "task-6",
+          "verb": "modify",
+          "target_type": "file",
+          "target": "tests/test_repository.py",
+          "dependencies": [
+            "task-3",
+            "task-4"
+          ]
+        },
+        {
+          "id": "task-7",
+          "verb": "execute",
+          "target_type": "file",
+          "target": "tests/test_repository.py",
+          "dependencies": [
+            "task-4",
+            "task-5",
+            "task-6"
+          ]
+        }
+      ],
+      "oracle_observation": {
+        "missing_goal_units": [
+          "g4"
+        ],
+        "unexpected_task_ids": [
+          "task-1",
+          "task-2",
+          "task-3",
+          "task-7"
+        ],
+        "predicted_task_count": 7,
+        "goal_unit_count": 4,
+        "unnecessary_task_count": 4,
+        "missing_task_count": 1,
+        "task_granularity": 0.0
+      }
+    },
+    {
+      "case_id": "PA012",
+      "input": "修复 frontend/api.ts 与 backend/routes.py 的字段不一致问题，补集成测试并执行测试。",
+      "family": "P3",
+      "expected_mode": "plan",
+      "baseline_provider_status": "SUCCESS",
+      "baseline_failure_category": "P-CAP",
+      "baseline_failure_subcategory": "UNDER_PLAN",
+      "review": {
+        "category": "P-CON",
+        "subcategory": "GOAL_SCOPE_AMBIGUITY",
+        "confidence": "medium",
+        "disposition": "exclude_from_strict_target_score_pending_dataset_decision",
+        "note": "The plan writes the integration test, modifies both sides of the stated field mismatch, and executes the test file. Whether backend modification is required is not encoded by the frozen goal units, so this is contract ambiguity rather than an Oracle-only lexical miss."
+      },
+      "expected_goal_units": [
+        {
+          "id": "g1",
+          "verbs": [
+            "read"
+          ],
+          "target_type": "file",
+          "target": "frontend/api.ts",
+          "critical": true,
+          "depends_on": []
+        },
+        {
+          "id": "g2",
+          "verbs": [
+            "read"
+          ],
+          "target_type": "file",
+          "target": "backend/routes.py",
+          "critical": true,
+          "depends_on": []
+        },
+        {
+          "id": "g3",
+          "verbs": [
+            "modify"
+          ],
+          "target_type": "file",
+          "target": "frontend/api.ts",
+          "critical": true,
+          "depends_on": [
+            "g1",
+            "g2"
+          ]
+        },
+        {
+          "id": "g4",
+          "verbs": [
+            "modify"
+          ],
+          "target_type": "file",
+          "target": "tests/test_integration.py",
+          "critical": true,
+          "depends_on": [
+            "g3"
+          ]
+        },
+        {
+          "id": "g5",
+          "verbs": [
+            "execute"
+          ],
+          "target_type": "text",
+          "target": "pytest",
+          "critical": true,
+          "depends_on": [
+            "g4"
+          ]
+        }
+      ],
+      "actual_tasks": [
+        {
+          "id": "task-1",
+          "verb": "read",
+          "target_type": "file",
+          "target": "frontend/api.ts",
+          "dependencies": []
+        },
+        {
+          "id": "task-2",
+          "verb": "read",
+          "target_type": "file",
+          "target": "backend/routes.py",
+          "dependencies": []
+        },
+        {
+          "id": "task-3",
+          "verb": "write",
+          "target_type": "file",
+          "target": "tests/test_integration.py",
+          "dependencies": [
+            "task-1",
+            "task-2"
+          ]
+        },
+        {
+          "id": "task-4",
+          "verb": "modify",
+          "target_type": "file",
+          "target": "frontend/api.ts",
+          "dependencies": [
+            "task-3"
+          ]
+        },
+        {
+          "id": "task-5",
+          "verb": "modify",
+          "target_type": "file",
+          "target": "backend/routes.py",
+          "dependencies": [
+            "task-3"
+          ]
+        },
+        {
+          "id": "task-6",
+          "verb": "execute",
+          "target_type": "file",
+          "target": "tests/test_integration.py",
+          "dependencies": [
+            "task-4",
+            "task-5"
+          ]
+        }
+      ],
+      "oracle_observation": {
+        "missing_goal_units": [
+          "g4",
+          "g5"
+        ],
+        "unexpected_task_ids": [
+          "task-3",
+          "task-5",
+          "task-6"
+        ],
+        "predicted_task_count": 6,
+        "goal_unit_count": 5,
+        "unnecessary_task_count": 3,
+        "missing_task_count": 2,
+        "task_granularity": 0.0
+      }
+    },
+    {
+      "case_id": "PA013",
+      "input": "给 parser.py 增加日期字面量支持，补测试并更新 README.md。",
+      "family": "P4",
+      "expected_mode": "plan",
+      "baseline_provider_status": "SUCCESS",
+      "baseline_failure_category": "P-CAP",
+      "baseline_failure_subcategory": "UNDER_PLAN",
+      "review": {
+        "category": "P-CAP",
+        "subcategory": "GOAL_DRIFT",
+        "confidence": "high",
+        "disposition": "retain_as_planner_failure",
+        "note": "The test target changes from tests/test_parser.py to test_parser.py. The requested test file identity is not preserved; this is a genuine target drift signal."
+      },
+      "expected_goal_units": [
+        {
+          "id": "g1",
+          "verbs": [
+            "modify"
+          ],
+          "target_type": "file",
+          "target": "parser.py",
+          "critical": true,
+          "depends_on": []
+        },
+        {
+          "id": "g2",
+          "verbs": [
+            "modify"
+          ],
+          "target_type": "file",
+          "target": "tests/test_parser.py",
+          "critical": true,
+          "depends_on": [
+            "g1"
+          ]
+        },
+        {
+          "id": "g3",
+          "verbs": [
+            "modify"
+          ],
+          "target_type": "file",
+          "target": "README.md",
+          "critical": false,
+          "depends_on": [
+            "g2"
+          ]
+        }
+      ],
+      "actual_tasks": [
+        {
+          "id": "task-1",
+          "verb": "read",
+          "target_type": "file",
+          "target": "parser.py",
+          "dependencies": []
+        },
+        {
+          "id": "task-2",
+          "verb": "read",
+          "target_type": "file",
+          "target": "test_parser.py",
+          "dependencies": []
+        },
+        {
+          "id": "task-3",
+          "verb": "modify",
+          "target_type": "file",
+          "target": "parser.py",
+          "dependencies": [
+            "task-1"
+          ]
+        },
+        {
+          "id": "task-4",
+          "verb": "modify",
+          "target_type": "file",
+          "target": "test_parser.py",
+          "dependencies": [
+            "task-2",
+            "task-3"
+          ]
+        },
+        {
+          "id": "task-5",
+          "verb": "modify",
+          "target_type": "file",
+          "target": "README.md",
+          "dependencies": [
+            "task-3"
+          ]
+        }
+      ],
+      "oracle_observation": {
+        "missing_goal_units": [
+          "g2"
+        ],
+        "unexpected_task_ids": [
+          "task-1",
+          "task-2",
+          "task-4"
+        ],
+        "predicted_task_count": 5,
+        "goal_unit_count": 3,
+        "unnecessary_task_count": 3,
+        "missing_task_count": 1,
+        "task_granularity": 0.0
+      }
+    },
+    {
+      "case_id": "PA014",
+      "input": "在 routes.py 增加 /health 端点，并为它补测试。",
+      "family": "P4",
+      "expected_mode": "plan",
+      "baseline_provider_status": "SUCCESS",
+      "baseline_failure_category": "P-CAP",
+      "baseline_failure_subcategory": "UNDER_PLAN",
+      "review": {
+        "category": "P-ORACLE",
+        "subcategory": "IMPLICIT_READ_AND_NEW_FILE_WRITE",
+        "confidence": "high",
+        "disposition": "exclude_from_strict_target_score",
+        "note": "The requested route and test are both covered. Reading the existing route and using write for a newly created test file are reasonable task representations absent an explicit prerequisite policy."
+      },
+      "expected_goal_units": [
+        {
+          "id": "g1",
+          "verbs": [
+            "modify"
+          ],
+          "target_type": "file",
+          "target": "routes.py",
+          "critical": true,
+          "depends_on": []
+        },
+        {
+          "id": "g2",
+          "verbs": [
+            "modify"
+          ],
+          "target_type": "file",
+          "target": "tests/test_routes.py",
+          "critical": true,
+          "depends_on": [
+            "g1"
+          ]
+        }
+      ],
+      "actual_tasks": [
+        {
+          "id": "task-1",
+          "verb": "read",
+          "target_type": "file",
+          "target": "routes.py",
+          "dependencies": []
+        },
+        {
+          "id": "task-2",
+          "verb": "modify",
+          "target_type": "file",
+          "target": "routes.py",
+          "dependencies": [
+            "task-1"
+          ]
+        },
+        {
+          "id": "task-3",
+          "verb": "write",
+          "target_type": "file",
+          "target": "tests/test_routes.py",
+          "dependencies": [
+            "task-2"
+          ]
+        }
+      ],
+      "oracle_observation": {
+        "missing_goal_units": [
+          "g2"
+        ],
+        "unexpected_task_ids": [
+          "task-1",
+          "task-3"
+        ],
+        "predicted_task_count": 3,
+        "goal_unit_count": 2,
+        "unnecessary_task_count": 2,
+        "missing_task_count": 1,
+        "task_granularity": 0.0
+      }
+    },
+    {
+      "case_id": "PA015",
+      "input": "给 cli.py 增加 --json 输出选项，并更新对应测试。",
+      "family": "P4",
+      "expected_mode": "plan",
+      "baseline_provider_status": "PROVIDER_ERROR",
+      "baseline_failure_category": "P-PROV",
+      "baseline_failure_subcategory": "INTERNAL",
+      "review": {
+        "category": "P-PROV",
+        "subcategory": "PROVIDER_INTERNAL",
+        "confidence": "high",
+        "disposition": "exclude_provider_error",
+        "note": "The baseline has one failed production Provider attempt and no Planner output; it cannot be attributed to planning capability."
+      },
+      "expected_goal_units": [
+        {
+          "id": "g1",
+          "verbs": [
+            "modify"
+          ],
+          "target_type": "file",
+          "target": "cli.py",
+          "critical": true,
+          "depends_on": []
+        },
+        {
+          "id": "g2",
+          "verbs": [
+            "modify"
+          ],
+          "target_type": "file",
+          "target": "tests/test_cli.py",
+          "critical": true,
+          "depends_on": [
+            "g1"
+          ]
+        }
+      ],
+      "actual_tasks": [
+        {
+          "id": "task-1",
+          "verb": "modify",
+          "target_type": "text",
+          "target": "",
+          "dependencies": []
+        }
+      ],
+      "oracle_observation": {
+        "missing_goal_units": [],
+        "unexpected_task_ids": [],
+        "predicted_task_count": 0,
+        "goal_unit_count": 0,
+        "unnecessary_task_count": 0,
+        "missing_task_count": 0,
+        "task_granularity": 0.0
+      }
+    },
+    {
+      "case_id": "PA016",
+      "input": "为 service.py 增加带过期时间的缓存，添加测试并说明配置方式。",
+      "family": "P4",
+      "expected_mode": "plan",
+      "baseline_provider_status": "SUCCESS",
+      "baseline_failure_category": "P-CAP",
+      "baseline_failure_subcategory": "UNDER_PLAN",
+      "review": {
+        "category": "P-CAP",
+        "subcategory": "GOAL_DRIFT",
+        "confidence": "high",
+        "disposition": "retain_as_planner_failure",
+        "note": "The plan changes tests/test_service.py to test_service.py and changes the requested README documentation target to CACHE.md; both requested target identities drift."
+      },
+      "expected_goal_units": [
+        {
+          "id": "g1",
+          "verbs": [
+            "modify"
+          ],
+          "target_type": "file",
+          "target": "service.py",
+          "critical": true,
+          "depends_on": []
+        },
+        {
+          "id": "g2",
+          "verbs": [
+            "modify"
+          ],
+          "target_type": "file",
+          "target": "tests/test_service.py",
+          "critical": true,
+          "depends_on": [
+            "g1"
+          ]
+        },
+        {
+          "id": "g3",
+          "verbs": [
+            "modify"
+          ],
+          "target_type": "file",
+          "target": "README.md",
+          "critical": false,
+          "depends_on": [
+            "g2"
+          ]
+        }
+      ],
+      "actual_tasks": [
+        {
+          "id": "task-1",
+          "verb": "read",
+          "target_type": "file",
+          "target": "service.py",
+          "dependencies": []
+        },
+        {
+          "id": "task-2",
+          "verb": "modify",
+          "target_type": "file",
+          "target": "service.py",
+          "dependencies": [
+            "task-1"
+          ]
+        },
+        {
+          "id": "task-3",
+          "verb": "write",
+          "target_type": "file",
+          "target": "test_service.py",
+          "dependencies": [
+            "task-2"
+          ]
+        },
+        {
+          "id": "task-4",
+          "verb": "write",
+          "target_type": "file",
+          "target": "CACHE.md",
+          "dependencies": [
+            "task-2"
+          ]
+        }
+      ],
+      "oracle_observation": {
+        "missing_goal_units": [
+          "g2",
+          "g3"
+        ],
+        "unexpected_task_ids": [
+          "task-1",
+          "task-3",
+          "task-4"
+        ],
+        "predicted_task_count": 4,
+        "goal_unit_count": 3,
+        "unnecessary_task_count": 3,
+        "missing_task_count": 2,
+        "task_granularity": 0.0
+      }
+    },
+    {
+      "case_id": "PA017",
+      "input": "分析 agent/runtime.py 中 run 方法的职责，给出调用流程。",
+      "family": "P5",
+      "expected_mode": "plan",
+      "baseline_provider_status": "SUCCESS",
+      "baseline_failure_category": "P-CAP",
+      "baseline_failure_subcategory": "UNDER_PLAN",
+      "review": {
+        "category": "P-ORACLE",
+        "subcategory": "TARGET_TYPE_REPRESENTATION",
+        "confidence": "high",
+        "disposition": "exclude_from_strict_target_score",
+        "note": "The plan reads agent/runtime.py and explains the run method. The text target carries the symbol and requested call flow, but the Oracle requires target_type=symbol with target=run."
+      },
+      "expected_goal_units": [
+        {
+          "id": "g1",
+          "verbs": [
+            "read"
+          ],
+          "target_type": "file",
+          "target": "agent/runtime.py",
+          "critical": true,
+          "depends_on": []
+        },
+        {
+          "id": "g2",
+          "verbs": [
+            "explain"
+          ],
+          "target_type": "symbol",
+          "target": "run",
+          "critical": true,
+          "depends_on": [
+            "g1"
+          ]
+        }
+      ],
+      "actual_tasks": [
+        {
+          "id": "task-1",
+          "verb": "read",
+          "target_type": "file",
+          "target": "agent/runtime.py",
+          "dependencies": []
+        },
+        {
+          "id": "task-2",
+          "verb": "explain",
+          "target_type": "text",
+          "target": "agent/runtime.py 中 run 方法的职责与调用流程",
+          "dependencies": [
+            "task-1"
+          ]
+        }
+      ],
+      "oracle_observation": {
+        "missing_goal_units": [
+          "g2"
+        ],
+        "unexpected_task_ids": [
+          "task-2"
+        ],
+        "predicted_task_count": 2,
+        "goal_unit_count": 2,
+        "unnecessary_task_count": 1,
+        "missing_task_count": 1,
+        "task_granularity": 1.0
+      }
+    },
+    {
+      "case_id": "PA018",
+      "input": "找出 Planner 到 PlanExecutor 的调用链并解释每层职责。",
+      "family": "P5",
+      "expected_mode": "plan",
+      "baseline_provider_status": "SUCCESS",
+      "baseline_failure_category": "P-CAP",
+      "baseline_failure_subcategory": "UNDER_PLAN",
+      "review": {
+        "category": "P-ORACLE",
+        "subcategory": "SEARCH_GRANULARITY",
+        "confidence": "high",
+        "disposition": "exclude_from_strict_target_score",
+        "note": "Two symbol searches followed by a dependent explanation are a semantically valid expansion of finding the Planner→PlanExecutor call chain; the frozen unit requires one text search."
+      },
+      "expected_goal_units": [
+        {
+          "id": "g1",
+          "verbs": [
+            "search"
+          ],
+          "target_type": "text",
+          "target": "Planner 到 PlanExecutor",
+          "critical": true,
+          "depends_on": []
+        },
+        {
+          "id": "g2",
+          "verbs": [
+            "explain"
+          ],
+          "target_type": "text",
+          "target": "Planner 到 PlanExecutor 的调用链",
+          "critical": true,
+          "depends_on": [
+            "g1"
+          ]
+        }
+      ],
+      "actual_tasks": [
+        {
+          "id": "task-1",
+          "verb": "search",
+          "target_type": "symbol",
+          "target": "Planner",
+          "dependencies": []
+        },
+        {
+          "id": "task-2",
+          "verb": "search",
+          "target_type": "symbol",
+          "target": "PlanExecutor",
+          "dependencies": []
+        },
+        {
+          "id": "task-3",
+          "verb": "explain",
+          "target_type": "text",
+          "target": "Planner 到 PlanExecutor 的调用链及每层职责",
+          "dependencies": [
+            "task-1",
+            "task-2"
+          ]
+        }
+      ],
+      "oracle_observation": {
+        "missing_goal_units": [
+          "g1"
+        ],
+        "unexpected_task_ids": [
+          "task-1",
+          "task-2"
+        ],
+        "predicted_task_count": 3,
+        "goal_unit_count": 2,
+        "unnecessary_task_count": 2,
+        "missing_task_count": 1,
+        "task_granularity": 0.0
+      }
+    },
+    {
+      "case_id": "PA021",
+      "input": "搜索 Python 最新版本的变化并给出带来源的摘要。",
+      "family": "P6",
+      "expected_mode": "plan",
+      "baseline_provider_status": "SUCCESS",
+      "baseline_failure_category": "P-CAP",
+      "baseline_failure_subcategory": "UNDER_PLAN",
+      "review": {
+        "category": "P-ORACLE",
+        "subcategory": "SEMANTIC_TEXT_TARGET",
+        "confidence": "high",
+        "disposition": "exclude_from_strict_target_score",
+        "note": "Python latest version changelog 2026 is a semantic rendering of Python 最新版本的变化; the text matcher does not recognize the translation/expansion."
+      },
+      "expected_goal_units": [
+        {
+          "id": "g1",
+          "verbs": [
+            "search"
+          ],
+          "target_type": "text",
+          "target": "Python 最新版本的变化",
+          "critical": true,
+          "depends_on": []
+        },
+        {
+          "id": "g2",
+          "verbs": [
+            "explain"
+          ],
+          "target_type": "text",
+          "target": "Python 最新版本摘要",
+          "critical": true,
+          "depends_on": [
+            "g1"
+          ]
+        }
+      ],
+      "actual_tasks": [
+        {
+          "id": "task-1",
+          "verb": "search",
+          "target_type": "text",
+          "target": "Python latest version changelog 2026",
+          "dependencies": []
+        },
+        {
+          "id": "task-2",
+          "verb": "explain",
+          "target_type": "text",
+          "target": "Python 最新版本变化摘要（含来源）",
+          "dependencies": [
+            "task-1"
+          ]
+        }
+      ],
+      "oracle_observation": {
+        "missing_goal_units": [
+          "g1",
+          "g2"
+        ],
+        "unexpected_task_ids": [
+          "task-1",
+          "task-2"
+        ],
+        "predicted_task_count": 2,
+        "goal_unit_count": 2,
+        "unnecessary_task_count": 2,
+        "missing_task_count": 2,
+        "task_granularity": 1.0
+      }
+    },
+    {
+      "case_id": "PA022",
+      "input": "查阅 SQLite WAL 的官方资料，整理它的优缺点并附链接。",
+      "family": "P6",
+      "expected_mode": "plan",
+      "baseline_provider_status": "NOT_CALLED",
+      "baseline_failure_category": "P-CAP",
+      "baseline_failure_subcategory": "FALSE_CLARIFICATION",
+      "review": {
+        "category": "P-UNCERTAINTY",
+        "subcategory": "FALSE_CLARIFICATION_POLICY",
+        "confidence": "high",
+        "disposition": "retain_as_policy_failure",
+        "note": "The deterministic detector treats the legitimate pronoun 它 in this otherwise specific request as a vague reference, returns abstain before any Provider call, and suppresses a valid plan."
+      },
+      "expected_goal_units": [
+        {
+          "id": "g1",
+          "verbs": [
+            "search"
+          ],
+          "target_type": "text",
+          "target": "SQLite WAL 官方资料",
+          "critical": true,
+          "depends_on": []
+        },
+        {
+          "id": "g2",
+          "verbs": [
+            "explain"
+          ],
+          "target_type": "text",
+          "target": "SQLite WAL 优缺点",
+          "critical": true,
+          "depends_on": [
+            "g1"
+          ]
+        }
+      ],
+      "actual_tasks": [],
+      "oracle_observation": {
+        "missing_goal_units": [
+          "g1",
+          "g2"
+        ],
+        "unexpected_task_ids": [],
+        "predicted_task_count": 0,
+        "goal_unit_count": 2,
+        "unnecessary_task_count": 0,
+        "missing_task_count": 2,
+        "task_granularity": 0.0
+      }
+    },
+    {
+      "case_id": "PA023",
+      "input": "搜索最近的 Python 安全公告，按影响和修复方式总结。",
+      "family": "P6",
+      "expected_mode": "plan",
+      "baseline_provider_status": "SUCCESS",
+      "baseline_failure_category": "P-CAP",
+      "baseline_failure_subcategory": "UNDER_PLAN",
+      "review": {
+        "category": "P-ORACLE",
+        "subcategory": "SEMANTIC_TEXT_TARGET",
+        "confidence": "high",
+        "disposition": "exclude_from_strict_target_score",
+        "note": "The search target matches exactly and the explanation target adds the requested impact/remediation detail; the missing result is a lexical target false negative."
+      },
+      "expected_goal_units": [
+        {
+          "id": "g1",
+          "verbs": [
+            "search"
+          ],
+          "target_type": "text",
+          "target": "最近的 Python 安全公告",
+          "critical": true,
+          "depends_on": []
+        },
+        {
+          "id": "g2",
+          "verbs": [
+            "explain"
+          ],
+          "target_type": "text",
+          "target": "Python 安全公告总结",
+          "critical": true,
+          "depends_on": [
+            "g1"
+          ]
+        }
+      ],
+      "actual_tasks": [
+        {
+          "id": "task-1",
+          "verb": "search",
+          "target_type": "text",
+          "target": "最近的 Python 安全公告",
+          "dependencies": []
+        },
+        {
+          "id": "task-2",
+          "verb": "explain",
+          "target_type": "text",
+          "target": "Python 安全公告的影响和修复方式",
+          "dependencies": [
+            "task-1"
+          ]
+        }
+      ],
+      "oracle_observation": {
+        "missing_goal_units": [
+          "g2"
+        ],
+        "unexpected_task_ids": [
+          "task-2"
+        ],
+        "predicted_task_count": 2,
+        "goal_unit_count": 2,
+        "unnecessary_task_count": 1,
+        "missing_task_count": 1,
+        "task_granularity": 1.0
+      }
+    },
+    {
+      "case_id": "PA024",
+      "input": "搜索 PostgreSQL 和 SQLite 的最新官方文档，比较适用场景。",
+      "family": "P6",
+      "expected_mode": "plan",
+      "baseline_provider_status": "SUCCESS",
+      "baseline_failure_category": "P-CAP",
+      "baseline_failure_subcategory": "UNDER_PLAN",
+      "review": {
+        "category": "P-ORACLE",
+        "subcategory": "PARALLEL_SEARCH_DECOMPOSITION",
+        "confidence": "high",
+        "disposition": "exclude_from_strict_target_score",
+        "note": "Splitting one combined documentation search into independent PostgreSQL and SQLite searches is semantically aligned and preserves the comparison dependency; the frozen max task count rejects that representation."
+      },
+      "expected_goal_units": [
+        {
+          "id": "g1",
+          "verbs": [
+            "search"
+          ],
+          "target_type": "text",
+          "target": "PostgreSQL 和 SQLite 最新官方文档",
+          "critical": true,
+          "depends_on": []
+        },
+        {
+          "id": "g2",
+          "verbs": [
+            "explain"
+          ],
+          "target_type": "text",
+          "target": "PostgreSQL 和 SQLite 适用场景",
+          "critical": true,
+          "depends_on": [
+            "g1"
+          ]
+        }
+      ],
+      "actual_tasks": [
+        {
+          "id": "task-1",
+          "verb": "search",
+          "target_type": "text",
+          "target": "PostgreSQL 最新官方文档",
+          "dependencies": []
+        },
+        {
+          "id": "task-2",
+          "verb": "search",
+          "target_type": "text",
+          "target": "SQLite 最新官方文档",
+          "dependencies": []
+        },
+        {
+          "id": "task-3",
+          "verb": "explain",
+          "target_type": "text",
+          "target": "PostgreSQL 与 SQLite 适用场景比较",
+          "dependencies": [
+            "task-1",
+            "task-2"
+          ]
+        }
+      ],
+      "oracle_observation": {
+        "missing_goal_units": [
+          "g2"
+        ],
+        "unexpected_task_ids": [
+          "task-1",
+          "task-3"
+        ],
+        "predicted_task_count": 3,
+        "goal_unit_count": 2,
+        "unnecessary_task_count": 2,
+        "missing_task_count": 1,
+        "task_granularity": 0.0
+      }
+    },
+    {
+      "case_id": "PA025",
+      "input": "搜索向量数据库的最新对比，并把带来源的报告写入 output/vector_db.md。",
+      "family": "P7",
+      "expected_mode": "plan",
+      "baseline_provider_status": "SUCCESS",
+      "baseline_failure_category": "P-CAP",
+      "baseline_failure_subcategory": "UNDER_PLAN",
+      "review": {
+        "category": "P-ORACLE",
+        "subcategory": "SEMANTIC_TEXT_TARGET",
+        "confidence": "high",
+        "disposition": "exclude_from_strict_target_score",
+        "note": "Adding the explicit 2025-2026 range to the vector-database comparison query preserves the requested research goal; containment matching is too strict for this form."
+      },
+      "expected_goal_units": [
+        {
+          "id": "g1",
+          "verbs": [
+            "search"
+          ],
+          "target_type": "text",
+          "target": "向量数据库的最新对比",
+          "critical": true,
+          "depends_on": []
+        },
+        {
+          "id": "g2",
+          "verbs": [
+            "write"
+          ],
+          "target_type": "file",
+          "target": "output/vector_db.md",
+          "critical": true,
+          "depends_on": [
+            "g1"
+          ]
+        }
+      ],
+      "actual_tasks": [
+        {
+          "id": "task-1",
+          "verb": "search",
+          "target_type": "text",
+          "target": "向量数据库最新对比（2025-2026）",
+          "dependencies": []
+        },
+        {
+          "id": "task-2",
+          "verb": "write",
+          "target_type": "file",
+          "target": "output/vector_db.md",
+          "dependencies": [
+            "task-1"
+          ]
+        }
+      ],
+      "oracle_observation": {
+        "missing_goal_units": [
+          "g1"
+        ],
+        "unexpected_task_ids": [
+          "task-1"
+        ],
+        "predicted_task_count": 2,
+        "goal_unit_count": 2,
+        "unnecessary_task_count": 1,
+        "missing_task_count": 1,
+        "task_granularity": 1.0
+      }
+    },
+    {
+      "case_id": "PA026",
+      "input": "查找 Ollama 官方 API 用法，整理成 output/ollama_api.md。",
+      "family": "P7",
+      "expected_mode": "plan",
+      "baseline_provider_status": "SUCCESS",
+      "baseline_failure_category": "P-CAP",
+      "baseline_failure_subcategory": "UNDER_PLAN",
+      "review": {
+        "category": "P-ORACLE",
+        "subcategory": "SEMANTIC_TEXT_TARGET",
+        "confidence": "high",
+        "disposition": "exclude_from_strict_target_score",
+        "note": "Ollama API official documentation is a concise equivalent of Ollama 官方 API 用法."
+      },
+      "expected_goal_units": [
+        {
+          "id": "g1",
+          "verbs": [
+            "search"
+          ],
+          "target_type": "text",
+          "target": "Ollama 官方 API 用法",
+          "critical": true,
+          "depends_on": []
+        },
+        {
+          "id": "g2",
+          "verbs": [
+            "write"
+          ],
+          "target_type": "file",
+          "target": "output/ollama_api.md",
+          "critical": true,
+          "depends_on": [
+            "g1"
+          ]
+        }
+      ],
+      "actual_tasks": [
+        {
+          "id": "task-1",
+          "verb": "search",
+          "target_type": "text",
+          "target": "Ollama API 官方文档",
+          "dependencies": []
+        },
+        {
+          "id": "task-2",
+          "verb": "write",
+          "target_type": "file",
+          "target": "output/ollama_api.md",
+          "dependencies": [
+            "task-1"
+          ]
+        }
+      ],
+      "oracle_observation": {
+        "missing_goal_units": [
+          "g1"
+        ],
+        "unexpected_task_ids": [
+          "task-1"
+        ],
+        "predicted_task_count": 2,
+        "goal_unit_count": 2,
+        "unnecessary_task_count": 1,
+        "missing_task_count": 1,
+        "task_granularity": 1.0
+      }
+    },
+    {
+      "case_id": "PA028",
+      "input": "搜索今天的 AI 新闻，把标题和来源写入 output/ai_news.md。",
+      "family": "P7",
+      "expected_mode": "plan",
+      "baseline_provider_status": "SUCCESS",
+      "baseline_failure_category": "P-CAP",
+      "baseline_failure_subcategory": "UNDER_PLAN",
+      "review": {
+        "category": "P-ORACLE",
+        "subcategory": "SEMANTIC_TEXT_TARGET",
+        "confidence": "high",
+        "disposition": "exclude_from_strict_target_score",
+        "note": "The plan expands 今天的 AI 新闻 into a concrete dated news/title/source search while retaining the requested write target."
+      },
+      "expected_goal_units": [
+        {
+          "id": "g1",
+          "verbs": [
+            "search"
+          ],
+          "target_type": "text",
+          "target": "今天的 AI 新闻",
+          "critical": true,
+          "depends_on": []
+        },
+        {
+          "id": "g2",
+          "verbs": [
+            "write"
+          ],
+          "target_type": "file",
+          "target": "output/ai_news.md",
+          "critical": true,
+          "depends_on": [
+            "g1"
+          ]
+        }
+      ],
+      "actual_tasks": [
+        {
+          "id": "task-1",
+          "verb": "search",
+          "target_type": "text",
+          "target": "2026-08-29 人工智能 新闻 标题 来源",
+          "dependencies": []
+        },
+        {
+          "id": "task-2",
+          "verb": "write",
+          "target_type": "file",
+          "target": "output/ai_news.md",
+          "dependencies": [
+            "task-1"
+          ]
+        }
+      ],
+      "oracle_observation": {
+        "missing_goal_units": [
+          "g1"
+        ],
+        "unexpected_task_ids": [
+          "task-1"
+        ],
+        "predicted_task_count": 2,
+        "goal_unit_count": 2,
+        "unnecessary_task_count": 1,
+        "missing_task_count": 1,
+        "task_granularity": 1.0
+      }
+    },
+    {
+      "case_id": "PA029",
+      "input": "搜索 Python asyncio 超时处理的官方建议，结合结果修改 client.py 并补测试。",
+      "family": "P8",
+      "expected_mode": "plan",
+      "baseline_provider_status": "SUCCESS",
+      "baseline_failure_category": "P-CAP",
+      "baseline_failure_subcategory": "UNDER_PLAN",
+      "review": {
+        "category": "P-ORACLE",
+        "subcategory": "SEMANTIC_TEXT_TARGET_AND_PREREQUISITE",
+        "confidence": "high",
+        "disposition": "exclude_from_strict_target_score",
+        "note": "The search target is an English rendering of the Chinese request, and the two file reads are reasonable prerequisites before the two modifications."
+      },
+      "expected_goal_units": [
+        {
+          "id": "g1",
+          "verbs": [
+            "search"
+          ],
+          "target_type": "text",
+          "target": "Python asyncio 超时处理官方建议",
+          "critical": true,
+          "depends_on": []
+        },
+        {
+          "id": "g2",
+          "verbs": [
+            "modify"
+          ],
+          "target_type": "file",
+          "target": "client.py",
+          "critical": true,
+          "depends_on": [
+            "g1"
+          ]
+        },
+        {
+          "id": "g3",
+          "verbs": [
+            "modify"
+          ],
+          "target_type": "file",
+          "target": "tests/test_client.py",
+          "critical": true,
+          "depends_on": [
+            "g2"
+          ]
+        }
+      ],
+      "actual_tasks": [
+        {
+          "id": "task-1",
+          "verb": "search",
+          "target_type": "text",
+          "target": "Python asyncio timeout handling official documentation",
+          "dependencies": []
+        },
+        {
+          "id": "task-2",
+          "verb": "read",
+          "target_type": "file",
+          "target": "client.py",
+          "dependencies": []
+        },
+        {
+          "id": "task-3",
+          "verb": "read",
+          "target_type": "file",
+          "target": "tests/test_client.py",
+          "dependencies": []
+        },
+        {
+          "id": "task-4",
+          "verb": "modify",
+          "target_type": "file",
+          "target": "client.py",
+          "dependencies": [
+            "task-1",
+            "task-2"
+          ]
+        },
+        {
+          "id": "task-5",
+          "verb": "modify",
+          "target_type": "file",
+          "target": "tests/test_client.py",
+          "dependencies": [
+            "task-1",
+            "task-2",
+            "task-3",
+            "task-4"
+          ]
+        }
+      ],
+      "oracle_observation": {
+        "missing_goal_units": [
+          "g1"
+        ],
+        "unexpected_task_ids": [
+          "task-1",
+          "task-2",
+          "task-3"
+        ],
+        "predicted_task_count": 5,
+        "goal_unit_count": 3,
+        "unnecessary_task_count": 3,
+        "missing_task_count": 1,
+        "task_granularity": 0.0
+      }
+    },
+    {
+      "case_id": "PA030",
+      "input": "阅读 serializer.py，搜索 JSON Schema 的兼容建议，修改 serializer.py 并运行测试。",
+      "family": "P8",
+      "expected_mode": "plan",
+      "baseline_provider_status": "SUCCESS",
+      "baseline_failure_category": "P-CAP",
+      "baseline_failure_subcategory": "UNDER_PLAN",
+      "review": {
+        "category": "P-ORACLE",
+        "subcategory": "SEMANTIC_TEXT_TARGET_AND_TARGET_TYPE",
+        "confidence": "high",
+        "disposition": "exclude_from_strict_target_score",
+        "note": "The search target is an equivalent English query and execute symbol=pytest is a more precise representation than execute text=pytest."
+      },
+      "expected_goal_units": [
+        {
+          "id": "g1",
+          "verbs": [
+            "read"
+          ],
+          "target_type": "file",
+          "target": "serializer.py",
+          "critical": true,
+          "depends_on": []
+        },
+        {
+          "id": "g2",
+          "verbs": [
+            "search"
+          ],
+          "target_type": "text",
+          "target": "JSON Schema 兼容建议",
+          "critical": true,
+          "depends_on": []
+        },
+        {
+          "id": "g3",
+          "verbs": [
+            "modify"
+          ],
+          "target_type": "file",
+          "target": "serializer.py",
+          "critical": true,
+          "depends_on": [
+            "g1",
+            "g2"
+          ]
+        },
+        {
+          "id": "g4",
+          "verbs": [
+            "execute"
+          ],
+          "target_type": "text",
+          "target": "pytest",
+          "critical": true,
+          "depends_on": [
+            "g3"
+          ]
+        }
+      ],
+      "actual_tasks": [
+        {
+          "id": "task-1",
+          "verb": "read",
+          "target_type": "file",
+          "target": "serializer.py",
+          "dependencies": []
+        },
+        {
+          "id": "task-2",
+          "verb": "search",
+          "target_type": "text",
+          "target": "JSON Schema compatibility best practices",
+          "dependencies": []
+        },
+        {
+          "id": "task-3",
+          "verb": "modify",
+          "target_type": "file",
+          "target": "serializer.py",
+          "dependencies": [
+            "task-1",
+            "task-2"
+          ]
+        },
+        {
+          "id": "task-4",
+          "verb": "execute",
+          "target_type": "symbol",
+          "target": "pytest",
+          "dependencies": [
+            "task-3"
+          ]
+        }
+      ],
+      "oracle_observation": {
+        "missing_goal_units": [
+          "g2",
+          "g4"
+        ],
+        "unexpected_task_ids": [
+          "task-2",
+          "task-4"
+        ],
+        "predicted_task_count": 4,
+        "goal_unit_count": 4,
+        "unnecessary_task_count": 2,
+        "missing_task_count": 2,
+        "task_granularity": 1.0
+      }
+    },
+    {
+      "case_id": "PA031",
+      "input": "查找一个稳定的 CSV 解析库，写出 output/csv_probe.py，运行它并贴出结果。",
+      "family": "P8",
+      "expected_mode": "plan",
+      "baseline_provider_status": "SUCCESS",
+      "baseline_failure_category": "P-CAP",
+      "baseline_failure_subcategory": "UNDER_PLAN",
+      "review": {
+        "category": "P-CON",
+        "subcategory": "PLANNER_VS_FINAL_RESPONSE_BOUNDARY",
+        "confidence": "medium",
+        "disposition": "exclude_from_strict_target_score_pending_contract_decision",
+        "note": "resolve is a plausible rendering of 查找, while explaining the run output is naturally a user-visible final response. The Dataset requires search and omits that response boundary."
+      },
+      "expected_goal_units": [
+        {
+          "id": "g1",
+          "verbs": [
+            "search"
+          ],
+          "target_type": "text",
+          "target": "稳定的 CSV 解析库",
+          "critical": true,
+          "depends_on": []
+        },
+        {
+          "id": "g2",
+          "verbs": [
+            "write"
+          ],
+          "target_type": "file",
+          "target": "output/csv_probe.py",
+          "critical": true,
+          "depends_on": [
+            "g1"
+          ]
+        },
+        {
+          "id": "g3",
+          "verbs": [
+            "execute"
+          ],
+          "target_type": "file",
+          "target": "output/csv_probe.py",
+          "critical": true,
+          "depends_on": [
+            "g2"
+          ]
+        }
+      ],
+      "actual_tasks": [
+        {
+          "id": "task-1",
+          "verb": "resolve",
+          "target_type": "text",
+          "target": "稳定的 CSV 解析库",
+          "dependencies": []
+        },
+        {
+          "id": "task-2",
+          "verb": "write",
+          "target_type": "file",
+          "target": "output/csv_probe.py",
+          "dependencies": [
+            "task-1"
+          ]
+        },
+        {
+          "id": "task-3",
+          "verb": "execute",
+          "target_type": "file",
+          "target": "output/csv_probe.py",
+          "dependencies": [
+            "task-2"
+          ]
+        },
+        {
+          "id": "task-4",
+          "verb": "explain",
+          "target_type": "text",
+          "target": "csv_probe.py 的运行结果",
+          "dependencies": [
+            "task-3"
+          ]
+        }
+      ],
+      "oracle_observation": {
+        "missing_goal_units": [
+          "g1"
+        ],
+        "unexpected_task_ids": [
+          "task-1",
+          "task-4"
+        ],
+        "predicted_task_count": 4,
+        "goal_unit_count": 3,
+        "unnecessary_task_count": 2,
+        "missing_task_count": 1,
+        "task_granularity": 0.0
+      }
+    },
+    {
+      "case_id": "PA032",
+      "input": "搜索 requests 和 httpx 的异步用法，给 downloader.py 增加 httpx 适配并补测试。",
+      "family": "P8",
+      "expected_mode": "plan",
+      "baseline_provider_status": "PROVIDER_ERROR",
+      "baseline_failure_category": "P-PROV",
+      "baseline_failure_subcategory": "INTERNAL",
+      "review": {
+        "category": "P-PROV",
+        "subcategory": "PROVIDER_INTERNAL",
+        "confidence": "high",
+        "disposition": "exclude_provider_error",
+        "note": "The baseline has one failed production Provider attempt and no Planner output; it cannot be attributed to planning capability."
+      },
+      "expected_goal_units": [
+        {
+          "id": "g1",
+          "verbs": [
+            "search"
+          ],
+          "target_type": "text",
+          "target": "requests 和 httpx 的异步用法",
+          "critical": true,
+          "depends_on": []
+        },
+        {
+          "id": "g2",
+          "verbs": [
+            "modify"
+          ],
+          "target_type": "file",
+          "target": "downloader.py",
+          "critical": true,
+          "depends_on": [
+            "g1"
+          ]
+        },
+        {
+          "id": "g3",
+          "verbs": [
+            "modify"
+          ],
+          "target_type": "file",
+          "target": "tests/test_downloader.py",
+          "critical": true,
+          "depends_on": [
+            "g2"
+          ]
+        }
+      ],
+      "actual_tasks": [
+        {
+          "id": "task-1",
+          "verb": "modify",
+          "target_type": "text",
+          "target": "",
+          "dependencies": []
+        }
+      ],
+      "oracle_observation": {
+        "missing_goal_units": [],
+        "unexpected_task_ids": [],
+        "predicted_task_count": 0,
+        "goal_unit_count": 0,
+        "unnecessary_task_count": 0,
+        "missing_task_count": 0,
+        "task_granularity": 0.0
+      }
+    },
+    {
+      "case_id": "PA034",
+      "input": "帮我加个功能。",
+      "family": "P9",
+      "expected_mode": "abstain",
+      "baseline_provider_status": "SUCCESS",
+      "baseline_failure_category": "P-CAP",
+      "baseline_failure_subcategory": "MISSED_CLARIFICATION",
+      "review": {
+        "category": "P-UNCERTAINTY",
+        "subcategory": "MISSED_CLARIFICATION",
+        "confidence": "high",
+        "disposition": "retain_as_policy_failure",
+        "note": "The deterministic detector returns false for 帮我加个功能；the Provider path then returns a generic modify task instead of abstaining."
+      },
+      "expected_goal_units": [],
+      "actual_tasks": [
+        {
+          "id": "task-1",
+          "verb": "modify",
+          "target_type": "text",
+          "target": "",
+          "dependencies": []
+        }
+      ],
+      "oracle_observation": {
+        "missing_goal_units": [],
+        "unexpected_task_ids": [
+          "task-1"
+        ],
+        "predicted_task_count": 1,
+        "goal_unit_count": 0,
+        "unnecessary_task_count": 1,
+        "missing_task_count": 0,
+        "task_granularity": 0.0
+      }
+    },
+    {
+      "case_id": "PA036",
+      "input": "部署到那里。",
+      "family": "P9",
+      "expected_mode": "abstain",
+      "baseline_provider_status": "SUCCESS",
+      "baseline_failure_category": "P-CAP",
+      "baseline_failure_subcategory": "MISSED_CLARIFICATION",
+      "review": {
+        "category": "P-UNCERTAINTY",
+        "subcategory": "MISSED_CLARIFICATION",
+        "confidence": "high",
+        "disposition": "retain_as_policy_failure",
+        "note": "那里 is not covered by the deterministic vague-reference regex; the Provider/fallback path emits an empty-target modify task."
+      },
+      "expected_goal_units": [],
+      "actual_tasks": [
+        {
+          "id": "task-1",
+          "verb": "modify",
+          "target_type": "text",
+          "target": "",
+          "dependencies": []
+        }
+      ],
+      "oracle_observation": {
+        "missing_goal_units": [],
+        "unexpected_task_ids": [
+          "task-1"
+        ],
+        "predicted_task_count": 1,
+        "goal_unit_count": 0,
+        "unnecessary_task_count": 1,
+        "missing_task_count": 0,
+        "task_granularity": 0.0
+      }
+    },
+    {
+      "case_id": "PA038",
+      "input": "把结果保存一下。",
+      "family": "P10",
+      "expected_mode": "abstain",
+      "baseline_provider_status": "SUCCESS",
+      "baseline_failure_category": "P-CAP",
+      "baseline_failure_subcategory": "MISSED_CLARIFICATION",
+      "review": {
+        "category": "P-UNCERTAINTY",
+        "subcategory": "MISSED_CLARIFICATION",
+        "confidence": "high",
+        "disposition": "retain_as_policy_failure",
+        "note": "把结果保存一下 leaves the result identity and destination unspecified; the Planner invents result.txt instead of requesting clarification."
+      },
+      "expected_goal_units": [],
+      "actual_tasks": [
+        {
+          "id": "task-1",
+          "verb": "write",
+          "target_type": "file",
+          "target": "result.txt",
+          "dependencies": []
+        }
+      ],
+      "oracle_observation": {
+        "missing_goal_units": [],
+        "unexpected_task_ids": [
+          "task-1"
+        ],
+        "predicted_task_count": 1,
+        "goal_unit_count": 0,
+        "unnecessary_task_count": 1,
+        "missing_task_count": 0,
+        "task_granularity": 0.0
+      }
+    },
+    {
+      "case_id": "PA039",
+      "input": "按之前的方案改。",
+      "family": "P10",
+      "expected_mode": "abstain",
+      "baseline_provider_status": "SUCCESS",
+      "baseline_failure_category": "P-CAP",
+      "baseline_failure_subcategory": "MISSED_CLARIFICATION",
+      "review": {
+        "category": "P-UNCERTAINTY",
+        "subcategory": "MISSED_CLARIFICATION",
+        "confidence": "high",
+        "disposition": "retain_as_policy_failure",
+        "note": "之前的方案 is an unresolved reference; the deterministic detector does not cover it and the fallback returns an empty-target modify task."
+      },
+      "expected_goal_units": [],
+      "actual_tasks": [
+        {
+          "id": "task-1",
+          "verb": "modify",
+          "target_type": "text",
+          "target": "",
+          "dependencies": []
+        }
+      ],
+      "oracle_observation": {
+        "missing_goal_units": [],
+        "unexpected_task_ids": [
+          "task-1"
+        ],
+        "predicted_task_count": 1,
+        "goal_unit_count": 0,
+        "unnecessary_task_count": 1,
+        "missing_task_count": 0,
+        "task_granularity": 0.0
+      }
+    },
+    {
+      "case_id": "PA042",
+      "input": "同时搜索 SQLite WAL 和 PostgreSQL MVCC 的官方资料，最后比较两者。",
+      "family": "P11",
+      "expected_mode": "plan",
+      "baseline_provider_status": "SUCCESS",
+      "baseline_failure_category": "P-CAP",
+      "baseline_failure_subcategory": "UNDER_PLAN",
+      "review": {
+        "category": "P-ORACLE",
+        "subcategory": "SEMANTIC_TEXT_TARGET",
+        "confidence": "high",
+        "disposition": "exclude_from_strict_target_score",
+        "note": "The English search targets and Chinese comparison target preserve all three requested goals and the parallel/dependency structure; the frozen matcher rejects multilingual paraphrase."
+      },
+      "expected_goal_units": [
+        {
+          "id": "g1",
+          "verbs": [
+            "search"
+          ],
+          "target_type": "text",
+          "target": "SQLite WAL 官方资料",
+          "critical": true,
+          "depends_on": []
+        },
+        {
+          "id": "g2",
+          "verbs": [
+            "search"
+          ],
+          "target_type": "text",
+          "target": "PostgreSQL MVCC 官方资料",
+          "critical": true,
+          "depends_on": []
+        },
+        {
+          "id": "g3",
+          "verbs": [
+            "explain"
+          ],
+          "target_type": "text",
+          "target": "SQLite WAL 和 PostgreSQL MVCC 比较",
+          "critical": true,
+          "depends_on": [
+            "g1",
+            "g2"
+          ]
+        }
+      ],
+      "actual_tasks": [
+        {
+          "id": "task-1",
+          "verb": "search",
+          "target_type": "text",
+          "target": "SQLite WAL official documentation",
+          "dependencies": []
+        },
+        {
+          "id": "task-2",
+          "verb": "search",
+          "target_type": "text",
+          "target": "PostgreSQL MVCC official documentation",
+          "dependencies": []
+        },
+        {
+          "id": "task-3",
+          "verb": "explain",
+          "target_type": "text",
+          "target": "SQLite WAL 与 PostgreSQL MVCC 的对比",
+          "dependencies": [
+            "task-1",
+            "task-2"
+          ]
+        }
+      ],
+      "oracle_observation": {
+        "missing_goal_units": [
+          "g1",
+          "g2",
+          "g3"
+        ],
+        "unexpected_task_ids": [
+          "task-1",
+          "task-2",
+          "task-3"
+        ],
+        "predicted_task_count": 3,
+        "goal_unit_count": 3,
+        "unnecessary_task_count": 3,
+        "missing_task_count": 3,
+        "task_granularity": 1.0
+      }
+    },
+    {
+      "case_id": "PA046",
+      "input": "继续完成摘要并保存到 output/summary.md。",
+      "family": "P12",
+      "expected_mode": "plan",
+      "baseline_provider_status": "SUCCESS",
+      "baseline_failure_category": "P-CAP",
+      "baseline_failure_subcategory": "UNDER_PLAN",
+      "review": {
+        "category": "P-ORACLE",
+        "subcategory": "RESUME_WRITE_VS_MODIFY",
+        "confidence": "medium",
+        "disposition": "exclude_from_strict_target_score_pending_contract_decision",
+        "note": "After the source unit is marked completed, reading the current output and modifying it is a plausible continuation of 继续完成摘要; the Oracle only accepts a fresh write unit."
+      },
+      "expected_goal_units": [
+        {
+          "id": "g1",
+          "verbs": [
+            "read"
+          ],
+          "target_type": "file",
+          "target": "input/source.txt",
+          "critical": true,
+          "depends_on": []
+        },
+        {
+          "id": "g2",
+          "verbs": [
+            "write"
+          ],
+          "target_type": "file",
+          "target": "output/summary.md",
+          "critical": true,
+          "depends_on": [
+            "g1"
+          ]
+        }
+      ],
+      "actual_tasks": [
+        {
+          "id": "task-1",
+          "verb": "read",
+          "target_type": "file",
+          "target": "output/summary.md",
+          "dependencies": []
+        },
+        {
+          "id": "task-2",
+          "verb": "modify",
+          "target_type": "file",
+          "target": "output/summary.md",
+          "dependencies": [
+            "task-1"
+          ]
+        }
+      ],
+      "oracle_observation": {
+        "missing_goal_units": [
+          "g2"
+        ],
+        "unexpected_task_ids": [
+          "task-1",
+          "task-2"
+        ],
+        "predicted_task_count": 2,
+        "goal_unit_count": 1,
+        "unnecessary_task_count": 2,
+        "missing_task_count": 1,
+        "task_granularity": 0.0
+      }
+    },
+    {
+      "case_id": "PA049",
+      "input": "A 已经完成，继续完成 B 的实现、测试和验证。",
+      "family": "P12",
+      "expected_mode": "plan",
+      "baseline_provider_status": "SUCCESS",
+      "baseline_failure_category": "P-CAP",
+      "baseline_failure_subcategory": "UNDER_PLAN",
+      "review": {
+        "category": "P-CON",
+        "subcategory": "MISSING_TARGET_CONTEXT",
+        "confidence": "high",
+        "disposition": "exclude_from_decomposition_pending_context_contract",
+        "note": "The input names abstract A/B only, while the Dataset supplies hidden concrete module targets. Searching for their definition is safer under the production no-guess rule than inventing module_b.py and pytest tasks."
+      },
+      "expected_goal_units": [
+        {
+          "id": "g1",
+          "verbs": [
+            "modify"
+          ],
+          "target_type": "file",
+          "target": "module_a.py",
+          "critical": true,
+          "depends_on": []
+        },
+        {
+          "id": "g2",
+          "verbs": [
+            "modify"
+          ],
+          "target_type": "file",
+          "target": "module_b.py",
+          "critical": true,
+          "depends_on": [
+            "g1"
+          ]
+        },
+        {
+          "id": "g3",
+          "verbs": [
+            "modify"
+          ],
+          "target_type": "file",
+          "target": "tests/test_modules.py",
+          "critical": true,
+          "depends_on": [
+            "g2"
+          ]
+        },
+        {
+          "id": "g4",
+          "verbs": [
+            "execute"
+          ],
+          "target_type": "text",
+          "target": "pytest",
+          "critical": true,
+          "depends_on": [
+            "g3"
+          ]
+        }
+      ],
+      "actual_tasks": [
+        {
+          "id": "task-1",
+          "verb": "search",
+          "target_type": "text",
+          "target": "项目上下文中关于 A 和 B 的定义、需求或代码位置",
+          "dependencies": []
+        }
+      ],
+      "oracle_observation": {
+        "missing_goal_units": [
+          "g2",
+          "g3",
+          "g4"
+        ],
+        "unexpected_task_ids": [
+          "task-1"
+        ],
+        "predicted_task_count": 1,
+        "goal_unit_count": 3,
+        "unnecessary_task_count": 1,
+        "missing_task_count": 3,
+        "task_granularity": 0.0
+      }
+    }
+  ],
+  "next_decision_inputs": {
+    "do_not_enter_planner_improvement_yet": true,
+    "contract_decision_required": "Decide whether chat routing is part of the Planner public contract; ADR-0029 currently says yes, production plan_with_metadata does not expose that mode.",
+    "oracle_decision_required": "Decide whether to publish Dataset/Oracle v1.1 with aliases or preserve strict v1 and score semantic equivalence separately.",
+    "production_policy_check": "PA022 is a deterministic false-positive abstention; PA034/PA036/PA038/PA039 are deterministic coverage gaps or fallback-policy failures.",
+    "planner_capability_cases_retained": [
+      "PA013",
+      "PA016"
+    ],
+    "provider_cases_excluded": [
+      "PA015",
+      "PA032"
+    ]
+  }
+}

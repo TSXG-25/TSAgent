@@ -1,0 +1,27 @@
+{
+  "version": "h9-runtime-spine-v3",
+  "status": "PARTIALLY_VERIFIED",
+  "baseline": "261f4cb6",
+  "manifest_hash": "73542bbc53099e63a7220e70b3375938cf012b2d1567b2b84e52ca7657916974",
+  "offline": {
+    "cases": 20,
+    "capability_pass": 19,
+    "freshness_deferred": ["H916"],
+    "runtime_correctness": "20/20",
+    "runtime_failures": 0,
+    "false_completion": 0
+  },
+  "focused_regression": {
+    "tests_passed": 36,
+    "tests_failed": 0
+  },
+  "real_provider": {
+    "provider": "ollama",
+    "model": "qwen2.5:14b",
+    "fallback": false,
+    "pass": ["H903", "H904", "H905", "H906"],
+    "deferred": {},
+    "repository_case_not_sent": ["H912"]
+  },
+  "interpretation": "Runtime spine and completion gates verified; full real-provider capability acceptance remains deferred."
+}

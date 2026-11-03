@@ -10,8 +10,29 @@ from agent.validators.python_syntax import PythonSyntaxValidator
 
 code_generation_workflow = Workflow(
     id="code_generation",
-    description="从题目描述生成解题代码",
-    version="3.0",
+    description=(
+        "读取用户提供的题目/问题文件（question_path，如 question.docx、题目 md/txt）"
+        "并生成解题代码文件。仅当用户明确给出一个待解答的题目文件路径时适用；"
+        "“写个计算器/实现一个工具”这类一般编程请求不属于本 Workflow，"
+        "由通用 Planner 处理。"
+    ),
+    version="3.2",
+    metadata={
+        "capability": {
+            "required_bindings": ["question_path", "output_path"],
+            # question_path is an input the workflow reads: it must already
+            # exist in the Run workspace.  output_path is a write target and
+            # is deliberately not listed here.
+            "required_input_paths": ["question_path"],
+            "defaults": {"output_path": "output/solution.py"},
+            "required_artifacts": [],
+            "required_capabilities": [
+                "filesystem.read",
+                "filesystem.write",
+            ],
+            "output_types": ["solution_file"],
+        },
+    },
     stages=[
         Stage(
             id="read_question",
@@ -43,32 +64,19 @@ code_generation_workflow = Workflow(
             outputs=[OutputArtifact(type="python_code")],
         ),
         Stage(
-            id="verify_code",
-            description="语法检查",
-            execution=ExecutionSpec(
-                executor=ExecutorType.TOOL,
-                tool_policy=ToolPolicy(allow=["run_python"], max_calls=2),
-            ),
-            arguments=[
-                ToolArgument(param="code", artifact="python_code"),
-            ],
-            outputs=[OutputArtifact(type="verified_code")],
-            required_outputs=["python_code"],
-        ),
-        Stage(
             id="write_output",
-            description="写入输出文件",
+            description="写入输出文件并静态检查 Python 语法",
             execution=ExecutionSpec(
                 executor=ExecutorType.TOOL,
                 tool_policy=ToolPolicy(allow=["write_file"]),
             ),
             arguments=[
                 ToolArgument(param="path", artifact="output_path"),
-                ToolArgument(param="content", artifact="verified_code"),
+                ToolArgument(param="content", artifact="python_code"),
             ],
             outputs=[OutputArtifact(type="solution_file")],
-            required_outputs=["verified_code"],
-            validators=[FileExistsValidator()],
+            required_outputs=["python_code"],
+            validators=[FileExistsValidator(), PythonSyntaxValidator()],
         ),
     ],
 )

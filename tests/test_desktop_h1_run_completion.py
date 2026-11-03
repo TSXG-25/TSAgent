@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from types import SimpleNamespace
+import hashlib
 
 from agent.orchestrator.finalizer import Finalizer
 from agent.runtime_store import (
@@ -191,8 +192,9 @@ def test_launcher_artifact_fact_is_bound_to_run_workspace(tmp_path: Path) -> Non
             last_run_evidence={
                 "verified_artifacts": [
                     {
-                        "reference": "output/result.txt",
-                        "artifact_type": "file",
+                            "reference": "output/result.txt",
+                            "digest": hashlib.sha256(b"desktop-h1").hexdigest(),
+                            "artifact_type": "file",
                         "producer_workflow_id": "runtime-execution",
                         "producer_stage_id": "task:h1-write",
                         "producer_task_id": "h1-write",

@@ -1,0 +1,14 @@
+...........F............................................................ [ 21%]
+........................................................................ [ 42%]
+........................................................................ [ 63%]
+........................................................................ [ 84%]
+.....................................................                    [100%]
+=================================== FAILURES ===================================
+______________ test_partial_files_disclosed_if_later_work_failed _______________
+tests/test_ha_r1_harness.py:267: in test_partial_files_disclosed_if_later_work_failed
+    assert 'output/partial.py' in answer and '已完成并保留' in answer
+E   AssertionError: assert ('output/partial.py' in '目标尚未完成，缺少可验证证据：failed task evidence、outcome:FILE_MUTATION、outcome:CODE_EXECUTION、outcome:COMMAND_EXECUTION、verified artifact delivery。本次不会报告为成功。 已完成的步骤：write（write output/partial.py）。' and '已完成并保留' in '目标尚未完成，缺少可验证证据：failed task evidence、outcome:FILE_MUTATION、outcome:CODE_EXECUTION、outcome:COMMAND_EXECUTION、verified artifact delivery。本次不会报告为成功。 已完成的步骤：write（write output/partial.py）。')
+- generated xml file: /Users/tsxg/Desktop/TSAgent/realtest_reports/ha_r2/offline-results.xml -
+=========================== short test summary info ============================
+FAILED tests/test_ha_r1_harness.py::test_partial_files_disclosed_if_later_work_failed
+1 failed, 340 passed, 2 warnings in 27.22s

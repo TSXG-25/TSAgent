@@ -88,15 +88,15 @@ async def init_repository_async() -> None:
         if inspect.isawaitable(symbol_build):
             await symbol_build
 
-    # Also init the existing RepositoryIndexer if available
+    # Warm the on-disk repository index; each ApplicationContext owns its
+    # in-memory indexer, keyed by workspace root.
     try:
-        from agent.repository.indexer import RepositoryIndexer, set_repository_indexer, get_repository_indexer
+        from agent.repository.indexer import RepositoryIndexer
         from agent.workspace.manager import WorkspaceManager
         ws = WorkspaceManager.current_workspace()
-        if ws and not get_repository_indexer():
+        if ws:
             indexer = RepositoryIndexer(ws.root)
             await asyncio.to_thread(indexer.ensure_built)
-            set_repository_indexer(indexer)
     except ImportError:
         pass
 
@@ -132,10 +132,9 @@ def load_tool_modules(module_names: tuple[str, ...] | None = None):
 
 def load_all_skills():
     _ensure_project_root()
-    import skills as skills_pkg
+    from agent.skills import load_project_skills
 
-    for _, module_name, _ in pkgutil.iter_modules(skills_pkg.__path__):
-        importlib.import_module(f"skills.{module_name}")
+    load_project_skills()
 
 
 def load_all_workflows():

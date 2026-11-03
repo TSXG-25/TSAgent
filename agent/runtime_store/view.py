@@ -9,6 +9,7 @@ writes must go through ``prepare_operation`` and ``finalize_bundle``.
 
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 from typing import Any
 
@@ -39,6 +40,7 @@ class DurableRuntimeStoreView:
         writer_id: str,
         ensure_run: bool = True,
         takeover_fence: bool = False,
+        worker_lease: bool = False,
     ) -> None:
         self._store = store
         self.tenant_id = str(tenant_id).strip()
@@ -56,6 +58,7 @@ class DurableRuntimeStoreView:
             if not getattr(self, name):
                 raise ValueError(f"{name} must be non-empty")
         self._closed = False
+        self._worker_lease = worker_lease
         self._fence_token = 0
         if ensure_run:
             self._store.initialize_run(
@@ -64,7 +67,10 @@ class DurableRuntimeStoreView:
                 self.run_id,
                 self.request_id,
             )
-        self._acquire_or_reuse_fence(takeover=takeover_fence)
+        self._acquire_or_reuse_fence(
+            takeover=takeover_fence,
+            worker_lease=worker_lease,
+        )
 
     @property
     def store(self) -> SqliteRuntimeStore:
@@ -104,7 +110,12 @@ class DurableRuntimeStoreView:
                 f"durable Run view is closed: {self.run_id}",
             )
 
-    def _acquire_or_reuse_fence(self, *, takeover: bool = False) -> None:
+    def _acquire_or_reuse_fence(
+        self,
+        *,
+        takeover: bool = False,
+        worker_lease: bool = False,
+    ) -> None:
         current = self._store.get_current_fence(
             self.tenant_id,
             self.run_id,
@@ -123,6 +134,7 @@ class DurableRuntimeStoreView:
                 self.writer_id,
                 expected_fence_token=current.fence_token,
                 request_id=self.request_id,
+                worker_lease=worker_lease,
             )
             self._fence_token = grant.fence_token
             return
@@ -133,8 +145,22 @@ class DurableRuntimeStoreView:
             self.writer_id,
             expected_fence_token=(current.fence_token if current else None),
             request_id=self.request_id,
+            worker_lease=worker_lease,
         )
         self._fence_token = grant.fence_token
+
+    def renew_worker_lease(self) -> None:
+        self._ensure_open()
+        if not self._worker_lease:
+            raise RuntimeError("Run context does not own a Service worker lease")
+        self._store.renew_worker_lease(
+            self.tenant_id,
+            self.session_id,
+            self.run_id,
+            self.writer_id,
+            self._fence_token,
+            expected_store_generation=self.store_generation,
+        )
 
     def head(self):
         self._ensure_open()
@@ -232,6 +258,63 @@ class DurableRuntimeStoreView:
             run_output=run_output,
             artifacts=artifacts,
         )
+
+    def session_summary(self) -> dict[str, str] | None:
+        """Return the durable summary covering this session's oldest runs."""
+        self._ensure_open()
+        return self._store.read_session_summary(self.tenant_id, self.session_id)
+
+    def save_session_summary(
+        self,
+        summary: str,
+        *,
+        through_run_id: str,
+        through_updated_at: str,
+    ) -> None:
+        """Persist the summary covering runs up to the given cutoff."""
+        self._ensure_open()
+        self._store.write_session_summary(
+            self.tenant_id,
+            self.session_id,
+            through_updated_at=through_updated_at,
+            through_run_id=through_run_id,
+            summary=summary,
+        )
+
+    def conversation_results(self) -> list[dict[str, Any]]:
+        """Project committed goals, output and evidence, never another Run's live state."""
+        self._ensure_open()
+        cutoff = self._store.read_session_summary(self.tenant_id, self.session_id)
+        results = []
+        for run_id in self._store.recent_terminal_run_ids(
+            self.tenant_id,
+            self.session_id,
+            exclude_run_id=self.run_id,
+            after_updated_at=(cutoff or {}).get("through_updated_at"),
+            after_run_id=(cutoff or {}).get("through_run_id"),
+        ):
+            snapshot = self._store.read_run_snapshot(
+                self.tenant_id, run_id, session_id=self.session_id,
+            )
+            payload = json.loads(snapshot.terminal_event.payload_json) if snapshot.terminal_event else {}
+            continuation = payload.get("continuation", {})
+            results.append({
+                "run_id": run_id,
+                "updated_at": str(snapshot.head.updated_at),
+                "status": snapshot.head.run_status,
+                "request": continuation.get("request", ""),
+                "goal": continuation.get("goal", ""),
+                "goal_contract": continuation.get("goal_contract", {}),
+                "missing": continuation.get("missing", []),
+                "observations": continuation.get("observations", []),
+                "acceptance_evidence": continuation.get("acceptance_evidence", []),
+                "answer": snapshot.output.text[:12000] if snapshot.output else "",
+                "artifacts": [
+                    {"artifact_id": item.artifact_id, "path": item.reference, "digest": item.digest}
+                    for item in snapshot.artifacts if item.exists and item.verified
+                ],
+            })
+        return results
 
     def latest_run_id(self, *, exclude_run_id: str | None = None) -> str | None:
         """Find the latest Run strictly inside this tenant/session scope."""

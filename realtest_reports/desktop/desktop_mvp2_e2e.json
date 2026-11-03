@@ -1,6 +1,6 @@
 {
   "version": "v2.3D-4c",
-  "head": "14a79f8a",
+  "head": "261f4cb6a8e9df989af38070f1a9f2247cbd9248",
   "dataset_hash": "bda9f690fff05f4e947d7088c4c95d414cab5b220f5c2082a4985f10a04d4185",
   "mode": "local",
   "provider_configuration": "ollama:qwen2.5:14b (test-forced-no-fallback)",
@@ -35,7 +35,7 @@
       "events_seen": [
         "run_created",
         "run_started",
-        "run_failed"
+        "run_completed"
       ],
       "event_sequences": [
         1,
@@ -43,26 +43,39 @@
         3
       ],
       "duplicate_ui_events": 0,
-      "artifacts": [],
+      "artifacts": [
+        {
+          "artifact_id": "artifact-7892ab97c358a855ea692343",
+          "display_name": "artifact-7892ab97c358a855ea692343",
+          "reference": "artifact://desktop4c-dt02-tenant/run-6b63b8ad6c954b4692397196716b2039/artifact-7892ab97c358a855ea692343",
+          "digest": "ef48ed1ce56b18976a68fbb6e5b704194deb05a106a192d5d6f070db96a639ef",
+          "exists": true,
+          "verified": true
+        }
+      ],
       "run_output_present": true,
       "resume_calls": 0,
       "cancel_calls": 0,
       "runtime_invariants": {
-        "terminal_snapshot_event_match": null,
+        "terminal_snapshot_event_match": true,
         "event_sequence_contiguous": true,
         "false_completed_zero": true,
         "duplicate_ui_events_zero": true
       },
       "notes": [
-        "DT03 and DT07 reuse this known durable Run as read-only follow-up cases.",
-        "service_error=PROVIDER_UNAVAILABLE"
+        "DT03 and DT07 reuse this known durable Run as read-only follow-up cases."
       ],
-      "result": "PROVIDER_ERROR",
+      "result": "PASS",
       "runtime_correctness": "PASS",
-      "capability_outcome": "DEFERRED",
-      "run_id": "run-1990ab65a19942a49a6296cad0e308d5",
-      "terminal_status": "failed",
-      "failure_code": "RUNTIME_EXCEPTION"
+      "capability_outcome": "PASS",
+      "run_id": "run-6b63b8ad6c954b4692397196716b2039",
+      "terminal_status": "completed",
+      "diagnostics": {
+        "pid": 81316,
+        "exit_code": null,
+        "exit_signal": null,
+        "stderr_tail": "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/langgraph/cache/base/__init__.py:8: LangChainPendingDeprecationWarning: The default value of `allowed_objects` will change in a future version. Pass an explicit value (e.g., allowed_objects='messages' or allowed_objects='core') to suppress this warning.\n  from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer\nollama 调用失败: Error code: 503\n  🧠 规划上下文: 对话轮次: 最近1轮\n  🔍 引用消歧: 无需消歧\n  🧠 意图: Intent(domain=file, action=write, target='output/desktop4c-result.txt', entities=[], current_file='', conf=0.85, exec=True)\n\n============================================================\n📋 执行计划（Task 分解）\n============================================================\n  task-1: write output/desktop4c-result.txt\n============================================================\n\n  🔀 Compiler: task-1 → tool_executor\n\n==================================================\n⏱️  启动耗时 Profile\n==================================================\n  TOTAL                  0.00s\n==================================================\n\n==================================================\n⚡ 执行耗时 Profile\n==================================================\n  init                  32.73s  ███████████████████░ 100%\n  executor               0.00s  ░░░░░░░░░░░░░░░░░░░░ 0%\n  EXCLUSIVE TOTAL       32.73s\n  WALL TOTAL            32.74s\n==================================================\n\n"
+      }
     },
     {
       "case_id": "DT03",
@@ -71,7 +84,7 @@
       "events_seen": [
         "run_created",
         "run_started",
-        "run_failed"
+        "run_completed"
       ],
       "event_sequences": [
         1,
@@ -79,24 +92,36 @@
         3
       ],
       "duplicate_ui_events": 0,
-      "artifacts": [],
+      "artifacts": [
+        {
+          "artifact_id": "artifact-7892ab97c358a855ea692343",
+          "display_name": "artifact-7892ab97c358a855ea692343",
+          "reference": "artifact://desktop4c-dt02-tenant/run-6b63b8ad6c954b4692397196716b2039/artifact-7892ab97c358a855ea692343",
+          "digest": "ef48ed1ce56b18976a68fbb6e5b704194deb05a106a192d5d6f070db96a639ef",
+          "exists": true,
+          "verified": true
+        }
+      ],
       "run_output_present": true,
       "resume_calls": 0,
       "cancel_calls": 0,
       "runtime_invariants": {
-        "artifact_reference_is_opaque_and_scoped": null,
-        "artifact_verified": null,
+        "artifact_reference_is_opaque_and_scoped": true,
+        "artifact_verified": true,
         "frontend_direct_workspace_access_zero": true
       },
-      "notes": [
-        "capability deferred because DT02 did not provide a completed Run with verified artifacts"
-      ],
-      "result": "DEFERRED",
-      "runtime_correctness": "DEFERRED",
-      "capability_outcome": "DEFERRED",
-      "run_id": "run-1990ab65a19942a49a6296cad0e308d5",
-      "terminal_status": "failed",
-      "failure_code": "RUNTIME_EXCEPTION"
+      "notes": [],
+      "result": "PASS",
+      "runtime_correctness": "PASS",
+      "capability_outcome": "PASS",
+      "run_id": "run-6b63b8ad6c954b4692397196716b2039",
+      "terminal_status": "completed",
+      "diagnostics": {
+        "pid": 81316,
+        "exit_code": null,
+        "exit_signal": null,
+        "stderr_tail": "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/langgraph/cache/base/__init__.py:8: LangChainPendingDeprecationWarning: The default value of `allowed_objects` will change in a future version. Pass an explicit value (e.g., allowed_objects='messages' or allowed_objects='core') to suppress this warning.\n  from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer\nollama 调用失败: Error code: 503\n  🧠 规划上下文: 对话轮次: 最近1轮\n  🔍 引用消歧: 无需消歧\n  🧠 意图: Intent(domain=file, action=write, target='output/desktop4c-result.txt', entities=[], current_file='', conf=0.85, exec=True)\n\n============================================================\n📋 执行计划（Task 分解）\n============================================================\n  task-1: write output/desktop4c-result.txt\n============================================================\n\n  🔀 Compiler: task-1 → tool_executor\n\n==================================================\n⏱️  启动耗时 Profile\n==================================================\n  TOTAL                  0.00s\n==================================================\n\n==================================================\n⚡ 执行耗时 Profile\n==================================================\n  init                  32.73s  ███████████████████░ 100%\n  executor               0.00s  ░░░░░░░░░░░░░░░░░░░░ 0%\n  EXCLUSIVE TOTAL       32.73s\n  WALL TOTAL            32.74s\n==================================================\n\n"
+      }
     },
     {
       "case_id": "DT04",
@@ -105,7 +130,7 @@
       "events_seen": [
         "run_created",
         "run_started",
-        "run_failed"
+        "run_completed"
       ],
       "event_sequences": [
         1,
@@ -113,7 +138,16 @@
         3
       ],
       "duplicate_ui_events": 0,
-      "artifacts": [],
+      "artifacts": [
+        {
+          "artifact_id": "artifact-768202b92f883502e936dbc1",
+          "display_name": "artifact-768202b92f883502e936dbc1",
+          "reference": "artifact://desktop4c-dt04-tenant/run-f57b568b232f419b97408abd5bc66fb0/artifact-768202b92f883502e936dbc1",
+          "digest": "b6c709754a2f2a912303f2125a618ef7452dc41d0614d8ceeff8a91e954618a0",
+          "exists": true,
+          "verified": true
+        }
+      ],
       "run_output_present": true,
       "resume_calls": 0,
       "cancel_calls": 0,
@@ -128,9 +162,15 @@
       ],
       "result": "PASS",
       "runtime_correctness": "PASS",
-      "capability_outcome": "PARTIAL",
-      "run_id": "run-b8d2681e3d684320a04898d75be3b7e4",
-      "terminal_status": "failed"
+      "capability_outcome": "PASS",
+      "run_id": "run-f57b568b232f419b97408abd5bc66fb0",
+      "terminal_status": "completed",
+      "diagnostics": {
+        "pid": 81389,
+        "exit_code": null,
+        "exit_signal": null,
+        "stderr_tail": "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/langgraph/cache/base/__init__.py:8: LangChainPendingDeprecationWarning: The default value of `allowed_objects` will change in a future version. Pass an explicit value (e.g., allowed_objects='messages' or allowed_objects='core') to suppress this warning.\n  from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer\nollama 调用失败: Error code: 503\n  🧠 规划上下文: 对话轮次: 最近1轮\n  🔍 引用消歧: 无需消歧\n  🧠 意图: Intent(domain=file, action=write, target='output/desktop4c-reconnect.txt', entities=[], current_file='', conf=0.85, exec=True)\n\n============================================================\n📋 执行计划（Task 分解）\n============================================================\n  task-1: write output/desktop4c-reconnect.txt\n============================================================\n\n  🔀 Compiler: task-1 → tool_executor\n\n==================================================\n⏱️  启动耗时 Profile\n==================================================\n  TOTAL                  0.00s\n==================================================\n\n==================================================\n⚡ 执行耗时 Profile\n==================================================\n  init                  12.77s  ███████████████████░ 100%\n  executor               0.00s  ░░░░░░░░░░░░░░░░░░░░ 0%\n  EXCLUSIVE TOTAL       12.77s\n  WALL TOTAL            12.78s\n==================================================\n\n"
+      }
     },
     {
       "case_id": "DT05",
@@ -184,27 +224,57 @@
       "result": "PASS",
       "runtime_correctness": "PASS",
       "capability_outcome": "PARTIAL",
-      "run_id": "run-3687da21340e4d8fba10b4dde867b3fd",
-      "terminal_status": "cancelled"
+      "run_id": "run-307da1d5f4714b4984bcdbdfb70b6981",
+      "terminal_status": "cancelled",
+      "diagnostics": {
+        "pid": 81415,
+        "exit_code": null,
+        "exit_signal": null,
+        "stderr_tail": "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/langgraph/cache/base/__init__.py:8: LangChainPendingDeprecationWarning: The default value of `allowed_objects` will change in a future version. Pass an explicit value (e.g., allowed_objects='messages' or allowed_objects='core') to suppress this warning.\n  from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer\n"
+      }
     },
     {
       "case_id": "DT07",
       "mode": "local",
       "provider": "ollama:qwen2.5:14b (test-forced-no-fallback)",
-      "events_seen": [],
-      "event_sequences": [],
+      "events_seen": [
+        "run_created",
+        "run_started",
+        "run_completed"
+      ],
+      "event_sequences": [
+        1,
+        2,
+        3
+      ],
       "duplicate_ui_events": 0,
-      "artifacts": [],
-      "run_output_present": false,
+      "artifacts": [
+        {
+          "artifact_id": "artifact-7892ab97c358a855ea692343",
+          "display_name": "artifact-7892ab97c358a855ea692343",
+          "reference": "artifact://desktop4c-dt02-tenant/run-6b63b8ad6c954b4692397196716b2039/artifact-7892ab97c358a855ea692343",
+          "digest": "ef48ed1ce56b18976a68fbb6e5b704194deb05a106a192d5d6f070db96a639ef",
+          "exists": true,
+          "verified": true
+        }
+      ],
+      "run_output_present": true,
       "resume_calls": 0,
       "cancel_calls": 0,
-      "runtime_invariants": {},
+      "runtime_invariants": {
+        "process_restart_state_preserved": true,
+        "terminal_snapshot_event_match": true,
+        "direct_sqlite_access_zero": true,
+        "workspace_rehydrated_via_service": true
+      },
       "notes": [
-        "no durable completed Run was available for restart rehydration"
+        "known Run rehydrated through getRun/readEvents/listArtifacts only"
       ],
-      "result": "DEFERRED",
-      "runtime_correctness": "DEFERRED",
-      "capability_outcome": "DEFERRED"
+      "result": "PASS",
+      "runtime_correctness": "PASS",
+      "capability_outcome": "PASS",
+      "run_id": "run-6b63b8ad6c954b4692397196716b2039",
+      "terminal_status": "completed"
     },
     {
       "case_id": "DT08",
@@ -239,8 +309,14 @@
       "result": "PASS",
       "runtime_correctness": "PASS",
       "capability_outcome": "PASS",
-      "run_id": "run-cbd31a8da59c4280893d2164faf3aa64",
-      "terminal_status": "timed_out"
+      "run_id": "run-87b21aa76ad442ebaa65e396d5557169",
+      "terminal_status": "timed_out",
+      "diagnostics": {
+        "pid": 81432,
+        "exit_code": null,
+        "exit_signal": null,
+        "stderr_tail": "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/langgraph/cache/base/__init__.py:8: LangChainPendingDeprecationWarning: The default value of `allowed_objects` will change in a future version. Pass an explicit value (e.g., allowed_objects='messages' or allowed_objects='core') to suppress this warning.\n  from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer\n"
+      }
     },
     {
       "case_id": "DT09",

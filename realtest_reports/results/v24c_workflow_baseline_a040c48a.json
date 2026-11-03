@@ -1,0 +1,2994 @@
+{
+  "harness_version": "v2.4C-2b-real-workflow-baseline-v1",
+  "generated_at": "2026-08-31T02:29:21.683892+00:00",
+  "evaluated_head": "a040c48aab4b0abb2fcdb31beb902a5758c0e5c8",
+  "working_tree_dirty": false,
+  "dataset": {
+    "version": "v2.4C-workflow-capability-v1",
+    "hash": "43338803cbe9192c19a2957887a8013c17058a6dbea9e7bb6cb66c06d60fbd69",
+    "case_count": 24
+  },
+  "selector": {
+    "symbol": "agent.workflow_selector.WorkflowDecisionSelector",
+    "baseline_commit": "bc15e33a",
+    "projection_hash": "283c02fca3ef07aab5cac01806b677d2ec24dcb75dccf052b1533601c8c84e14",
+    "prompt_hash": "23324d6bf8ff0f2ef083fff5d80a4433117a1a80c5818c4f9f125390d5e40880"
+  },
+  "provider": {
+    "provider": "deepseek",
+    "model": "deepseek-v4-flash",
+    "base_url": "https://api.deepseek.com/v1",
+    "fallback": false
+  },
+  "controls": {
+    "automatic_retry": false,
+    "provider_fallback": false,
+    "golden_repair": false,
+    "json_repair": false,
+    "workflow_execution": false,
+    "runtime_mutation": false,
+    "case_attempts": 1
+  },
+  "summary": {
+    "case_count": 24,
+    "evaluable_count": 24,
+    "pass_count": 22,
+    "capability_rate": 0.9166666666666666,
+    "funnel": {
+      "schema_validity": 1.0,
+      "decision_kind_accuracy": 0.9583333333333334,
+      "workflow_accuracy": 1.0,
+      "binding_accuracy": 0.9583333333333334,
+      "safe_decision_rate": 1.0
+    },
+    "risk": {
+      "false_workflow_selection": 0,
+      "unsafe_reuse": 0,
+      "missed_workflow": 0
+    },
+    "failure_categories": {
+      "P-CAP": 2
+    },
+    "capability_failures": {
+      "ARGUMENT_BINDING": 1,
+      "WRONG_KIND": 1
+    },
+    "format_paths": {
+      "STRUCTURED_TO_RAW_FALLBACK": 24
+    },
+    "provider_error_count": 0,
+    "contract_error_count": 0,
+    "oracle_error_count": 0,
+    "integration_error_count": 0,
+    "latency_ms": {
+      "mean": 2989.063,
+      "p50": 2433.981,
+      "p95": 5398.725,
+      "max": 6567.215
+    },
+    "token_usage": {
+      "prompt_tokens": 14016,
+      "completion_tokens": 5926,
+      "total_tokens": 19942
+    }
+  },
+  "records": [
+    {
+      "case_id": "C001",
+      "family": "CLEAR_MATCH",
+      "goal": "根据 input/question.docx 解题并保存为 output/answer.py。",
+      "context_projection": {
+        "artifacts": {},
+        "capabilities": [
+          "filesystem.read",
+          "filesystem.write",
+          "run_python"
+        ],
+        "facts": {},
+        "active_workflow": null
+      },
+      "available_workflows": [
+        {
+          "id": "code_generation",
+          "version": "3.0",
+          "description": "从题目文件生成 Python 解题代码",
+          "required_bindings": [
+            "question_path",
+            "output_path"
+          ],
+          "defaults": {
+            "output_path": "output/solution.py"
+          },
+          "required_artifacts": [],
+          "required_capabilities": [
+            "filesystem.read",
+            "filesystem.write",
+            "run_python"
+          ],
+          "output_types": [
+            "solution_file"
+          ]
+        }
+      ],
+      "case_attempts": 1,
+      "latency_ms": 2194.86,
+      "provider_status": "SUCCESS_WITH_FORMAT_FALLBACK",
+      "provider_path": "SINGLE_PROVIDER",
+      "format_path": "STRUCTURED_TO_RAW_FALLBACK",
+      "provider_calls": [
+        {
+          "sequence": 1,
+          "provider": "deepseek",
+          "call_kind": "structured_bind",
+          "outcome": "SUCCESS",
+          "latency_ms": 1.558,
+          "token_usage": {},
+          "response_preview": null
+        },
+        {
+          "sequence": 2,
+          "provider": "deepseek",
+          "call_kind": "structured_ainvoke",
+          "outcome": "ERROR",
+          "latency_ms": 326.698,
+          "token_usage": {},
+          "response_preview": null,
+          "error_code": "STRUCTURED_OUTPUT_REJECTED",
+          "error": {
+            "type": "BadRequestError",
+            "message": "Error code: 400 - {'error': {'message': 'This response_format type is unavailable now', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}"
+          }
+        },
+        {
+          "sequence": 3,
+          "provider": "deepseek",
+          "call_kind": "raw_ainvoke",
+          "outcome": "SUCCESS",
+          "latency_ms": 1865.043,
+          "token_usage": {
+            "prompt_tokens": 575,
+            "completion_tokens": 168,
+            "total_tokens": 743
+          },
+          "response_preview": "{\"kind\":\"instantiate\",\"workflow_id\":\"code_generation\",\"bindings\":{\"question_path\":\"input/question.docx\",\"output_path\":\"output/answer.py\"},\"reason\":\"Goal matches the code_generation workflow exactly; required bindings are grounded in the requested input and output paths.\"}"
+        }
+      ],
+      "token_usage": {
+        "prompt_tokens": 575,
+        "completion_tokens": 168,
+        "total_tokens": 743
+      },
+      "raw_provider_output": "{\"kind\":\"instantiate\",\"workflow_id\":\"code_generation\",\"bindings\":{\"question_path\":\"input/question.docx\",\"output_path\":\"output/answer.py\"},\"reason\":\"Goal matches the code_generation workflow exactly; required bindings are grounded in the requested input and output paths.\"}",
+      "normalized_workflow_decision": {
+        "kind": "instantiate",
+        "workflow_id": "code_generation",
+        "bindings": {
+          "question_path": "input/question.docx",
+          "output_path": "output/answer.py"
+        },
+        "reason": "Goal matches the code_generation workflow exactly; required bindings are grounded in the requested input and output paths."
+      },
+      "oracle_result": {
+        "passed": true,
+        "schema_validity": true,
+        "kind_accuracy": true,
+        "workflow_accuracy": true,
+        "binding_accuracy": true,
+        "safe_decision": true,
+        "false_workflow_selection": 0,
+        "missed_workflow": 0,
+        "unsafe_reuse": 0,
+        "errors": [],
+        "normalized_decision": {
+          "kind": "instantiate",
+          "workflow_id": "code_generation",
+          "bindings": {
+            "question_path": "input/question.docx",
+            "output_path": "output/answer.py"
+          },
+          "reason": "Goal matches the code_generation workflow exactly; required bindings are grounded in the requested input and output paths."
+        }
+      },
+      "evaluable": true,
+      "passed": true,
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {}
+    },
+    {
+      "case_id": "C002",
+      "family": "CLEAR_MATCH",
+      "goal": "研究 SQLite WAL 的最新官方资料并写入 output/wal.md。",
+      "context_projection": {
+        "artifacts": {},
+        "capabilities": [
+          "web_search",
+          "filesystem.write"
+        ],
+        "facts": {},
+        "active_workflow": null
+      },
+      "available_workflows": [
+        {
+          "id": "research_report",
+          "version": "1.0",
+          "description": "检索外部资料并生成带来源的报告",
+          "required_bindings": [
+            "topic",
+            "output_path"
+          ],
+          "defaults": {},
+          "required_artifacts": [],
+          "required_capabilities": [
+            "web_search",
+            "filesystem.write"
+          ],
+          "output_types": [
+            "research_report"
+          ]
+        },
+        {
+          "id": "code_generation",
+          "version": "3.0",
+          "description": "从题目文件生成 Python 解题代码",
+          "required_bindings": [
+            "question_path",
+            "output_path"
+          ],
+          "defaults": {
+            "output_path": "output/solution.py"
+          },
+          "required_artifacts": [],
+          "required_capabilities": [
+            "filesystem.read",
+            "filesystem.write",
+            "run_python"
+          ],
+          "output_types": [
+            "solution_file"
+          ]
+        }
+      ],
+      "case_attempts": 1,
+      "latency_ms": 4515.43,
+      "provider_status": "SUCCESS_WITH_FORMAT_FALLBACK",
+      "provider_path": "SINGLE_PROVIDER",
+      "format_path": "STRUCTURED_TO_RAW_FALLBACK",
+      "provider_calls": [
+        {
+          "sequence": 1,
+          "provider": "deepseek",
+          "call_kind": "structured_bind",
+          "outcome": "SUCCESS",
+          "latency_ms": 0.87,
+          "token_usage": {},
+          "response_preview": null
+        },
+        {
+          "sequence": 2,
+          "provider": "deepseek",
+          "call_kind": "structured_ainvoke",
+          "outcome": "ERROR",
+          "latency_ms": 90.136,
+          "token_usage": {},
+          "response_preview": null,
+          "error_code": "STRUCTURED_OUTPUT_REJECTED",
+          "error": {
+            "type": "BadRequestError",
+            "message": "Error code: 400 - {'error': {'message': 'This response_format type is unavailable now', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}"
+          }
+        },
+        {
+          "sequence": 3,
+          "provider": "deepseek",
+          "call_kind": "raw_ainvoke",
+          "outcome": "SUCCESS",
+          "latency_ms": 4423.989,
+          "token_usage": {
+            "prompt_tokens": 642,
+            "completion_tokens": 419,
+            "total_tokens": 1061
+          },
+          "response_preview": "{\"kind\":\"instantiate\",\"workflow_id\":\"research_report\",\"bindings\":{\"topic\":\"SQLite WAL 的最新官方资料\",\"output_path\":\"output/wal.md\"},\"reason\":\"Goal matches research_report workflow; required topic and output_path are explicitly provided, and required capabilities are available.\"}"
+        }
+      ],
+      "token_usage": {
+        "prompt_tokens": 642,
+        "completion_tokens": 419,
+        "total_tokens": 1061
+      },
+      "raw_provider_output": "{\"kind\":\"instantiate\",\"workflow_id\":\"research_report\",\"bindings\":{\"topic\":\"SQLite WAL 的最新官方资料\",\"output_path\":\"output/wal.md\"},\"reason\":\"Goal matches research_report workflow; required topic and output_path are explicitly provided, and required capabilities are available.\"}",
+      "normalized_workflow_decision": {
+        "kind": "instantiate",
+        "workflow_id": "research_report",
+        "bindings": {
+          "topic": "SQLite WAL 的最新官方资料",
+          "output_path": "output/wal.md"
+        },
+        "reason": "Goal matches research_report workflow; required topic and output_path are explicitly provided, and required capabilities are available."
+      },
+      "oracle_result": {
+        "passed": false,
+        "schema_validity": true,
+        "kind_accuracy": true,
+        "workflow_accuracy": true,
+        "binding_accuracy": false,
+        "safe_decision": true,
+        "false_workflow_selection": 0,
+        "missed_workflow": 0,
+        "unsafe_reuse": 0,
+        "errors": [],
+        "normalized_decision": {
+          "kind": "instantiate",
+          "workflow_id": "research_report",
+          "bindings": {
+            "topic": "SQLite WAL 的最新官方资料",
+            "output_path": "output/wal.md"
+          },
+          "reason": "Goal matches research_report workflow; required topic and output_path are explicitly provided, and required capabilities are available."
+        }
+      },
+      "evaluable": true,
+      "passed": false,
+      "failure_category": "P-CAP",
+      "failure_subcategory": "ARGUMENT_BINDING",
+      "evidence": {
+        "oracle_errors": [],
+        "selection_error": null
+      }
+    },
+    {
+      "case_id": "C003",
+      "family": "CLEAR_MATCH",
+      "goal": "验证 release v2.4.0 在 staging 的发布清单。",
+      "context_projection": {
+        "artifacts": {
+          "release_manifest": "artifact:manifest-v240"
+        },
+        "capabilities": [
+          "run_python",
+          "filesystem.read"
+        ],
+        "facts": {},
+        "active_workflow": null
+      },
+      "available_workflows": [
+        {
+          "id": "release_validation",
+          "version": "1.0",
+          "description": "按固定检查清单验证一个 staging release",
+          "required_bindings": [
+            "release_tag",
+            "staging_env"
+          ],
+          "defaults": {
+            "staging_env": "staging"
+          },
+          "required_artifacts": [
+            "release_manifest"
+          ],
+          "required_capabilities": [
+            "run_python",
+            "filesystem.read"
+          ],
+          "output_types": [
+            "release_report"
+          ]
+        }
+      ],
+      "case_attempts": 1,
+      "latency_ms": 2629.618,
+      "provider_status": "SUCCESS_WITH_FORMAT_FALLBACK",
+      "provider_path": "SINGLE_PROVIDER",
+      "format_path": "STRUCTURED_TO_RAW_FALLBACK",
+      "provider_calls": [
+        {
+          "sequence": 1,
+          "provider": "deepseek",
+          "call_kind": "structured_bind",
+          "outcome": "SUCCESS",
+          "latency_ms": 0.75,
+          "token_usage": {},
+          "response_preview": null
+        },
+        {
+          "sequence": 2,
+          "provider": "deepseek",
+          "call_kind": "structured_ainvoke",
+          "outcome": "ERROR",
+          "latency_ms": 191.789,
+          "token_usage": {},
+          "response_preview": null,
+          "error_code": "STRUCTURED_OUTPUT_REJECTED",
+          "error": {
+            "type": "BadRequestError",
+            "message": "Error code: 400 - {'error': {'message': 'This response_format type is unavailable now', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}"
+          }
+        },
+        {
+          "sequence": 3,
+          "provider": "deepseek",
+          "call_kind": "raw_ainvoke",
+          "outcome": "SUCCESS",
+          "latency_ms": 2436.689,
+          "token_usage": {
+            "prompt_tokens": 582,
+            "completion_tokens": 219,
+            "total_tokens": 801
+          },
+          "response_preview": "{\"kind\":\"instantiate\",\"workflow_id\":\"release_validation\",\"bindings\":{\"release_tag\":\"v2.4.0\",\"staging_env\":\"staging\"},\"reason\":\"Goal matches release_validation workflow; release_tag is explicit in goal and staging_env uses the catalog default.\"}"
+        }
+      ],
+      "token_usage": {
+        "prompt_tokens": 582,
+        "completion_tokens": 219,
+        "total_tokens": 801
+      },
+      "raw_provider_output": "{\"kind\":\"instantiate\",\"workflow_id\":\"release_validation\",\"bindings\":{\"release_tag\":\"v2.4.0\",\"staging_env\":\"staging\"},\"reason\":\"Goal matches release_validation workflow; release_tag is explicit in goal and staging_env uses the catalog default.\"}",
+      "normalized_workflow_decision": {
+        "kind": "instantiate",
+        "workflow_id": "release_validation",
+        "bindings": {
+          "release_tag": "v2.4.0",
+          "staging_env": "staging"
+        },
+        "reason": "Goal matches release_validation workflow; release_tag is explicit in goal and staging_env uses the catalog default."
+      },
+      "oracle_result": {
+        "passed": true,
+        "schema_validity": true,
+        "kind_accuracy": true,
+        "workflow_accuracy": true,
+        "binding_accuracy": true,
+        "safe_decision": true,
+        "false_workflow_selection": 0,
+        "missed_workflow": 0,
+        "unsafe_reuse": 0,
+        "errors": [],
+        "normalized_decision": {
+          "kind": "instantiate",
+          "workflow_id": "release_validation",
+          "bindings": {
+            "release_tag": "v2.4.0",
+            "staging_env": "staging"
+          },
+          "reason": "Goal matches release_validation workflow; release_tag is explicit in goal and staging_env uses the catalog default."
+        }
+      },
+      "evaluable": true,
+      "passed": true,
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {}
+    },
+    {
+      "case_id": "C004",
+      "family": "CLEAR_MATCH",
+      "goal": "清洗 input/sales.csv 并保存为 output/sales_clean.csv。",
+      "context_projection": {
+        "artifacts": {},
+        "capabilities": [
+          "filesystem.read",
+          "filesystem.write",
+          "run_python"
+        ],
+        "facts": {},
+        "active_workflow": null
+      },
+      "available_workflows": [
+        {
+          "id": "data_cleanup",
+          "version": "1.0",
+          "description": "读取结构化数据、清洗并保存结果",
+          "required_bindings": [
+            "source_path",
+            "output_path"
+          ],
+          "defaults": {},
+          "required_artifacts": [],
+          "required_capabilities": [
+            "filesystem.read",
+            "filesystem.write",
+            "run_python"
+          ],
+          "output_types": [
+            "clean_dataset"
+          ]
+        }
+      ],
+      "case_attempts": 1,
+      "latency_ms": 1992.411,
+      "provider_status": "SUCCESS_WITH_FORMAT_FALLBACK",
+      "provider_path": "SINGLE_PROVIDER",
+      "format_path": "STRUCTURED_TO_RAW_FALLBACK",
+      "provider_calls": [
+        {
+          "sequence": 1,
+          "provider": "deepseek",
+          "call_kind": "structured_bind",
+          "outcome": "SUCCESS",
+          "latency_ms": 1.125,
+          "token_usage": {},
+          "response_preview": null
+        },
+        {
+          "sequence": 2,
+          "provider": "deepseek",
+          "call_kind": "structured_ainvoke",
+          "outcome": "ERROR",
+          "latency_ms": 181.99,
+          "token_usage": {},
+          "response_preview": null,
+          "error_code": "STRUCTURED_OUTPUT_REJECTED",
+          "error": {
+            "type": "BadRequestError",
+            "message": "Error code: 400 - {'error': {'message': 'This response_format type is unavailable now', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}"
+          }
+        },
+        {
+          "sequence": 3,
+          "provider": "deepseek",
+          "call_kind": "raw_ainvoke",
+          "outcome": "SUCCESS",
+          "latency_ms": 1808.941,
+          "token_usage": {
+            "prompt_tokens": 571,
+            "completion_tokens": 174,
+            "total_tokens": 745
+          },
+          "response_preview": "{\"kind\":\"instantiate\",\"workflow_id\":\"data_cleanup\",\"bindings\":{\"source_path\":\"input/sales.csv\",\"output_path\":\"output/sales_clean.csv\"},\"reason\":\"Goal matches data_cleanup workflow and explicitly provides both required bindings; required capabilities are available.\"}"
+        }
+      ],
+      "token_usage": {
+        "prompt_tokens": 571,
+        "completion_tokens": 174,
+        "total_tokens": 745
+      },
+      "raw_provider_output": "{\"kind\":\"instantiate\",\"workflow_id\":\"data_cleanup\",\"bindings\":{\"source_path\":\"input/sales.csv\",\"output_path\":\"output/sales_clean.csv\"},\"reason\":\"Goal matches data_cleanup workflow and explicitly provides both required bindings; required capabilities are available.\"}",
+      "normalized_workflow_decision": {
+        "kind": "instantiate",
+        "workflow_id": "data_cleanup",
+        "bindings": {
+          "source_path": "input/sales.csv",
+          "output_path": "output/sales_clean.csv"
+        },
+        "reason": "Goal matches data_cleanup workflow and explicitly provides both required bindings; required capabilities are available."
+      },
+      "oracle_result": {
+        "passed": true,
+        "schema_validity": true,
+        "kind_accuracy": true,
+        "workflow_accuracy": true,
+        "binding_accuracy": true,
+        "safe_decision": true,
+        "false_workflow_selection": 0,
+        "missed_workflow": 0,
+        "unsafe_reuse": 0,
+        "errors": [],
+        "normalized_decision": {
+          "kind": "instantiate",
+          "workflow_id": "data_cleanup",
+          "bindings": {
+            "source_path": "input/sales.csv",
+            "output_path": "output/sales_clean.csv"
+          },
+          "reason": "Goal matches data_cleanup workflow and explicitly provides both required bindings; required capabilities are available."
+        }
+      },
+      "evaluable": true,
+      "passed": true,
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {}
+    },
+    {
+      "case_id": "C005",
+      "family": "FALSE_MATCH_GUARD",
+      "goal": "帮我写一个 Python 排序函数。",
+      "context_projection": {
+        "artifacts": {},
+        "capabilities": [
+          "filesystem.read",
+          "filesystem.write",
+          "run_python"
+        ],
+        "facts": {},
+        "active_workflow": null
+      },
+      "available_workflows": [
+        {
+          "id": "code_generation",
+          "version": "3.0",
+          "description": "从题目文件生成 Python 解题代码",
+          "required_bindings": [
+            "question_path",
+            "output_path"
+          ],
+          "defaults": {
+            "output_path": "output/solution.py"
+          },
+          "required_artifacts": [],
+          "required_capabilities": [
+            "filesystem.read",
+            "filesystem.write",
+            "run_python"
+          ],
+          "output_types": [
+            "solution_file"
+          ]
+        }
+      ],
+      "case_attempts": 1,
+      "latency_ms": 2389.107,
+      "provider_status": "SUCCESS_WITH_FORMAT_FALLBACK",
+      "provider_path": "SINGLE_PROVIDER",
+      "format_path": "STRUCTURED_TO_RAW_FALLBACK",
+      "provider_calls": [
+        {
+          "sequence": 1,
+          "provider": "deepseek",
+          "call_kind": "structured_bind",
+          "outcome": "SUCCESS",
+          "latency_ms": 0.717,
+          "token_usage": {},
+          "response_preview": null
+        },
+        {
+          "sequence": 2,
+          "provider": "deepseek",
+          "call_kind": "structured_ainvoke",
+          "outcome": "ERROR",
+          "latency_ms": 120.818,
+          "token_usage": {},
+          "response_preview": null,
+          "error_code": "STRUCTURED_OUTPUT_REJECTED",
+          "error": {
+            "type": "BadRequestError",
+            "message": "Error code: 400 - {'error': {'message': 'This response_format type is unavailable now', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}"
+          }
+        },
+        {
+          "sequence": 3,
+          "provider": "deepseek",
+          "call_kind": "raw_ainvoke",
+          "outcome": "SUCCESS",
+          "latency_ms": 2267.207,
+          "token_usage": {
+            "prompt_tokens": 569,
+            "completion_tokens": 167,
+            "total_tokens": 736
+          },
+          "response_preview": "{\"kind\":\"decline\",\"workflow_id\":\"\",\"bindings\":{},\"reason\":\"目标是一个简单的编码请求，不匹配需要题目文件的代码生成工作流，且缺少 question_path 等必要绑定；更适合由普通任务执行处理。\"}"
+        }
+      ],
+      "token_usage": {
+        "prompt_tokens": 569,
+        "completion_tokens": 167,
+        "total_tokens": 736
+      },
+      "raw_provider_output": "{\"kind\":\"decline\",\"workflow_id\":\"\",\"bindings\":{},\"reason\":\"目标是一个简单的编码请求，不匹配需要题目文件的代码生成工作流，且缺少 question_path 等必要绑定；更适合由普通任务执行处理。\"}",
+      "normalized_workflow_decision": {
+        "kind": "decline",
+        "workflow_id": "",
+        "bindings": {},
+        "reason": "目标是一个简单的编码请求，不匹配需要题目文件的代码生成工作流，且缺少 question_path 等必要绑定；更适合由普通任务执行处理。"
+      },
+      "oracle_result": {
+        "passed": true,
+        "schema_validity": true,
+        "kind_accuracy": true,
+        "workflow_accuracy": true,
+        "binding_accuracy": true,
+        "safe_decision": true,
+        "false_workflow_selection": 0,
+        "missed_workflow": 0,
+        "unsafe_reuse": 0,
+        "errors": [],
+        "normalized_decision": {
+          "kind": "decline",
+          "workflow_id": "",
+          "bindings": {},
+          "reason": "目标是一个简单的编码请求，不匹配需要题目文件的代码生成工作流，且缺少 question_path 等必要绑定；更适合由普通任务执行处理。"
+        }
+      },
+      "evaluable": true,
+      "passed": true,
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {}
+    },
+    {
+      "case_id": "C006",
+      "family": "FALSE_MATCH_GUARD",
+      "goal": "修改 agent/runtime.py 的超时处理并补测试。",
+      "context_projection": {
+        "artifacts": {},
+        "capabilities": [
+          "filesystem.read",
+          "filesystem.write",
+          "run_python"
+        ],
+        "facts": {},
+        "active_workflow": null
+      },
+      "available_workflows": [
+        {
+          "id": "code_generation",
+          "version": "3.0",
+          "description": "从题目文件生成 Python 解题代码",
+          "required_bindings": [
+            "question_path",
+            "output_path"
+          ],
+          "defaults": {
+            "output_path": "output/solution.py"
+          },
+          "required_artifacts": [],
+          "required_capabilities": [
+            "filesystem.read",
+            "filesystem.write",
+            "run_python"
+          ],
+          "output_types": [
+            "solution_file"
+          ]
+        },
+        {
+          "id": "release_validation",
+          "version": "1.0",
+          "description": "按固定检查清单验证一个 staging release",
+          "required_bindings": [
+            "release_tag",
+            "staging_env"
+          ],
+          "defaults": {
+            "staging_env": "staging"
+          },
+          "required_artifacts": [
+            "release_manifest"
+          ],
+          "required_capabilities": [
+            "run_python",
+            "filesystem.read"
+          ],
+          "output_types": [
+            "release_report"
+          ]
+        }
+      ],
+      "case_attempts": 1,
+      "latency_ms": 2720.859,
+      "provider_status": "SUCCESS_WITH_FORMAT_FALLBACK",
+      "provider_path": "SINGLE_PROVIDER",
+      "format_path": "STRUCTURED_TO_RAW_FALLBACK",
+      "provider_calls": [
+        {
+          "sequence": 1,
+          "provider": "deepseek",
+          "call_kind": "structured_bind",
+          "outcome": "SUCCESS",
+          "latency_ms": 0.77,
+          "token_usage": {},
+          "response_preview": null
+        },
+        {
+          "sequence": 2,
+          "provider": "deepseek",
+          "call_kind": "structured_ainvoke",
+          "outcome": "ERROR",
+          "latency_ms": 119.831,
+          "token_usage": {},
+          "response_preview": null,
+          "error_code": "STRUCTURED_OUTPUT_REJECTED",
+          "error": {
+            "type": "BadRequestError",
+            "message": "Error code: 400 - {'error': {'message': 'This response_format type is unavailable now', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}"
+          }
+        },
+        {
+          "sequence": 3,
+          "provider": "deepseek",
+          "call_kind": "raw_ainvoke",
+          "outcome": "SUCCESS",
+          "latency_ms": 2599.872,
+          "token_usage": {
+            "prompt_tokens": 658,
+            "completion_tokens": 237,
+            "total_tokens": 895
+          },
+          "response_preview": "{\"kind\":\"decline\",\"workflow_id\":\"\",\"bindings\":{},\"reason\":\"Goal is a code modification/testing task, not covered by code_generation (which generates solution code from a problem file) or release_validation (which validates a staged release). No active workflow or matching bindings/artifacts exist.\"}"
+        }
+      ],
+      "token_usage": {
+        "prompt_tokens": 658,
+        "completion_tokens": 237,
+        "total_tokens": 895
+      },
+      "raw_provider_output": "{\"kind\":\"decline\",\"workflow_id\":\"\",\"bindings\":{},\"reason\":\"Goal is a code modification/testing task, not covered by code_generation (which generates solution code from a problem file) or release_validation (which validates a staged release). No active workflow or matching bindings/artifacts exist.\"}",
+      "normalized_workflow_decision": {
+        "kind": "decline",
+        "workflow_id": "",
+        "bindings": {},
+        "reason": "Goal is a code modification/testing task, not covered by code_generation (which generates solution code from a problem file) or release_validation (which validates a staged release). No active workflow or matching bindings/artifacts exist."
+      },
+      "oracle_result": {
+        "passed": true,
+        "schema_validity": true,
+        "kind_accuracy": true,
+        "workflow_accuracy": true,
+        "binding_accuracy": true,
+        "safe_decision": true,
+        "false_workflow_selection": 0,
+        "missed_workflow": 0,
+        "unsafe_reuse": 0,
+        "errors": [],
+        "normalized_decision": {
+          "kind": "decline",
+          "workflow_id": "",
+          "bindings": {},
+          "reason": "Goal is a code modification/testing task, not covered by code_generation (which generates solution code from a problem file) or release_validation (which validates a staged release). No active workflow or matching bindings/artifacts exist."
+        }
+      },
+      "evaluable": true,
+      "passed": true,
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {}
+    },
+    {
+      "case_id": "C007",
+      "family": "FALSE_MATCH_GUARD",
+      "goal": "根据 input/question.docx 把答案整理成 output/answer.xlsx。",
+      "context_projection": {
+        "artifacts": {},
+        "capabilities": [
+          "filesystem.read",
+          "filesystem.write",
+          "run_python"
+        ],
+        "facts": {},
+        "active_workflow": null
+      },
+      "available_workflows": [
+        {
+          "id": "code_generation",
+          "version": "3.0",
+          "description": "从题目文件生成 Python 解题代码",
+          "required_bindings": [
+            "question_path",
+            "output_path"
+          ],
+          "defaults": {
+            "output_path": "output/solution.py"
+          },
+          "required_artifacts": [],
+          "required_capabilities": [
+            "filesystem.read",
+            "filesystem.write",
+            "run_python"
+          ],
+          "output_types": [
+            "solution_file"
+          ]
+        }
+      ],
+      "case_attempts": 1,
+      "latency_ms": 2514.663,
+      "provider_status": "SUCCESS_WITH_FORMAT_FALLBACK",
+      "provider_path": "SINGLE_PROVIDER",
+      "format_path": "STRUCTURED_TO_RAW_FALLBACK",
+      "provider_calls": [
+        {
+          "sequence": 1,
+          "provider": "deepseek",
+          "call_kind": "structured_bind",
+          "outcome": "SUCCESS",
+          "latency_ms": 0.925,
+          "token_usage": {},
+          "response_preview": null
+        },
+        {
+          "sequence": 2,
+          "provider": "deepseek",
+          "call_kind": "structured_ainvoke",
+          "outcome": "ERROR",
+          "latency_ms": 115.29,
+          "token_usage": {},
+          "response_preview": null,
+          "error_code": "STRUCTURED_OUTPUT_REJECTED",
+          "error": {
+            "type": "BadRequestError",
+            "message": "Error code: 400 - {'error': {'message': 'This response_format type is unavailable now', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}"
+          }
+        },
+        {
+          "sequence": 3,
+          "provider": "deepseek",
+          "call_kind": "raw_ainvoke",
+          "outcome": "SUCCESS",
+          "latency_ms": 2398.097,
+          "token_usage": {
+            "prompt_tokens": 576,
+            "completion_tokens": 180,
+            "total_tokens": 756
+          },
+          "response_preview": "{\"kind\":\"decline\",\"workflow_id\":\"\",\"bindings\":{},\"reason\":\"Goal requires creating an answer.xlsx file, but the available workflow only generates a Python solution file (output/solution.py) from a problem file; output type and deliverable are incompatible.\"}"
+        }
+      ],
+      "token_usage": {
+        "prompt_tokens": 576,
+        "completion_tokens": 180,
+        "total_tokens": 756
+      },
+      "raw_provider_output": "{\"kind\":\"decline\",\"workflow_id\":\"\",\"bindings\":{},\"reason\":\"Goal requires creating an answer.xlsx file, but the available workflow only generates a Python solution file (output/solution.py) from a problem file; output type and deliverable are incompatible.\"}",
+      "normalized_workflow_decision": {
+        "kind": "decline",
+        "workflow_id": "",
+        "bindings": {},
+        "reason": "Goal requires creating an answer.xlsx file, but the available workflow only generates a Python solution file (output/solution.py) from a problem file; output type and deliverable are incompatible."
+      },
+      "oracle_result": {
+        "passed": true,
+        "schema_validity": true,
+        "kind_accuracy": true,
+        "workflow_accuracy": true,
+        "binding_accuracy": true,
+        "safe_decision": true,
+        "false_workflow_selection": 0,
+        "missed_workflow": 0,
+        "unsafe_reuse": 0,
+        "errors": [],
+        "normalized_decision": {
+          "kind": "decline",
+          "workflow_id": "",
+          "bindings": {},
+          "reason": "Goal requires creating an answer.xlsx file, but the available workflow only generates a Python solution file (output/solution.py) from a problem file; output type and deliverable are incompatible."
+        }
+      },
+      "evaluable": true,
+      "passed": true,
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {}
+    },
+    {
+      "case_id": "C008",
+      "family": "FALSE_MATCH_GUARD",
+      "goal": "解释什么是 SQLite WAL。",
+      "context_projection": {
+        "artifacts": {},
+        "capabilities": [
+          "web_search",
+          "filesystem.write"
+        ],
+        "facts": {},
+        "active_workflow": null
+      },
+      "available_workflows": [
+        {
+          "id": "research_report",
+          "version": "1.0",
+          "description": "检索外部资料并生成带来源的报告",
+          "required_bindings": [
+            "topic",
+            "output_path"
+          ],
+          "defaults": {},
+          "required_artifacts": [],
+          "required_capabilities": [
+            "web_search",
+            "filesystem.write"
+          ],
+          "output_types": [
+            "research_report"
+          ]
+        }
+      ],
+      "case_attempts": 1,
+      "latency_ms": 4040.558,
+      "provider_status": "SUCCESS_WITH_FORMAT_FALLBACK",
+      "provider_path": "SINGLE_PROVIDER",
+      "format_path": "STRUCTURED_TO_RAW_FALLBACK",
+      "provider_calls": [
+        {
+          "sequence": 1,
+          "provider": "deepseek",
+          "call_kind": "structured_bind",
+          "outcome": "SUCCESS",
+          "latency_ms": 1.031,
+          "token_usage": {},
+          "response_preview": null
+        },
+        {
+          "sequence": 2,
+          "provider": "deepseek",
+          "call_kind": "structured_ainvoke",
+          "outcome": "ERROR",
+          "latency_ms": 102.938,
+          "token_usage": {},
+          "response_preview": null,
+          "error_code": "STRUCTURED_OUTPUT_REJECTED",
+          "error": {
+            "type": "BadRequestError",
+            "message": "Error code: 400 - {'error': {'message': 'This response_format type is unavailable now', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}"
+          }
+        },
+        {
+          "sequence": 3,
+          "provider": "deepseek",
+          "call_kind": "raw_ainvoke",
+          "outcome": "SUCCESS",
+          "latency_ms": 3936.213,
+          "token_usage": {
+            "prompt_tokens": 549,
+            "completion_tokens": 287,
+            "total_tokens": 836
+          },
+          "response_preview": "{\"kind\":\"decline\",\"workflow_id\":\"\",\"bindings\":{},\"reason\":\"Goal is a simple conceptual explanation, not a request for a sourced research report; required bindings like output_path are also missing.\"}"
+        }
+      ],
+      "token_usage": {
+        "prompt_tokens": 549,
+        "completion_tokens": 287,
+        "total_tokens": 836
+      },
+      "raw_provider_output": "{\"kind\":\"decline\",\"workflow_id\":\"\",\"bindings\":{},\"reason\":\"Goal is a simple conceptual explanation, not a request for a sourced research report; required bindings like output_path are also missing.\"}",
+      "normalized_workflow_decision": {
+        "kind": "decline",
+        "workflow_id": "",
+        "bindings": {},
+        "reason": "Goal is a simple conceptual explanation, not a request for a sourced research report; required bindings like output_path are also missing."
+      },
+      "oracle_result": {
+        "passed": true,
+        "schema_validity": true,
+        "kind_accuracy": true,
+        "workflow_accuracy": true,
+        "binding_accuracy": true,
+        "safe_decision": true,
+        "false_workflow_selection": 0,
+        "missed_workflow": 0,
+        "unsafe_reuse": 0,
+        "errors": [],
+        "normalized_decision": {
+          "kind": "decline",
+          "workflow_id": "",
+          "bindings": {},
+          "reason": "Goal is a simple conceptual explanation, not a request for a sourced research report; required bindings like output_path are also missing."
+        }
+      },
+      "evaluable": true,
+      "passed": true,
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {}
+    },
+    {
+      "case_id": "C009",
+      "family": "PARAMETER_BINDING",
+      "goal": "读取 input/two_sum.md 解题，输出到 output/two_sum.py。",
+      "context_projection": {
+        "artifacts": {},
+        "capabilities": [
+          "filesystem.read",
+          "filesystem.write",
+          "run_python"
+        ],
+        "facts": {
+          "language": "python"
+        },
+        "active_workflow": null
+      },
+      "available_workflows": [
+        {
+          "id": "code_generation",
+          "version": "3.0",
+          "description": "从题目文件生成 Python 解题代码",
+          "required_bindings": [
+            "question_path",
+            "output_path"
+          ],
+          "defaults": {
+            "output_path": "output/solution.py"
+          },
+          "required_artifacts": [],
+          "required_capabilities": [
+            "filesystem.read",
+            "filesystem.write",
+            "run_python"
+          ],
+          "output_types": [
+            "solution_file"
+          ]
+        }
+      ],
+      "case_attempts": 1,
+      "latency_ms": 2073.287,
+      "provider_status": "SUCCESS_WITH_FORMAT_FALLBACK",
+      "provider_path": "SINGLE_PROVIDER",
+      "format_path": "STRUCTURED_TO_RAW_FALLBACK",
+      "provider_calls": [
+        {
+          "sequence": 1,
+          "provider": "deepseek",
+          "call_kind": "structured_bind",
+          "outcome": "SUCCESS",
+          "latency_ms": 0.77,
+          "token_usage": {},
+          "response_preview": null
+        },
+        {
+          "sequence": 2,
+          "provider": "deepseek",
+          "call_kind": "structured_ainvoke",
+          "outcome": "ERROR",
+          "latency_ms": 155.417,
+          "token_usage": {},
+          "response_preview": null,
+          "error_code": "STRUCTURED_OUTPUT_REJECTED",
+          "error": {
+            "type": "BadRequestError",
+            "message": "Error code: 400 - {'error': {'message': 'This response_format type is unavailable now', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}"
+          }
+        },
+        {
+          "sequence": 3,
+          "provider": "deepseek",
+          "call_kind": "raw_ainvoke",
+          "outcome": "SUCCESS",
+          "latency_ms": 1916.702,
+          "token_usage": {
+            "prompt_tokens": 581,
+            "completion_tokens": 169,
+            "total_tokens": 750
+          },
+          "response_preview": "{\"kind\":\"instantiate\",\"workflow_id\":\"code_generation\",\"bindings\":{\"question_path\":\"input/two_sum.md\",\"output_path\":\"output/two_sum.py\"},\"reason\":\"Goal matches the code_generation workflow and provides explicit groundings for both required bindings.\"}"
+        }
+      ],
+      "token_usage": {
+        "prompt_tokens": 581,
+        "completion_tokens": 169,
+        "total_tokens": 750
+      },
+      "raw_provider_output": "{\"kind\":\"instantiate\",\"workflow_id\":\"code_generation\",\"bindings\":{\"question_path\":\"input/two_sum.md\",\"output_path\":\"output/two_sum.py\"},\"reason\":\"Goal matches the code_generation workflow and provides explicit groundings for both required bindings.\"}",
+      "normalized_workflow_decision": {
+        "kind": "instantiate",
+        "workflow_id": "code_generation",
+        "bindings": {
+          "question_path": "input/two_sum.md",
+          "output_path": "output/two_sum.py"
+        },
+        "reason": "Goal matches the code_generation workflow and provides explicit groundings for both required bindings."
+      },
+      "oracle_result": {
+        "passed": true,
+        "schema_validity": true,
+        "kind_accuracy": true,
+        "workflow_accuracy": true,
+        "binding_accuracy": true,
+        "safe_decision": true,
+        "false_workflow_selection": 0,
+        "missed_workflow": 0,
+        "unsafe_reuse": 0,
+        "errors": [],
+        "normalized_decision": {
+          "kind": "instantiate",
+          "workflow_id": "code_generation",
+          "bindings": {
+            "question_path": "input/two_sum.md",
+            "output_path": "output/two_sum.py"
+          },
+          "reason": "Goal matches the code_generation workflow and provides explicit groundings for both required bindings."
+        }
+      },
+      "evaluable": true,
+      "passed": true,
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {}
+    },
+    {
+      "case_id": "C010",
+      "family": "PARAMETER_BINDING",
+      "goal": "根据 input/question.docx 解题。",
+      "context_projection": {
+        "artifacts": {},
+        "capabilities": [
+          "filesystem.read",
+          "filesystem.write",
+          "run_python"
+        ],
+        "facts": {},
+        "active_workflow": null
+      },
+      "available_workflows": [
+        {
+          "id": "code_generation",
+          "version": "3.0",
+          "description": "从题目文件生成 Python 解题代码",
+          "required_bindings": [
+            "question_path",
+            "output_path"
+          ],
+          "defaults": {
+            "output_path": "output/solution.py"
+          },
+          "required_artifacts": [],
+          "required_capabilities": [
+            "filesystem.read",
+            "filesystem.write",
+            "run_python"
+          ],
+          "output_types": [
+            "solution_file"
+          ]
+        }
+      ],
+      "case_attempts": 1,
+      "latency_ms": 3555.827,
+      "provider_status": "SUCCESS_WITH_FORMAT_FALLBACK",
+      "provider_path": "SINGLE_PROVIDER",
+      "format_path": "STRUCTURED_TO_RAW_FALLBACK",
+      "provider_calls": [
+        {
+          "sequence": 1,
+          "provider": "deepseek",
+          "call_kind": "structured_bind",
+          "outcome": "SUCCESS",
+          "latency_ms": 0.709,
+          "token_usage": {},
+          "response_preview": null
+        },
+        {
+          "sequence": 2,
+          "provider": "deepseek",
+          "call_kind": "structured_ainvoke",
+          "outcome": "ERROR",
+          "latency_ms": 180.047,
+          "token_usage": {},
+          "response_preview": null,
+          "error_code": "STRUCTURED_OUTPUT_REJECTED",
+          "error": {
+            "type": "BadRequestError",
+            "message": "Error code: 400 - {'error': {'message': 'This response_format type is unavailable now', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}"
+          }
+        },
+        {
+          "sequence": 3,
+          "provider": "deepseek",
+          "call_kind": "raw_ainvoke",
+          "outcome": "SUCCESS",
+          "latency_ms": 3374.725,
+          "token_usage": {
+            "prompt_tokens": 568,
+            "completion_tokens": 331,
+            "total_tokens": 899
+          },
+          "response_preview": "{\"kind\":\"instantiate\",\"workflow_id\":\"code_generation\",\"bindings\":{\"question_path\":\"input/question.docx\",\"output_path\":\"output/solution.py\"},\"reason\":\"Goal matches the code_generation workflow; required bindings are satisfied by explicit question_path and catalog default output_path, and required capabilities are available.\"}"
+        }
+      ],
+      "token_usage": {
+        "prompt_tokens": 568,
+        "completion_tokens": 331,
+        "total_tokens": 899
+      },
+      "raw_provider_output": "{\"kind\":\"instantiate\",\"workflow_id\":\"code_generation\",\"bindings\":{\"question_path\":\"input/question.docx\",\"output_path\":\"output/solution.py\"},\"reason\":\"Goal matches the code_generation workflow; required bindings are satisfied by explicit question_path and catalog default output_path, and required capabilities are available.\"}",
+      "normalized_workflow_decision": {
+        "kind": "instantiate",
+        "workflow_id": "code_generation",
+        "bindings": {
+          "question_path": "input/question.docx",
+          "output_path": "output/solution.py"
+        },
+        "reason": "Goal matches the code_generation workflow; required bindings are satisfied by explicit question_path and catalog default output_path, and required capabilities are available."
+      },
+      "oracle_result": {
+        "passed": true,
+        "schema_validity": true,
+        "kind_accuracy": true,
+        "workflow_accuracy": true,
+        "binding_accuracy": true,
+        "safe_decision": true,
+        "false_workflow_selection": 0,
+        "missed_workflow": 0,
+        "unsafe_reuse": 0,
+        "errors": [],
+        "normalized_decision": {
+          "kind": "instantiate",
+          "workflow_id": "code_generation",
+          "bindings": {
+            "question_path": "input/question.docx",
+            "output_path": "output/solution.py"
+          },
+          "reason": "Goal matches the code_generation workflow; required bindings are satisfied by explicit question_path and catalog default output_path, and required capabilities are available."
+        }
+      },
+      "evaluable": true,
+      "passed": true,
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {}
+    },
+    {
+      "case_id": "C011",
+      "family": "PARAMETER_BINDING",
+      "goal": "用现有解题流程处理那个题目并保存为 output/result.py。",
+      "context_projection": {
+        "artifacts": {},
+        "capabilities": [
+          "filesystem.read",
+          "filesystem.write",
+          "run_python"
+        ],
+        "facts": {},
+        "active_workflow": null
+      },
+      "available_workflows": [
+        {
+          "id": "code_generation",
+          "version": "3.0",
+          "description": "从题目文件生成 Python 解题代码",
+          "required_bindings": [
+            "question_path",
+            "output_path"
+          ],
+          "defaults": {
+            "output_path": "output/solution.py"
+          },
+          "required_artifacts": [],
+          "required_capabilities": [
+            "filesystem.read",
+            "filesystem.write",
+            "run_python"
+          ],
+          "output_types": [
+            "solution_file"
+          ]
+        }
+      ],
+      "case_attempts": 1,
+      "latency_ms": 2662.932,
+      "provider_status": "SUCCESS_WITH_FORMAT_FALLBACK",
+      "provider_path": "SINGLE_PROVIDER",
+      "format_path": "STRUCTURED_TO_RAW_FALLBACK",
+      "provider_calls": [
+        {
+          "sequence": 1,
+          "provider": "deepseek",
+          "call_kind": "structured_bind",
+          "outcome": "SUCCESS",
+          "latency_ms": 0.718,
+          "token_usage": {},
+          "response_preview": null
+        },
+        {
+          "sequence": 2,
+          "provider": "deepseek",
+          "call_kind": "structured_ainvoke",
+          "outcome": "ERROR",
+          "latency_ms": 118.785,
+          "token_usage": {},
+          "response_preview": null,
+          "error_code": "STRUCTURED_OUTPUT_REJECTED",
+          "error": {
+            "type": "BadRequestError",
+            "message": "Error code: 400 - {'error': {'message': 'This response_format type is unavailable now', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}"
+          }
+        },
+        {
+          "sequence": 3,
+          "provider": "deepseek",
+          "call_kind": "raw_ainvoke",
+          "outcome": "SUCCESS",
+          "latency_ms": 2543.078,
+          "token_usage": {
+            "prompt_tokens": 576,
+            "completion_tokens": 237,
+            "total_tokens": 813
+          },
+          "response_preview": "{\"kind\":\"ask\",\"workflow_id\":\"\",\"bindings\":{},\"reason\":\"Goal matches available workflow code_generation, but required binding question_path is not provided in context or facts.\"}"
+        }
+      ],
+      "token_usage": {
+        "prompt_tokens": 576,
+        "completion_tokens": 237,
+        "total_tokens": 813
+      },
+      "raw_provider_output": "{\"kind\":\"ask\",\"workflow_id\":\"\",\"bindings\":{},\"reason\":\"Goal matches available workflow code_generation, but required binding question_path is not provided in context or facts.\"}",
+      "normalized_workflow_decision": {
+        "kind": "ask",
+        "workflow_id": "",
+        "bindings": {},
+        "reason": "Goal matches available workflow code_generation, but required binding question_path is not provided in context or facts."
+      },
+      "oracle_result": {
+        "passed": true,
+        "schema_validity": true,
+        "kind_accuracy": true,
+        "workflow_accuracy": true,
+        "binding_accuracy": true,
+        "safe_decision": true,
+        "false_workflow_selection": 0,
+        "missed_workflow": 0,
+        "unsafe_reuse": 0,
+        "errors": [],
+        "normalized_decision": {
+          "kind": "ask",
+          "workflow_id": "",
+          "bindings": {},
+          "reason": "Goal matches available workflow code_generation, but required binding question_path is not provided in context or facts."
+        }
+      },
+      "evaluable": true,
+      "passed": true,
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {}
+    },
+    {
+      "case_id": "C012",
+      "family": "PARAMETER_BINDING",
+      "goal": "生成 SQLite WAL 研究报告。",
+      "context_projection": {
+        "artifacts": {},
+        "capabilities": [
+          "web_search",
+          "filesystem.write"
+        ],
+        "facts": {},
+        "active_workflow": null
+      },
+      "available_workflows": [
+        {
+          "id": "research_report",
+          "version": "1.0",
+          "description": "检索外部资料并生成带来源的报告",
+          "required_bindings": [
+            "topic",
+            "output_path"
+          ],
+          "defaults": {},
+          "required_artifacts": [],
+          "required_capabilities": [
+            "web_search",
+            "filesystem.write"
+          ],
+          "output_types": [
+            "research_report"
+          ]
+        }
+      ],
+      "case_attempts": 1,
+      "latency_ms": 6567.215,
+      "provider_status": "SUCCESS_WITH_FORMAT_FALLBACK",
+      "provider_path": "SINGLE_PROVIDER",
+      "format_path": "STRUCTURED_TO_RAW_FALLBACK",
+      "provider_calls": [
+        {
+          "sequence": 1,
+          "provider": "deepseek",
+          "call_kind": "structured_bind",
+          "outcome": "SUCCESS",
+          "latency_ms": 0.867,
+          "token_usage": {},
+          "response_preview": null
+        },
+        {
+          "sequence": 2,
+          "provider": "deepseek",
+          "call_kind": "structured_ainvoke",
+          "outcome": "ERROR",
+          "latency_ms": 114.917,
+          "token_usage": {},
+          "response_preview": null,
+          "error_code": "STRUCTURED_OUTPUT_REJECTED",
+          "error": {
+            "type": "BadRequestError",
+            "message": "Error code: 400 - {'error': {'message': 'This response_format type is unavailable now', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}"
+          }
+        },
+        {
+          "sequence": 3,
+          "provider": "deepseek",
+          "call_kind": "raw_ainvoke",
+          "outcome": "SUCCESS",
+          "latency_ms": 6451.012,
+          "token_usage": {
+            "prompt_tokens": 550,
+            "completion_tokens": 653,
+            "total_tokens": 1203
+          },
+          "response_preview": "{\"kind\":\"ask\",\"workflow_id\":\"\",\"bindings\":{},\"reason\":\"目标匹配 research_report 工作流，但缺少必需的 output_path 绑定（topic 可从目标推断，但仍需确认），无法实例化，需向用户询问。\"}"
+        }
+      ],
+      "token_usage": {
+        "prompt_tokens": 550,
+        "completion_tokens": 653,
+        "total_tokens": 1203
+      },
+      "raw_provider_output": "{\"kind\":\"ask\",\"workflow_id\":\"\",\"bindings\":{},\"reason\":\"目标匹配 research_report 工作流，但缺少必需的 output_path 绑定（topic 可从目标推断，但仍需确认），无法实例化，需向用户询问。\"}",
+      "normalized_workflow_decision": {
+        "kind": "ask",
+        "workflow_id": "",
+        "bindings": {},
+        "reason": "目标匹配 research_report 工作流，但缺少必需的 output_path 绑定（topic 可从目标推断，但仍需确认），无法实例化，需向用户询问。"
+      },
+      "oracle_result": {
+        "passed": true,
+        "schema_validity": true,
+        "kind_accuracy": true,
+        "workflow_accuracy": true,
+        "binding_accuracy": true,
+        "safe_decision": true,
+        "false_workflow_selection": 0,
+        "missed_workflow": 0,
+        "unsafe_reuse": 0,
+        "errors": [],
+        "normalized_decision": {
+          "kind": "ask",
+          "workflow_id": "",
+          "bindings": {},
+          "reason": "目标匹配 research_report 工作流，但缺少必需的 output_path 绑定（topic 可从目标推断，但仍需确认），无法实例化，需向用户询问。"
+        }
+      },
+      "evaluable": true,
+      "passed": true,
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {}
+    },
+    {
+      "case_id": "C013",
+      "family": "SIMPLE_TASK_DECLINE",
+      "goal": "读取 agent/runtime.py。",
+      "context_projection": {
+        "artifacts": {},
+        "capabilities": [
+          "filesystem.read",
+          "filesystem.write",
+          "web_search",
+          "run_python"
+        ],
+        "facts": {},
+        "active_workflow": null
+      },
+      "available_workflows": [
+        {
+          "id": "code_generation",
+          "version": "3.0",
+          "description": "从题目文件生成 Python 解题代码",
+          "required_bindings": [
+            "question_path",
+            "output_path"
+          ],
+          "defaults": {
+            "output_path": "output/solution.py"
+          },
+          "required_artifacts": [],
+          "required_capabilities": [
+            "filesystem.read",
+            "filesystem.write",
+            "run_python"
+          ],
+          "output_types": [
+            "solution_file"
+          ]
+        },
+        {
+          "id": "research_report",
+          "version": "1.0",
+          "description": "检索外部资料并生成带来源的报告",
+          "required_bindings": [
+            "topic",
+            "output_path"
+          ],
+          "defaults": {},
+          "required_artifacts": [],
+          "required_capabilities": [
+            "web_search",
+            "filesystem.write"
+          ],
+          "output_types": [
+            "research_report"
+          ]
+        }
+      ],
+      "case_attempts": 1,
+      "latency_ms": 2239.682,
+      "provider_status": "SUCCESS_WITH_FORMAT_FALLBACK",
+      "provider_path": "SINGLE_PROVIDER",
+      "format_path": "STRUCTURED_TO_RAW_FALLBACK",
+      "provider_calls": [
+        {
+          "sequence": 1,
+          "provider": "deepseek",
+          "call_kind": "structured_bind",
+          "outcome": "SUCCESS",
+          "latency_ms": 0.831,
+          "token_usage": {},
+          "response_preview": null
+        },
+        {
+          "sequence": 2,
+          "provider": "deepseek",
+          "call_kind": "structured_ainvoke",
+          "outcome": "ERROR",
+          "latency_ms": 639.788,
+          "token_usage": {},
+          "response_preview": null,
+          "error_code": "STRUCTURED_OUTPUT_REJECTED",
+          "error": {
+            "type": "BadRequestError",
+            "message": "Error code: 400 - {'error': {'message': 'This response_format type is unavailable now', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}"
+          }
+        },
+        {
+          "sequence": 3,
+          "provider": "deepseek",
+          "call_kind": "raw_ainvoke",
+          "outcome": "SUCCESS",
+          "latency_ms": 1598.451,
+          "token_usage": {
+            "prompt_tokens": 640,
+            "completion_tokens": 134,
+            "total_tokens": 774
+          },
+          "response_preview": "{\"kind\":\"decline\",\"workflow_id\":\"\",\"bindings\":{},\"reason\":\"目标仅为读取文件，属于简单任务，不匹配任何可用工作流（代码生成或研究报告），应由普通规划/任务执行处理。\"}"
+        }
+      ],
+      "token_usage": {
+        "prompt_tokens": 640,
+        "completion_tokens": 134,
+        "total_tokens": 774
+      },
+      "raw_provider_output": "{\"kind\":\"decline\",\"workflow_id\":\"\",\"bindings\":{},\"reason\":\"目标仅为读取文件，属于简单任务，不匹配任何可用工作流（代码生成或研究报告），应由普通规划/任务执行处理。\"}",
+      "normalized_workflow_decision": {
+        "kind": "decline",
+        "workflow_id": "",
+        "bindings": {},
+        "reason": "目标仅为读取文件，属于简单任务，不匹配任何可用工作流（代码生成或研究报告），应由普通规划/任务执行处理。"
+      },
+      "oracle_result": {
+        "passed": true,
+        "schema_validity": true,
+        "kind_accuracy": true,
+        "workflow_accuracy": true,
+        "binding_accuracy": true,
+        "safe_decision": true,
+        "false_workflow_selection": 0,
+        "missed_workflow": 0,
+        "unsafe_reuse": 0,
+        "errors": [],
+        "normalized_decision": {
+          "kind": "decline",
+          "workflow_id": "",
+          "bindings": {},
+          "reason": "目标仅为读取文件，属于简单任务，不匹配任何可用工作流（代码生成或研究报告），应由普通规划/任务执行处理。"
+        }
+      },
+      "evaluable": true,
+      "passed": true,
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {}
+    },
+    {
+      "case_id": "C014",
+      "family": "SIMPLE_TASK_DECLINE",
+      "goal": "把 hello 写入 output/hello.txt。",
+      "context_projection": {
+        "artifacts": {},
+        "capabilities": [
+          "filesystem.read",
+          "filesystem.write",
+          "run_python"
+        ],
+        "facts": {},
+        "active_workflow": null
+      },
+      "available_workflows": [
+        {
+          "id": "code_generation",
+          "version": "3.0",
+          "description": "从题目文件生成 Python 解题代码",
+          "required_bindings": [
+            "question_path",
+            "output_path"
+          ],
+          "defaults": {
+            "output_path": "output/solution.py"
+          },
+          "required_artifacts": [],
+          "required_capabilities": [
+            "filesystem.read",
+            "filesystem.write",
+            "run_python"
+          ],
+          "output_types": [
+            "solution_file"
+          ]
+        },
+        {
+          "id": "data_cleanup",
+          "version": "1.0",
+          "description": "读取结构化数据、清洗并保存结果",
+          "required_bindings": [
+            "source_path",
+            "output_path"
+          ],
+          "defaults": {},
+          "required_artifacts": [],
+          "required_capabilities": [
+            "filesystem.read",
+            "filesystem.write",
+            "run_python"
+          ],
+          "output_types": [
+            "clean_dataset"
+          ]
+        }
+      ],
+      "case_attempts": 1,
+      "latency_ms": 1996.281,
+      "provider_status": "SUCCESS_WITH_FORMAT_FALLBACK",
+      "provider_path": "SINGLE_PROVIDER",
+      "format_path": "STRUCTURED_TO_RAW_FALLBACK",
+      "provider_calls": [
+        {
+          "sequence": 1,
+          "provider": "deepseek",
+          "call_kind": "structured_bind",
+          "outcome": "SUCCESS",
+          "latency_ms": 0.977,
+          "token_usage": {},
+          "response_preview": null
+        },
+        {
+          "sequence": 2,
+          "provider": "deepseek",
+          "call_kind": "structured_ainvoke",
+          "outcome": "ERROR",
+          "latency_ms": 112.229,
+          "token_usage": {},
+          "response_preview": null,
+          "error_code": "STRUCTURED_OUTPUT_REJECTED",
+          "error": {
+            "type": "BadRequestError",
+            "message": "Error code: 400 - {'error': {'message': 'This response_format type is unavailable now', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}"
+          }
+        },
+        {
+          "sequence": 3,
+          "provider": "deepseek",
+          "call_kind": "raw_ainvoke",
+          "outcome": "SUCCESS",
+          "latency_ms": 1882.692,
+          "token_usage": {
+            "prompt_tokens": 648,
+            "completion_tokens": 163,
+            "total_tokens": 811
+          },
+          "response_preview": "{\"kind\":\"decline\",\"workflow_id\":\"\",\"bindings\":{},\"reason\":\"Goal is a simple file write, not code generation or data cleanup; no workflow matches. Better handled by ordinary task execution.\"}"
+        }
+      ],
+      "token_usage": {
+        "prompt_tokens": 648,
+        "completion_tokens": 163,
+        "total_tokens": 811
+      },
+      "raw_provider_output": "{\"kind\":\"decline\",\"workflow_id\":\"\",\"bindings\":{},\"reason\":\"Goal is a simple file write, not code generation or data cleanup; no workflow matches. Better handled by ordinary task execution.\"}",
+      "normalized_workflow_decision": {
+        "kind": "decline",
+        "workflow_id": "",
+        "bindings": {},
+        "reason": "Goal is a simple file write, not code generation or data cleanup; no workflow matches. Better handled by ordinary task execution."
+      },
+      "oracle_result": {
+        "passed": true,
+        "schema_validity": true,
+        "kind_accuracy": true,
+        "workflow_accuracy": true,
+        "binding_accuracy": true,
+        "safe_decision": true,
+        "false_workflow_selection": 0,
+        "missed_workflow": 0,
+        "unsafe_reuse": 0,
+        "errors": [],
+        "normalized_decision": {
+          "kind": "decline",
+          "workflow_id": "",
+          "bindings": {},
+          "reason": "Goal is a simple file write, not code generation or data cleanup; no workflow matches. Better handled by ordinary task execution."
+        }
+      },
+      "evaluable": true,
+      "passed": true,
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {}
+    },
+    {
+      "case_id": "C015",
+      "family": "SIMPLE_TASK_DECLINE",
+      "goal": "运行 date 命令并贴出结果。",
+      "context_projection": {
+        "artifacts": {},
+        "capabilities": [
+          "shell"
+        ],
+        "facts": {},
+        "active_workflow": null
+      },
+      "available_workflows": [
+        {
+          "id": "release_validation",
+          "version": "1.0",
+          "description": "按固定检查清单验证一个 staging release",
+          "required_bindings": [
+            "release_tag",
+            "staging_env"
+          ],
+          "defaults": {
+            "staging_env": "staging"
+          },
+          "required_artifacts": [
+            "release_manifest"
+          ],
+          "required_capabilities": [
+            "run_python",
+            "filesystem.read"
+          ],
+          "output_types": [
+            "release_report"
+          ]
+        }
+      ],
+      "case_attempts": 1,
+      "latency_ms": 2176.948,
+      "provider_status": "SUCCESS_WITH_FORMAT_FALLBACK",
+      "provider_path": "SINGLE_PROVIDER",
+      "format_path": "STRUCTURED_TO_RAW_FALLBACK",
+      "provider_calls": [
+        {
+          "sequence": 1,
+          "provider": "deepseek",
+          "call_kind": "structured_bind",
+          "outcome": "SUCCESS",
+          "latency_ms": 0.716,
+          "token_usage": {},
+          "response_preview": null
+        },
+        {
+          "sequence": 2,
+          "provider": "deepseek",
+          "call_kind": "structured_ainvoke",
+          "outcome": "ERROR",
+          "latency_ms": 121.521,
+          "token_usage": {},
+          "response_preview": null,
+          "error_code": "STRUCTURED_OUTPUT_REJECTED",
+          "error": {
+            "type": "BadRequestError",
+            "message": "Error code: 400 - {'error': {'message': 'This response_format type is unavailable now', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}"
+          }
+        },
+        {
+          "sequence": 3,
+          "provider": "deepseek",
+          "call_kind": "raw_ainvoke",
+          "outcome": "SUCCESS",
+          "latency_ms": 2054.336,
+          "token_usage": {
+            "prompt_tokens": 560,
+            "completion_tokens": 161,
+            "total_tokens": 721
+          },
+          "response_preview": "{\"kind\":\"decline\",\"workflow_id\":\"\",\"bindings\":{},\"reason\":\"Goal is a simple command execution not matching the release validation workflow; better handled by ordinary task execution.\"}"
+        }
+      ],
+      "token_usage": {
+        "prompt_tokens": 560,
+        "completion_tokens": 161,
+        "total_tokens": 721
+      },
+      "raw_provider_output": "{\"kind\":\"decline\",\"workflow_id\":\"\",\"bindings\":{},\"reason\":\"Goal is a simple command execution not matching the release validation workflow; better handled by ordinary task execution.\"}",
+      "normalized_workflow_decision": {
+        "kind": "decline",
+        "workflow_id": "",
+        "bindings": {},
+        "reason": "Goal is a simple command execution not matching the release validation workflow; better handled by ordinary task execution."
+      },
+      "oracle_result": {
+        "passed": true,
+        "schema_validity": true,
+        "kind_accuracy": true,
+        "workflow_accuracy": true,
+        "binding_accuracy": true,
+        "safe_decision": true,
+        "false_workflow_selection": 0,
+        "missed_workflow": 0,
+        "unsafe_reuse": 0,
+        "errors": [],
+        "normalized_decision": {
+          "kind": "decline",
+          "workflow_id": "",
+          "bindings": {},
+          "reason": "Goal is a simple command execution not matching the release validation workflow; better handled by ordinary task execution."
+        }
+      },
+      "evaluable": true,
+      "passed": true,
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {}
+    },
+    {
+      "case_id": "C016",
+      "family": "SIMPLE_TASK_DECLINE",
+      "goal": "总结我们刚才的对话。",
+      "context_projection": {
+        "artifacts": {},
+        "capabilities": [
+          "web_search",
+          "filesystem.write"
+        ],
+        "facts": {
+          "conversation_available": true
+        },
+        "active_workflow": null
+      },
+      "available_workflows": [
+        {
+          "id": "research_report",
+          "version": "1.0",
+          "description": "检索外部资料并生成带来源的报告",
+          "required_bindings": [
+            "topic",
+            "output_path"
+          ],
+          "defaults": {},
+          "required_artifacts": [],
+          "required_capabilities": [
+            "web_search",
+            "filesystem.write"
+          ],
+          "output_types": [
+            "research_report"
+          ]
+        }
+      ],
+      "case_attempts": 1,
+      "latency_ms": 1967.595,
+      "provider_status": "SUCCESS_WITH_FORMAT_FALLBACK",
+      "provider_path": "SINGLE_PROVIDER",
+      "format_path": "STRUCTURED_TO_RAW_FALLBACK",
+      "provider_calls": [
+        {
+          "sequence": 1,
+          "provider": "deepseek",
+          "call_kind": "structured_bind",
+          "outcome": "SUCCESS",
+          "latency_ms": 0.763,
+          "token_usage": {},
+          "response_preview": null
+        },
+        {
+          "sequence": 2,
+          "provider": "deepseek",
+          "call_kind": "structured_ainvoke",
+          "outcome": "ERROR",
+          "latency_ms": 123.353,
+          "token_usage": {},
+          "response_preview": null,
+          "error_code": "STRUCTURED_OUTPUT_REJECTED",
+          "error": {
+            "type": "BadRequestError",
+            "message": "Error code: 400 - {'error': {'message': 'This response_format type is unavailable now', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}"
+          }
+        },
+        {
+          "sequence": 3,
+          "provider": "deepseek",
+          "call_kind": "raw_ainvoke",
+          "outcome": "SUCCESS",
+          "latency_ms": 1843.127,
+          "token_usage": {
+            "prompt_tokens": 554,
+            "completion_tokens": 137,
+            "total_tokens": 691
+          },
+          "response_preview": "{\"kind\":\"decline\",\"workflow_id\":\"\",\"bindings\":{},\"reason\":\"Goal is to summarize a conversation, not to produce a sourced research report. No available workflow matches this simple summarization task.\"}"
+        }
+      ],
+      "token_usage": {
+        "prompt_tokens": 554,
+        "completion_tokens": 137,
+        "total_tokens": 691
+      },
+      "raw_provider_output": "{\"kind\":\"decline\",\"workflow_id\":\"\",\"bindings\":{},\"reason\":\"Goal is to summarize a conversation, not to produce a sourced research report. No available workflow matches this simple summarization task.\"}",
+      "normalized_workflow_decision": {
+        "kind": "decline",
+        "workflow_id": "",
+        "bindings": {},
+        "reason": "Goal is to summarize a conversation, not to produce a sourced research report. No available workflow matches this simple summarization task."
+      },
+      "oracle_result": {
+        "passed": true,
+        "schema_validity": true,
+        "kind_accuracy": true,
+        "workflow_accuracy": true,
+        "binding_accuracy": true,
+        "safe_decision": true,
+        "false_workflow_selection": 0,
+        "missed_workflow": 0,
+        "unsafe_reuse": 0,
+        "errors": [],
+        "normalized_decision": {
+          "kind": "decline",
+          "workflow_id": "",
+          "bindings": {},
+          "reason": "Goal is to summarize a conversation, not to produce a sourced research report. No available workflow matches this simple summarization task."
+        }
+      },
+      "evaluable": true,
+      "passed": true,
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {}
+    },
+    {
+      "case_id": "C017",
+      "family": "CONTINUATION",
+      "goal": "继续刚才的解题流程。",
+      "context_projection": {
+        "artifacts": {
+          "question_text": "artifact:q",
+          "algorithm_design": "artifact:a"
+        },
+        "capabilities": [
+          "filesystem.read",
+          "filesystem.write",
+          "run_python"
+        ],
+        "facts": {},
+        "active_workflow": {
+          "workflow_id": "code_generation",
+          "status": "active",
+          "reuse_allowed": true
+        }
+      },
+      "available_workflows": [
+        {
+          "id": "code_generation",
+          "version": "3.0",
+          "description": "从题目文件生成 Python 解题代码",
+          "required_bindings": [
+            "question_path",
+            "output_path"
+          ],
+          "defaults": {
+            "output_path": "output/solution.py"
+          },
+          "required_artifacts": [],
+          "required_capabilities": [
+            "filesystem.read",
+            "filesystem.write",
+            "run_python"
+          ],
+          "output_types": [
+            "solution_file"
+          ]
+        }
+      ],
+      "case_attempts": 1,
+      "latency_ms": 2112.179,
+      "provider_status": "SUCCESS_WITH_FORMAT_FALLBACK",
+      "provider_path": "SINGLE_PROVIDER",
+      "format_path": "STRUCTURED_TO_RAW_FALLBACK",
+      "provider_calls": [
+        {
+          "sequence": 1,
+          "provider": "deepseek",
+          "call_kind": "structured_bind",
+          "outcome": "SUCCESS",
+          "latency_ms": 0.748,
+          "token_usage": {},
+          "response_preview": null
+        },
+        {
+          "sequence": 2,
+          "provider": "deepseek",
+          "call_kind": "structured_ainvoke",
+          "outcome": "ERROR",
+          "latency_ms": 118.464,
+          "token_usage": {},
+          "response_preview": null,
+          "error_code": "STRUCTURED_OUTPUT_REJECTED",
+          "error": {
+            "type": "BadRequestError",
+            "message": "Error code: 400 - {'error': {'message': 'This response_format type is unavailable now', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}"
+          }
+        },
+        {
+          "sequence": 3,
+          "provider": "deepseek",
+          "call_kind": "raw_ainvoke",
+          "outcome": "SUCCESS",
+          "latency_ms": 1992.575,
+          "token_usage": {
+            "prompt_tokens": 598,
+            "completion_tokens": 180,
+            "total_tokens": 778
+          },
+          "response_preview": "{\"kind\":\"reuse\",\"workflow_id\":\"code_generation\",\"bindings\":{},\"reason\":\"The goal asks to continue the ongoing workflow, and the projected active code_generation workflow is active with reuse allowed.\"}"
+        }
+      ],
+      "token_usage": {
+        "prompt_tokens": 598,
+        "completion_tokens": 180,
+        "total_tokens": 778
+      },
+      "raw_provider_output": "{\"kind\":\"reuse\",\"workflow_id\":\"code_generation\",\"bindings\":{},\"reason\":\"The goal asks to continue the ongoing workflow, and the projected active code_generation workflow is active with reuse allowed.\"}",
+      "normalized_workflow_decision": {
+        "kind": "reuse",
+        "workflow_id": "code_generation",
+        "bindings": {},
+        "reason": "The goal asks to continue the ongoing workflow, and the projected active code_generation workflow is active with reuse allowed."
+      },
+      "oracle_result": {
+        "passed": true,
+        "schema_validity": true,
+        "kind_accuracy": true,
+        "workflow_accuracy": true,
+        "binding_accuracy": true,
+        "safe_decision": true,
+        "false_workflow_selection": 0,
+        "missed_workflow": 0,
+        "unsafe_reuse": 0,
+        "errors": [],
+        "normalized_decision": {
+          "kind": "reuse",
+          "workflow_id": "code_generation",
+          "bindings": {},
+          "reason": "The goal asks to continue the ongoing workflow, and the projected active code_generation workflow is active with reuse allowed."
+        }
+      },
+      "evaluable": true,
+      "passed": true,
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {}
+    },
+    {
+      "case_id": "C018",
+      "family": "CONTINUATION",
+      "goal": "继续刚才的发布验证。",
+      "context_projection": {
+        "artifacts": {
+          "release_manifest": "artifact:m"
+        },
+        "capabilities": [
+          "run_python",
+          "filesystem.read"
+        ],
+        "facts": {
+          "stale_reason": "manifest digest changed"
+        },
+        "active_workflow": {
+          "workflow_id": "release_validation",
+          "status": "blocked",
+          "reuse_allowed": false
+        }
+      },
+      "available_workflows": [
+        {
+          "id": "release_validation",
+          "version": "1.0",
+          "description": "按固定检查清单验证一个 staging release",
+          "required_bindings": [
+            "release_tag",
+            "staging_env"
+          ],
+          "defaults": {
+            "staging_env": "staging"
+          },
+          "required_artifacts": [
+            "release_manifest"
+          ],
+          "required_capabilities": [
+            "run_python",
+            "filesystem.read"
+          ],
+          "output_types": [
+            "release_report"
+          ]
+        }
+      ],
+      "case_attempts": 1,
+      "latency_ms": 3680.441,
+      "provider_status": "SUCCESS_WITH_FORMAT_FALLBACK",
+      "provider_path": "SINGLE_PROVIDER",
+      "format_path": "STRUCTURED_TO_RAW_FALLBACK",
+      "provider_calls": [
+        {
+          "sequence": 1,
+          "provider": "deepseek",
+          "call_kind": "structured_bind",
+          "outcome": "SUCCESS",
+          "latency_ms": 0.729,
+          "token_usage": {},
+          "response_preview": null
+        },
+        {
+          "sequence": 2,
+          "provider": "deepseek",
+          "call_kind": "structured_ainvoke",
+          "outcome": "ERROR",
+          "latency_ms": 143.71,
+          "token_usage": {},
+          "response_preview": null,
+          "error_code": "STRUCTURED_OUTPUT_REJECTED",
+          "error": {
+            "type": "BadRequestError",
+            "message": "Error code: 400 - {'error': {'message': 'This response_format type is unavailable now', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}"
+          }
+        },
+        {
+          "sequence": 3,
+          "provider": "deepseek",
+          "call_kind": "raw_ainvoke",
+          "outcome": "SUCCESS",
+          "latency_ms": 3535.492,
+          "token_usage": {
+            "prompt_tokens": 596,
+            "completion_tokens": 333,
+            "total_tokens": 929
+          },
+          "response_preview": "{\"kind\":\"ask\",\"workflow_id\":\"\",\"bindings\":{},\"reason\":\"Goal matches release_validation, but required binding release_tag is not grounded in the context and cannot be inferred.\"}"
+        }
+      ],
+      "token_usage": {
+        "prompt_tokens": 596,
+        "completion_tokens": 333,
+        "total_tokens": 929
+      },
+      "raw_provider_output": "{\"kind\":\"ask\",\"workflow_id\":\"\",\"bindings\":{},\"reason\":\"Goal matches release_validation, but required binding release_tag is not grounded in the context and cannot be inferred.\"}",
+      "normalized_workflow_decision": {
+        "kind": "ask",
+        "workflow_id": "",
+        "bindings": {},
+        "reason": "Goal matches release_validation, but required binding release_tag is not grounded in the context and cannot be inferred."
+      },
+      "oracle_result": {
+        "passed": true,
+        "schema_validity": true,
+        "kind_accuracy": true,
+        "workflow_accuracy": true,
+        "binding_accuracy": true,
+        "safe_decision": true,
+        "false_workflow_selection": 0,
+        "missed_workflow": 0,
+        "unsafe_reuse": 0,
+        "errors": [],
+        "normalized_decision": {
+          "kind": "ask",
+          "workflow_id": "",
+          "bindings": {},
+          "reason": "Goal matches release_validation, but required binding release_tag is not grounded in the context and cannot be inferred."
+        }
+      },
+      "evaluable": true,
+      "passed": true,
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {}
+    },
+    {
+      "case_id": "C019",
+      "family": "CONTINUATION",
+      "goal": "再继续刚才已经完成的清洗流程。",
+      "context_projection": {
+        "artifacts": {
+          "clean_dataset": "artifact:clean"
+        },
+        "capabilities": [
+          "filesystem.read",
+          "filesystem.write",
+          "run_python"
+        ],
+        "facts": {},
+        "active_workflow": {
+          "workflow_id": "data_cleanup",
+          "status": "completed",
+          "reuse_allowed": false
+        }
+      },
+      "available_workflows": [
+        {
+          "id": "data_cleanup",
+          "version": "1.0",
+          "description": "读取结构化数据、清洗并保存结果",
+          "required_bindings": [
+            "source_path",
+            "output_path"
+          ],
+          "defaults": {},
+          "required_artifacts": [],
+          "required_capabilities": [
+            "filesystem.read",
+            "filesystem.write",
+            "run_python"
+          ],
+          "output_types": [
+            "clean_dataset"
+          ]
+        }
+      ],
+      "case_attempts": 1,
+      "latency_ms": 5398.725,
+      "provider_status": "SUCCESS_WITH_FORMAT_FALLBACK",
+      "provider_path": "SINGLE_PROVIDER",
+      "format_path": "STRUCTURED_TO_RAW_FALLBACK",
+      "provider_calls": [
+        {
+          "sequence": 1,
+          "provider": "deepseek",
+          "call_kind": "structured_bind",
+          "outcome": "SUCCESS",
+          "latency_ms": 0.919,
+          "token_usage": {},
+          "response_preview": null
+        },
+        {
+          "sequence": 2,
+          "provider": "deepseek",
+          "call_kind": "structured_ainvoke",
+          "outcome": "ERROR",
+          "latency_ms": 1121.618,
+          "token_usage": {},
+          "response_preview": null,
+          "error_code": "STRUCTURED_OUTPUT_REJECTED",
+          "error": {
+            "type": "BadRequestError",
+            "message": "Error code: 400 - {'error': {'message': 'This response_format type is unavailable now', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}"
+          }
+        },
+        {
+          "sequence": 3,
+          "provider": "deepseek",
+          "call_kind": "raw_ainvoke",
+          "outcome": "SUCCESS",
+          "latency_ms": 4275.752,
+          "token_usage": {
+            "prompt_tokens": 588,
+            "completion_tokens": 427,
+            "total_tokens": 1015
+          },
+          "response_preview": "{\"kind\":\"ask\",\"workflow_id\":\"\",\"bindings\":{},\"reason\":\"用户希望继续已完成的清洗流程，但缺少 source_path 和 output_path 等必要绑定，且活动工作流不可复用。\"}"
+        }
+      ],
+      "token_usage": {
+        "prompt_tokens": 588,
+        "completion_tokens": 427,
+        "total_tokens": 1015
+      },
+      "raw_provider_output": "{\"kind\":\"ask\",\"workflow_id\":\"\",\"bindings\":{},\"reason\":\"用户希望继续已完成的清洗流程，但缺少 source_path 和 output_path 等必要绑定，且活动工作流不可复用。\"}",
+      "normalized_workflow_decision": {
+        "kind": "ask",
+        "workflow_id": "",
+        "bindings": {},
+        "reason": "用户希望继续已完成的清洗流程，但缺少 source_path 和 output_path 等必要绑定，且活动工作流不可复用。"
+      },
+      "oracle_result": {
+        "passed": false,
+        "schema_validity": true,
+        "kind_accuracy": false,
+        "workflow_accuracy": true,
+        "binding_accuracy": true,
+        "safe_decision": true,
+        "false_workflow_selection": 0,
+        "missed_workflow": 0,
+        "unsafe_reuse": 0,
+        "errors": [],
+        "normalized_decision": {
+          "kind": "ask",
+          "workflow_id": "",
+          "bindings": {},
+          "reason": "用户希望继续已完成的清洗流程，但缺少 source_path 和 output_path 等必要绑定，且活动工作流不可复用。"
+        }
+      },
+      "evaluable": true,
+      "passed": false,
+      "failure_category": "P-CAP",
+      "failure_subcategory": "WRONG_KIND",
+      "evidence": {
+        "oracle_errors": [],
+        "selection_error": null
+      }
+    },
+    {
+      "case_id": "C020",
+      "family": "CONTINUATION",
+      "goal": "读取 README.md；不要继续之前的研究流程。",
+      "context_projection": {
+        "artifacts": {},
+        "capabilities": [
+          "filesystem.read",
+          "web_search",
+          "filesystem.write"
+        ],
+        "facts": {},
+        "active_workflow": {
+          "workflow_id": "research_report",
+          "status": "active",
+          "reuse_allowed": true
+        }
+      },
+      "available_workflows": [
+        {
+          "id": "research_report",
+          "version": "1.0",
+          "description": "检索外部资料并生成带来源的报告",
+          "required_bindings": [
+            "topic",
+            "output_path"
+          ],
+          "defaults": {},
+          "required_artifacts": [],
+          "required_capabilities": [
+            "web_search",
+            "filesystem.write"
+          ],
+          "output_types": [
+            "research_report"
+          ]
+        }
+      ],
+      "case_attempts": 1,
+      "latency_ms": 2429.455,
+      "provider_status": "SUCCESS_WITH_FORMAT_FALLBACK",
+      "provider_path": "SINGLE_PROVIDER",
+      "format_path": "STRUCTURED_TO_RAW_FALLBACK",
+      "provider_calls": [
+        {
+          "sequence": 1,
+          "provider": "deepseek",
+          "call_kind": "structured_bind",
+          "outcome": "SUCCESS",
+          "latency_ms": 0.749,
+          "token_usage": {},
+          "response_preview": null
+        },
+        {
+          "sequence": 2,
+          "provider": "deepseek",
+          "call_kind": "structured_ainvoke",
+          "outcome": "ERROR",
+          "latency_ms": 118.446,
+          "token_usage": {},
+          "response_preview": null,
+          "error_code": "STRUCTURED_OUTPUT_REJECTED",
+          "error": {
+            "type": "BadRequestError",
+            "message": "Error code: 400 - {'error': {'message': 'This response_format type is unavailable now', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}"
+          }
+        },
+        {
+          "sequence": 3,
+          "provider": "deepseek",
+          "call_kind": "raw_ainvoke",
+          "outcome": "SUCCESS",
+          "latency_ms": 2309.879,
+          "token_usage": {
+            "prompt_tokens": 574,
+            "completion_tokens": 209,
+            "total_tokens": 783
+          },
+          "response_preview": "{\"kind\":\"decline\",\"workflow_id\":\"\",\"bindings\":{},\"reason\":\"The goal is a simple read task and explicitly excludes continuing the previous research workflow; no available workflow matches.\"}"
+        }
+      ],
+      "token_usage": {
+        "prompt_tokens": 574,
+        "completion_tokens": 209,
+        "total_tokens": 783
+      },
+      "raw_provider_output": "{\"kind\":\"decline\",\"workflow_id\":\"\",\"bindings\":{},\"reason\":\"The goal is a simple read task and explicitly excludes continuing the previous research workflow; no available workflow matches.\"}",
+      "normalized_workflow_decision": {
+        "kind": "decline",
+        "workflow_id": "",
+        "bindings": {},
+        "reason": "The goal is a simple read task and explicitly excludes continuing the previous research workflow; no available workflow matches."
+      },
+      "oracle_result": {
+        "passed": true,
+        "schema_validity": true,
+        "kind_accuracy": true,
+        "workflow_accuracy": true,
+        "binding_accuracy": true,
+        "safe_decision": true,
+        "false_workflow_selection": 0,
+        "missed_workflow": 0,
+        "unsafe_reuse": 0,
+        "errors": [],
+        "normalized_decision": {
+          "kind": "decline",
+          "workflow_id": "",
+          "bindings": {},
+          "reason": "The goal is a simple read task and explicitly excludes continuing the previous research workflow; no available workflow matches."
+        }
+      },
+      "evaluable": true,
+      "passed": true,
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {}
+    },
+    {
+      "case_id": "C021",
+      "family": "RUNTIME_BOUNDARY",
+      "goal": "用研究报告流程分析 AI 芯片并保存 output/chips.md。",
+      "context_projection": {
+        "artifacts": {},
+        "capabilities": [
+          "web_search",
+          "filesystem.write"
+        ],
+        "facts": {
+          "workflow_execution_profile": "compiled_and_dynamic_stages"
+        },
+        "active_workflow": null
+      },
+      "available_workflows": [
+        {
+          "id": "research_report",
+          "version": "1.0",
+          "description": "检索外部资料并生成带来源的报告",
+          "required_bindings": [
+            "topic",
+            "output_path"
+          ],
+          "defaults": {},
+          "required_artifacts": [],
+          "required_capabilities": [
+            "web_search",
+            "filesystem.write"
+          ],
+          "output_types": [
+            "research_report"
+          ]
+        }
+      ],
+      "case_attempts": 1,
+      "latency_ms": 2433.981,
+      "provider_status": "SUCCESS_WITH_FORMAT_FALLBACK",
+      "provider_path": "SINGLE_PROVIDER",
+      "format_path": "STRUCTURED_TO_RAW_FALLBACK",
+      "provider_calls": [
+        {
+          "sequence": 1,
+          "provider": "deepseek",
+          "call_kind": "structured_bind",
+          "outcome": "SUCCESS",
+          "latency_ms": 0.796,
+          "token_usage": {},
+          "response_preview": null
+        },
+        {
+          "sequence": 2,
+          "provider": "deepseek",
+          "call_kind": "structured_ainvoke",
+          "outcome": "ERROR",
+          "latency_ms": 122.093,
+          "token_usage": {},
+          "response_preview": null,
+          "error_code": "STRUCTURED_OUTPUT_REJECTED",
+          "error": {
+            "type": "BadRequestError",
+            "message": "Error code: 400 - {'error': {'message': 'This response_format type is unavailable now', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}"
+          }
+        },
+        {
+          "sequence": 3,
+          "provider": "deepseek",
+          "call_kind": "raw_ainvoke",
+          "outcome": "SUCCESS",
+          "latency_ms": 2310.718,
+          "token_usage": {
+            "prompt_tokens": 569,
+            "completion_tokens": 220,
+            "total_tokens": 789
+          },
+          "response_preview": "{\"kind\":\"instantiate\",\"workflow_id\":\"research_report\",\"bindings\":{\"topic\":\"AI 芯片\",\"output_path\":\"output/chips.md\"},\"reason\":\"Goal explicitly requests the research_report workflow for AI chips with a concrete output path; required capabilities are available and bindings are grounded in the goal.\"}"
+        }
+      ],
+      "token_usage": {
+        "prompt_tokens": 569,
+        "completion_tokens": 220,
+        "total_tokens": 789
+      },
+      "raw_provider_output": "{\"kind\":\"instantiate\",\"workflow_id\":\"research_report\",\"bindings\":{\"topic\":\"AI 芯片\",\"output_path\":\"output/chips.md\"},\"reason\":\"Goal explicitly requests the research_report workflow for AI chips with a concrete output path; required capabilities are available and bindings are grounded in the goal.\"}",
+      "normalized_workflow_decision": {
+        "kind": "instantiate",
+        "workflow_id": "research_report",
+        "bindings": {
+          "topic": "AI 芯片",
+          "output_path": "output/chips.md"
+        },
+        "reason": "Goal explicitly requests the research_report workflow for AI chips with a concrete output path; required capabilities are available and bindings are grounded in the goal."
+      },
+      "oracle_result": {
+        "passed": true,
+        "schema_validity": true,
+        "kind_accuracy": true,
+        "workflow_accuracy": true,
+        "binding_accuracy": true,
+        "safe_decision": true,
+        "false_workflow_selection": 0,
+        "missed_workflow": 0,
+        "unsafe_reuse": 0,
+        "errors": [],
+        "normalized_decision": {
+          "kind": "instantiate",
+          "workflow_id": "research_report",
+          "bindings": {
+            "topic": "AI 芯片",
+            "output_path": "output/chips.md"
+          },
+          "reason": "Goal explicitly requests the research_report workflow for AI chips with a concrete output path; required capabilities are available and bindings are grounded in the goal."
+        }
+      },
+      "evaluable": true,
+      "passed": true,
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {}
+    },
+    {
+      "case_id": "C022",
+      "family": "RUNTIME_BOUNDARY",
+      "goal": "动态搜索一个官方链接后回答，不要生成报告。",
+      "context_projection": {
+        "artifacts": {},
+        "capabilities": [
+          "web_search",
+          "filesystem.write"
+        ],
+        "facts": {
+          "dynamic_task_available": true
+        },
+        "active_workflow": null
+      },
+      "available_workflows": [
+        {
+          "id": "research_report",
+          "version": "1.0",
+          "description": "检索外部资料并生成带来源的报告",
+          "required_bindings": [
+            "topic",
+            "output_path"
+          ],
+          "defaults": {},
+          "required_artifacts": [],
+          "required_capabilities": [
+            "web_search",
+            "filesystem.write"
+          ],
+          "output_types": [
+            "research_report"
+          ]
+        }
+      ],
+      "case_attempts": 1,
+      "latency_ms": 3203.082,
+      "provider_status": "SUCCESS_WITH_FORMAT_FALLBACK",
+      "provider_path": "SINGLE_PROVIDER",
+      "format_path": "STRUCTURED_TO_RAW_FALLBACK",
+      "provider_calls": [
+        {
+          "sequence": 1,
+          "provider": "deepseek",
+          "call_kind": "structured_bind",
+          "outcome": "SUCCESS",
+          "latency_ms": 0.712,
+          "token_usage": {},
+          "response_preview": null
+        },
+        {
+          "sequence": 2,
+          "provider": "deepseek",
+          "call_kind": "structured_ainvoke",
+          "outcome": "ERROR",
+          "latency_ms": 727.32,
+          "token_usage": {},
+          "response_preview": null,
+          "error_code": "STRUCTURED_OUTPUT_REJECTED",
+          "error": {
+            "type": "BadRequestError",
+            "message": "Error code: 400 - {'error': {'message': 'This response_format type is unavailable now', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}"
+          }
+        },
+        {
+          "sequence": 3,
+          "provider": "deepseek",
+          "call_kind": "raw_ainvoke",
+          "outcome": "SUCCESS",
+          "latency_ms": 2474.668,
+          "token_usage": {
+            "prompt_tokens": 559,
+            "completion_tokens": 210,
+            "total_tokens": 769
+          },
+          "response_preview": "{\"kind\":\"decline\",\"workflow_id\":\"\",\"bindings\":{},\"reason\":\"Goal explicitly says 'do not generate a report', but the only available workflow produces a research report. The task is a simple search-and-answer better handled by ordinary execution, and no required output_path is grounded.\"}"
+        }
+      ],
+      "token_usage": {
+        "prompt_tokens": 559,
+        "completion_tokens": 210,
+        "total_tokens": 769
+      },
+      "raw_provider_output": "{\"kind\":\"decline\",\"workflow_id\":\"\",\"bindings\":{},\"reason\":\"Goal explicitly says 'do not generate a report', but the only available workflow produces a research report. The task is a simple search-and-answer better handled by ordinary execution, and no required output_path is grounded.\"}",
+      "normalized_workflow_decision": {
+        "kind": "decline",
+        "workflow_id": "",
+        "bindings": {},
+        "reason": "Goal explicitly says 'do not generate a report', but the only available workflow produces a research report. The task is a simple search-and-answer better handled by ordinary execution, and no required output_path is grounded."
+      },
+      "oracle_result": {
+        "passed": true,
+        "schema_validity": true,
+        "kind_accuracy": true,
+        "workflow_accuracy": true,
+        "binding_accuracy": true,
+        "safe_decision": true,
+        "false_workflow_selection": 0,
+        "missed_workflow": 0,
+        "unsafe_reuse": 0,
+        "errors": [],
+        "normalized_decision": {
+          "kind": "decline",
+          "workflow_id": "",
+          "bindings": {},
+          "reason": "Goal explicitly says 'do not generate a report', but the only available workflow produces a research report. The task is a simple search-and-answer better handled by ordinary execution, and no required output_path is grounded."
+        }
+      },
+      "evaluable": true,
+      "passed": true,
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {}
+    },
+    {
+      "case_id": "C023",
+      "family": "RUNTIME_BOUNDARY",
+      "goal": "继续当前研究报告流程。",
+      "context_projection": {
+        "artifacts": {
+          "sources": "artifact:sources"
+        },
+        "capabilities": [
+          "web_search",
+          "filesystem.write"
+        ],
+        "facts": {
+          "next_stage_execution_owner": "dynamic"
+        },
+        "active_workflow": {
+          "workflow_id": "research_report",
+          "status": "active",
+          "reuse_allowed": true
+        }
+      },
+      "available_workflows": [
+        {
+          "id": "research_report",
+          "version": "1.0",
+          "description": "检索外部资料并生成带来源的报告",
+          "required_bindings": [
+            "topic",
+            "output_path"
+          ],
+          "defaults": {},
+          "required_artifacts": [],
+          "required_capabilities": [
+            "web_search",
+            "filesystem.write"
+          ],
+          "output_types": [
+            "research_report"
+          ]
+        }
+      ],
+      "case_attempts": 1,
+      "latency_ms": 1940.498,
+      "provider_status": "SUCCESS_WITH_FORMAT_FALLBACK",
+      "provider_path": "SINGLE_PROVIDER",
+      "format_path": "STRUCTURED_TO_RAW_FALLBACK",
+      "provider_calls": [
+        {
+          "sequence": 1,
+          "provider": "deepseek",
+          "call_kind": "structured_bind",
+          "outcome": "SUCCESS",
+          "latency_ms": 1.165,
+          "token_usage": {},
+          "response_preview": null
+        },
+        {
+          "sequence": 2,
+          "provider": "deepseek",
+          "call_kind": "structured_ainvoke",
+          "outcome": "ERROR",
+          "latency_ms": 219.459,
+          "token_usage": {},
+          "response_preview": null,
+          "error_code": "STRUCTURED_OUTPUT_REJECTED",
+          "error": {
+            "type": "BadRequestError",
+            "message": "Error code: 400 - {'error': {'message': 'This response_format type is unavailable now', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}"
+          }
+        },
+        {
+          "sequence": 3,
+          "provider": "deepseek",
+          "call_kind": "raw_ainvoke",
+          "outcome": "SUCCESS",
+          "latency_ms": 1719.485,
+          "token_usage": {
+            "prompt_tokens": 579,
+            "completion_tokens": 132,
+            "total_tokens": 711
+          },
+          "response_preview": "{\"kind\":\"reuse\",\"workflow_id\":\"research_report\",\"bindings\":{},\"reason\":\"Goal is to continue the current research report process, and the active research_report workflow is active with reuse_allowed=true.\"}"
+        }
+      ],
+      "token_usage": {
+        "prompt_tokens": 579,
+        "completion_tokens": 132,
+        "total_tokens": 711
+      },
+      "raw_provider_output": "{\"kind\":\"reuse\",\"workflow_id\":\"research_report\",\"bindings\":{},\"reason\":\"Goal is to continue the current research report process, and the active research_report workflow is active with reuse_allowed=true.\"}",
+      "normalized_workflow_decision": {
+        "kind": "reuse",
+        "workflow_id": "research_report",
+        "bindings": {},
+        "reason": "Goal is to continue the current research report process, and the active research_report workflow is active with reuse_allowed=true."
+      },
+      "oracle_result": {
+        "passed": true,
+        "schema_validity": true,
+        "kind_accuracy": true,
+        "workflow_accuracy": true,
+        "binding_accuracy": true,
+        "safe_decision": true,
+        "false_workflow_selection": 0,
+        "missed_workflow": 0,
+        "unsafe_reuse": 0,
+        "errors": [],
+        "normalized_decision": {
+          "kind": "reuse",
+          "workflow_id": "research_report",
+          "bindings": {},
+          "reason": "Goal is to continue the current research report process, and the active research_report workflow is active with reuse_allowed=true."
+        }
+      },
+      "evaluable": true,
+      "passed": true,
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {}
+    },
+    {
+      "case_id": "C024",
+      "family": "RUNTIME_BOUNDARY",
+      "goal": "研究当前市场并生成 output/market.md。",
+      "context_projection": {
+        "artifacts": {},
+        "capabilities": [
+          "filesystem.write"
+        ],
+        "facts": {
+          "web_search_unavailable": true
+        },
+        "active_workflow": null
+      },
+      "available_workflows": [
+        {
+          "id": "research_report",
+          "version": "1.0",
+          "description": "检索外部资料并生成带来源的报告",
+          "required_bindings": [
+            "topic",
+            "output_path"
+          ],
+          "defaults": {},
+          "required_artifacts": [],
+          "required_capabilities": [
+            "web_search",
+            "filesystem.write"
+          ],
+          "output_types": [
+            "research_report"
+          ]
+        }
+      ],
+      "case_attempts": 1,
+      "latency_ms": 4301.867,
+      "provider_status": "SUCCESS_WITH_FORMAT_FALLBACK",
+      "provider_path": "SINGLE_PROVIDER",
+      "format_path": "STRUCTURED_TO_RAW_FALLBACK",
+      "provider_calls": [
+        {
+          "sequence": 1,
+          "provider": "deepseek",
+          "call_kind": "structured_bind",
+          "outcome": "SUCCESS",
+          "latency_ms": 1.139,
+          "token_usage": {},
+          "response_preview": null
+        },
+        {
+          "sequence": 2,
+          "provider": "deepseek",
+          "call_kind": "structured_ainvoke",
+          "outcome": "ERROR",
+          "latency_ms": 127.608,
+          "token_usage": {},
+          "response_preview": null,
+          "error_code": "STRUCTURED_OUTPUT_REJECTED",
+          "error": {
+            "type": "BadRequestError",
+            "message": "Error code: 400 - {'error': {'message': 'This response_format type is unavailable now', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}"
+          }
+        },
+        {
+          "sequence": 3,
+          "provider": "deepseek",
+          "call_kind": "raw_ainvoke",
+          "outcome": "SUCCESS",
+          "latency_ms": 4172.719,
+          "token_usage": {
+            "prompt_tokens": 554,
+            "completion_tokens": 379,
+            "total_tokens": 933
+          },
+          "response_preview": "{\"kind\":\"decline\",\"workflow_id\":\"\",\"bindings\":{},\"reason\":\"Required capability web_search is unavailable, and required binding 'topic' is missing.\"}"
+        }
+      ],
+      "token_usage": {
+        "prompt_tokens": 554,
+        "completion_tokens": 379,
+        "total_tokens": 933
+      },
+      "raw_provider_output": "{\"kind\":\"decline\",\"workflow_id\":\"\",\"bindings\":{},\"reason\":\"Required capability web_search is unavailable, and required binding 'topic' is missing.\"}",
+      "normalized_workflow_decision": {
+        "kind": "decline",
+        "workflow_id": "",
+        "bindings": {},
+        "reason": "Required capability web_search is unavailable, and required binding 'topic' is missing."
+      },
+      "oracle_result": {
+        "passed": true,
+        "schema_validity": true,
+        "kind_accuracy": true,
+        "workflow_accuracy": true,
+        "binding_accuracy": true,
+        "safe_decision": true,
+        "false_workflow_selection": 0,
+        "missed_workflow": 0,
+        "unsafe_reuse": 0,
+        "errors": [],
+        "normalized_decision": {
+          "kind": "decline",
+          "workflow_id": "",
+          "bindings": {},
+          "reason": "Required capability web_search is unavailable, and required binding 'topic' is missing."
+        }
+      },
+      "evaluable": true,
+      "passed": true,
+      "failure_category": null,
+      "failure_subcategory": null,
+      "evidence": {}
+    }
+  ]
+}

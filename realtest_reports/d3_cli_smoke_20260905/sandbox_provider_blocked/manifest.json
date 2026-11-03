@@ -1,0 +1,35 @@
+{
+  "head": "1ebfb492a4240c5bf3df7249b47b869045447236",
+  "tenant_id": "d3-smoke-20260905_094621",
+  "python": "/opt/anaconda3/bin/python3",
+  "method": "Unmodified main.py in fresh PTY process per turn; distinct session IDs, same tenant/user per pair. No DB reads during behavioral run. Default provider configuration.",
+  "turns": [
+    {
+      "case": "name",
+      "phase": "learn",
+      "session_id": "name-learn",
+      "user_id": "name",
+      "prompt": "我叫 TS",
+      "argv": [
+        "/opt/anaconda3/bin/python3",
+        "-B",
+        "-u",
+        "main.py",
+        "--db",
+        "/Users/tsxg/Desktop/TSAgent/realtest_reports/d3_cli_smoke_20260905/runtime.sqlite",
+        "--tenant-id",
+        "d3-smoke-20260905_094621",
+        "--user-id",
+        "name",
+        "--session-id",
+        "name-learn"
+      ],
+      "started_at": "2026-09-05T09:46:21.110171",
+      "raw_log": "name_learn.raw.txt",
+      "terminal_observation": "🤖 状态: FAILED_TERMINAL",
+      "exit_code": 0,
+      "signal": null,
+      "elapsed_seconds": 88.085
+    }
+  ]
+}

@@ -22,6 +22,7 @@ ALLOWED_TRANSITIONS: Mapping[CheckpointStatus, frozenset[CheckpointStatus]] = {
     }),
     CheckpointStatus.SUSPENDED: frozenset({
         CheckpointStatus.RUNNING,
+        CheckpointStatus.WAITING_USER,
         CheckpointStatus.CANCELLED,
     }),
     CheckpointStatus.WAITING_USER: frozenset({
@@ -30,6 +31,7 @@ ALLOWED_TRANSITIONS: Mapping[CheckpointStatus, frozenset[CheckpointStatus]] = {
     }),
     CheckpointStatus.FAILED_RECOVERABLE: frozenset({
         CheckpointStatus.SUSPENDED,
+        CheckpointStatus.WAITING_USER,
         CheckpointStatus.CANCELLED,
     }),
     CheckpointStatus.FAILED_TERMINAL: frozenset(),

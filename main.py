@@ -353,11 +353,28 @@ _HELP_TEXT = """\
   /model                         查看当前模型与提供商
   /model auto|deepseek|ollama    切换提供商模式
   /apikey                        输入 DeepSeek API Key（隐藏输入，推荐）
-  /apikey <key>                  直接设置 API Key
+  /apikey <provider>             输入指定提供商 Key（隐藏输入）
+  /apikey <provider> <key>       直接设置指定提供商 Key
   /cancel [run_id]               取消当前或指定 Run
   /resume <run_id> [JSON 证据]   续接等待用户的 Run
   exit / quit                    退出\
 """
+
+# Provider name → canonical env var.  Unknown providers fall back to the
+# <NAME>_API_KEY convention so the command stays forward-compatible with
+# anything that reads env credentials (ReMe's LLM backend, future routers).
+_APIKEY_PROVIDER_ENV = {
+    "deepseek": "OPENAI_API_KEY",
+    "openai": "OPENAI_API_KEY",
+    "anthropic": "ANTHROPIC_API_KEY",
+    "claude": "ANTHROPIC_API_KEY",
+    "gemini": "GEMINI_API_KEY",
+    "google": "GOOGLE_API_KEY",
+    "groq": "GROQ_API_KEY",
+    "moonshot": "MOONSHOT_API_KEY",
+    "dashscope": "DASHSCOPE_API_KEY",
+    "qwen": "DASHSCOPE_API_KEY",
+}
 
 
 def _handle_model_command(parts: list[str]) -> None:
@@ -386,26 +403,43 @@ def _handle_model_command(parts: list[str]) -> None:
 
 
 async def _handle_apikey_command(parts: list[str]) -> None:
-    from agent import llm as llm_module
-
-    if len(parts) == 1:
+    if len(parts) > 3:
+        print("用法: /apikey [provider] [key]")
+        return
+    provider = "deepseek"
+    key = ""
+    if len(parts) == 3:
+        provider = parts[1].lower()
+        key = parts[2]
+    elif len(parts) == 2:
+        # One argument: a known provider name prompts for its key;
+        # anything else is the DeepSeek key itself (legacy inline form).
+        if parts[1].lower() in _APIKEY_PROVIDER_ENV:
+            provider = parts[1].lower()
+        else:
+            key = parts[1]
+    env_name = _APIKEY_PROVIDER_ENV.get(
+        provider, f"{provider.upper().replace('-', '_')}_API_KEY"
+    )
+    if not key:
         import getpass
 
         key = await asyncio.to_thread(
-            getpass.getpass, "DeepSeek API Key: "
+            getpass.getpass, f"{provider} API Key: "
         )
-    else:
-        key = parts[1]
     key = key.strip()
     if not key:
         print("API Key 为空，未修改。")
         return
-    llm_module.DEEPSEEK_API_KEY = key
-    os.environ["OPENAI_API_KEY"] = key
-    # Reset the cached provider so the next request uses the new key.
-    llm_module.llm._deepseek = None
-    llm_module.llm._deepseek_available = True
-    print("DeepSeek API Key 已更新（仅本次会话有效，未写入磁盘）。")
+    os.environ[env_name] = key
+    if env_name == "OPENAI_API_KEY":
+        from agent import llm as llm_module
+
+        llm_module.DEEPSEEK_API_KEY = key
+        # Reset the cached provider so the next request uses the new key.
+        llm_module.llm._deepseek = None
+        llm_module.llm._deepseek_available = True
+    print(f"{provider} API Key 已写入 {env_name}（仅本次会话有效，未写入磁盘）。")
 
 
 async def main() -> None:

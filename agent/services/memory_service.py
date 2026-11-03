@@ -258,6 +258,13 @@ class MemoryService:
 
         return get_facts_text(user_id, scope=scope)
 
+    @staticmethod
+    def get_facts(user_id: str, *, scope: str = "user") -> dict[str, dict[str, str]]:
+        """Get facts in the requested learning scope keyed by category."""
+        from agent.memory.long_term import get_facts
+
+        return get_facts(user_id, scope=scope)
+
     # ===== Layer 4: Cross-Session Resolution Memory =====
 
     @staticmethod
@@ -577,6 +584,18 @@ class ScopedMemoryView:
             scope=self.learning_scope,
         )
 
+    def get_handoff(self, workspace_slug: str) -> str:
+        """Latest workspace-scoped handoff entry, or '' when none exists."""
+        self._ensure_open()
+        facts = MemoryService.get_facts(
+            self.learning_namespace,
+            scope=self.learning_scope,
+        )
+        return str(
+            (facts.get("handoff") or {}).get(f"latest.{workspace_slug}")
+            or ""
+        )
+
     async def learn_resolution(
         self,
         utterance: str,
@@ -653,4 +672,13 @@ class ScopedMemoryView:
         self._closed = True
 
 
-__all__ = ["MemoryLearningResult", "MemoryService", "ScopedMemoryView"]
+def workspace_slug(workspace: object) -> str:
+    """Stable per-workspace slug for memory keys (handoff scoping)."""
+    import re
+    from pathlib import Path
+
+    name = Path(str(workspace or "default")).name or "default"
+    return re.sub(r"[^A-Za-z0-9_.-]+", "-", name) or "default"
+
+
+__all__ = ["MemoryLearningResult", "MemoryService", "ScopedMemoryView", "workspace_slug"]

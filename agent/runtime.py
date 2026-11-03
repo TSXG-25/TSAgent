@@ -1070,6 +1070,8 @@ class UniversalAgent:
             # back through the same facts channel as other memory.
             handoff = _session_handoff(state, user_input, final_answer)
             if handoff:
+                from agent.services.memory_service import workspace_slug
+
                 try:
                     await asyncio.wait_for(
                         self._memory_view.learn_from_interaction(
@@ -1078,7 +1080,7 @@ class UniversalAgent:
                             facts=[
                                 {
                                     "category": "handoff",
-                                    "key": "latest",
+                                    "key": f"latest.{workspace_slug(self._workspace)}",
                                     "memory_type": "fact",
                                     "value": handoff,
                                 }

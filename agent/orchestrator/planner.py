@@ -390,8 +390,25 @@ class PlannerStage:
         planner_context.query = user_input
 
         needs = getattr(intent, "context_needs", None) or {}
+        memory_view = self._memory_view()
+        if memory_view is not None:
+            # ② Private layer: the workspace-scoped §〇 handoff is the
+            # unconditional resume anchor — tiny by contract, so it is
+            # injected on every planning turn regardless of whether the
+            # intent asked for memory retrieval.
+            run_context = getattr(self._orch, "run_context", None)
+            workspace = getattr(run_context, "workspace", None)
+            if workspace is not None:
+                from agent.services.memory_service import workspace_slug
+
+                handoff = await asyncio.to_thread(
+                    memory_view.get_handoff, workspace_slug(workspace)
+                )
+                if handoff:
+                    untrusted_context["session_handoff"] = _cap_memory_field(
+                        handoff
+                    )
         if needs.get("memory"):
-            memory_view = self._memory_view()
             if memory_view is not None:
                 retrieved = await asyncio.to_thread(
                     memory_view.get_context,

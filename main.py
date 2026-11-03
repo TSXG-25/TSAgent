@@ -73,12 +73,21 @@ class ServiceCLI:
         return self._active_run_id
 
     @staticmethod
-    def _print_snapshot(snapshot: RunSnapshot) -> None:
+    def _print_snapshot(
+        snapshot: RunSnapshot, *, streamed_text: str = ""
+    ) -> None:
         """Render the durable result, not only the Run lifecycle status."""
         print(f"🤖 状态: {snapshot.status.value}")
         if snapshot.output is not None and snapshot.output.text.strip():
-            print("\n📝 输出:")
-            print(snapshot.output.text)
+            text = snapshot.output.text
+            streamed = streamed_text.strip()
+            if streamed and text.startswith(streamed):
+                # The answer already streamed live; only the residual
+                # manifest/disclosures need the final panel.
+                text = text[len(streamed):].lstrip()
+            if text.strip():
+                print("\n📝 输出:")
+                print(text)
 
         verified_artifacts = tuple(
             artifact
@@ -183,6 +192,7 @@ class ServiceCLI:
     ) -> EventType | None:
         """Consume events through a terminal outcome or a user-input boundary."""
 
+        self._streamed_text = ""
         stream = self._service.stream_events(
             self._event_stream_request(run_id, after_sequence=after_sequence)
         )
@@ -190,9 +200,9 @@ class ServiceCLI:
         try:
             async for event in iterator:
                 if event.event_type is EventType.ASSISTANT_DELTA:
-                    sys.stdout.write(
-                        str((event.payload or {}).get("delta", ""))
-                    )
+                    delta = str((event.payload or {}).get("delta", ""))
+                    self._streamed_text += delta
+                    sys.stdout.write(delta)
                     sys.stdout.flush()
                     continue
                 print(f"  • {event.sequence_number}: {event.event_type.value}")
@@ -247,7 +257,9 @@ class ServiceCLI:
                     request_id=f"lookup-{uuid.uuid4().hex}",
                 )
             )
-            self._print_snapshot(snapshot)
+            self._print_snapshot(
+                snapshot, streamed_text=getattr(self, "_streamed_text", "")
+            )
             self._print_resume_instruction(snapshot)
         finally:
             if self._active_run_id == handle.run_id:
@@ -298,7 +310,9 @@ class ServiceCLI:
                     request_id=f"lookup-{uuid.uuid4().hex}",
                 )
             )
-            self._print_snapshot(snapshot)
+            self._print_snapshot(
+                snapshot, streamed_text=getattr(self, "_streamed_text", "")
+            )
             self._print_resume_instruction(snapshot)
         finally:
             if self._active_run_id == handle.run_id:
@@ -327,7 +341,9 @@ class ServiceCLI:
             return None
 
         print("🛑 取消请求已持久化；等待 Runtime 在安全边界收敛。")
-        self._print_snapshot(snapshot)
+        self._print_snapshot(
+            snapshot, streamed_text=getattr(self, "_streamed_text", "")
+        )
         return snapshot
 
 

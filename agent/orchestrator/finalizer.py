@@ -204,7 +204,8 @@ class Finalizer:
         if state.get("artifact_required") and state.get("verified_artifact_paths"):
             assert workspace is not None, "verified artifacts require a scoped workspace"
             paths = [str(workspace.resolve_path(path, must_exist=True)) for path in state["verified_artifact_paths"]]
-            answer = "已生成/更新本地文件：\n" + "\n".join(paths)
+            manifest = "已生成/更新本地文件：\n" + "\n".join(paths)
+            answer = f"{best_answer}\n\n{manifest}" if best_answer else manifest
             execution_answer = self._deterministic_completion_answer(state)
             if execution_answer and any(task.get("verb") == "execute" for task in (state.get("plan") or [])):
                 answer += "\n" + execution_answer

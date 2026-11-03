@@ -1,0 +1,234 @@
+{
+  "manifest": "core-scenarios-v1",
+  "run_id": "core_scenarios_20261102_145338",
+  "provider": "auto",
+  "model": "deepseek-v4-flash",
+  "started_at": "2026-11-02T14:53:38.268955+00:00",
+  "cases_file": "core_scenarios_cases.json",
+  "workspace_root": "/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261102_145338_workspace",
+  "cases": [
+    {
+      "id": "CS14",
+      "title": "correction '不对，我要的是本地文件' still delivers a real artifact",
+      "result": "PASS",
+      "skip_reason": "",
+      "workspace": "/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261102_145338_workspace/cs14",
+      "duration_ms": 196685.0,
+      "error": "",
+      "turns": [
+        {
+          "turn": 1,
+          "request": "帮我写个计算器",
+          "status": "COMPLETED",
+          "output": "已生成/更新本地文件：\n/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261102_145338_workspace/cs14/output/calculator.py",
+          "artifacts": [
+            {
+              "artifact_id": "artifact-66b050c71f486ffe14e02b0c",
+              "artifact_type": "file",
+              "digest": "e0ed640a53b516b7c96056c076f7d300bafb726973c5016797111ad304794aad",
+              "reference": "artifact://core-scenarios/run-c16cb30102da4271b2a8bb165acabbe4/artifact-66b050c71f486ffe14e02b0c",
+              "exists": true,
+              "verified": true,
+              "run_id": "run-c16cb30102da4271b2a8bb165acabbe4",
+              "display_name": "artifact-66b050c71f486ffe14e02b0c",
+              "size": null,
+              "producer_workflow_id": "runtime-execution",
+              "producer_stage_id": "task:loop-1",
+              "created_revision": 1,
+              "created_at": ""
+            }
+          ],
+          "provider_calls": 1,
+          "plan_calls": 1,
+          "replan_calls": 1,
+          "tool_calls": [
+            {
+              "tool": "filesystem.write",
+              "args": {
+                "path": "output/calculator.py",
+                "content": "def add(x, y):\n    return x + y\n\ndef subtract(x, y):\n    return x - y\n\ndef multiply(x, y):\n    return x * y\n\ndef divide(x, y):\n    if y == 0:\n        return \"错误",
+                "mode": "overwrite"
+              }
+            }
+          ],
+          "intent": {
+            "domain": "development",
+            "action": "create a calculator program",
+            "target": "",
+            "confidence": 0.95,
+            "summary": "用户要一个可用的计算器程序，作为本地文件交付。",
+            "requires_execution": true,
+            "artifact_required": true,
+            "requested_outcomes": [
+              "FILE_MUTATION",
+              "USER_VISIBLE_OUTPUT"
+            ],
+            "delivery_requirements": [
+              {
+                "id": "calc",
+                "kind": "file",
+                "quantity": 1,
+                "target": "",
+                "acceptance_criteria": []
+              }
+            ],
+            "acceptance_criteria": [],
+            "write_targets": [],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "new_request",
+            "resolved_request": "帮我写一个计算器程序，作为可运行的本地产物交付。",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": ""
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "stage_started",
+            "task_started",
+            "task_completed",
+            "stage_completed",
+            "run_completed"
+          ],
+          "failure_summary": null,
+          "error": "",
+          "duration_ms": 111163.5
+        },
+        {
+          "turn": 2,
+          "request": "不对，我要的是你在本地生成一个计算器脚本文件",
+          "status": "COMPLETED",
+          "output": "已生成/更新本地文件：\n/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261102_145338_workspace/cs14/output/calculator.py",
+          "artifacts": [
+            {
+              "artifact_id": "artifact-856b8beb4bfe32073656e061",
+              "artifact_type": "file",
+              "digest": "463d534d17ba2ad0f66c5f114dff3c2644e360a7a96b99860f823166d309e739",
+              "reference": "artifact://core-scenarios/run-46ea56c0ce094a8a87a3cb59e1e7f1ed/artifact-856b8beb4bfe32073656e061",
+              "exists": true,
+              "verified": true,
+              "run_id": "run-46ea56c0ce094a8a87a3cb59e1e7f1ed",
+              "display_name": "artifact-856b8beb4bfe32073656e061",
+              "size": null,
+              "producer_workflow_id": "runtime-execution",
+              "producer_stage_id": "task:loop-1",
+              "created_revision": 1,
+              "created_at": ""
+            }
+          ],
+          "provider_calls": 1,
+          "plan_calls": 1,
+          "replan_calls": 1,
+          "tool_calls": [
+            {
+              "tool": "filesystem.write",
+              "args": {
+                "path": "output/calculator.py",
+                "content": "def add(x, y):\n    return x + y\n\ndef subtract(x, y):\n    return x - y\n\ndef multiply(x, y):\n    return x * y\n\ndef divide(x, y):\n    if y == 0:\n        return \"Er",
+                "mode": "overwrite"
+              }
+            }
+          ],
+          "intent": {
+            "domain": "development",
+            "action": "code",
+            "target": "calculator.py",
+            "confidence": 0.95,
+            "summary": "用户要求生成一个计算器脚本文件",
+            "requires_execution": true,
+            "artifact_required": true,
+            "requested_outcomes": [
+              "FILE_MUTATION"
+            ],
+            "delivery_requirements": [
+              {
+                "id": "1",
+                "kind": "file",
+                "quantity": 1,
+                "target": "output/calculator.py",
+                "acceptance_criteria": []
+              }
+            ],
+            "acceptance_criteria": [],
+            "write_targets": [
+              "output/calculator.py"
+            ],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "correction",
+            "resolved_request": "在本地生成一个计算器脚本文件",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": ""
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "stage_started",
+            "task_started",
+            "task_completed",
+            "stage_completed",
+            "run_completed"
+          ],
+          "failure_summary": null,
+          "error": "",
+          "duration_ms": 85488.1
+        }
+      ],
+      "checks": [
+        {
+          "check": "status",
+          "passed": true,
+          "detail": "expected COMPLETED got COMPLETED",
+          "turn": 1
+        },
+        {
+          "check": "artifact_exists_any",
+          "passed": true,
+          "detail": "no match for any of ['output/**/*.py', 'output/**/*.html']",
+          "turn": 1
+        },
+        {
+          "check": "status",
+          "passed": true,
+          "detail": "expected COMPLETED got COMPLETED",
+          "turn": 2
+        },
+        {
+          "check": "artifact_exists_any",
+          "passed": true,
+          "detail": "no match for any of ['output/**/*.py', 'output/**/*.html']",
+          "turn": 2
+        },
+        {
+          "check": "intent.conversation_relation_in",
+          "passed": true,
+          "detail": "expected one of ['correction', 'reference'] got 'correction'",
+          "turn": 2
+        }
+      ],
+      "files": {
+        "output/calculator.py": "def add(x, y):\n    return x + y\n\ndef subtract(x, y):\n    return x - y\n\ndef multiply(x, y):\n    return x * y\n\ndef divide(x, y):\n    if y == 0:\n        return \"Error: Division by zero\"\n    return x / y\n\n# Example usage:\n# print(add(5, 3))  # Output: 8\n# print(subtract(10, 4))  # Output: 6\n# print(multiply(6, 7))  # Output: 42\n# print(divide(20, 5))  # Output: 4"
+      }
+    }
+  ],
+  "summary": {
+    "total": 1,
+    "passed": 1,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 0,
+    "provider_calls": 2
+  }
+}

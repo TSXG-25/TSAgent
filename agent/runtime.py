@@ -84,6 +84,17 @@ def _fact_capture_suffix(memory_action: str, facts: object) -> str:
 
 
 
+def _log_reme_task_result(task: "asyncio.Task[str]") -> None:
+    if task.cancelled():
+        return
+    exc = task.exception()
+    if exc is not None:
+        logger.warning(
+            "长期记忆记录失败，不影响当前回答: %s",
+            stable_error_message(exc, fallback="reme auto_memory failed")[:200],
+        )
+
+
 def _runtime_has_unfinished_work(state: AgentState) -> bool:
     """Project the current Runtime cache to the continuation contract signal.
 
@@ -1009,6 +1020,30 @@ class UniversalAgent:
             final_answer = final_answer + _fact_capture_suffix(
                 str(state.get("intent_memory_action", "") or ""), captured_facts,
             )
+        # Long-term memory handoff: the ReMe sidecar decides what from this
+        # completed turn is durable.  Fire-and-forget so a missing service
+        # can never delay or fail the response path.
+        if str(state.get("runtime_terminal_status", "")) not in {
+            "CANCELLED",
+            "TIMED_OUT",
+        }:
+            from agent.mcp.reme import reme_auto_memory
+
+            reme_task = asyncio.create_task(
+                reme_auto_memory(
+                    [
+                        {"role": "user", "content": user_input},
+                        {"role": "assistant", "content": final_answer},
+                    ],
+                    session_id=self._session_context.session_id,
+                    request_id=(
+                        f"run:{self._run_context.run_id}"
+                        if self._run_context is not None
+                        else ""
+                    ),
+                )
+            )
+            reme_task.add_done_callback(_log_reme_task_result)
         # ── v2.1B-1：会话状态更新（ADR-0013；每轮 answer 后）──
         conversation_diagnostic = None
         try:

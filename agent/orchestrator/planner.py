@@ -381,14 +381,19 @@ class PlannerStage:
             memory_view = self._memory_view()
             if memory_view is not None:
                 retrieved = await asyncio.to_thread(
-                    memory_view.get_retrieved_memory,
+                    memory_view.get_context,
                     user_input,
                 )
                 untrusted_context["long_term_memory"] = retrieved.get("long_term", "")
                 untrusted_context["user_facts"] = retrieved.get("facts", "")
                 planning_memory = "\n\n".join(
                     part
-                    for part in (retrieved.get("long_term", ""), retrieved.get("facts", ""))
+                    for part in (
+                        retrieved.get("session", ""),
+                        retrieved.get("short_term", ""),
+                        retrieved.get("long_term", ""),
+                        retrieved.get("facts", ""),
+                    )
                     if part
                 )
                 state["memory_context"] = planning_memory

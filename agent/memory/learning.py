@@ -233,7 +233,9 @@ MemoryLearningPolicy = MemoryPolicyProjection
 
 def _source_rejection(evidence: InteractionEvidence) -> str | None:
     if evidence.source_kind == "user_request":
-        if getattr(evidence, "memory_action", "") == "forget":
+        if evidence.memory_action == "forget" or re.search(
+            r"忘记|删除|清除|不要记", evidence.text
+        ):
             return "DELETE_OWNED_BY_LIFECYCLE"
         return "NO_PERSISTABLE_EVIDENCE"
     if evidence.source_kind == "assistant_output":
@@ -334,6 +336,7 @@ def decide_memory_learning(
         elif (
             evidence.memory_type == "preference"
             and evidence.memory_action != "remember"
+            and not re.search(r"记住|以后|默认|优先|偏好|请", evidence.text)
         ):
             reason_code = "NEW_CANONICAL_FACT"
         elif evidence.memory_type == "preference":

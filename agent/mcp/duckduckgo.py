@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
@@ -43,6 +44,12 @@ async def duckduckgo_mcp_client() -> AsyncIterator[
             # this tool call, so its in-memory ref:// tokens would not survive.
             "DDG_REF_URL_THRESHOLD": "0",
             "DDG_SEARCH_BACKEND": "auto",
+            # Forward the opt-in SSRF bypass: under fake-IP DNS (Clash/V2Ray TUN
+            # mode) every domain resolves to 198.18.x.x and the server's private-
+            # address check rejects all fetches.
+            "DDG_ALLOW_PRIVATE_URLS": os.environ.get(
+                "DDG_ALLOW_PRIVATE_URLS", "0"
+            ),
         },
     )
     async with stdio_client(server) as (read_stream, write_stream):

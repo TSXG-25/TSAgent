@@ -193,6 +193,28 @@ def build_toolset(
             }),
         )
 
+    # Long-term memory sidecar (ReMe service).  Read-only like load_skill;
+    # the service's own agent decides what is worth persisting — the model
+    # only queries.  Unavailable service surfaces as a tool error at call
+    # time, the same posture as the DuckDuckGo research tools.
+    tools["reme_search"] = LoopTool(
+        name="reme_search",
+        executor_tool=None,
+        verb="search",
+        concurrency_safe=True,
+        spec=function_tool_spec("reme_search", (
+            "检索跨会话长期记忆（用户偏好、历史事实、过往结论、项目经验）。"
+            "当问题可能依赖之前会话的信息时使用；无结果即无记忆，不要编造。"
+        ), {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "检索查询"},
+                "limit": {"type": "integer", "description": "最大结果数，默认 8"},
+            },
+            "required": ["query"],
+        }),
+    )
+
     from agent.skills import skills_index
 
     if skills_index():

@@ -6,7 +6,7 @@
 ## 当前状态
 
 ```text
-v2.3 Runtime Platform       已冻结
+Runtime Platform
   Context Isolation         ✅
   Durable SQLite Store      ✅
   AgentService + Events     ✅
@@ -15,7 +15,7 @@ v2.3 Runtime Platform       已冻结
   Cancellation / Timeout    ✅
   Orphaned Run Convergence  ✅（worker lease 过期自动收敛为 RUN_WORKER_LOST）
 
-Agent Loop（当前执行架构）
+Agent Loop（执行架构）
   Native Tool Calling        ✅（DeepSeek OpenAI 兼容 / Ollama /api/chat）
   Parallel Tool Scheduling   ✅（concurrency_safe 池化 + 排他屏障，保序提交）
   Streaming Output           ✅（assistant_delta 事件流经 EventBus → run_events → CLI）
@@ -23,14 +23,13 @@ Agent Loop（当前执行架构）
   Workflow as Tool           ✅（run_workflow，专用工作流保持可恢复）
   Provider Retry/Fallback    ✅（连接类错误重试 3 次后降级，60s 探测恢复）
 
-v2.4 Capability Development 进行中
-  v2.4A Planner Contract / Dataset / Oracle  ✅ 冻结
-  v2.4B Tool Selection（并入 native tool loop）
-  v2.4C Workflow                             ✅
-  v2.4D Memory Learning                      进行中
+Memory（两层）
+  Durable Facts              ✅（SQLite + 证据门禁：sensitive/secret/forget 策略层）
+  Long-term Knowledge        ✅（ReMe sidecar：reme_search 工具 + 每轮 auto_memory
+                                后台蒸馏，服务懒启动自动拉起）
 ```
 
-这里的“已冻结”表示对应合同和回归门禁已经建立；真实 Provider 的能力结果始终单独记录，
+能力合同和回归门禁已建立；真实 Provider 的能力结果始终单独记录，
 不会用离线 golden self-check 冒充模型验收。
 
 ## 架构概览
@@ -61,6 +60,15 @@ Executor/Verifier/Effect-Truth 路径；同一轮里连续的只读/检索类调
 普通动作失败不会偷偷启动第二套 Planner 循环；结构性失败经过统一的
 `FailurePolicy → RecoveryDirective`。所有成功声明都必须有对应的执行或 Artifact evidence。
 
+记忆分两层：
+
+- **Durable Facts**（`agent/memory/`）：SQLite 持久事实，写入走
+  `InteractionEvidence → MemoryLearningProvider → policy → commit evidence`
+  管线，`scope="user"` 落到 `{tenant}:{user}` 命名空间跨会话共享；
+- **Long-term Knowledge**（ReMe sidecar）：Markdown workspace +
+  BM25/wikilink 检索，`reme_search` 为 loop 只读工具，每个完成轮次
+  fire-and-forget 交给 `auto_memory` 蒸馏；服务懒启动，不可用时优雅降级。
+
 完整当前架构见 [docs/architecture.md](docs/architecture.md)，历史决策见
 [docs/adr/](docs/adr/)。
 
@@ -70,6 +78,8 @@ Executor/Verifier/Effect-Truth 路径；同一轮里连续的只读/检索类调
 agent/              Runtime、Context、Service、Orchestrator、Loop、Skills、
                     Compiler、Executor、MCP 客户端
 agent/loop/         单 agent 原生 tool-calling 循环（toolset/runner/prompt/workflow_tool）
+agent/memory/       事实学习管线与生命周期（learning/persistence/long_term/各分层）
+agent/mcp/          MCP 客户端（DuckDuckGo 检索、ReMe 长期记忆 sidecar）
 agent/runtime_store/  Durable SQLite Store（run heads/events/leases/工件事实）
 skills/             SKILL.md 技能说明文件（load_skill 渐进加载）
 apps/desktop/       Desktop UI 与本地传输适配器

@@ -365,3 +365,45 @@ def test_verifier_gap_feeds_back_twice_then_finalizes(monkeypatch, tmp_path):
         for item in feedback
     )
     assert state["verification_feedback_rounds"] == 2
+
+
+def test_reme_search_tool_reports_results_and_unavailability(
+    monkeypatch, tmp_path,
+):
+    orch = _orchestrator(tmp_path)
+    state = _mutation_state()
+
+    async def scenario():
+        loop = AgentLoop(orch)
+        tools = build_toolset(
+            EffectAuthorization.from_state(state, "查记忆"),
+        )
+        assert tools["reme_search"].concurrency_safe
+
+        import agent.mcp.reme as reme_mod
+
+        async def fake_search(query, *, limit=8):
+            return f"memory:{query}:{limit}"
+
+        monkeypatch.setattr(reme_mod, "reme_search", fake_search)
+        call = ToolCall(id="r1", name="reme_search",
+                        arguments={"query": "偏好", "limit": 3})
+        msg = await loop._dispatch(
+            call, tools, state, index=1,
+            run_context=orch.run_context, user_id="u", user_input="查记忆",
+        )
+        assert "memory:偏好:3" in msg["content"]
+
+        async def failing_search(query, *, limit=8):
+            raise RuntimeError("connection refused")
+
+        monkeypatch.setattr(reme_mod, "reme_search", failing_search)
+        call = ToolCall(id="r2", name="reme_search",
+                        arguments={"query": "偏好"})
+        msg = await loop._dispatch(
+            call, tools, state, index=2,
+            run_context=orch.run_context, user_id="u", user_input="查记忆",
+        )
+        assert "ERROR[MEMORY_UNAVAILABLE]" in msg["content"]
+
+    asyncio.run(scenario())

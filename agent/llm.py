@@ -141,6 +141,9 @@ OLLAMA_REQUEST_TIMEOUT: Final[float] = float(os.getenv("TSAGENT_OLLAMA_TIMEOUT",
 LLM_PROVIDER_COOLDOWN: Final[float] = float(
     os.getenv("TSAGENT_LLM_PROVIDER_COOLDOWN", "5")
 )
+LLM_PROVIDER_RETRY_AFTER: Final[float] = float(
+    os.getenv("TSAGENT_LLM_PROVIDER_RETRY_AFTER", "60")
+)
 _VALID_PROVIDER_MODES = {"auto", "deepseek", "ollama"}
 
 
@@ -480,6 +483,7 @@ class LLMRouter:
         self._fallback_count = 0
         self._last_error = ""
         self._providers_unavailable_until = 0.0
+        self._deepseek_retry_at = 0.0
         # Structured-output support belongs to a concrete provider endpoint.
         # A DeepSeek response-format rejection must not poison a later model
         # or endpoint selected by the same router.
@@ -560,7 +564,10 @@ class LLMRouter:
             return self._provider_deepseek, "deepseek"
         if self._provider_mode == "ollama":
             return self._provider_ollama, "ollama"
-        if self._deepseek_available:
+        if (
+            self._deepseek_available
+            or time.monotonic() >= self._deepseek_retry_at
+        ):
             return self._provider_deepseek, "deepseek"
         if self._ollama_available:
             return self._provider_ollama, "ollama"
@@ -573,6 +580,7 @@ class LLMRouter:
             logger.info("DeepSeek 恢复可用")
             self._deepseek_available = True
             self._fallback_count = 0
+            self._deepseek_retry_at = 0.0
 
     def _on_failure(self, provider_name: str, error: Exception) -> None:
         error_message = stable_error_message(
@@ -583,6 +591,9 @@ class LLMRouter:
         logger.warning("%s 调用失败: %s", provider_name, error_message)
         if provider_name == "deepseek":
             self._deepseek_available = False
+            self._deepseek_retry_at = (
+                time.monotonic() + LLM_PROVIDER_RETRY_AFTER
+            )
             self._fallback_count += 1
             if self._provider_mode == "auto" and self._ollama_available:
                 logger.info(f"降级到本地 Ollama ({OLLAMA_MODEL})")

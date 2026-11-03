@@ -109,6 +109,31 @@ def test_auto_mode_cools_down_after_both_providers_fail() -> None:
     assert (deepseek.calls, ollama.calls) == (2, 1)
 
 
+def test_auto_mode_probes_deepseek_again_after_retry_window() -> None:
+    router = LLMRouter(provider_mode="auto")
+    deepseek = _Provider("deepseek", error=ConnectionError("deepseek flaky"))
+    ollama = _Provider("ollama")
+    router._deepseek = deepseek  # type: ignore[assignment]
+    router._ollama = ollama  # type: ignore[assignment]
+
+    assert asyncio.run(router.ainvoke([])) == "ollama-result"
+    assert (deepseek.calls, ollama.calls) == (1, 1)
+
+    # Inside the retry window calls stay on the fallback instead of paying
+    # a DeepSeek timeout on every request.
+    assert asyncio.run(router.ainvoke([])) == "ollama-result"
+    assert (deepseek.calls, ollama.calls) == (1, 2)
+
+    # Once the window expires the next call probes DeepSeek; on success it
+    # becomes the active provider again for later calls.
+    deepseek.error = None
+    router._deepseek_retry_at = time.monotonic() - 1
+    assert asyncio.run(router.ainvoke([])) == "deepseek-result"
+    assert (deepseek.calls, ollama.calls) == (2, 2)
+    assert asyncio.run(router.ainvoke([])) == "deepseek-result"
+    assert ollama.calls == 2
+
+
 def test_provider_mode_rejects_unknown_value() -> None:
     with pytest.raises(ValueError, match="TSAGENT_LLM_PROVIDER"):
         LLMRouter(provider_mode="qwen")

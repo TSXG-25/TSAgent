@@ -158,7 +158,7 @@ def build_toolset(
         for name in _COMMAND_EXECUTION_TOOLS:
             add_registry(name, "execute", declares_outputs=True)
     for name in _WEB_TOOLS:
-        add_registry(name, "search" if name != "web_fetch" else "fetch")
+        add_registry(name, "read" if name == "web_fetch" else "search")
 
     if workflows:
         ids = [str(item.get("id", "")) for item in workflows]

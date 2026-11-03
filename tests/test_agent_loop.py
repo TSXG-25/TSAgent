@@ -261,6 +261,27 @@ def test_failed_tool_attempt_does_not_poison_goal_verification(
     assert "failed task evidence" not in decision.missing
 
 
+def test_all_toolset_verbs_are_valid_task_verbs():
+    """Every tool the loop can expose must map to a Task Verb, or
+    Task.from_dict raises ValueError mid-run (e.g. web_fetch -> 'fetch')."""
+    from agent.task import Verb
+
+    valid = {verb.value for verb in Verb}
+    for outcomes in (
+        (RequestedOutcome.USER_VISIBLE_OUTPUT,),
+        tuple(RequestedOutcome),
+    ):
+        authorization = EffectAuthorization(
+            requested_outcomes=tuple(outcomes),
+            write_scopes=("output/",),
+        )
+        for name, tool in build_toolset(authorization).items():
+            if tool.verb:
+                assert tool.verb in valid, (
+                    f"{name} maps to unknown verb {tool.verb}"
+                )
+
+
 def test_verifier_gap_feeds_back_twice_then_finalizes(monkeypatch, tmp_path):
     orch = _orchestrator(tmp_path)
     orch.verify_goal = lambda state, answer: SimpleNamespace(

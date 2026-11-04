@@ -14,6 +14,14 @@ from .dispatcher import SidecarDispatcher
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    argv = list(argv if argv is not None else sys.argv[1:])
+    # Browser dev mode: serve the same dispatcher over loopback HTTP
+    # instead of stdio (a browser cannot spawn the stdio transport).
+    http_port: int | None = None
+    if "--http" in argv:
+        index = argv.index("--http")
+        argv.pop(index)
+        http_port = int(argv.pop(index)) if index < len(argv) else 8765
     config = parse_args(argv)
     protocol_stdout = sys.stdout
     try:
@@ -28,6 +36,15 @@ def main(argv: Sequence[str] | None = None) -> int:
                 bootstrap_tools=False,
                 defer_context_creation=True,
             )
+            if http_port is not None:
+                from .http_server import run_http_sidecar
+
+                run_http_sidecar(
+                    service,
+                    port=http_port,
+                    diagnostics=sys.stderr,
+                )
+                return 0
             dispatcher = SidecarDispatcher(service, diagnostics=sys.stderr)
             return asyncio.run(
                 serve(

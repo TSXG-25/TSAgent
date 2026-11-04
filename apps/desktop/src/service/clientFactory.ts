@@ -20,12 +20,15 @@ import {
   TauriSidecarTransport,
   type TauriSidecarBridge,
 } from "./tauriSidecarTransport";
+import { HttpLocalTransport } from "./httpTransport";
 
 export interface DesktopClientFactoryConfig {
   /** `mock` is the browser-development default; `local` is always explicit. */
   mode?: string;
   identity?: Partial<DesktopIdentity>;
   bridge?: TauriSidecarBridge;
+  /** Loopback URL of the HTTP sidecar used when no bridge is present. */
+  sidecarUrl?: string;
   requestTimeoutMs?: number;
 }
 
@@ -139,12 +142,13 @@ export function createAgentServiceClientFromConfig(config: DesktopClientFactoryC
   }
 
   if (!config.bridge) {
-    return unavailable(
-      mode,
-      identity,
-      "PROVIDER_UNAVAILABLE",
-      "local AgentService backend is unavailable; no sidecar bridge is configured",
+    // Browser dev mode: no host bridge — talk to the sidecar's HTTP
+    // transport instead (`python -m agent.service.local_sidecar --http`).
+    const httpTransport = new HttpLocalTransport(
+      config.sidecarUrl ?? "http://127.0.0.1:8765",
+      config.requestTimeoutMs ?? 30000,
     );
+    return new LocalAgentServiceClient(httpTransport, { identity });
   }
 
   const transport = new TauriSidecarTransport(config.bridge, {
@@ -171,5 +175,6 @@ export function createAgentServiceClient(): DesktopAgentServiceClient {
       sessionId: import.meta.env.VITE_TSAGENT_SESSION_ID,
     },
     bridge: injectedSidecarBridge(),
+    sidecarUrl: import.meta.env.VITE_TSAGENT_SIDECAR_URL,
   });
 }

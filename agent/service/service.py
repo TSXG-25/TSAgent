@@ -297,6 +297,30 @@ class AgentService:
         except Exception as error:
             raise self._runtime_error(error, run_id=request.run_id) from error
 
+    async def list_runs(self, request: "ListRunsRequest") -> list[RunSnapshot]:
+        self._ensure_open()
+        heads = self._store.list_run_heads(
+            request.tenant_id,
+            request.session_id,
+            limit=request.limit,
+        )
+        snapshots: list[RunSnapshot] = []
+        for head in heads:
+            lookup = RunLookupRequest(
+                tenant_id=request.tenant_id,
+                user_id=request.user_id,
+                session_id=request.session_id,
+                run_id=head.run_id,
+                request_id=request.request_id,
+            )
+            read = self._store.read_run_snapshot(
+                request.tenant_id,
+                head.run_id,
+                session_id=request.session_id,
+            )
+            snapshots.append(self._run_projector().project(read, lookup))
+        return snapshots
+
     async def resume_run(self, request: ResumeRunRequest) -> RunHandle:
         import asyncio
 

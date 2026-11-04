@@ -323,13 +323,22 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
     await this.health();
   }
 
-  /**
-   * The local transport has no list_runs wire method yet. This catalog is
-   * deliberately limited to snapshots observed by this client instance; it
-   * never reads SQLite or reconstructs durable history in the UI layer.
-   */
   async listRuns(): Promise<RunSnapshot[]> {
-    return [...this.knownSnapshots.values()].map((snapshot) => clone(snapshot));
+    const params: LocalRpcParams = {
+      tenant_id: this.identity.tenantId,
+      user_id: this.identity.userId,
+      session_id: this.identity.sessionId,
+      request_id: this.nextRequestId("get_run"),
+      limit: 100,
+    };
+    return this.project(async () => {
+      const result = (await this.call("list_runs", params)) as { runs?: unknown[] };
+      const snapshots = (result.runs ?? []).map((value) => mapSnapshot(value));
+      for (const snapshot of snapshots) {
+        this.rememberSnapshot(snapshot);
+      }
+      return snapshots;
+    });
   }
 
   async startRun(request: StartRunRequest): Promise<RunHandle> {

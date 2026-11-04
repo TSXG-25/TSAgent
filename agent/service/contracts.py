@@ -460,6 +460,33 @@ class RunLookupRequest:
 
 
 @dataclass(frozen=True)
+class ListRunsRequest:
+    """Identity-complete request for the Runs of one session."""
+
+    tenant_id: str
+    user_id: str
+    session_id: str
+    request_id: str
+    limit: int = 100
+
+    def __post_init__(self) -> None:
+        _required_identifier(self.tenant_id, "tenant_id")
+        _required_identifier(self.user_id, "user_id")
+        _required_identifier(self.session_id, "session_id")
+        _required_identifier(self.request_id, "request_id")
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "ListRunsRequest":
+        return cls(
+            tenant_id=str(value.get("tenant_id", "")),
+            user_id=str(value.get("user_id", "")),
+            session_id=str(value.get("session_id", "")),
+            request_id=str(value.get("request_id", "")),
+            limit=int(value.get("limit") or 100),
+        )
+
+
+@dataclass(frozen=True)
 class EventStreamRequest(RunLookupRequest):
     """Identity-complete cursor for persisted event replay."""
 

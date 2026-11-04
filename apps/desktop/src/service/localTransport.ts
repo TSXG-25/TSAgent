@@ -12,6 +12,7 @@ export const LOCAL_TRANSPORT_METHODS = [
   "resume_run",
   "cancel_run",
   "list_artifacts",
+  "list_runs",
   "read_events",
   "shutdown",
 ] as const;

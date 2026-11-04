@@ -34,6 +34,7 @@ class SidecarDispatcher:
             LocalTransportMethod.RESUME_RUN: self._resume_run,
             LocalTransportMethod.CANCEL_RUN: self._cancel_run,
             LocalTransportMethod.LIST_ARTIFACTS: self._list_artifacts,
+            LocalTransportMethod.LIST_RUNS: self._list_runs,
             LocalTransportMethod.READ_EVENTS: self._read_events,
             LocalTransportMethod.SHUTDOWN: self._shutdown,
         }
@@ -138,6 +139,12 @@ class SidecarDispatcher:
         cancel_params.setdefault("reason", "USER_CANCEL")
         request = self._from_dto(CancelRunRequest.from_dict, cancel_params)
         return await self._service.cancel_run(request)
+
+    async def _list_runs(self, params: Mapping[str, Any]) -> Any:
+        from ..contracts import ListRunsRequest
+
+        request = self._from_dto(ListRunsRequest.from_dict, params)
+        return await self._service.list_runs(request)
 
     async def _list_artifacts(self, params: Mapping[str, Any]) -> Any:
         from ..contracts import RunLookupRequest

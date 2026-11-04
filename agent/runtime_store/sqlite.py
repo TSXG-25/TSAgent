@@ -1100,6 +1100,35 @@ class SqliteRuntimeStore:
                 )
             return self._head_contract(row)
 
+    def list_run_heads(
+        self,
+        tenant_id: str,
+        session_id: str,
+        *,
+        limit: int = 100,
+    ) -> list[RunHead]:
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        session_id = _require_text(session_id, "session_id")
+        with self._lock:
+            self._ensure_open()
+            rows = self._connection.execute(
+                """
+                SELECT tenant_id, session_id, run_id, request_id,
+                       current_revision, current_digest, current_writer_id,
+                       current_fence_token, store_generation, run_status, updated_at
+                FROM run_heads
+                WHERE tenant_id = ? AND session_id = ?
+                ORDER BY updated_at DESC
+                LIMIT ?
+                """,
+                (tenant_id, session_id, int(limit)),
+            ).fetchall()
+            return [
+                self._head_contract(row)
+                for row in rows
+                if str(row["store_generation"]) == self.store_generation
+            ]
+
     @staticmethod
     def _interruption_contract(
         row: sqlite3.Row,

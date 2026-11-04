@@ -28,6 +28,7 @@ class LocalTransportMethod(str, Enum):
     RESUME_RUN = "resume_run"
     CANCEL_RUN = "cancel_run"
     LIST_ARTIFACTS = "list_artifacts"
+    LIST_RUNS = "list_runs"
     READ_EVENTS = "read_events"
     SHUTDOWN = "shutdown"
 

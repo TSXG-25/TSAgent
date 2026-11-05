@@ -1241,6 +1241,45 @@ class ForgetFactRequest:
 
 
 @dataclass(frozen=True)
+class ParticipantSummary:
+    """One session participant: a user or an agent identity."""
+
+    participant_id: str
+    role: str
+    joined_at: str
+
+    def to_dict(self) -> dict[str, JSONValue]:
+        return {
+            "participant_id": self.participant_id,
+            "role": self.role,
+            "joined_at": self.joined_at,
+        }
+
+
+@dataclass(frozen=True)
+class ListParticipantsRequest:
+    tenant_id: str
+    user_id: str
+    session_id: str
+    request_id: str
+
+    def __post_init__(self) -> None:
+        _required_identifier(self.tenant_id, "tenant_id")
+        _required_identifier(self.user_id, "user_id")
+        _required_identifier(self.session_id, "session_id")
+        _required_identifier(self.request_id, "request_id")
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "ListParticipantsRequest":
+        return cls(
+            tenant_id=str(value.get("tenant_id", "")),
+            user_id=str(value.get("user_id", "")),
+            session_id=str(value.get("session_id", "")),
+            request_id=str(value.get("request_id", "")),
+        )
+
+
+@dataclass(frozen=True)
 class HandoffSummary:
     """Public delegation record: source run -> target run/task."""
 

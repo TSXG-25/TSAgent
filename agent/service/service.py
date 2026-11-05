@@ -194,7 +194,8 @@ class AgentService:
 
         async with self._operation_lock:
             self._store.ensure_session(
-                request.tenant_id, request.session_id, request.user_id
+                request.tenant_id, request.session_id, request.user_id,
+                role="owner",
             )
             task_id = self._resolve_task_id(request)
             try:
@@ -454,7 +455,8 @@ class AgentService:
     async def create_session(self, request: Any) -> Any:
         self._ensure_open()
         head = self._store.ensure_session(
-            request.tenant_id, request.session_id, request.user_id
+            request.tenant_id, request.session_id, request.user_id,
+            role="owner",
         )
         return self._session_summary(head)
 
@@ -552,6 +554,12 @@ class AgentService:
             planet = f" @{profile.planet_affinity}" if profile.planet_affinity else ""
             child_text = f"[Agent: {label}{planet}]\n{child_text}"
         child_session_id = f"{session_id}:subtask:{child_task.task_id}"
+        self._store.add_participant(
+            tenant_id,
+            session_id,
+            child_task.task_id,
+            role="delegate",
+        )
         import json as _json
         handoff = self._store.create_handoff(
             tenant_id,
@@ -804,6 +812,22 @@ class AgentService:
             description=record.description,
             updated_at=record.updated_at,
         )
+
+    async def list_participants(self, request: Any) -> list[Any]:
+        self._ensure_open()
+        records = self._store.list_participants(
+            request.tenant_id, request.session_id
+        )
+        from .contracts import ParticipantSummary
+
+        return [
+            ParticipantSummary(
+                participant_id=r.participant_id,
+                role=r.role,
+                joined_at=r.joined_at,
+            )
+            for r in records
+        ]
 
     async def list_facts(self, request: Any) -> list[Any]:
         """Memory governance read — facts with provenance."""

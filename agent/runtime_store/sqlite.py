@@ -31,6 +31,7 @@ from .contracts import (
     RunHead,
     AgentProfileRecord,
     ApprovalRecord,
+    SessionParticipantRecord,
     WorkspaceRecord,
     HandoffRecord,
     ScheduledTaskRecord,
@@ -533,6 +534,16 @@ class SqliteRuntimeStore:
                     UNIQUE (tenant_id, run_id, event_id),
                     FOREIGN KEY (tenant_id, run_id)
                         REFERENCES run_heads (tenant_id, run_id)
+                );
+
+                CREATE TABLE IF NOT EXISTS session_participants (
+                    tenant_id TEXT NOT NULL,
+                    session_id TEXT NOT NULL,
+                    participant_id TEXT NOT NULL,
+                    role TEXT NOT NULL DEFAULT 'member',
+                    joined_at TEXT NOT NULL,
+                    store_generation TEXT NOT NULL,
+                    PRIMARY KEY (tenant_id, session_id, participant_id)
                 );
 
                 CREATE TABLE IF NOT EXISTS workspace_registry (
@@ -2181,11 +2192,69 @@ class SqliteRuntimeStore:
             store_generation=str(row["store_generation"]),
         )
 
+    def add_participant(
+        self,
+        tenant_id: str,
+        session_id: str,
+        participant_id: str,
+        *,
+        role: str = "member",
+    ) -> None:
+        """Idempotent session roster append (INSERT OR IGNORE)."""
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        session_id = _require_text(session_id, "session_id")
+        participant_id = _require_text(participant_id, "participant_id")
+        with self._write_transaction() as connection:
+            connection.execute(
+                """
+                INSERT OR IGNORE INTO session_participants
+                    (tenant_id, session_id, participant_id, role,
+                     joined_at, store_generation)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    tenant_id, session_id, participant_id,
+                    str(role), _now(), self.store_generation,
+                ),
+            )
+
+    def list_participants(
+        self, tenant_id: str, session_id: str
+    ) -> "list[SessionParticipantRecord]":
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        session_id = _require_text(session_id, "session_id")
+        with self._lock:
+            self._ensure_open()
+            rows = self._connection.execute(
+                """
+                SELECT tenant_id, session_id, participant_id, role,
+                       joined_at, store_generation
+                FROM session_participants
+                WHERE tenant_id = ? AND session_id = ?
+                ORDER BY joined_at ASC
+                """,
+                (tenant_id, session_id),
+            ).fetchall()
+            return [
+                SessionParticipantRecord(
+                    tenant_id=str(r["tenant_id"]),
+                    session_id=str(r["session_id"]),
+                    participant_id=str(r["participant_id"]),
+                    role=str(r["role"]),
+                    joined_at=str(r["joined_at"]),
+                    store_generation=str(r["store_generation"]),
+                )
+                for r in rows
+                if str(r["store_generation"]) == self.store_generation
+            ]
+
     def ensure_session(
         self,
         tenant_id: str,
         session_id: str,
         user_id: str = "",
+        *,
+        role: str = "member",
     ) -> "SessionHead":
         """Idempotent session registration; every scope-ful write path
         calls this so sessions exist as first-class entities."""
@@ -2210,6 +2279,19 @@ class SqliteRuntimeStore:
                 """,
                 (tenant_id, session_id, str(user_id), self.store_generation, _now()),
             )
+            if user_id:
+                connection.execute(
+                    """
+                    INSERT OR IGNORE INTO session_participants
+                        (tenant_id, session_id, participant_id, role,
+                         joined_at, store_generation)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        tenant_id, session_id, str(user_id), str(role),
+                        _now(), self.store_generation,
+                    ),
+                )
             return SessionHead(
                 tenant_id=tenant_id,
                 session_id=session_id,

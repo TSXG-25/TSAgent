@@ -59,7 +59,9 @@ class SidecarDispatcher:
             LocalTransportMethod.LIST_SKILLS: self._list_skills,
             LocalTransportMethod.LIST_FACTS: self._list_facts,
             LocalTransportMethod.FORGET_FACT: self._forget_fact,
+            LocalTransportMethod.LIST_PARTICIPANTS: self._list_participants,
             LocalTransportMethod.READ_EVENTS: self._read_events,
+            LocalTransportMethod.SUBSCRIBE_EVENTS: self._subscribe_events,
             LocalTransportMethod.SHUTDOWN: self._shutdown,
         }
 
@@ -331,6 +333,12 @@ class SidecarDispatcher:
         request = self._from_dto(ForgetFactRequest.from_dict, params)
         return await self._service.forget_fact(request)
 
+    async def _list_participants(self, params: Mapping[str, Any]) -> Any:
+        from ..contracts import ListParticipantsRequest
+
+        request = self._from_dto(ListParticipantsRequest.from_dict, params)
+        return await self._service.list_participants(request)
+
     async def _list_artifacts(self, params: Mapping[str, Any]) -> Any:
         from ..contracts import RunLookupRequest
 
@@ -338,6 +346,28 @@ class SidecarDispatcher:
         return await self._service.list_artifacts(request)
 
     async def _read_events(self, params: Mapping[str, Any]) -> list[Any]:
+        # A poll must return promptly when a live Run has no new event.  The
+        # durable event repository remains the source of truth; this timeout
+        # is only transport framing.
+        return await self._stream_events_bounded(
+            params, first_timeout=0.05, gap_timeout=0.01
+        )
+
+    async def _subscribe_events(self, params: Mapping[str, Any]) -> list[Any]:
+        """Long-poll event push — holds the request up to ~8s until new
+        durable events arrive, then returns them.  Same request shape and
+        semantics as read_events; the client chains calls for live runs."""
+        return await self._stream_events_bounded(
+            params, first_timeout=8.0, gap_timeout=0.25
+        )
+
+    async def _stream_events_bounded(
+        self,
+        params: Mapping[str, Any],
+        *,
+        first_timeout: float,
+        gap_timeout: float,
+    ) -> list[Any]:
         import asyncio
         from ..contracts import EventStreamRequest
 
@@ -349,12 +379,9 @@ class SidecarDispatcher:
         try:
             while len(events) < limit:
                 try:
-                    # A poll must return promptly when a live Run has no new
-                    # event.  The durable event repository remains the source
-                    # of truth; this timeout is only transport framing.
                     event = await asyncio.wait_for(
                         anext(iterator),
-                        timeout=0.05 if not events else 0.01,
+                        timeout=first_timeout if not events else gap_timeout,
                     )
                 except asyncio.TimeoutError:
                     break

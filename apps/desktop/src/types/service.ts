@@ -668,6 +668,23 @@ export interface FactForgetResult {
   removed: boolean;
 }
 
+export interface ParticipantSummary {
+  participantId: string;
+  role: string;
+  joinedAt: string;
+}
+
+export interface ListParticipantsRequest {
+  tenantId: string;
+  sessionId: string;
+  requestId: string;
+}
+
+/** Session roster — owners and delegated agents. */
+export interface ParticipantClient {
+  listParticipants(request: ListParticipantsRequest): Promise<ParticipantSummary[]>;
+}
+
 /** Memory governance — see/forget what the agent remembers. */
 export interface MemoryClient {
   listFacts(request: ListFactsRequest): Promise<FactRecordSummary[]>;
@@ -692,7 +709,7 @@ export interface TaskCatalogClient {
   getTask(request: TaskLookupRequest): Promise<TaskRecord>;
 }
 
-export interface DesktopAgentServiceClient extends AgentServiceClient, RunCatalogClient, TaskCatalogClient, ApprovalClient, SessionCatalogClient, HandoffClient, HistoryClient, ScheduleClient, ProfileClient, SettingsClient, WorkspaceClient, CapabilityClient, WebSearchClient, SkillClient, MemoryClient {
+export interface DesktopAgentServiceClient extends AgentServiceClient, RunCatalogClient, TaskCatalogClient, ApprovalClient, SessionCatalogClient, HandoffClient, HistoryClient, ScheduleClient, ProfileClient, SettingsClient, WorkspaceClient, CapabilityClient, WebSearchClient, SkillClient, MemoryClient, ParticipantClient {
   readonly mode: DesktopAgentServiceMode;
   readonly identity: DesktopIdentity;
   /** Resolve the backend health before the UI begins using the client. */

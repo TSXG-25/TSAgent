@@ -35,8 +35,10 @@ export const LOCAL_TRANSPORT_METHODS = [
   "list_capabilities",
   "web_search",
   "list_skills",
+  "subscribe_events",
   "list_facts",
   "forget_fact",
+  "list_participants",
   "read_events",
   "shutdown",
 ] as const;

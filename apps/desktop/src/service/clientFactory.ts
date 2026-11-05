@@ -21,6 +21,7 @@ import {
   type SkillSummary,
   type FactRecordSummary,
   type FactForgetResult,
+  type ParticipantSummary,
   type SettingsSummary,
   type WorkspaceSummary,
   type TaskHandle,
@@ -161,6 +162,10 @@ class UnavailableDesktopAgentServiceClient implements DesktopAgentServiceClient 
   }
 
   async webSearch(): Promise<WebSearchResult> {
+    throw this.error;
+  }
+
+  async listParticipants(): Promise<ParticipantSummary[]> {
     throw this.error;
   }
 

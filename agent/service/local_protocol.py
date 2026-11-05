@@ -51,8 +51,10 @@ class LocalTransportMethod(str, Enum):
     LIST_CAPABILITIES = "list_capabilities"
     WEB_SEARCH = "web_search"
     LIST_SKILLS = "list_skills"
+    SUBSCRIBE_EVENTS = "subscribe_events"
     LIST_FACTS = "list_facts"
     FORGET_FACT = "forget_fact"
+    LIST_PARTICIPANTS = "list_participants"
     READ_EVENTS = "read_events"
     SHUTDOWN = "shutdown"
 

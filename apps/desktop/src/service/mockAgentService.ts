@@ -27,6 +27,7 @@ import {
   type SkillSummary,
   type FactRecordSummary,
   type FactForgetResult,
+  type ParticipantSummary,
   type UpsertWorkspaceRequest,
   type DecideApprovalRequest,
   type ProfileSummary,
@@ -375,6 +376,10 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
       content: `Results for "${request.query}" — mock search returns canned content; the local client calls the real provider chain.`,
       sources: [],
     };
+  }
+
+  async listParticipants(): Promise<ParticipantSummary[]> {
+    return [];
   }
 
   async listFacts(): Promise<FactRecordSummary[]> {

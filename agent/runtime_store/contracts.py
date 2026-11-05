@@ -45,6 +45,16 @@ class TaskHead:
 
 
 @dataclass(frozen=True)
+class SessionParticipantRecord:
+    tenant_id: str
+    session_id: str
+    participant_id: str
+    role: str
+    joined_at: str
+    store_generation: str
+
+
+@dataclass(frozen=True)
 class WorkspaceRecord:
     """A registered planet/scene with its declared capabilities."""
 

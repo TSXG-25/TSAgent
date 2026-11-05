@@ -50,6 +50,8 @@ import {
   type FactRecordSummary,
   type FactForgetResult,
   type ForgetFactRequest,
+  type ListParticipantsRequest,
+  type ParticipantSummary,
   type SkillSummary,
   type ListSchedulesRequest,
   type ListSessionsRequest,
@@ -690,6 +692,18 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
       content: optionalString(raw.content) ?? "",
       sources: Array.isArray(raw.sources) ? raw.sources as Array<Record<string, unknown>> : [],
     };
+  }
+
+  async listParticipants(request: ListParticipantsRequest): Promise<ParticipantSummary[]> {
+    const result = (await this.call("list_participants", {
+      tenant_id: request.tenantId, user_id: this.identity.userId,
+      session_id: request.sessionId, request_id: request.requestId,
+    })) as Array<Record<string, unknown>>;
+    return result.map((raw) => ({
+      participantId: optionalString(raw.participant_id) ?? "",
+      role: optionalString(raw.role) ?? "",
+      joinedAt: optionalString(raw.joined_at) ?? "",
+    }));
   }
 
   async listFacts(request: ListFactsRequest): Promise<FactRecordSummary[]> {

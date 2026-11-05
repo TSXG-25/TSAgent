@@ -26,6 +26,10 @@ class LoopTool:
     # Opt-in parallel scheduling: safe calls may overlap siblings in one
     # assistant step; everything else stays an exclusive barrier.
     concurrency_safe: bool = False
+    # Discovered MCP tool link: (MCPServerSpec, server-side tool name).
+    # Set only for tools discovered via expose_tools; dispatch is the
+    # builtin branch, not the executor.
+    mcp: Any = None
 
 
 def _fs_spec(
@@ -122,6 +126,7 @@ def build_toolset(
     *,
     workflows: Sequence[Mapping[str, Any]] = (),
     skills: Mapping[str, Any] | None = None,
+    mcp_tools: Sequence[Any] = (),
 ) -> dict[str, LoopTool]:
     """Build the per-Run tool catalog under the intent-derived authorization."""
     tools: dict[str, LoopTool] = {}
@@ -168,6 +173,25 @@ def build_toolset(
     for name in _WEB_TOOLS:
         add_registry(name, "read" if name == "web_fetch" else "search")
 
+    # MCP-discovered tools: server schemas enter the catalog verbatim
+    # under a namespaced name; the spec's expose_tools allowlist is the
+    # authorization decision (see agent.mcp.tools).
+    for exposed in mcp_tools:
+        name = exposed.catalog_name
+        schema = dict(exposed.input_schema or {})
+        tools[name] = LoopTool(
+            name=name,
+            executor_tool=None,
+            verb="mcp",
+            concurrency_safe=True,
+            mcp=(exposed.spec, exposed.tool_name),
+            spec=function_tool_spec(
+                name,
+                exposed.description,
+                schema or {"type": "object", "properties": {}},
+            ),
+        )
+
     if workflows:
         ids = [str(item.get("id", "")) for item in workflows]
         lines = ["根据题目/输入文件执行专用工作流。"]
@@ -213,6 +237,33 @@ def build_toolset(
                 "limit": {"type": "integer", "description": "最大结果数，默认 8"},
             },
             "required": ["query"],
+        }),
+    )
+
+    tools["spawn_subtask"] = LoopTool(
+        name="spawn_subtask",
+        executor_tool=None,
+        verb="delegate",
+        spec=function_tool_spec("spawn_subtask", (
+            "把一个明确的子任务委派给子 Agent 执行并等待结果。"
+            "适合可独立完成的调研、文档、代码片段等任务；子任务有独立的 Run"
+            "和 Task 记录，结果作为工具结果返回。不要委派需要当前上下文的任务。"
+        ), {
+            "type": "object",
+            "properties": {
+                "request_text": {"type": "string", "description": "子任务的完整描述"},
+                "target_planet": {
+                    "type": "string",
+                    "description": "目标场景/星球（如 mercury/mars），留空为通用执行",
+                },
+                "profile_id": {"type": "string", "description": "目标 Agent Profile，可空"},
+                "context_refs": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "传给子任务的上下文引用（文件路径、artifact id 等）",
+                },
+            },
+            "required": ["request_text"],
         }),
     )
 

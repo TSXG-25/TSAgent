@@ -266,6 +266,7 @@ class AgentService:
                     request,
                     run_id=run_id,
                 )
+            context.delegation = self
             managed = self._runs.get(run_id)
             if managed is not None:
                 self._runs[run_id] = _ManagedRun(context, managed.task)
@@ -345,14 +346,12 @@ class AgentService:
                 f"task-{uuid.uuid4().hex[:12]}",
             )
             return head.task_id
-        if self._store.get_task_head(
-            request.tenant_id,
-            request.task_id,
-            session_id=request.session_id,
-        ) is None:
+        # Delegated Runs attach to a Task created in the parent session; the
+        # task_id scope is tenant-wide, not per-session.
+        if self._store.get_task_head(request.tenant_id, request.task_id) is None:
             raise AgentServiceError(
                 ServiceErrorCode.INVALID_REQUEST,
-                "task not found in the requested session scope",
+                "task not found in the requested tenant scope",
             )
         return request.task_id
 
@@ -394,18 +393,21 @@ class AgentService:
             request.session_id,
             limit=request.limit,
         )
-        runs = self._store.list_run_heads(
-            request.tenant_id,
-            request.session_id,
-            limit=2000,
-        )
-        run_ids_by_task: dict[str, list[str]] = {}
-        latest_status_by_task: dict[str, str] = {}
-        for run in runs:
-            if not run.task_id:
-                continue
-            run_ids_by_task.setdefault(run.task_id, []).append(run.run_id)
-            latest_status_by_task.setdefault(run.task_id, run.run_status)
+        task_runs = {
+            head.task_id: self._store.list_runs_for_task(
+                request.tenant_id, head.task_id
+            )
+            for head in heads
+        }
+        run_ids_by_task = {
+            task_id: [run.run_id for run in task_run_heads]
+            for task_id, task_run_heads in task_runs.items()
+        }
+        latest_status_by_task = {
+            task_id: task_run_heads[0].run_status
+            for task_id, task_run_heads in task_runs.items()
+            if task_run_heads
+        }
         children_by_parent: dict[str, list[str]] = {}
         for head in heads:
             if head.parent_task_id:
@@ -486,6 +488,120 @@ class AgentService:
             latest_run_id="" if latest_run is None else latest_run.run_id,
             latest_status="" if latest_run is None else latest_run.run_status,
             latest_updated_at="" if latest_run is None else latest_run.updated_at,
+        )
+
+    async def spawn_subtask(
+        self,
+        run_context: Any,
+        *,
+        request_text: str,
+        target_planet: str = "",
+        profile_id: str = "",
+        context_refs: tuple[str, ...] | list[str] = (),
+    ) -> str:
+        """Delegate a subtask: child Task -> child Run -> result back to
+        the parent's tool result.  The parent run's loop blocks on this
+        call; the delegation tree and handoff event are durable."""
+        import asyncio
+        import uuid
+
+        view = run_context.durable_store_view
+        tenant_id, session_id = view.tenant_id, view.session_id
+        parent_head = self._store.get_run_head(
+            tenant_id, run_context.run_id, session_id=session_id
+        )
+        # The Task tree lives in the parent session; the delegated Run gets a
+        # derived session — one active run per session plus context isolation.
+        child_task = self._store.create_task_head(
+            tenant_id,
+            session_id,
+            f"task-{uuid.uuid4().hex[:12]}",
+            parent_task_id=parent_head.task_id if parent_head else "",
+            origin_planet=target_planet,
+            owner_profile_id=profile_id,
+        )
+        child_session_id = f"{session_id}:subtask:{child_task.task_id}"
+        handle = await self.start_run(
+            StartRunRequest(
+                tenant_id=tenant_id,
+                user_id=run_context.user_id,
+                session_id=child_session_id,
+                request_id=f"subtask:{child_task.task_id}",
+                request_text=request_text,
+                task_id=child_task.task_id,
+            )
+        )
+        view.store.append_event(
+            view.tenant_id,
+            view.session_id,
+            view.run_id,
+            event_id=f"task-delegated:{view.run_id}:{child_task.task_id}",
+            event_type="task.delegated",
+            timestamp=self._timestamp(),
+            payload={
+                "child_task_id": child_task.task_id,
+                "child_run_id": handle.run_id,
+                "child_session_id": child_session_id,
+                "parent_task_id": child_task.parent_task_id,
+                "target_planet": target_planet,
+                "profile_id": profile_id,
+                "context_refs": [str(ref) for ref in context_refs],
+            },
+            run_revision=view.head().current_revision,
+            expected_store_generation=view.store_generation,
+        )
+        try:
+            managed = self._runs.get(handle.run_id)
+            if managed is not None and managed.task is not None:
+                await managed.task
+            snapshot = await self.get_run(
+                RunLookupRequest(
+                    tenant_id=tenant_id,
+                    user_id=run_context.user_id,
+                    session_id=child_session_id,
+                    run_id=handle.run_id,
+                    request_id=f"subtask-read:{child_task.task_id}",
+                )
+            )
+        except Exception as error:
+            view.store.append_event(
+            view.tenant_id,
+            view.session_id,
+            view.run_id,
+            event_id=f"task-result:{view.run_id}:{child_task.task_id}",
+            event_type="task.result",
+            timestamp=self._timestamp(),
+            payload={
+                    "child_task_id": child_task.task_id,
+                    "child_run_id": handle.run_id,
+                    "outcome": "error",
+                    "detail": str(error)[:500],
+                },
+            run_revision=view.head().current_revision,
+            expected_store_generation=view.store_generation,
+        )
+            return f"子任务执行失败: {error}"
+        output = snapshot.output.text if snapshot.output else ""
+        view.store.append_event(
+            view.tenant_id,
+            view.session_id,
+            view.run_id,
+            event_id=f"task-result:{view.run_id}:{child_task.task_id}",
+            event_type="task.result",
+            timestamp=self._timestamp(),
+            payload={
+                "child_task_id": child_task.task_id,
+                "child_run_id": handle.run_id,
+                "outcome": snapshot.status.value,
+            },
+            run_revision=view.head().current_revision,
+            expected_store_generation=view.store_generation,
+        )
+        if snapshot.status.value == "COMPLETED" and output:
+            return output[:8000]
+        return (
+            f"子任务 {handle.run_id} 结束于 {snapshot.status.value}"
+            + (f": {output[:2000]}" if output else "")
         )
 
     async def request_approval(
@@ -658,6 +774,7 @@ class AgentService:
                     run_id=request.run_id,
                     takeover_writer=True,
                 )
+                context.delegation = self
                 if context.durable_store_view is None:
                     raise AgentServiceError(
                         ServiceErrorCode.INVALID_REQUEST,

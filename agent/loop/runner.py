@@ -218,7 +218,15 @@ class AgentLoop:
         from agent.skills import merged_skills
 
         skills = merged_skills(getattr(run_context, "workspace", None))
-        tools = build_toolset(authorization, workflows=workflows, skills=skills)
+        from agent.mcp.tools import discover_exposed_tools
+
+        mcp_tools = await discover_exposed_tools()
+        tools = build_toolset(
+            authorization,
+            workflows=workflows,
+            skills=skills,
+            mcp_tools=mcp_tools,
+        )
         tool_specs = [tool.spec for tool in tools.values()]
 
         goal_state = GoalState.from_dict(state.get("goal_state"))
@@ -229,6 +237,7 @@ class AgentLoop:
             workflows=workflows,
             freshness_required=bool(state.get("freshness_required")),
             source_grounding_required=bool(state.get("source_grounding_required")),
+            workspace_card=str(state.get("workspace_card") or ""),
         )
 
         transcript: list[dict[str, Any]] = [
@@ -478,6 +487,39 @@ class AgentLoop:
             )
 
         if tool.executor_tool is None:
+            if tool.mcp is not None:
+                from agent.interruption import await_interruptibly
+                from agent.mcp.client import call_mcp_tool
+
+                spec, server_name = tool.mcp
+                run_context = getattr(self._orch, "run_context", None)
+                view = (
+                    getattr(run_context, "cancellation_view", None)
+                    if run_context is not None
+                    else None
+                )
+                invocation = call_mcp_tool(
+                    spec, server_name, dict(call.arguments)
+                )
+                try:
+                    text = await (
+                        await_interruptibly(invocation, view=view)
+                        if view is not None else invocation
+                    )
+                except Exception as exc:
+                    return _tool_message(
+                        call,
+                        "MCP 工具不可用: "
+                        + stable_error_message(
+                            exc, fallback="mcp tool call failed"
+                        ),
+                        ok=False,
+                        error_code=spec.unavailable_code or "MCP_UNAVAILABLE",
+                        workspace=workspace,
+                    )
+                return _tool_message(
+                    call, text or "工具无输出", workspace=workspace
+                )
             if call.name == "load_skill":
                 from agent.skills import merged_skills
 
@@ -521,6 +563,39 @@ class AgentLoop:
                     bindings=call.arguments.get("bindings") or {},
                 )
                 return _tool_message(call, message, ok=ok, workspace=workspace)
+            if call.name == "spawn_subtask":
+                delegation = getattr(run_context, "delegation", None)
+                if delegation is None:
+                    return _tool_message(
+                        call,
+                        "子任务委派在当前运行环境不可用",
+                        ok=False,
+                        error_code="DELEGATION_UNAVAILABLE",
+                    )
+                request_text = str(call.arguments.get("request_text", "")).strip()
+                if not request_text:
+                    return _tool_message(
+                        call, "spawn_subtask 需要 request_text", ok=False,
+                        error_code="INVALID_REQUEST",
+                    )
+                try:
+                    text = await delegation.spawn_subtask(
+                        run_context,
+                        request_text=request_text,
+                        target_planet=str(call.arguments.get("target_planet", "")),
+                        profile_id=str(call.arguments.get("profile_id", "")),
+                        context_refs=tuple(
+                            str(r) for r in (call.arguments.get("context_refs") or ())
+                        ),
+                    )
+                except Exception as exc:
+                    return _tool_message(
+                        call,
+                        "子任务委派失败: " + stable_error_message(exc),
+                        ok=False,
+                        error_code="DELEGATION_FAILED",
+                    )
+                return _tool_message(call, text or "子任务无输出", workspace=workspace)
             return _tool_message(call, "未实现的内置工具", ok=False)
 
         authorization = EffectAuthorization.from_state(state, user_input)

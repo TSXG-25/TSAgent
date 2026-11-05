@@ -1200,6 +1200,37 @@ class SqliteRuntimeStore:
                 if str(row["store_generation"]) == self.store_generation
             ]
 
+    def list_runs_for_task(
+        self,
+        tenant_id: str,
+        task_id: str,
+        *,
+        limit: int = 200,
+    ) -> list[RunHead]:
+        """Runs attached to a Task regardless of session — delegated Runs
+        execute in derived child sessions."""
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        task_id = _require_text(task_id, "task_id")
+        with self._lock:
+            self._ensure_open()
+            rows = self._connection.execute(
+                """
+                SELECT tenant_id, session_id, run_id, request_id, task_id,
+                       current_revision, current_digest, current_writer_id,
+                       current_fence_token, store_generation, run_status, updated_at
+                FROM run_heads
+                WHERE tenant_id = ? AND task_id = ?
+                ORDER BY updated_at DESC
+                LIMIT ?
+                """,
+                (tenant_id, task_id, int(limit)),
+            ).fetchall()
+            return [
+                self._head_contract(row)
+                for row in rows
+                if str(row["store_generation"]) == self.store_generation
+            ]
+
     def create_task_head(
         self,
         tenant_id: str,

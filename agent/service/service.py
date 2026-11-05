@@ -64,6 +64,7 @@ class AgentService:
         self._cancellation: Any | None = None
         self._defer_context_creation = defer_context_creation
         self._runs: dict[str, _ManagedRun] = {}
+        self._approval_waiters: dict[str, Any] = {}
         self._task_errors: dict[str, AgentServiceError] = {}
         self._operation_lock = asyncio.Lock()
         self._closed = False
@@ -443,6 +444,129 @@ class AgentService:
             )
         )
         return next(s for s in snapshots if s.task_id == head.task_id)
+
+    async def request_approval(
+        self,
+        run_context: Any,
+        *,
+        approval_id: str,
+        action: str,
+        scope: str = "",
+        params: dict[str, Any] | None = None,
+        risk_level: str = "R1",
+    ) -> Any:
+        """Runtime-side approval gate: persist the request, park the run in
+        WAITING_USER, and block until an external ``decide_approval`` lands.
+
+        Idempotent on approval_id — a replay after restart returns the
+        already-decided record instead of re-parking the run.
+        """
+        import asyncio
+        import json
+
+        view = run_context.durable_store_view
+        record = self._store.create_approval(
+            view.tenant_id,
+            view.session_id,
+            view.run_id,
+            approval_id,
+            action=action,
+            scope=scope,
+            params_json=json.dumps(params or {}),
+            risk_level=risk_level,
+        )
+        if record.status != "PENDING":
+            return record
+        waiter = asyncio.Event()
+        self._approval_waiters[record.approval_id] = waiter
+        timestamp = self._timestamp()
+        try:
+            view.transition_run_with_event(
+                run_status="WAITING_USER",
+                event_id=f"approval-requested:{view.run_id}:{record.approval_id}",
+                event_type="approval.requested",
+                timestamp=timestamp,
+                payload={
+                    "approval_id": record.approval_id,
+                    "action": record.action,
+                    "scope": record.scope,
+                    "risk_level": record.risk_level,
+                    "params": dict(params or {}),
+                },
+            )
+            await waiter.wait()
+            decided = self._store.get_approval(
+                view.tenant_id, view.run_id, record.approval_id
+            )
+            view.transition_run_with_event(
+                run_status="RUNNING",
+                event_id=f"approval-decided:{view.run_id}:{record.approval_id}",
+                event_type="approval.decided",
+                timestamp=self._timestamp(),
+                payload={
+                    "approval_id": record.approval_id,
+                    "decision": decided.status,
+                    "decided_by": decided.decided_by,
+                },
+            )
+            return decided
+        finally:
+            self._approval_waiters.pop(record.approval_id, None)
+
+    async def decide_approval(self, request: Any) -> Any:
+        """Wire decision for one pending approval (idempotent replay-safe)."""
+        self._ensure_open()
+        record = self._store.decide_approval(
+            request.tenant_id,
+            request.run_id,
+            request.approval_id,
+            decision="APPROVED" if request.decision == "approve" else "DENIED",
+            decided_by=request.decided_by or request.user_id,
+        )
+        waiter = self._approval_waiters.get(request.approval_id)
+        if waiter is not None:
+            waiter.set()
+        return self._approval_summary(record)
+
+    async def list_approvals(self, request: Any) -> list[Any]:
+        self._ensure_open()
+        records = self._store.list_approvals(
+            request.tenant_id,
+            request.session_id,
+            run_id=request.run_id or None,
+            status=request.status.upper() or None,
+            limit=request.limit,
+        )
+        return [self._approval_summary(record) for record in records]
+
+    @staticmethod
+    def _approval_summary(record: Any) -> Any:
+        import json
+
+        from .contracts import ApprovalSummary
+
+        try:
+            params = json.loads(record.params_json)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            params = {}
+        return ApprovalSummary(
+            approval_id=record.approval_id,
+            run_id=record.run_id,
+            action=record.action,
+            scope=record.scope,
+            params=params,
+            risk_level=record.risk_level,
+            status=record.status,
+            decided_by=record.decided_by,
+            decided_at=record.decided_at,
+            created_at=record.created_at,
+        )
+
+    @staticmethod
+    def _timestamp() -> str:
+        from datetime import datetime, timezone
+
+        return datetime.now(timezone.utc).isoformat()
 
     async def resume_run(self, request: ResumeRunRequest) -> RunHandle:
         import asyncio

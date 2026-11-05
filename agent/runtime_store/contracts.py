@@ -45,6 +45,25 @@ class TaskHead:
 
 
 @dataclass(frozen=True)
+class ApprovalRecord:
+    """Durable approval request/decision for one Run effect."""
+
+    tenant_id: str
+    session_id: str
+    run_id: str
+    approval_id: str
+    action: str
+    scope: str
+    params_json: str
+    risk_level: str
+    status: str  # PENDING | APPROVED | DENIED | EXPIRED
+    decided_by: str
+    decided_at: str
+    created_at: str
+    store_generation: str
+
+
+@dataclass(frozen=True)
 class FenceGrant:
     """The writer token currently granted for one Run."""
 

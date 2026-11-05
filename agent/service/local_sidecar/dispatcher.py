@@ -38,6 +38,8 @@ class SidecarDispatcher:
             LocalTransportMethod.CREATE_TASK: self._create_task,
             LocalTransportMethod.LIST_TASKS: self._list_tasks,
             LocalTransportMethod.GET_TASK: self._get_task,
+            LocalTransportMethod.LIST_APPROVALS: self._list_approvals,
+            LocalTransportMethod.DECIDE_APPROVAL: self._decide_approval,
             LocalTransportMethod.READ_EVENTS: self._read_events,
             LocalTransportMethod.SHUTDOWN: self._shutdown,
         }
@@ -166,6 +168,18 @@ class SidecarDispatcher:
 
         request = self._from_dto(TaskLookupRequest.from_dict, params)
         return await self._service.get_task(request)
+
+    async def _list_approvals(self, params: Mapping[str, Any]) -> Any:
+        from ..contracts import ListApprovalsRequest
+
+        request = self._from_dto(ListApprovalsRequest.from_dict, params)
+        return await self._service.list_approvals(request)
+
+    async def _decide_approval(self, params: Mapping[str, Any]) -> Any:
+        from ..contracts import DecideApprovalRequest
+
+        request = self._from_dto(DecideApprovalRequest.from_dict, params)
+        return await self._service.decide_approval(request)
 
     async def _list_artifacts(self, params: Mapping[str, Any]) -> Any:
         from ..contracts import RunLookupRequest

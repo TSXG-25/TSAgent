@@ -1,5 +1,6 @@
 import {
   AgentServiceClientError,
+  type ApprovalSummary,
   type ArtifactSummary,
   type CancelRunRequest,
   type CreateTaskRequest,
@@ -19,6 +20,8 @@ import {
   type RunSnapshot,
   type RunStatus,
   type ServiceErrorCode,
+  type DecideApprovalRequest,
+  type ListApprovalsRequest,
   type StartRunRequest,
   type TaskHandle,
   type TaskLookupRequest,
@@ -222,6 +225,22 @@ function mapArtifact(value: unknown, fallbackRunId: string): ArtifactSummary {
   };
 }
 
+function mapApproval(value: unknown): ApprovalSummary {
+  const raw = isRecord(value) ? value : (() => { throw new Error("approval is not an object"); })();
+  return {
+    approvalId: requiredString(raw.approval_id, "approval_id"),
+    runId: requiredString(raw.run_id, "run_id"),
+    action: requiredString(raw.action, "action"),
+    scope: optionalString(raw.scope) ?? "",
+    params: isRecord(raw.params) ? raw.params : {},
+    riskLevel: optionalString(raw.risk_level) ?? "R1",
+    status: (optionalString(raw.status) ?? "PENDING") as ApprovalSummary["status"],
+    decidedBy: optionalString(raw.decided_by) ?? "",
+    decidedAt: optionalString(raw.decided_at) ?? "",
+    createdAt: requiredString(raw.created_at, "created_at"),
+  };
+}
+
 function mapTaskHandle(value: unknown): TaskHandle {
   const raw = isRecord(value) ? value : (() => { throw new Error("task handle is not an object"); })();
   return {
@@ -403,6 +422,34 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
       task_id: request.taskId,
     };
     return mapTaskRecord(await this.call("get_task", params));
+  }
+
+  async listApprovals(request: ListApprovalsRequest): Promise<ApprovalSummary[]> {
+    const params: LocalRpcParams = {
+      tenant_id: request.tenantId,
+      user_id: this.identity.userId,
+      session_id: request.sessionId,
+      request_id: request.requestId,
+      run_id: request.runId ?? "",
+      status: request.status ?? "",
+      limit: request.limit ?? 200,
+    };
+    const result = (await this.call("list_approvals", params)) as unknown[];
+    return result.map((value) => mapApproval(value));
+  }
+
+  async decideApproval(request: DecideApprovalRequest): Promise<ApprovalSummary> {
+    const params: LocalRpcParams = {
+      tenant_id: request.tenantId,
+      user_id: this.identity.userId,
+      session_id: request.sessionId,
+      request_id: request.requestId,
+      run_id: request.runId,
+      approval_id: request.approvalId,
+      decision: request.decision,
+      decided_by: request.decidedBy ?? this.identity.userId,
+    };
+    return mapApproval(await this.call("decide_approval", params));
   }
 
   async startRun(request: StartRunRequest): Promise<RunHandle> {

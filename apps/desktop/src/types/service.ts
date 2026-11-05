@@ -326,6 +326,44 @@ export interface RunCatalogClient {
   listRuns(): Promise<RunSnapshot[]>;
 }
 
+export interface ApprovalSummary {
+  approvalId: string;
+  runId: string;
+  action: string;
+  scope: string;
+  params: Record<string, unknown>;
+  riskLevel: string;
+  status: "PENDING" | "APPROVED" | "DENIED" | "EXPIRED";
+  decidedBy: string;
+  decidedAt: string;
+  createdAt: string;
+}
+
+export interface ListApprovalsRequest {
+  tenantId: string;
+  sessionId: string;
+  requestId: string;
+  runId?: string;
+  status?: string;
+  limit?: number;
+}
+
+export interface DecideApprovalRequest {
+  tenantId: string;
+  sessionId: string;
+  requestId: string;
+  runId: string;
+  approvalId: string;
+  decision: "approve" | "deny";
+  decidedBy?: string;
+}
+
+/** Approval cards — durable gates that park runs in WAITING_USER. */
+export interface ApprovalClient {
+  listApprovals(request: ListApprovalsRequest): Promise<ApprovalSummary[]>;
+  decideApproval(request: DecideApprovalRequest): Promise<ApprovalSummary>;
+}
+
 /** Task tree catalog — delegation units that Runs attach to. */
 export interface TaskCatalogClient {
   createTask(request: CreateTaskRequest): Promise<TaskHandle>;
@@ -333,7 +371,7 @@ export interface TaskCatalogClient {
   getTask(request: TaskLookupRequest): Promise<TaskRecord>;
 }
 
-export interface DesktopAgentServiceClient extends AgentServiceClient, RunCatalogClient, TaskCatalogClient {
+export interface DesktopAgentServiceClient extends AgentServiceClient, RunCatalogClient, TaskCatalogClient, ApprovalClient {
   readonly mode: DesktopAgentServiceMode;
   readonly identity: DesktopIdentity;
   /** Resolve the backend health before the UI begins using the client. */

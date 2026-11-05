@@ -29,6 +29,7 @@ from .contracts import (
     PreparedOperation,
     RevisionRecord,
     RunHead,
+    ApprovalRecord,
     ServiceStartReservation,
     RunReadSnapshot,
     RunOutputRecord,
@@ -514,6 +515,25 @@ class SqliteRuntimeStore:
                         REFERENCES run_heads (tenant_id, run_id)
                 );
 
+                CREATE TABLE IF NOT EXISTS run_approvals (
+                    tenant_id TEXT NOT NULL,
+                    session_id TEXT NOT NULL,
+                    run_id TEXT NOT NULL,
+                    approval_id TEXT NOT NULL,
+                    action TEXT NOT NULL,
+                    scope TEXT NOT NULL DEFAULT '',
+                    params_json TEXT NOT NULL DEFAULT '{}',
+                    risk_level TEXT NOT NULL DEFAULT 'R1',
+                    status TEXT NOT NULL DEFAULT 'PENDING',
+                    decided_by TEXT NOT NULL DEFAULT '',
+                    decided_at TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    store_generation TEXT NOT NULL,
+                    PRIMARY KEY (tenant_id, run_id, approval_id),
+                    FOREIGN KEY (tenant_id, run_id)
+                        REFERENCES run_heads (tenant_id, run_id)
+                );
+
                 CREATE TABLE IF NOT EXISTS run_interruption_intents (
                     tenant_id TEXT NOT NULL,
                     session_id TEXT NOT NULL,
@@ -557,6 +577,8 @@ class SqliteRuntimeStore:
                     ON run_resume_revisions (tenant_id, run_id, revision DESC);
                 CREATE INDEX IF NOT EXISTS idx_run_fences_current
                     ON run_fences (tenant_id, run_id, fence_token DESC);
+                CREATE INDEX IF NOT EXISTS idx_run_approvals_pending
+                    ON run_approvals (tenant_id, session_id, status, created_at ASC);
                 CREATE INDEX IF NOT EXISTS idx_run_events_replay
                     ON run_events (tenant_id, run_id, sequence_number ASC);
                 CREATE INDEX IF NOT EXISTS idx_run_interruptions_request
@@ -1277,6 +1299,218 @@ class SqliteRuntimeStore:
                 for row in rows
                 if str(row["store_generation"]) == self.store_generation
             ]
+
+    def create_approval(
+        self,
+        tenant_id: str,
+        session_id: str,
+        run_id: str,
+        approval_id: str,
+        *,
+        action: str,
+        scope: str = "",
+        params_json: str = "{}",
+        risk_level: str = "R1",
+    ) -> "ApprovalRecord":
+        """Durable approval request; idempotent on (tenant, run, approval_id)."""
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        session_id = _require_text(session_id, "session_id")
+        run_id = _require_text(run_id, "run_id")
+        approval_id = _require_text(approval_id, "approval_id")
+        action = _require_text(action, "action")
+        with self._write_transaction() as connection:
+            existing = connection.execute(
+                """
+                SELECT tenant_id, session_id, run_id, approval_id, action, scope,
+                       params_json, risk_level, status, decided_by, decided_at,
+                       created_at, store_generation
+                FROM run_approvals
+                WHERE tenant_id = ? AND run_id = ? AND approval_id = ?
+                """,
+                (tenant_id, run_id, approval_id),
+            ).fetchone()
+            if existing is not None:
+                return self._approval_contract(existing)
+            connection.execute(
+                """
+                INSERT INTO run_approvals
+                    (tenant_id, session_id, run_id, approval_id, action, scope,
+                     params_json, risk_level, status, decided_by, decided_at,
+                     created_at, store_generation)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', '', '', ?, ?)
+                """,
+                (
+                    tenant_id,
+                    session_id,
+                    run_id,
+                    approval_id,
+                    action,
+                    str(scope),
+                    str(params_json),
+                    str(risk_level),
+                    _now(),
+                    self.store_generation,
+                ),
+            )
+            return ApprovalRecord(
+                tenant_id=tenant_id,
+                session_id=session_id,
+                run_id=run_id,
+                approval_id=approval_id,
+                action=action,
+                scope=str(scope),
+                params_json=str(params_json),
+                risk_level=str(risk_level),
+                status="PENDING",
+                decided_by="",
+                decided_at="",
+                created_at=_now(),
+                store_generation=self.store_generation,
+            )
+
+    def get_approval(
+        self,
+        tenant_id: str,
+        run_id: str,
+        approval_id: str,
+    ) -> "ApprovalRecord | None":
+        with self._lock:
+            self._ensure_open()
+            row = self._connection.execute(
+                """
+                SELECT tenant_id, session_id, run_id, approval_id, action, scope,
+                       params_json, risk_level, status, decided_by, decided_at,
+                       created_at, store_generation
+                FROM run_approvals
+                WHERE tenant_id = ? AND run_id = ? AND approval_id = ?
+                """,
+                (tenant_id, run_id, approval_id),
+            ).fetchone()
+            if row is None or str(row["store_generation"]) != self.store_generation:
+                return None
+            return self._approval_contract(row)
+
+    def list_approvals(
+        self,
+        tenant_id: str,
+        session_id: str,
+        *,
+        run_id: str | None = None,
+        status: str | None = None,
+        limit: int = 200,
+    ) -> "list[ApprovalRecord]":
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        session_id = _require_text(session_id, "session_id")
+        with self._lock:
+            self._ensure_open()
+            rows = self._connection.execute(
+                """
+                SELECT tenant_id, session_id, run_id, approval_id, action, scope,
+                       params_json, risk_level, status, decided_by, decided_at,
+                       created_at, store_generation
+                FROM run_approvals
+                WHERE tenant_id = ? AND session_id = ?
+                  AND (? = '' OR run_id = ?)
+                  AND (? = '' OR status = ?)
+                ORDER BY created_at ASC
+                LIMIT ?
+                """,
+                (
+                    tenant_id,
+                    session_id,
+                    str(run_id or ""),
+                    str(run_id or ""),
+                    str(status or ""),
+                    str(status or ""),
+                    int(limit),
+                ),
+            ).fetchall()
+            return [
+                self._approval_contract(row)
+                for row in rows
+                if str(row["store_generation"]) == self.store_generation
+            ]
+
+    def decide_approval(
+        self,
+        tenant_id: str,
+        run_id: str,
+        approval_id: str,
+        *,
+        decision: str,
+        decided_by: str,
+    ) -> "ApprovalRecord":
+        """Atomically transition a PENDING approval to APPROVED/DENIED.
+
+        Replaying the same decision returns the record unchanged; a
+        conflicting second decision raises a store conflict.
+        """
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        run_id = _require_text(run_id, "run_id")
+        approval_id = _require_text(approval_id, "approval_id")
+        decision = _require_text(decision, "decision")
+        decided_by = _require_text(decided_by, "decided_by")
+        if decision not in ("APPROVED", "DENIED"):
+            raise DurableStoreError(
+                StoreErrorCode.SCHEMA_INCOMPATIBLE,
+                "approval decision must be APPROVED or DENIED",
+            )
+        with self._write_transaction() as connection:
+            row = connection.execute(
+                """
+                SELECT tenant_id, session_id, run_id, approval_id, action, scope,
+                       params_json, risk_level, status, decided_by, decided_at,
+                       created_at, store_generation
+                FROM run_approvals
+                WHERE tenant_id = ? AND run_id = ? AND approval_id = ?
+                """,
+                (tenant_id, run_id, approval_id),
+            ).fetchone()
+            if row is None or str(row["store_generation"]) != self.store_generation:
+                raise DurableStoreError(
+                    StoreErrorCode.IDENTITY_MISMATCH,
+                    "approval not found in the requested scope",
+                )
+            current = str(row["status"])
+            if current == "PENDING":
+                connection.execute(
+                    """
+                    UPDATE run_approvals
+                    SET status = ?, decided_by = ?, decided_at = ?
+                    WHERE tenant_id = ? AND run_id = ? AND approval_id = ?
+                      AND status = 'PENDING'
+                    """,
+                    (decision, decided_by, _now(), tenant_id, run_id, approval_id),
+                )
+                return ApprovalRecord(
+                    **{**self._approval_contract(row).__dict__,
+                       "status": decision, "decided_by": decided_by,
+                       "decided_at": _now()}
+                )
+            if current != decision:
+                raise DurableStoreError(
+                    StoreErrorCode.IDEMPOTENCY_CONFLICT,
+                    "approval already decided with a different outcome",
+                )
+            return self._approval_contract(row)
+
+    @staticmethod
+    def _approval_contract(row: sqlite3.Row) -> "ApprovalRecord":
+        return ApprovalRecord(
+            tenant_id=str(row["tenant_id"]),
+            session_id=str(row["session_id"]),
+            run_id=str(row["run_id"]),
+            approval_id=str(row["approval_id"]),
+            action=str(row["action"]),
+            scope=str(row["scope"]),
+            params_json=str(row["params_json"]),
+            risk_level=str(row["risk_level"]),
+            status=str(row["status"]),
+            decided_by=str(row["decided_by"]),
+            decided_at=str(row["decided_at"]),
+            created_at=str(row["created_at"]),
+            store_generation=str(row["store_generation"]),
+        )
 
     @staticmethod
     def _task_contract(row: sqlite3.Row) -> "TaskHead":

@@ -10,6 +10,7 @@ import {
   type StartRunRequest,
   type GetRunRequest,
   type CancelRunRequest,
+  type ApprovalSummary,
   type TaskHandle,
   type TaskRecord,
   type ResumeRunRequest,
@@ -96,6 +97,14 @@ class UnavailableDesktopAgentServiceClient implements DesktopAgentServiceClient 
   }
 
   async getTask(): Promise<TaskRecord> {
+    throw this.error;
+  }
+
+  async listApprovals(): Promise<ApprovalSummary[]> {
+    throw this.error;
+  }
+
+  async decideApproval(): Promise<ApprovalSummary> {
     throw this.error;
   }
 

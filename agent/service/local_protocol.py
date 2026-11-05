@@ -32,6 +32,8 @@ class LocalTransportMethod(str, Enum):
     CREATE_TASK = "create_task"
     LIST_TASKS = "list_tasks"
     GET_TASK = "get_task"
+    LIST_APPROVALS = "list_approvals"
+    DECIDE_APPROVAL = "decide_approval"
     READ_EVENTS = "read_events"
     SHUTDOWN = "shutdown"
 

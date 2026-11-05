@@ -31,6 +31,8 @@ def test_desktop_method_allowlist_is_frozen() -> None:
         "create_task",
         "list_tasks",
         "get_task",
+        "list_approvals",
+        "decide_approval",
         "read_events",
         "shutdown",
     )

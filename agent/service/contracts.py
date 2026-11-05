@@ -623,6 +623,104 @@ class TaskSnapshot(TaskHandle):
 
 
 @dataclass(frozen=True)
+class ApprovalSummary:
+    """Public approval card: request context plus the decision state."""
+
+    approval_id: str
+    run_id: str
+    action: str
+    scope: str
+    params: Mapping[str, JSONValue]
+    risk_level: str
+    status: str
+    decided_by: str
+    decided_at: str
+    created_at: str
+
+    def to_dict(self) -> dict[str, JSONValue]:
+        return {
+            "approval_id": self.approval_id,
+            "run_id": self.run_id,
+            "action": self.action,
+            "scope": self.scope,
+            "params": _thaw_json(self.params),
+            "risk_level": self.risk_level,
+            "status": self.status,
+            "decided_by": self.decided_by,
+            "decided_at": self.decided_at,
+            "created_at": self.created_at,
+        }
+
+
+@dataclass(frozen=True)
+class DecideApprovalRequest:
+    """External decision for one pending approval."""
+
+    tenant_id: str
+    user_id: str
+    session_id: str
+    run_id: str
+    approval_id: str
+    decision: str  # "approve" | "deny"
+    request_id: str
+    decided_by: str = ""
+
+    def __post_init__(self) -> None:
+        _required_identifier(self.tenant_id, "tenant_id")
+        _required_identifier(self.user_id, "user_id")
+        _required_identifier(self.session_id, "session_id")
+        _required_identifier(self.run_id, "run_id")
+        _required_identifier(self.approval_id, "approval_id")
+        _required_identifier(self.request_id, "request_id")
+        if self.decision not in ("approve", "deny"):
+            raise ValueError("decision must be 'approve' or 'deny'")
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "DecideApprovalRequest":
+        return cls(
+            tenant_id=str(value.get("tenant_id", "")),
+            user_id=str(value.get("user_id", "")),
+            session_id=str(value.get("session_id", "")),
+            run_id=str(value.get("run_id", "")),
+            approval_id=str(value.get("approval_id", "")),
+            decision=str(value.get("decision", "")).lower(),
+            request_id=str(value.get("request_id", "")),
+            decided_by=str(value.get("decided_by", "")),
+        )
+
+
+@dataclass(frozen=True)
+class ListApprovalsRequest:
+    """Identity-complete approval query, run-scoped or session-wide."""
+
+    tenant_id: str
+    user_id: str
+    session_id: str
+    request_id: str
+    run_id: str = ""
+    status: str = ""
+    limit: int = 200
+
+    def __post_init__(self) -> None:
+        _required_identifier(self.tenant_id, "tenant_id")
+        _required_identifier(self.user_id, "user_id")
+        _required_identifier(self.session_id, "session_id")
+        _required_identifier(self.request_id, "request_id")
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "ListApprovalsRequest":
+        return cls(
+            tenant_id=str(value.get("tenant_id", "")),
+            user_id=str(value.get("user_id", "")),
+            session_id=str(value.get("session_id", "")),
+            request_id=str(value.get("request_id", "")),
+            run_id=str(value.get("run_id", "")),
+            status=str(value.get("status", "")),
+            limit=int(value.get("limit") or 200),
+        )
+
+
+@dataclass(frozen=True)
 class EventStreamRequest(RunLookupRequest):
     """Identity-complete cursor for persisted event replay."""
 

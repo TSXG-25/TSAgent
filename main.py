@@ -15,7 +15,9 @@ from agent.interruption import CancelRunRequest
 from agent.service import (
     AgentService,
     AgentServiceError,
+    DecideApprovalRequest,
     EventStreamRequest,
+    ListApprovalsRequest,
     EventType,
     ResumeRunRequest,
     RunLookupRequest,
@@ -346,6 +348,52 @@ class ServiceCLI:
         )
         return snapshot
 
+    async def approve(self, approval_id: str | None = None, *, deny: bool = False) -> None:
+        """List pending approvals, or decide one by id (the CLI channel for
+        the WAITING_USER approval gate)."""
+        if approval_id is None:
+            try:
+                pending = await self._service.list_approvals(
+                    ListApprovalsRequest(
+                        tenant_id=self._tenant_id,
+                        user_id=self._user_id,
+                        session_id=self._session_id,
+                        request_id=f"cli-approvals-{uuid.uuid4().hex}",
+                        status="PENDING",
+                    )
+                )
+            except AgentServiceError as error:
+                print(f"审批查询失败: {error.code.value}: {error.message}")
+                return
+            if not pending:
+                print("当前没有待审批的操作。")
+                return
+            for record in pending:
+                print(
+                    f"  {record.approval_id}  [{record.risk_level}] "
+                    f"{record.action}  {record.scope}  run={record.run_id}"
+                )
+            return
+
+        run_id = approval_id.rsplit(":", 1)[0]
+        try:
+            summary = await self._service.decide_approval(
+                DecideApprovalRequest(
+                    tenant_id=self._tenant_id,
+                    user_id=self._user_id,
+                    session_id=self._session_id,
+                    run_id=run_id,
+                    approval_id=approval_id,
+                    decision="deny" if deny else "approve",
+                    request_id=f"cli-decide-{uuid.uuid4().hex}",
+                    decided_by=self._user_id,
+                )
+            )
+        except AgentServiceError as error:
+            print(f"审批决策失败: {error.code.value}: {error.message}")
+            return
+        print(f"审批 {summary.approval_id} → {summary.status}（run 继续执行）")
+
 
 _HELP_TEXT = """\
 可用命令:
@@ -355,6 +403,11 @@ _HELP_TEXT = """\
   /apikey                        输入 DeepSeek API Key（隐藏输入，推荐）
   /apikey <provider>             输入指定提供商 Key（隐藏输入）
   /apikey <provider> <key>       直接设置指定提供商 Key
+  /session                       查看当前 session
+  /session <id>                  切换到指定 session（不存在则新建）
+  /session new                   新建并切换到一个随机 session
+  /approve                       列出待审批操作
+  /approve <approval_id>         批准（--deny 拒绝）
   /cancel [run_id]               取消当前或指定 Run
   /resume <run_id> [JSON 证据]   续接等待用户的 Run
   exit / quit                    退出\
@@ -523,6 +576,12 @@ async def main() -> None:
 
             parts = user_input.strip().split(maxsplit=2)
             is_exit = parts[0].lower() in {"exit", "quit"}
+            if parts[0] == "/approve":
+                await cli.approve(
+                    parts[1] if len(parts) >= 2 else None,
+                    deny="--deny" in parts[2:] if len(parts) > 2 else False,
+                )
+                continue
             if parts[0] == "/cancel":
                 if len(parts) > 2:
                     print("用法: /cancel 或 /cancel <run_id>")
@@ -537,6 +596,18 @@ async def main() -> None:
                 continue
             if parts[0] == "/apikey":
                 await _handle_apikey_command(parts)
+                continue
+            if parts[0] == "/session":
+                if len(parts) == 1:
+                    print(f"当前 session: {cli._session_id}")
+                    continue
+                target = parts[1]
+                if target == "new":
+                    import uuid
+
+                    target = f"cli-{uuid.uuid4().hex[:8]}"
+                cli._session_id = target
+                print(f"已切换到 session: {target}")
                 continue
 
             if active_task is not None and not active_task.done():

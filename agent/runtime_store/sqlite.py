@@ -29,6 +29,7 @@ from .contracts import (
     PreparedOperation,
     RevisionRecord,
     RunHead,
+    AgentProfileRecord,
     ApprovalRecord,
     HandoffRecord,
     ScheduledTaskRecord,
@@ -531,6 +532,20 @@ class SqliteRuntimeStore:
                     UNIQUE (tenant_id, run_id, event_id),
                     FOREIGN KEY (tenant_id, run_id)
                         REFERENCES run_heads (tenant_id, run_id)
+                );
+
+                CREATE TABLE IF NOT EXISTS agent_profiles (
+                    tenant_id TEXT NOT NULL,
+                    profile_id TEXT NOT NULL,
+                    display_name TEXT NOT NULL DEFAULT '',
+                    planet_affinity TEXT NOT NULL DEFAULT '',
+                    model_ref TEXT NOT NULL DEFAULT '',
+                    skill_refs_json TEXT NOT NULL DEFAULT '[]',
+                    permission_policy_json TEXT NOT NULL DEFAULT '{}',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    store_generation TEXT NOT NULL,
+                    PRIMARY KEY (tenant_id, profile_id)
                 );
 
                 CREATE TABLE IF NOT EXISTS scheduled_tasks (
@@ -1947,6 +1962,112 @@ class SqliteRuntimeStore:
             last_run_id=str(row["last_run_id"]),
             fire_count=int(row["fire_count"]),
             created_at=str(row["created_at"]),
+            store_generation=str(row["store_generation"]),
+        )
+
+    def upsert_profile(
+        self,
+        tenant_id: str,
+        profile_id: str,
+        *,
+        display_name: str = "",
+        planet_affinity: str = "",
+        model_ref: str = "",
+        skill_refs_json: str = "[]",
+        permission_policy_json: str = "{}",
+    ) -> "AgentProfileRecord":
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        profile_id = _require_text(profile_id, "profile_id")
+        with self._write_transaction() as connection:
+            connection.execute(
+                """
+                INSERT INTO agent_profiles
+                    (tenant_id, profile_id, display_name, planet_affinity,
+                     model_ref, skill_refs_json, permission_policy_json,
+                     created_at, updated_at, store_generation)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (tenant_id, profile_id) DO UPDATE SET
+                    display_name = excluded.display_name,
+                    planet_affinity = excluded.planet_affinity,
+                    model_ref = excluded.model_ref,
+                    skill_refs_json = excluded.skill_refs_json,
+                    permission_policy_json = excluded.permission_policy_json,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    tenant_id, profile_id, str(display_name),
+                    str(planet_affinity), str(model_ref),
+                    str(skill_refs_json), str(permission_policy_json),
+                    _now(), _now(), self.store_generation,
+                ),
+            )
+            row = connection.execute(
+                """
+                SELECT tenant_id, profile_id, display_name, planet_affinity,
+                       model_ref, skill_refs_json, permission_policy_json,
+                       created_at, updated_at, store_generation
+                FROM agent_profiles
+                WHERE tenant_id = ? AND profile_id = ?
+                """,
+                (tenant_id, profile_id),
+            ).fetchone()
+            return self._profile_contract(row)
+
+    def get_profile(
+        self, tenant_id: str, profile_id: str
+    ) -> "AgentProfileRecord | None":
+        with self._lock:
+            self._ensure_open()
+            row = self._connection.execute(
+                """
+                SELECT tenant_id, profile_id, display_name, planet_affinity,
+                       model_ref, skill_refs_json, permission_policy_json,
+                       created_at, updated_at, store_generation
+                FROM agent_profiles
+                WHERE tenant_id = ? AND profile_id = ?
+                """,
+                (tenant_id, profile_id),
+            ).fetchone()
+            if row is None or str(row["store_generation"]) != self.store_generation:
+                return None
+            return self._profile_contract(row)
+
+    def list_profiles(
+        self, tenant_id: str, *, limit: int = 200
+    ) -> "list[AgentProfileRecord]":
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        with self._lock:
+            self._ensure_open()
+            rows = self._connection.execute(
+                """
+                SELECT tenant_id, profile_id, display_name, planet_affinity,
+                       model_ref, skill_refs_json, permission_policy_json,
+                       created_at, updated_at, store_generation
+                FROM agent_profiles
+                WHERE tenant_id = ?
+                ORDER BY profile_id ASC
+                LIMIT ?
+                """,
+                (tenant_id, int(limit)),
+            ).fetchall()
+            return [
+                self._profile_contract(row)
+                for row in rows
+                if str(row["store_generation"]) == self.store_generation
+            ]
+
+    @staticmethod
+    def _profile_contract(row: sqlite3.Row) -> "AgentProfileRecord":
+        return AgentProfileRecord(
+            tenant_id=str(row["tenant_id"]),
+            profile_id=str(row["profile_id"]),
+            display_name=str(row["display_name"]),
+            planet_affinity=str(row["planet_affinity"]),
+            model_ref=str(row["model_ref"]),
+            skill_refs_json=str(row["skill_refs_json"]),
+            permission_policy_json=str(row["permission_policy_json"]),
+            created_at=str(row["created_at"]),
+            updated_at=str(row["updated_at"]),
             store_generation=str(row["store_generation"]),
         )
 

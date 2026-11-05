@@ -867,6 +867,91 @@ class UpdateScheduleRequest:
 
 
 @dataclass(frozen=True)
+class ProfileSummary:
+    """Swappable agent binding for a planet/scene."""
+
+    profile_id: str
+    display_name: str
+    planet_affinity: str
+    model_ref: str
+    skill_refs: tuple[str, ...]
+    permission_policy: Mapping[str, JSONValue]
+    updated_at: str
+
+    def to_dict(self) -> dict[str, JSONValue]:
+        return {
+            "profile_id": self.profile_id,
+            "display_name": self.display_name,
+            "planet_affinity": self.planet_affinity,
+            "model_ref": self.model_ref,
+            "skill_refs": list(self.skill_refs),
+            "permission_policy": _thaw_json(self.permission_policy),
+            "updated_at": self.updated_at,
+        }
+
+
+@dataclass(frozen=True)
+class UpsertProfileRequest:
+    tenant_id: str
+    user_id: str
+    session_id: str
+    request_id: str
+    profile_id: str
+    display_name: str = ""
+    planet_affinity: str = ""
+    model_ref: str = ""
+    skill_refs: tuple[str, ...] = ()
+    permission_policy: Mapping[str, JSONValue] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        _required_identifier(self.tenant_id, "tenant_id")
+        _required_identifier(self.user_id, "user_id")
+        _required_identifier(self.session_id, "session_id")
+        _required_identifier(self.request_id, "request_id")
+        _required_identifier(self.profile_id, "profile_id")
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "UpsertProfileRequest":
+        return cls(
+            tenant_id=str(value.get("tenant_id", "")),
+            user_id=str(value.get("user_id", "")),
+            session_id=str(value.get("session_id", "")),
+            request_id=str(value.get("request_id", "")),
+            profile_id=str(value.get("profile_id", "")),
+            display_name=str(value.get("display_name", "")),
+            planet_affinity=str(value.get("planet_affinity", "")),
+            model_ref=str(value.get("model_ref", "")),
+            skill_refs=tuple(str(v) for v in (value.get("skill_refs") or ())),
+            permission_policy=cast(Mapping[str, JSONValue], value.get("permission_policy") or {}),
+        )
+
+
+@dataclass(frozen=True)
+class ListProfilesRequest:
+    tenant_id: str
+    user_id: str
+    session_id: str
+    request_id: str
+    limit: int = 200
+
+    def __post_init__(self) -> None:
+        _required_identifier(self.tenant_id, "tenant_id")
+        _required_identifier(self.user_id, "user_id")
+        _required_identifier(self.session_id, "session_id")
+        _required_identifier(self.request_id, "request_id")
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "ListProfilesRequest":
+        return cls(
+            tenant_id=str(value.get("tenant_id", "")),
+            user_id=str(value.get("user_id", "")),
+            session_id=str(value.get("session_id", "")),
+            request_id=str(value.get("request_id", "")),
+            limit=int(value.get("limit") or 200),
+        )
+
+
+@dataclass(frozen=True)
 class HandoffSummary:
     """Public delegation record: source run -> target run/task."""
 

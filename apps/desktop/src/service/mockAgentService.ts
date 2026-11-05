@@ -14,6 +14,7 @@ import {
   type HandoffSummary,
   type HistoryEntry,
   type ScheduleSummary,
+  type ProfileSummary,
   type TaskHandle,
   type TaskRecord,
   type ResumeRunRequest,
@@ -181,6 +182,14 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
   }
 
   async listHandoffs(): Promise<HandoffSummary[]> {
+    return [];
+  }
+
+  async upsertProfile(): Promise<ProfileSummary> {
+    return {} as ProfileSummary;
+  }
+
+  async listProfiles(): Promise<ProfileSummary[]> {
     return [];
   }
 

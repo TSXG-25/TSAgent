@@ -47,6 +47,8 @@ class SidecarDispatcher:
             LocalTransportMethod.CREATE_SCHEDULE: self._create_schedule,
             LocalTransportMethod.LIST_SCHEDULES: self._list_schedules,
             LocalTransportMethod.UPDATE_SCHEDULE: self._update_schedule,
+            LocalTransportMethod.UPSERT_PROFILE: self._upsert_profile,
+            LocalTransportMethod.LIST_PROFILES: self._list_profiles,
             LocalTransportMethod.READ_EVENTS: self._read_events,
             LocalTransportMethod.SHUTDOWN: self._shutdown,
         }
@@ -229,6 +231,18 @@ class SidecarDispatcher:
 
         request = self._from_dto(UpdateScheduleRequest.from_dict, params)
         return await self._service.update_schedule(request)
+
+    async def _upsert_profile(self, params: Mapping[str, Any]) -> Any:
+        from ..contracts import UpsertProfileRequest
+
+        request = self._from_dto(UpsertProfileRequest.from_dict, params)
+        return await self._service.upsert_profile(request)
+
+    async def _list_profiles(self, params: Mapping[str, Any]) -> Any:
+        from ..contracts import ListProfilesRequest
+
+        request = self._from_dto(ListProfilesRequest.from_dict, params)
+        return await self._service.list_profiles(request)
 
     async def _list_artifacts(self, params: Mapping[str, Any]) -> Any:
         from ..contracts import RunLookupRequest

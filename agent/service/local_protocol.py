@@ -41,6 +41,8 @@ class LocalTransportMethod(str, Enum):
     CREATE_SCHEDULE = "create_schedule"
     LIST_SCHEDULES = "list_schedules"
     UPDATE_SCHEDULE = "update_schedule"
+    UPSERT_PROFILE = "upsert_profile"
+    LIST_PROFILES = "list_profiles"
     READ_EVENTS = "read_events"
     SHUTDOWN = "shutdown"
 

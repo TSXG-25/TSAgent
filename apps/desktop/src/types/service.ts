@@ -475,6 +475,41 @@ export interface ScheduleClient {
   updateSchedule(request: UpdateScheduleRequest): Promise<ScheduleSummary>;
 }
 
+export interface ProfileSummary {
+  profileId: string;
+  displayName: string;
+  planetAffinity: string;
+  modelRef: string;
+  skillRefs: string[];
+  permissionPolicy: Record<string, unknown>;
+  updatedAt: string;
+}
+
+export interface UpsertProfileRequest {
+  tenantId: string;
+  sessionId: string;
+  requestId: string;
+  profileId: string;
+  displayName?: string;
+  planetAffinity?: string;
+  modelRef?: string;
+  skillRefs?: string[];
+  permissionPolicy?: Record<string, unknown>;
+}
+
+export interface ListProfilesRequest {
+  tenantId: string;
+  sessionId: string;
+  requestId: string;
+  limit?: number;
+}
+
+/** Agent profiles — swappable planet bindings for delegated runs. */
+export interface ProfileClient {
+  upsertProfile(request: UpsertProfileRequest): Promise<ProfileSummary>;
+  listProfiles(request: ListProfilesRequest): Promise<ProfileSummary[]>;
+}
+
 /** Delegation records — Sun-side task tree edges. */
 export interface HandoffClient {
   listHandoffs(request: ListHandoffsRequest): Promise<HandoffSummary[]>;
@@ -493,7 +528,7 @@ export interface TaskCatalogClient {
   getTask(request: TaskLookupRequest): Promise<TaskRecord>;
 }
 
-export interface DesktopAgentServiceClient extends AgentServiceClient, RunCatalogClient, TaskCatalogClient, ApprovalClient, SessionCatalogClient, HandoffClient, HistoryClient, ScheduleClient {
+export interface DesktopAgentServiceClient extends AgentServiceClient, RunCatalogClient, TaskCatalogClient, ApprovalClient, SessionCatalogClient, HandoffClient, HistoryClient, ScheduleClient, ProfileClient {
   readonly mode: DesktopAgentServiceMode;
   readonly identity: DesktopIdentity;
   /** Resolve the backend health before the UI begins using the client. */

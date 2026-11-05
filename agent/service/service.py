@@ -511,6 +511,15 @@ class AgentService:
         parent_head = self._store.get_run_head(
             tenant_id, run_context.run_id, session_id=session_id
         )
+        profile = None
+        if profile_id:
+            profile = self._store.get_profile(tenant_id, profile_id)
+            if profile is None:
+                raise AgentServiceError(
+                    ServiceErrorCode.INVALID_REQUEST,
+                    f"agent profile not found: {profile_id}",
+                )
+            target_planet = target_planet or profile.planet_affinity
         # The Task tree lives in the parent session; the delegated Run gets a
         # derived session — one active run per session plus context isolation.
         child_task = self._store.create_task_head(
@@ -521,6 +530,11 @@ class AgentService:
             origin_planet=target_planet,
             owner_profile_id=profile_id,
         )
+        child_text = request_text
+        if profile is not None:
+            label = profile.display_name or profile.profile_id
+            planet = f" @{profile.planet_affinity}" if profile.planet_affinity else ""
+            child_text = f"[Agent: {label}{planet}]\n{request_text}"
         child_session_id = f"{session_id}:subtask:{child_task.task_id}"
         import json as _json
         handoff = self._store.create_handoff(
@@ -540,7 +554,7 @@ class AgentService:
                 user_id=run_context.user_id,
                 session_id=child_session_id,
                 request_id=f"subtask:{child_task.task_id}",
-                request_text=request_text,
+                request_text=child_text,
                 task_id=child_task.task_id,
             )
         )
@@ -645,6 +659,47 @@ class AgentService:
             )
             for r in records
         ]
+
+    async def upsert_profile(self, request: Any) -> Any:
+        self._ensure_open()
+        import json as _json
+
+        record = self._store.upsert_profile(
+            request.tenant_id,
+            request.profile_id,
+            display_name=request.display_name,
+            planet_affinity=request.planet_affinity,
+            model_ref=request.model_ref,
+            skill_refs_json=_json.dumps(list(request.skill_refs)),
+            permission_policy_json=_json.dumps(dict(request.permission_policy)),
+        )
+        return self._profile_summary(record)
+
+    async def list_profiles(self, request: Any) -> list[Any]:
+        self._ensure_open()
+        return [
+            self._profile_summary(r)
+            for r in self._store.list_profiles(
+                request.tenant_id, limit=request.limit
+            )
+        ]
+
+    @staticmethod
+    def _profile_summary(record: Any) -> Any:
+        import json as _json
+        from .contracts import ProfileSummary
+
+        return ProfileSummary(
+            profile_id=record.profile_id,
+            display_name=record.display_name,
+            planet_affinity=record.planet_affinity,
+            model_ref=record.model_ref,
+            skill_refs=tuple(
+                str(v) for v in _json.loads(record.skill_refs_json or "[]")
+            ),
+            permission_policy=_json.loads(record.permission_policy_json or "{}"),
+            updated_at=record.updated_at,
+        )
 
     async def list_history(self, request: Any) -> list[Any]:
         """Jupiter history: request/answer pairs across the session's runs,

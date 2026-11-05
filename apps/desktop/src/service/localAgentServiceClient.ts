@@ -25,12 +25,15 @@ import {
   type SessionSummary,
   type HandoffSummary,
   type HistoryEntry,
+  type ProfileSummary,
   type ScheduleSummary,
   type UpdateScheduleRequest,
+  type UpsertProfileRequest,
   type DecideApprovalRequest,
   type ListApprovalsRequest,
   type ListHandoffsRequest,
   type ListHistoryRequest,
+  type ListProfilesRequest,
   type ListSchedulesRequest,
   type ListSessionsRequest,
   type StartRunRequest,
@@ -233,6 +236,19 @@ function mapArtifact(value: unknown, fallbackRunId: string): ArtifactSummary {
         : undefined,
     createdRevision: numberValue(raw.created_revision ?? 0, "artifact.created_revision"),
     createdAt: typeof raw.created_at === "string" ? raw.created_at : "",
+  };
+}
+
+function mapProfile(value: unknown): ProfileSummary {
+  const raw = isRecord(value) ? value : (() => { throw new Error("profile is not an object"); })();
+  return {
+    profileId: requiredString(raw.profile_id, "profile_id"),
+    displayName: optionalString(raw.display_name) ?? "",
+    planetAffinity: optionalString(raw.planet_affinity) ?? "",
+    modelRef: optionalString(raw.model_ref) ?? "",
+    skillRefs: Array.isArray(raw.skill_refs) ? raw.skill_refs.map(String) : [],
+    permissionPolicy: isRecord(raw.permission_policy) ? raw.permission_policy : {},
+    updatedAt: optionalString(raw.updated_at) ?? "",
   };
 }
 
@@ -519,6 +535,28 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
       decided_by: request.decidedBy ?? this.identity.userId,
     };
     return mapApproval(await this.call("decide_approval", params));
+  }
+
+  async upsertProfile(request: UpsertProfileRequest): Promise<ProfileSummary> {
+    return mapProfile(await this.call("upsert_profile", {
+      tenant_id: request.tenantId, user_id: this.identity.userId,
+      session_id: request.sessionId, request_id: request.requestId,
+      profile_id: request.profileId,
+      display_name: request.displayName ?? "",
+      planet_affinity: request.planetAffinity ?? "",
+      model_ref: request.modelRef ?? "",
+      skill_refs: request.skillRefs ?? [],
+      permission_policy: request.permissionPolicy ?? {},
+    }));
+  }
+
+  async listProfiles(request: ListProfilesRequest): Promise<ProfileSummary[]> {
+    const result = (await this.call("list_profiles", {
+      tenant_id: request.tenantId, user_id: this.identity.userId,
+      session_id: request.sessionId, request_id: request.requestId,
+      limit: request.limit ?? 200,
+    })) as unknown[];
+    return result.map((value) => mapProfile(value));
   }
 
   async createSchedule(request: CreateScheduleRequest): Promise<ScheduleSummary> {

@@ -45,6 +45,22 @@ class TaskHead:
 
 
 @dataclass(frozen=True)
+class AgentProfileRecord:
+    """Swappable agent binding for a planet/scene."""
+
+    tenant_id: str
+    profile_id: str
+    display_name: str
+    planet_affinity: str
+    model_ref: str
+    skill_refs_json: str
+    permission_policy_json: str
+    created_at: str
+    updated_at: str
+    store_generation: str
+
+
+@dataclass(frozen=True)
 class ScheduledTaskRecord:
     """Durable recurring-task schedule (Saturn domain)."""
 

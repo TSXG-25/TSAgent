@@ -203,6 +203,24 @@ class AgentLoop:
         user_input: str,
         user_id: str,
     ) -> str | None:
+        try:
+            return await self._run_impl(
+                state, user_input=user_input, user_id=user_id
+            )
+        finally:
+            run_context = getattr(self._orch, "run_context", None)
+            session = getattr(run_context, "browser_session", None)
+            if session is not None:
+                run_context.browser_session = None
+                await session.close()
+
+    async def _run_impl(
+        self,
+        state: AgentState,
+        *,
+        user_input: str,
+        user_id: str,
+    ) -> str | None:
         """Run the tool-calling loop; return the final answer or None."""
         from agent.goal import GoalState
 
@@ -485,6 +503,86 @@ class AgentLoop:
             cursor += 1
         return messages, index
 
+    async def _approval_gate(
+        self, run_context, tool, call, state
+    ) -> dict[str, Any] | None:
+        """Shared R2+ approval gate — builtin and executor paths both pass
+        through it.  Returns a denial/failure tool message or None to
+        proceed."""
+        if tool.risk_level < "R2":
+            return None
+        delegation = getattr(run_context, "delegation", None)
+        if delegation is None:
+            return None
+        approval_id = f"{getattr(run_context, 'run_id', 'run')}:{call.id}"
+        try:
+            record = await delegation.request_approval(
+                run_context,
+                approval_id=approval_id,
+                action=tool.executor_tool or call.name,
+                scope=str(
+                    call.arguments.get("command")
+                    or call.arguments.get("path")
+                    or call.arguments.get("selector")
+                    or call.arguments.get("code", "")
+                )[:500],
+                params=dict(call.arguments),
+                risk_level=tool.risk_level,
+            )
+        except Exception as exc:
+            return _tool_message(
+                call,
+                "审批请求失败: " + stable_error_message(exc),
+                ok=False, error_code="APPROVAL_FAILED",
+            )
+        if getattr(record, "status", "PENDING") == "DENIED":
+            denials = state.setdefault("authorization_denials", [])
+            denials.append({
+                "tool": tool.executor_tool or call.name,
+                "args": dict(call.arguments),
+                "reason": "user_denied",
+            })
+            return _tool_message(
+                call, "用户拒绝了该操作", ok=False,
+                error_code="APPROVAL_DENIED",
+            )
+        return None
+
+    async def _dispatch_browser(self, call, run_context, workspace) -> dict[str, Any]:
+        from agent.browser.session import BrowserSession
+
+        try:
+            session = await BrowserSession.for_context(run_context)
+            args = call.arguments
+            if call.name == "browser_navigate":
+                out = await session.navigate(str(args["url"]))
+            elif call.name == "browser_snapshot":
+                out = await session.snapshot()
+            elif call.name == "browser_extract":
+                out = await session.extract(str(args["selector"]))
+            elif call.name == "browser_screenshot":
+                if workspace is None:
+                    raise RuntimeError("browser_screenshot 需要工作区")
+                target = workspace.resolve_path(
+                    str(args["path"]), must_exist=False
+                )
+                out = await session.screenshot(str(target))
+            elif call.name == "browser_click":
+                out = await session.click(str(args["selector"]))
+            elif call.name == "browser_type":
+                out = await session.type_text(
+                    str(args["selector"]), str(args["text"])
+                )
+            else:
+                return _tool_message(call, f"未知浏览器工具 {call.name}",
+                                     ok=False, error_code="UNKNOWN_TOOL")
+        except Exception as exc:
+            return _tool_message(
+                call, "浏览器操作失败: " + stable_error_message(exc),
+                ok=False, error_code="BROWSER_FAILED",
+            )
+        return _tool_message(call, out, workspace=workspace)
+
     async def _dispatch(
         self,
         call: ToolCall,
@@ -529,6 +627,15 @@ class AgentLoop:
             await _gate.wait()
 
         if tool.executor_tool is None:
+            if call.name.startswith("browser_"):
+                denied = await self._approval_gate(
+                    run_context, tool, call, state
+                )
+                if denied is not None:
+                    return denied
+                return await self._dispatch_browser(
+                    call, run_context, workspace
+                )
             if tool.mcp is not None:
                 from agent.interruption import await_interruptibly
                 from agent.mcp.client import call_mcp_tool
@@ -654,43 +761,9 @@ class AgentLoop:
             return _tool_message(call, violation, ok=False,
                                  error_code="EFFECT_SCOPE_VIOLATION")
 
-        # One-time human approval for high-impact effects.  The gate parks
-        # the run in WAITING_USER until an external decide_approval lands;
-        # replay of a decided approval_id returns immediately.
-        if tool.risk_level >= "R2":
-            delegation = getattr(run_context, "delegation", None)
-            if delegation is not None:
-                approval_id = f"{getattr(run_context, 'run_id', 'run')}:{call.id}"
-                try:
-                    record = await delegation.request_approval(
-                        run_context,
-                        approval_id=approval_id,
-                        action=tool.executor_tool or call.name,
-                        scope=str(
-                            call.arguments.get("command")
-                            or call.arguments.get("path")
-                            or call.arguments.get("code", "")
-                        )[:500],
-                        params=dict(call.arguments),
-                        risk_level=tool.risk_level,
-                    )
-                except Exception as exc:
-                    return _tool_message(
-                        call,
-                        "审批请求失败: " + stable_error_message(exc),
-                        ok=False, error_code="APPROVAL_FAILED",
-                    )
-                if getattr(record, "status", "PENDING") == "DENIED":
-                    denials = state.setdefault("authorization_denials", [])
-                    denials.append({
-                        "tool": tool.executor_tool,
-                        "args": dict(call.arguments),
-                        "reason": "user_denied",
-                    })
-                    return _tool_message(
-                        call, "用户拒绝了该操作", ok=False,
-                        error_code="APPROVAL_DENIED",
-                    )
+        denied = await self._approval_gate(run_context, tool, call, state)
+        if denied is not None:
+            return denied
 
         task_dict = _task_for_call(call, tool, index)
         plan_tasks = state.setdefault("plan", [])

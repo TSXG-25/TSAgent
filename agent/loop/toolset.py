@@ -113,6 +113,49 @@ _MUTATION_TOOL_NAMES = frozenset({
 })
 
 _CODE_EXECUTION_TOOLS = ("run_python", "run_python_file")
+
+
+def _browser_spec(name: str, desc: str, props: dict, required: list) -> dict:
+    return function_tool_spec(name, desc, {
+        "type": "object", "properties": props, "required": required,
+        "additionalProperties": False,
+    })
+
+
+# Browser tools are stateful (one playwright page per RunContext) — they
+# dispatch through the builtin path, like spawn_subtask.  Read ops are R1;
+# click/type mutate remote state → R2 → approval gate.
+_BROWSER_TOOLS: tuple[tuple[str, str, str, dict], ...] = (
+    ("browser_navigate", "read", "R1", _browser_spec(
+        "browser_navigate", "打开网页并返回页面标题和 URL",
+        {"url": {"type": "string", "description": "http(s) 地址"}},
+        ["url"],
+    )),
+    ("browser_snapshot", "read", "R1", _browser_spec(
+        "browser_snapshot", "读取当前页面正文文本（截断返回）",
+        {}, [],
+    )),
+    ("browser_extract", "read", "R1", _browser_spec(
+        "browser_extract", "读取指定 CSS 选择器元素的文本",
+        {"selector": {"type": "string"}},
+        ["selector"],
+    )),
+    ("browser_screenshot", "read", "R1", _browser_spec(
+        "browser_screenshot", "截取当前页面保存到工作区文件",
+        {"path": {"type": "string", "description": "工作区相对路径"}},
+        ["path"],
+    )),
+    ("browser_click", "execute", "R2", _browser_spec(
+        "browser_click", "点击页面元素（会改变页面/远端状态）",
+        {"selector": {"type": "string"}},
+        ["selector"],
+    )),
+    ("browser_type", "execute", "R2", _browser_spec(
+        "browser_type", "在输入框填入文本（会改变页面/远端状态）",
+        {"selector": {"type": "string"}, "text": {"type": "string"}},
+        ["selector", "text"],
+    )),
+)
 _COMMAND_EXECUTION_TOOLS = ("shell",)
 _WEB_TOOLS = ("web_search", "web_news_search", "web_deep_search", "web_fetch")
 
@@ -189,6 +232,21 @@ def build_toolset(
     # MCP-discovered tools: server schemas enter the catalog verbatim
     # under a namespaced name; the spec's expose_tools allowlist is the
     # authorization decision (see agent.mcp.tools).
+    try:
+        import playwright.async_api  # noqa: F401
+
+        for name, verb, risk, spec in _BROWSER_TOOLS:
+            tools[name] = LoopTool(
+                name=name, executor_tool=None, verb=verb, spec=spec,
+                concurrency_safe=False,
+                risk_level=risk,
+                permission_scope="network" if risk == "R1" else "remote",
+                side_effects=risk == "R2",
+                produces=("file",) if name == "browser_screenshot" else (),
+            )
+    except ImportError:
+        pass
+
     for exposed in mcp_tools:
         name = exposed.catalog_name
         schema = dict(exposed.input_schema or {})

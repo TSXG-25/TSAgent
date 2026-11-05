@@ -142,10 +142,21 @@ def register_default_capabilities():
     # 网络
     registry.register_capability("web_search", "web_search", priority=10)
     registry.register_capability("web_fetch", "web_fetch", priority=10)
+
+    # 浏览器（Mercury Navigator / computer-use）
+    registry.register_capability("browser_navigate", "browser_navigate", priority=10)
+    registry.register_capability("browser_read", "browser_snapshot", priority=10)
+    registry.register_capability("browser_read", "browser_extract", priority=5)
+    registry.register_capability("browser_screenshot", "browser_screenshot", priority=10)
+    registry.register_capability("browser_action", "browser_click", priority=10)
+    registry.register_capability("browser_action", "browser_type", priority=5)
     
     # 办公文档
-    registry.register_capability("office_doc", "read_office", priority=10)
-    registry.register_capability("office_doc", "write_office", priority=10)
+    registry.register_capability("office_doc", "create_docx", priority=10)
+    registry.register_capability("office_doc", "create_pptx", priority=10)
+    registry.register_capability("office_doc", "edit_docx", priority=5)
+    registry.register_capability("office_doc", "edit_pptx", priority=5)
+    registry.register_capability("office_doc", "create_xlsx", priority=10)
     
     # Shell
     registry.register_capability("shell_execution", "shell", priority=10)

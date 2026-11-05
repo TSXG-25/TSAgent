@@ -1626,7 +1626,12 @@ class RunEvent:
         _optional_identifier(self.workflow_id, "workflow_id")
         _optional_identifier(self.stage_id, "stage_id")
         _optional_identifier(self.task_id, "task_id")
-        object.__setattr__(self, "event_type", EventType(self.event_type))
+        try:
+            object.__setattr__(self, "event_type", EventType(self.event_type))
+        except ValueError:
+            # Internal progress events (task.delegated, transcript_compacted,
+            # …) are arbitrary names; the wire contract accepts them as-is.
+            object.__setattr__(self, "event_type", str(self.event_type))
         _positive_integer(self.sequence_number, "sequence_number")
         _nonnegative_integer(self.run_revision, "run_revision")
         if not isinstance(self.timestamp, str) or not self.timestamp.strip():
@@ -1635,7 +1640,25 @@ class RunEvent:
 
     @property
     def is_terminal(self) -> bool:
-        return self.event_type.is_terminal
+        if isinstance(self.event_type, EventType):
+            return self.event_type.is_terminal
+        return str(self.event_type) in {
+            "run_completed", "run_failed", "run_blocked",
+            "run_cancelled", "run_timed_out",
+        }
+
+    @property
+    def public_type(self) -> str:
+        """Versioned public event contract name, e.g. run.started.v1.
+
+        Internal snake_case names stay as-is for durability; the wire form is
+        the dotted versioned contract the plan specifies."""
+        raw = (
+            self.event_type.value
+            if isinstance(self.event_type, EventType)
+            else str(self.event_type)
+        )
+        return f"{raw.replace('_', '.')}.v1"
 
     def to_dict(self) -> dict[str, JSONValue]:
         return {
@@ -1648,6 +1671,7 @@ class RunEvent:
             "stage_id": self.stage_id,
             "task_id": self.task_id,
             "event_type": self.event_type.value,
+            "public_type": self.public_type,
             "timestamp": self.timestamp,
             "payload": _thaw_json(self.payload),
             "run_revision": self.run_revision,

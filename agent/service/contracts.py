@@ -623,6 +623,79 @@ class TaskSnapshot(TaskHandle):
 
 
 @dataclass(frozen=True)
+class CreateSessionRequest:
+    """Request to register a session explicitly (auto-created on first run)."""
+
+    tenant_id: str
+    user_id: str
+    session_id: str
+    request_id: str
+
+    def __post_init__(self) -> None:
+        _required_identifier(self.tenant_id, "tenant_id")
+        _required_identifier(self.user_id, "user_id")
+        _required_identifier(self.session_id, "session_id")
+        _required_identifier(self.request_id, "request_id")
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "CreateSessionRequest":
+        return cls(
+            tenant_id=str(value.get("tenant_id", "")),
+            user_id=str(value.get("user_id", "")),
+            session_id=str(value.get("session_id", "")),
+            request_id=str(value.get("request_id", "")),
+        )
+
+
+@dataclass(frozen=True)
+class ListSessionsRequest:
+    tenant_id: str
+    user_id: str
+    request_id: str
+    limit: int = 500
+
+    def __post_init__(self) -> None:
+        _required_identifier(self.tenant_id, "tenant_id")
+        _required_identifier(self.user_id, "user_id")
+        _required_identifier(self.request_id, "request_id")
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "ListSessionsRequest":
+        return cls(
+            tenant_id=str(value.get("tenant_id", "")),
+            user_id=str(value.get("user_id", "")),
+            request_id=str(value.get("request_id", "")),
+            limit=int(value.get("limit") or 500),
+        )
+
+
+@dataclass(frozen=True)
+class SessionSummary:
+    """Public session handle plus derived run activity."""
+
+    tenant_id: str
+    session_id: str
+    user_id: str
+    created_at: str
+    run_count: int = 0
+    latest_run_id: str = ""
+    latest_status: str = ""
+    latest_updated_at: str = ""
+
+    def to_dict(self) -> dict[str, JSONValue]:
+        return {
+            "tenant_id": self.tenant_id,
+            "session_id": self.session_id,
+            "user_id": self.user_id,
+            "created_at": self.created_at,
+            "run_count": self.run_count,
+            "latest_run_id": self.latest_run_id,
+            "latest_status": self.latest_status,
+            "latest_updated_at": self.latest_updated_at,
+        }
+
+
+@dataclass(frozen=True)
 class ApprovalSummary:
     """Public approval card: request context plus the decision state."""
 

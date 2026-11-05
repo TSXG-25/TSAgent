@@ -18,6 +18,8 @@ export const LOCAL_TRANSPORT_METHODS = [
   "get_task",
   "list_approvals",
   "decide_approval",
+  "create_session",
+  "list_sessions",
   "read_events",
   "shutdown",
 ] as const;

@@ -11,6 +11,7 @@ import {
   type GetRunRequest,
   type CancelRunRequest,
   type ApprovalSummary,
+  type SessionSummary,
   type TaskHandle,
   type TaskRecord,
   type ResumeRunRequest,
@@ -105,6 +106,14 @@ class UnavailableDesktopAgentServiceClient implements DesktopAgentServiceClient 
   }
 
   async decideApproval(): Promise<ApprovalSummary> {
+    throw this.error;
+  }
+
+  async createSession(): Promise<SessionSummary> {
+    throw this.error;
+  }
+
+  async listSessions(): Promise<SessionSummary[]> {
     throw this.error;
   }
 

@@ -45,6 +45,17 @@ class TaskHead:
 
 
 @dataclass(frozen=True)
+class SessionHead:
+    """Registered identity scope for one session (first-class entity)."""
+
+    tenant_id: str
+    session_id: str
+    user_id: str
+    store_generation: str
+    created_at: str
+
+
+@dataclass(frozen=True)
 class ApprovalRecord:
     """Durable approval request/decision for one Run effect."""
 

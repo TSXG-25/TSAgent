@@ -33,6 +33,8 @@ def test_desktop_method_allowlist_is_frozen() -> None:
         "get_task",
         "list_approvals",
         "decide_approval",
+        "create_session",
+        "list_sessions",
         "read_events",
         "shutdown",
     )

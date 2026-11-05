@@ -192,6 +192,9 @@ class AgentService:
         from .run_projector import encode_request_reference
 
         async with self._operation_lock:
+            self._store.ensure_session(
+                request.tenant_id, request.session_id, request.user_id
+            )
             task_id = self._resolve_task_id(request)
             try:
                 reservation = self._store.reserve_service_start(
@@ -444,6 +447,46 @@ class AgentService:
             )
         )
         return next(s for s in snapshots if s.task_id == head.task_id)
+
+    async def create_session(self, request: Any) -> Any:
+        self._ensure_open()
+        head = self._store.ensure_session(
+            request.tenant_id, request.session_id, request.user_id
+        )
+        return self._session_summary(head)
+
+    async def list_sessions(self, request: Any) -> list[Any]:
+        self._ensure_open()
+        heads = self._store.list_sessions(request.tenant_id, limit=request.limit)
+        result = []
+        for head in heads:
+            session_runs = self._store.list_run_heads(
+                head.tenant_id, head.session_id, limit=2000
+            )
+            latest = session_runs[0] if session_runs else None
+            result.append(
+                self._session_summary(
+                    head, run_count=len(session_runs), latest_run=latest
+                )
+            )
+        return result
+
+    @staticmethod
+    def _session_summary(
+        head: Any, *, run_count: int = 0, latest_run: Any = None
+    ) -> Any:
+        from .contracts import SessionSummary
+
+        return SessionSummary(
+            tenant_id=head.tenant_id,
+            session_id=head.session_id,
+            user_id=head.user_id,
+            created_at=head.created_at,
+            run_count=run_count,
+            latest_run_id="" if latest_run is None else latest_run.run_id,
+            latest_status="" if latest_run is None else latest_run.run_status,
+            latest_updated_at="" if latest_run is None else latest_run.updated_at,
+        )
 
     async def request_approval(
         self,

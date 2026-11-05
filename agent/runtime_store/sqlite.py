@@ -31,6 +31,7 @@ from .contracts import (
     RunHead,
     ApprovalRecord,
     ServiceStartReservation,
+    SessionHead,
     RunReadSnapshot,
     RunOutputRecord,
     TaskHead,
@@ -326,6 +327,15 @@ class SqliteRuntimeStore:
                     store_generation TEXT NOT NULL,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS session_heads (
+                    tenant_id TEXT NOT NULL,
+                    session_id TEXT NOT NULL,
+                    user_id TEXT NOT NULL DEFAULT '',
+                    store_generation TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    PRIMARY KEY (tenant_id, session_id)
                 );
 
                 CREATE TABLE IF NOT EXISTS task_heads (
@@ -1493,6 +1503,78 @@ class SqliteRuntimeStore:
                     "approval already decided with a different outcome",
                 )
             return self._approval_contract(row)
+
+    def ensure_session(
+        self,
+        tenant_id: str,
+        session_id: str,
+        user_id: str = "",
+    ) -> "SessionHead":
+        """Idempotent session registration; every scope-ful write path
+        calls this so sessions exist as first-class entities."""
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        session_id = _require_text(session_id, "session_id")
+        with self._write_transaction() as connection:
+            row = connection.execute(
+                """
+                SELECT tenant_id, session_id, user_id, store_generation, created_at
+                FROM session_heads
+                WHERE tenant_id = ? AND session_id = ?
+                """,
+                (tenant_id, session_id),
+            ).fetchone()
+            if row is not None:
+                return self._session_contract(row)
+            connection.execute(
+                """
+                INSERT INTO session_heads
+                    (tenant_id, session_id, user_id, store_generation, created_at)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (tenant_id, session_id, str(user_id), self.store_generation, _now()),
+            )
+            return SessionHead(
+                tenant_id=tenant_id,
+                session_id=session_id,
+                user_id=str(user_id),
+                store_generation=self.store_generation,
+                created_at=_now(),
+            )
+
+    def list_sessions(
+        self,
+        tenant_id: str,
+        *,
+        limit: int = 500,
+    ) -> "list[SessionHead]":
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        with self._lock:
+            self._ensure_open()
+            rows = self._connection.execute(
+                """
+                SELECT tenant_id, session_id, user_id, store_generation, created_at
+                FROM session_heads
+                WHERE tenant_id = ?
+                ORDER BY created_at DESC
+                LIMIT ?
+                """,
+                (tenant_id, int(limit)),
+            ).fetchall()
+            return [
+                self._session_contract(row)
+                for row in rows
+                if str(row["store_generation"]) == self.store_generation
+            ]
+
+    @staticmethod
+    def _session_contract(row: sqlite3.Row) -> "SessionHead":
+        return SessionHead(
+            tenant_id=str(row["tenant_id"]),
+            session_id=str(row["session_id"]),
+            user_id=str(row["user_id"]),
+            store_generation=str(row["store_generation"]),
+            created_at=str(row["created_at"]),
+        )
 
     @staticmethod
     def _approval_contract(row: sqlite3.Row) -> "ApprovalRecord":

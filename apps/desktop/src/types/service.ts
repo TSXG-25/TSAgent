@@ -364,6 +364,37 @@ export interface ApprovalClient {
   decideApproval(request: DecideApprovalRequest): Promise<ApprovalSummary>;
 }
 
+export interface SessionSummary {
+  tenantId: string;
+  sessionId: string;
+  userId: string;
+  createdAt: string;
+  runCount: number;
+  latestRunId: string;
+  latestStatus: string;
+  latestUpdatedAt: string;
+}
+
+export interface CreateSessionRequest {
+  tenantId: string;
+  userId: string;
+  sessionId: string;
+  requestId: string;
+}
+
+export interface ListSessionsRequest {
+  tenantId: string;
+  userId: string;
+  requestId: string;
+  limit?: number;
+}
+
+/** Session catalog — first-class identity scopes for runs/tasks. */
+export interface SessionCatalogClient {
+  createSession(request: CreateSessionRequest): Promise<SessionSummary>;
+  listSessions(request: ListSessionsRequest): Promise<SessionSummary[]>;
+}
+
 /** Task tree catalog — delegation units that Runs attach to. */
 export interface TaskCatalogClient {
   createTask(request: CreateTaskRequest): Promise<TaskHandle>;
@@ -371,7 +402,7 @@ export interface TaskCatalogClient {
   getTask(request: TaskLookupRequest): Promise<TaskRecord>;
 }
 
-export interface DesktopAgentServiceClient extends AgentServiceClient, RunCatalogClient, TaskCatalogClient, ApprovalClient {
+export interface DesktopAgentServiceClient extends AgentServiceClient, RunCatalogClient, TaskCatalogClient, ApprovalClient, SessionCatalogClient {
   readonly mode: DesktopAgentServiceMode;
   readonly identity: DesktopIdentity;
   /** Resolve the backend health before the UI begins using the client. */

@@ -3,6 +3,7 @@ import {
   type ApprovalSummary,
   type ArtifactSummary,
   type CancelRunRequest,
+  type CreateSessionRequest,
   type CreateTaskRequest,
   type DesktopAgentServiceClient,
   type DesktopIdentity,
@@ -20,8 +21,10 @@ import {
   type RunSnapshot,
   type RunStatus,
   type ServiceErrorCode,
+  type SessionSummary,
   type DecideApprovalRequest,
   type ListApprovalsRequest,
+  type ListSessionsRequest,
   type StartRunRequest,
   type TaskHandle,
   type TaskLookupRequest,
@@ -222,6 +225,20 @@ function mapArtifact(value: unknown, fallbackRunId: string): ArtifactSummary {
         : undefined,
     createdRevision: numberValue(raw.created_revision ?? 0, "artifact.created_revision"),
     createdAt: typeof raw.created_at === "string" ? raw.created_at : "",
+  };
+}
+
+function mapSession(value: unknown): SessionSummary {
+  const raw = isRecord(value) ? value : (() => { throw new Error("session is not an object"); })();
+  return {
+    tenantId: requiredString(raw.tenant_id, "tenant_id"),
+    sessionId: requiredString(raw.session_id, "session_id"),
+    userId: optionalString(raw.user_id) ?? "",
+    createdAt: requiredString(raw.created_at, "created_at"),
+    runCount: Number(raw.run_count ?? 0),
+    latestRunId: optionalString(raw.latest_run_id) ?? "",
+    latestStatus: optionalString(raw.latest_status) ?? "",
+    latestUpdatedAt: optionalString(raw.latest_updated_at) ?? "",
   };
 }
 
@@ -450,6 +467,27 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
       decided_by: request.decidedBy ?? this.identity.userId,
     };
     return mapApproval(await this.call("decide_approval", params));
+  }
+
+  async createSession(request: CreateSessionRequest): Promise<SessionSummary> {
+    const params: LocalRpcParams = {
+      tenant_id: request.tenantId,
+      user_id: request.userId,
+      session_id: request.sessionId,
+      request_id: request.requestId,
+    };
+    return mapSession(await this.call("create_session", params));
+  }
+
+  async listSessions(request: ListSessionsRequest): Promise<SessionSummary[]> {
+    const params: LocalRpcParams = {
+      tenant_id: request.tenantId,
+      user_id: request.userId,
+      request_id: request.requestId,
+      limit: request.limit ?? 500,
+    };
+    const result = (await this.call("list_sessions", params)) as unknown[];
+    return result.map((value) => mapSession(value));
   }
 
   async startRun(request: StartRunRequest): Promise<RunHandle> {

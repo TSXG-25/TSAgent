@@ -22,6 +22,7 @@ import {
   type FactRecordSummary,
   type FactForgetResult,
   type ParticipantSummary,
+  type JupiterArtifactSummary,
   type SettingsSummary,
   type WorkspaceSummary,
   type TaskHandle,
@@ -165,6 +166,10 @@ class UnavailableDesktopAgentServiceClient implements DesktopAgentServiceClient 
     throw this.error;
   }
 
+  async searchArtifacts(): Promise<JupiterArtifactSummary[]> {
+    throw this.error;
+  }
+
   async listParticipants(): Promise<ParticipantSummary[]> {
     throw this.error;
   }
@@ -222,6 +227,10 @@ class UnavailableDesktopAgentServiceClient implements DesktopAgentServiceClient 
   }
 
   async readEvents(_request: EventStreamRequest): Promise<RunEvent[]> {
+    throw this.error;
+  }
+
+  async subscribeEvents(_request: EventStreamRequest): Promise<RunEvent[]> {
     throw this.error;
   }
 }

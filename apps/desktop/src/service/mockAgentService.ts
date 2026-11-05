@@ -28,6 +28,7 @@ import {
   type FactRecordSummary,
   type FactForgetResult,
   type ParticipantSummary,
+  type JupiterArtifactSummary,
   type UpsertWorkspaceRequest,
   type DecideApprovalRequest,
   type ProfileSummary,
@@ -376,6 +377,10 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
       content: `Results for "${request.query}" — mock search returns canned content; the local client calls the real provider chain.`,
       sources: [],
     };
+  }
+
+  async searchArtifacts(): Promise<JupiterArtifactSummary[]> {
+    return [];
   }
 
   async listParticipants(): Promise<ParticipantSummary[]> {
@@ -729,6 +734,10 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
   async listArtifacts(request: ListArtifactsRequest): Promise<ArtifactSummary[]> {
     this.getScopedRun(request);
     return clone(this.artifacts.get(request.runId) ?? []);
+  }
+
+  async subscribeEvents(request: EventStreamRequest): Promise<RunEvent[]> {
+    return this.readEvents(request);
   }
 
   async readEvents(request: EventStreamRequest): Promise<RunEvent[]> {

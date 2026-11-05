@@ -2248,6 +2248,67 @@ class SqliteRuntimeStore:
                 if str(r["store_generation"]) == self.store_generation
             ]
 
+    def search_artifacts(
+        self,
+        tenant_id: str,
+        query: str = "",
+        *,
+        session_id: str | None = None,
+        limit: int = 200,
+    ) -> "list[dict[str, Any]]":
+        """Jupiter deep index: artifacts across all sessions of a tenant —
+        the durable index, not a re-scan."""
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        with self._lock:
+            self._ensure_open()
+            rows = self._connection.execute(
+                """
+                SELECT tenant_id, session_id, run_id, artifact_id,
+                       artifact_type, digest, reference, exists_flag,
+                       verified, producer_workflow_id, producer_stage_id,
+                       producer_task_id, updated_at
+                FROM artifact_metadata
+                WHERE tenant_id = ?
+                  AND (? = '' OR session_id = ?)
+                  AND (
+                        ? = ''
+                     OR artifact_id LIKE ?
+                     OR reference LIKE ?
+                     OR artifact_type LIKE ?
+                  )
+                ORDER BY updated_at DESC
+                LIMIT ?
+                """,
+                (
+                    tenant_id,
+                    str(session_id or ""),
+                    str(session_id or ""),
+                    str(query or ""),
+                    f"%{query or ''}%",
+                    f"%{query or ''}%",
+                    f"%{query or ''}%",
+                    int(limit),
+                ),
+            ).fetchall()
+            return [
+                {
+                    "tenant_id": str(r["tenant_id"]),
+                    "session_id": str(r["session_id"]),
+                    "run_id": str(r["run_id"]),
+                    "artifact_id": str(r["artifact_id"]),
+                    "artifact_type": str(r["artifact_type"]),
+                    "digest": str(r["digest"]),
+                    "reference": str(r["reference"]),
+                    "exists": bool(r["exists_flag"]),
+                    "verified": bool(r["verified"]),
+                    "producer_workflow_id": str(r["producer_workflow_id"]),
+                    "producer_stage_id": str(r["producer_stage_id"]),
+                    "producer_task_id": str(r["producer_task_id"]),
+                    "updated_at": str(r["updated_at"]),
+                }
+                for r in rows
+            ]
+
     def ensure_session(
         self,
         tenant_id: str,

@@ -60,6 +60,7 @@ class SidecarDispatcher:
             LocalTransportMethod.LIST_FACTS: self._list_facts,
             LocalTransportMethod.FORGET_FACT: self._forget_fact,
             LocalTransportMethod.LIST_PARTICIPANTS: self._list_participants,
+            LocalTransportMethod.SEARCH_ARTIFACTS: self._search_artifacts,
             LocalTransportMethod.READ_EVENTS: self._read_events,
             LocalTransportMethod.SUBSCRIBE_EVENTS: self._subscribe_events,
             LocalTransportMethod.SHUTDOWN: self._shutdown,
@@ -338,6 +339,12 @@ class SidecarDispatcher:
 
         request = self._from_dto(ListParticipantsRequest.from_dict, params)
         return await self._service.list_participants(request)
+
+    async def _search_artifacts(self, params: Mapping[str, Any]) -> Any:
+        from ..contracts import SearchArtifactsRequest
+
+        request = self._from_dto(SearchArtifactsRequest.from_dict, params)
+        return await self._service.search_artifacts(request)
 
     async def _list_artifacts(self, params: Mapping[str, Any]) -> Any:
         from ..contracts import RunLookupRequest

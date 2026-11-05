@@ -280,6 +280,8 @@ export interface AgentServiceClient {
   resumeRun(request: ResumeRunRequest): Promise<RunHandle>;
   listArtifacts(request: ListArtifactsRequest): Promise<ArtifactSummary[]>;
   readEvents(request: EventStreamRequest): Promise<RunEvent[]>;
+  /** Long-poll variant — holds up to ~8s until new durable events arrive. */
+  subscribeEvents(request: EventStreamRequest): Promise<RunEvent[]>;
 }
 
 export interface HealthSnapshot {
@@ -680,6 +682,33 @@ export interface ListParticipantsRequest {
   requestId: string;
 }
 
+export interface JupiterArtifactSummary {
+  sessionId: string;
+  runId: string;
+  artifactId: string;
+  artifactType: string;
+  reference: string;
+  digest: string;
+  exists: boolean;
+  verified: boolean;
+  producerTaskId: string;
+  updatedAt: string;
+}
+
+export interface SearchArtifactsRequest {
+  tenantId: string;
+  sessionId: string;
+  requestId: string;
+  query?: string;
+  allSessions?: boolean;
+  limit?: number;
+}
+
+/** Jupiter — cross-session artifact index. */
+export interface JupiterClient {
+  searchArtifacts(request: SearchArtifactsRequest): Promise<JupiterArtifactSummary[]>;
+}
+
 /** Session roster — owners and delegated agents. */
 export interface ParticipantClient {
   listParticipants(request: ListParticipantsRequest): Promise<ParticipantSummary[]>;
@@ -709,7 +738,7 @@ export interface TaskCatalogClient {
   getTask(request: TaskLookupRequest): Promise<TaskRecord>;
 }
 
-export interface DesktopAgentServiceClient extends AgentServiceClient, RunCatalogClient, TaskCatalogClient, ApprovalClient, SessionCatalogClient, HandoffClient, HistoryClient, ScheduleClient, ProfileClient, SettingsClient, WorkspaceClient, CapabilityClient, WebSearchClient, SkillClient, MemoryClient, ParticipantClient {
+export interface DesktopAgentServiceClient extends AgentServiceClient, RunCatalogClient, TaskCatalogClient, ApprovalClient, SessionCatalogClient, HandoffClient, HistoryClient, ScheduleClient, ProfileClient, SettingsClient, WorkspaceClient, CapabilityClient, WebSearchClient, SkillClient, MemoryClient, ParticipantClient, JupiterClient {
   readonly mode: DesktopAgentServiceMode;
   readonly identity: DesktopIdentity;
   /** Resolve the backend health before the UI begins using the client. */

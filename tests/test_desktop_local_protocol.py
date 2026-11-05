@@ -54,6 +54,7 @@ def test_desktop_method_allowlist_is_frozen() -> None:
         "list_facts",
         "forget_fact",
         "list_participants",
+        "search_artifacts",
         "read_events",
         "shutdown",
     )

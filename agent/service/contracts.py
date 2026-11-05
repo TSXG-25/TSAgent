@@ -1280,6 +1280,65 @@ class ListParticipantsRequest:
 
 
 @dataclass(frozen=True)
+class JupiterArtifactSummary:
+    """Cross-session artifact index row (Jupiter domain)."""
+
+    session_id: str
+    run_id: str
+    artifact_id: str
+    artifact_type: str
+    reference: str
+    digest: str
+    exists: bool
+    verified: bool
+    producer_task_id: str
+    updated_at: str
+
+    def to_dict(self) -> dict[str, JSONValue]:
+        return {
+            "session_id": self.session_id,
+            "run_id": self.run_id,
+            "artifact_id": self.artifact_id,
+            "artifact_type": self.artifact_type,
+            "reference": self.reference,
+            "digest": self.digest,
+            "exists": self.exists,
+            "verified": self.verified,
+            "producer_task_id": self.producer_task_id,
+            "updated_at": self.updated_at,
+        }
+
+
+@dataclass(frozen=True)
+class SearchArtifactsRequest:
+    tenant_id: str
+    user_id: str
+    session_id: str
+    request_id: str
+    query: str = ""
+    all_sessions: bool = False
+    limit: int = 200
+
+    def __post_init__(self) -> None:
+        _required_identifier(self.tenant_id, "tenant_id")
+        _required_identifier(self.user_id, "user_id")
+        _required_identifier(self.session_id, "session_id")
+        _required_identifier(self.request_id, "request_id")
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "SearchArtifactsRequest":
+        return cls(
+            tenant_id=str(value.get("tenant_id", "")),
+            user_id=str(value.get("user_id", "")),
+            session_id=str(value.get("session_id", "")),
+            request_id=str(value.get("request_id", "")),
+            query=str(value.get("query", "")),
+            all_sessions=bool(value.get("all_sessions", False)),
+            limit=int(value.get("limit") or 200),
+        )
+
+
+@dataclass(frozen=True)
 class HandoffSummary:
     """Public delegation record: source run -> target run/task."""
 

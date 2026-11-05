@@ -813,6 +813,36 @@ class AgentService:
             updated_at=record.updated_at,
         )
 
+    async def search_artifacts(self, request: Any) -> list[Any]:
+        """Jupiter deep index — artifact lookup across sessions."""
+        self._ensure_open()
+        rows = self._store.search_artifacts(
+            request.tenant_id,
+            request.query,
+            session_id=(
+                None if getattr(request, "all_sessions", False)
+                else request.session_id
+            ),
+            limit=getattr(request, "limit", 200) or 200,
+        )
+        from .contracts import JupiterArtifactSummary
+
+        return [
+            JupiterArtifactSummary(
+                session_id=r["session_id"],
+                run_id=r["run_id"],
+                artifact_id=r["artifact_id"],
+                artifact_type=r["artifact_type"],
+                reference=r["reference"],
+                digest=r["digest"],
+                exists=r["exists"],
+                verified=r["verified"],
+                producer_task_id=r["producer_task_id"],
+                updated_at=r["updated_at"],
+            )
+            for r in rows
+        ]
+
     async def list_participants(self, request: Any) -> list[Any]:
         self._ensure_open()
         records = self._store.list_participants(

@@ -52,6 +52,8 @@ import {
   type ForgetFactRequest,
   type ListParticipantsRequest,
   type ParticipantSummary,
+  type SearchArtifactsRequest,
+  type JupiterArtifactSummary,
   type SkillSummary,
   type ListSchedulesRequest,
   type ListSessionsRequest,
@@ -694,6 +696,28 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
     };
   }
 
+  async searchArtifacts(request: SearchArtifactsRequest): Promise<JupiterArtifactSummary[]> {
+    const result = (await this.call("search_artifacts", {
+      tenant_id: request.tenantId, user_id: this.identity.userId,
+      session_id: request.sessionId, request_id: request.requestId,
+      query: request.query ?? "",
+      all_sessions: request.allSessions ?? false,
+      limit: request.limit ?? 200,
+    })) as Array<Record<string, unknown>>;
+    return result.map((raw) => ({
+      sessionId: optionalString(raw.session_id) ?? "",
+      runId: optionalString(raw.run_id) ?? "",
+      artifactId: optionalString(raw.artifact_id) ?? "",
+      artifactType: optionalString(raw.artifact_type) ?? "",
+      reference: optionalString(raw.reference) ?? "",
+      digest: optionalString(raw.digest) ?? "",
+      exists: Boolean(raw.exists),
+      verified: Boolean(raw.verified),
+      producerTaskId: optionalString(raw.producer_task_id) ?? "",
+      updatedAt: optionalString(raw.updated_at) ?? "",
+    }));
+  }
+
   async listParticipants(request: ListParticipantsRequest): Promise<ParticipantSummary[]> {
     const result = (await this.call("list_participants", {
       tenant_id: request.tenantId, user_id: this.identity.userId,
@@ -878,6 +902,24 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
       ...(request.limit === undefined ? {} : { limit: request.limit }),
     };
     return this.project(async () => mapEvents(await this.call("read_events", params), afterSequence));
+  }
+
+  async subscribeEvents(request: EventStreamRequest): Promise<RunEvent[]> {
+    if (!Number.isInteger(request.afterSequence) || request.afterSequence < -1) {
+      throw new AgentServiceClientError({
+        code: "CURSOR_INVALID",
+        message: "event cursor is invalid",
+        retryable: false,
+        runId: request.runId,
+      });
+    }
+    const afterSequence = Math.max(0, request.afterSequence);
+    const params = {
+      ...this.lookupParams(request, "read_events"),
+      after_sequence: afterSequence,
+      ...(request.limit === undefined ? {} : { limit: request.limit }),
+    };
+    return this.project(async () => mapEvents(await this.call("subscribe_events", params), afterSequence));
   }
 
   async shutdown(): Promise<void> {

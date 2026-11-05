@@ -510,6 +510,25 @@ export interface ProfileClient {
   listProfiles(request: ListProfilesRequest): Promise<ProfileSummary[]>;
 }
 
+export interface SettingsSummary {
+  providerMode: string;
+  activeProvider: string;
+  activeModel: string;
+  deepseekModel: string;
+  ollamaModel: string;
+}
+
+export interface GetSettingsRequest {
+  tenantId: string;
+  sessionId: string;
+  requestId: string;
+}
+
+/** Runtime/provider settings surface. */
+export interface SettingsClient {
+  getSettings(request: GetSettingsRequest): Promise<SettingsSummary>;
+}
+
 /** Delegation records — Sun-side task tree edges. */
 export interface HandoffClient {
   listHandoffs(request: ListHandoffsRequest): Promise<HandoffSummary[]>;
@@ -528,7 +547,7 @@ export interface TaskCatalogClient {
   getTask(request: TaskLookupRequest): Promise<TaskRecord>;
 }
 
-export interface DesktopAgentServiceClient extends AgentServiceClient, RunCatalogClient, TaskCatalogClient, ApprovalClient, SessionCatalogClient, HandoffClient, HistoryClient, ScheduleClient, ProfileClient {
+export interface DesktopAgentServiceClient extends AgentServiceClient, RunCatalogClient, TaskCatalogClient, ApprovalClient, SessionCatalogClient, HandoffClient, HistoryClient, ScheduleClient, ProfileClient, SettingsClient {
   readonly mode: DesktopAgentServiceMode;
   readonly identity: DesktopIdentity;
   /** Resolve the backend health before the UI begins using the client. */

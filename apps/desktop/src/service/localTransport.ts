@@ -27,6 +27,7 @@ export const LOCAL_TRANSPORT_METHODS = [
   "update_schedule",
   "upsert_profile",
   "list_profiles",
+  "get_settings",
   "read_events",
   "shutdown",
 ] as const;

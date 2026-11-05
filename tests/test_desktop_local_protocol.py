@@ -42,6 +42,7 @@ def test_desktop_method_allowlist_is_frozen() -> None:
         "update_schedule",
         "upsert_profile",
         "list_profiles",
+        "get_settings",
         "read_events",
         "shutdown",
     )

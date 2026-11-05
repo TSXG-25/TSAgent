@@ -5,6 +5,7 @@ import {
   type CancelRunRequest,
   type CreateScheduleRequest,
   type CreateSessionRequest,
+  type GetSettingsRequest,
   type CreateTaskRequest,
   type DesktopAgentServiceClient,
   type DesktopIdentity,
@@ -27,6 +28,7 @@ import {
   type HistoryEntry,
   type ProfileSummary,
   type ScheduleSummary,
+  type SettingsSummary,
   type UpdateScheduleRequest,
   type UpsertProfileRequest,
   type DecideApprovalRequest,
@@ -236,6 +238,17 @@ function mapArtifact(value: unknown, fallbackRunId: string): ArtifactSummary {
         : undefined,
     createdRevision: numberValue(raw.created_revision ?? 0, "artifact.created_revision"),
     createdAt: typeof raw.created_at === "string" ? raw.created_at : "",
+  };
+}
+
+function mapSettings(value: unknown): SettingsSummary {
+  const raw = isRecord(value) ? value : (() => { throw new Error("settings is not an object"); })();
+  return {
+    providerMode: optionalString(raw.provider_mode) ?? "",
+    activeProvider: optionalString(raw.active_provider) ?? "",
+    activeModel: optionalString(raw.active_model) ?? "",
+    deepseekModel: optionalString(raw.deepseek_model) ?? "",
+    ollamaModel: optionalString(raw.ollama_model) ?? "",
   };
 }
 
@@ -535,6 +548,13 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
       decided_by: request.decidedBy ?? this.identity.userId,
     };
     return mapApproval(await this.call("decide_approval", params));
+  }
+
+  async getSettings(request: GetSettingsRequest): Promise<SettingsSummary> {
+    return mapSettings(await this.call("get_settings", {
+      tenant_id: request.tenantId, user_id: this.identity.userId,
+      session_id: request.sessionId, request_id: request.requestId,
+    }));
   }
 
   async upsertProfile(request: UpsertProfileRequest): Promise<ProfileSummary> {

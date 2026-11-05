@@ -701,6 +701,27 @@ class AgentService:
             updated_at=record.updated_at,
         )
 
+    async def get_settings(self, request: Any) -> Any:
+        self._ensure_open()
+        from .. import llm as _llm_module
+        from .contracts import SettingsSummary
+
+        router = _llm_module.llm
+        try:
+            _provider, name = router._get_active_provider()
+        except Exception:
+            name = "unavailable"
+        return SettingsSummary(
+            provider_mode=router._provider_mode,
+            active_provider=name,
+            active_model=(
+                _llm_module.DEEPSEEK_MODEL if name == "deepseek"
+                else _llm_module.OLLAMA_MODEL if name == "ollama" else ""
+            ),
+            deepseek_model=_llm_module.DEEPSEEK_MODEL,
+            ollama_model=_llm_module.OLLAMA_MODEL,
+        )
+
     async def list_history(self, request: Any) -> list[Any]:
         """Jupiter history: request/answer pairs across the session's runs,
         derived from durable run records — never a second data source."""

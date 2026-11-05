@@ -36,6 +36,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 bootstrap_tools=False,
                 defer_context_creation=True,
             )
+            # Skills index is a cheap SKILL.md scan — not part of the heavy
+            # tool bootstrap this sidecar intentionally defers.
+            from agent.skills import load_project_skills
+
+            load_project_skills()
             if http_port is not None:
                 from .http_server import run_http_sidecar
 

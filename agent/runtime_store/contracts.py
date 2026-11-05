@@ -45,6 +45,24 @@ class TaskHead:
 
 
 @dataclass(frozen=True)
+class MotifRecord:
+    """Pluto exploration motif — a given theme the agent explores until
+    it can report genuine understanding back to the user."""
+
+    tenant_id: str
+    motif_id: str
+    text: str
+    source: str  # "user" | "auto"
+    status: str  # open | exploring | resolved
+    assigned_task_id: str
+    resolution_run_id: str
+    resolution: str
+    created_at: str
+    updated_at: str
+    store_generation: str
+
+
+@dataclass(frozen=True)
 class WorkflowGraphRecord:
     """Persisted node-graph definition for Uranus's workflow canvas."""
 

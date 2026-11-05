@@ -33,6 +33,7 @@ from .contracts import (
     ApprovalRecord,
     SessionParticipantRecord,
     EvaluationRecord,
+    MotifRecord,
     WorkflowGraphRecord,
     WorkspaceRecord,
     HandoffRecord,
@@ -536,6 +537,21 @@ class SqliteRuntimeStore:
                     UNIQUE (tenant_id, run_id, event_id),
                     FOREIGN KEY (tenant_id, run_id)
                         REFERENCES run_heads (tenant_id, run_id)
+                );
+
+                CREATE TABLE IF NOT EXISTS motifs (
+                    tenant_id TEXT NOT NULL,
+                    motif_id TEXT NOT NULL,
+                    text TEXT NOT NULL,
+                    source TEXT NOT NULL DEFAULT 'user',
+                    status TEXT NOT NULL DEFAULT 'open',
+                    assigned_task_id TEXT NOT NULL DEFAULT '',
+                    resolution_run_id TEXT NOT NULL DEFAULT '',
+                    resolution TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    store_generation TEXT NOT NULL,
+                    PRIMARY KEY (tenant_id, motif_id)
                 );
 
                 CREATE TABLE IF NOT EXISTS workflow_graphs (
@@ -2437,6 +2453,105 @@ class SqliteRuntimeStore:
                     verdict=str(r["verdict"]),
                     notes=str(r["notes"]),
                     created_at=str(r["created_at"]),
+                    store_generation=str(r["store_generation"]),
+                )
+                for r in rows
+                if str(r["store_generation"]) == self.store_generation
+            ]
+
+    def upsert_motif(
+        self,
+        tenant_id: str,
+        motif_id: str,
+        *,
+        text: str,
+        source: str = "user",
+    ) -> "MotifRecord":
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        motif_id = _require_text(motif_id, "motif_id")
+        text = _require_text(text, "motif text")
+        now = _now()
+        with self._write_transaction() as connection:
+            connection.execute(
+                """
+                INSERT INTO motifs
+                    (tenant_id, motif_id, text, source, status,
+                     created_at, updated_at, store_generation)
+                VALUES (?, ?, ?, ?, 'open', ?, ?, ?)
+                ON CONFLICT (tenant_id, motif_id) DO UPDATE SET
+                    text = excluded.text, updated_at = excluded.updated_at
+                """,
+                (tenant_id, motif_id, text, str(source), now, now,
+                 self.store_generation),
+            )
+            return MotifRecord(
+                tenant_id=tenant_id, motif_id=motif_id, text=text,
+                source=str(source), status="open", assigned_task_id="",
+                resolution_run_id="", resolution="",
+                created_at=now, updated_at=now,
+                store_generation=self.store_generation,
+            )
+
+    def update_motif(
+        self,
+        tenant_id: str,
+        motif_id: str,
+        *,
+        status: str | None = None,
+        assigned_task_id: str | None = None,
+        resolution_run_id: str | None = None,
+        resolution: str | None = None,
+    ) -> None:
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        motif_id = _require_text(motif_id, "motif_id")
+        sets = ["updated_at = ?"]
+        params: list[Any] = [_now()]
+        if status is not None:
+            sets.append("status = ?"); params.append(status)
+        if assigned_task_id is not None:
+            sets.append("assigned_task_id = ?"); params.append(assigned_task_id)
+        if resolution_run_id is not None:
+            sets.append("resolution_run_id = ?"); params.append(resolution_run_id)
+        if resolution is not None:
+            sets.append("resolution = ?"); params.append(resolution)
+        params.extend([tenant_id, motif_id])
+        with self._write_transaction() as connection:
+            connection.execute(
+                f"UPDATE motifs SET {', '.join(sets)} WHERE tenant_id = ? AND motif_id = ?",
+                params,
+            )
+
+    def list_motifs(
+        self, tenant_id: str, *, status: str | None = None, limit: int = 100
+    ) -> "list[MotifRecord]":
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        sql = """
+            SELECT tenant_id, motif_id, text, source, status, assigned_task_id,
+                   resolution_run_id, resolution, created_at, updated_at,
+                   store_generation
+            FROM motifs WHERE tenant_id = ?
+        """
+        params: list[Any] = [tenant_id]
+        if status:
+            sql += " AND status = ?"
+            params.append(status)
+        sql += " ORDER BY updated_at DESC LIMIT ?"
+        params.append(int(limit))
+        with self._lock:
+            self._ensure_open()
+            rows = self._connection.execute(sql, params).fetchall()
+            return [
+                MotifRecord(
+                    tenant_id=str(r["tenant_id"]),
+                    motif_id=str(r["motif_id"]),
+                    text=str(r["text"]),
+                    source=str(r["source"]),
+                    status=str(r["status"]),
+                    assigned_task_id=str(r["assigned_task_id"]),
+                    resolution_run_id=str(r["resolution_run_id"]),
+                    resolution=str(r["resolution"]),
+                    created_at=str(r["created_at"]),
+                    updated_at=str(r["updated_at"]),
                     store_generation=str(r["store_generation"]),
                 )
                 for r in rows

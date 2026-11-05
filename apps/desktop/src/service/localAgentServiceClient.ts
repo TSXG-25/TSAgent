@@ -62,6 +62,11 @@ import {
   type ListWorkflowGraphsRequest,
   type GraphRunStepSummary,
   type RunWorkflowGraphRequest,
+  type MotifSummary,
+  type CreateMotifRequest,
+  type AssignMotifRequest,
+  type ResolveMotifRequest,
+  type ListMotifsRequest,
   type EvaluationSummary,
   type RecordEvaluationRequest,
   type ListEvaluationsRequest,
@@ -275,6 +280,21 @@ function mapArtifact(value: unknown, fallbackRunId: string): ArtifactSummary {
         : undefined,
     createdRevision: numberValue(raw.created_revision ?? 0, "artifact.created_revision"),
     createdAt: typeof raw.created_at === "string" ? raw.created_at : "",
+  };
+}
+
+function mapMotif(value: unknown): MotifSummary {
+  const raw = isRecord(value) ? value : (() => { throw new Error("motif is not an object"); })();
+  return {
+    motifId: requiredString(raw.motif_id, "motif_id"),
+    text: optionalString(raw.text) ?? "",
+    source: optionalString(raw.source) ?? "",
+    status: optionalString(raw.status) ?? "",
+    assignedTaskId: optionalString(raw.assigned_task_id) ?? "",
+    resolutionRunId: optionalString(raw.resolution_run_id) ?? "",
+    resolution: optionalString(raw.resolution) ?? "",
+    createdAt: optionalString(raw.created_at) ?? "",
+    updatedAt: optionalString(raw.updated_at) ?? "",
   };
 }
 
@@ -812,6 +832,43 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
       owner: request.owner ?? this.identity.userId,
     })) as Record<string, unknown>;
     return mapWorkflowGraph(raw);
+  }
+
+  async createMotif(request: CreateMotifRequest): Promise<MotifSummary> {
+    const raw = (await this.call("create_motif", {
+      tenant_id: request.tenantId, user_id: this.identity.userId,
+      session_id: request.sessionId, request_id: request.requestId,
+      text: request.text, motif_id: request.motifId ?? "",
+      source: request.source ?? "user",
+    })) as Record<string, unknown>;
+    return mapMotif(raw);
+  }
+
+  async assignMotif(request: AssignMotifRequest): Promise<DelegateRunResult> {
+    return this.call("assign_motif", {
+      tenant_id: request.tenantId, user_id: this.identity.userId,
+      session_id: request.sessionId, request_id: request.requestId,
+      motif_id: request.motifId, parent_run_id: request.parentRunId,
+    }) as Promise<DelegateRunResult>;
+  }
+
+  async resolveMotif(request: ResolveMotifRequest): Promise<MotifSummary[]> {
+    const result = (await this.call("resolve_motif", {
+      tenant_id: request.tenantId, user_id: this.identity.userId,
+      session_id: request.sessionId, request_id: request.requestId,
+      motif_id: request.motifId, resolution_run_id: request.resolutionRunId,
+      resolution: request.resolution,
+    })) as Array<Record<string, unknown>>;
+    return result.map((v) => mapMotif(v));
+  }
+
+  async listMotifs(request: ListMotifsRequest): Promise<MotifSummary[]> {
+    const result = (await this.call("list_motifs", {
+      tenant_id: request.tenantId, user_id: this.identity.userId,
+      session_id: request.sessionId, request_id: request.requestId,
+      status: request.status ?? "", limit: request.limit ?? 100,
+    })) as Array<Record<string, unknown>>;
+    return result.map((v) => mapMotif(v));
   }
 
   async runGraph(request: RunWorkflowGraphRequest): Promise<GraphRunStepSummary[]> {

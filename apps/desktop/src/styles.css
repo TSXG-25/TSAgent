@@ -3155,3 +3155,7 @@ html[data-fx="standard"] .ws-root::after { animation: none; }
 .ven-compose-input { width: 100%; background: rgba(255,255,255,.03); border: 1px solid var(--border-base); border-radius: 2px; color: var(--text-main); font-size: 12px; padding: 8px; resize: none; font-family: inherit; }
 .ven-compose-input:focus { outline: none; border-color: var(--planet-accent); }
 .ven-compose-send { align-self: flex-end; }
+
+/* Pluto motif resolution panel */
+.plu-resolution { margin-top: 14px; padding: 10px; border: 1px solid var(--border-base); border-radius: 2px; }
+.plu-resolution h4 { margin: 0 0 8px; font-size: 11px; color: var(--text-muted); }

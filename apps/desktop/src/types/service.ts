@@ -841,6 +841,60 @@ export interface ListWorkflowGraphsRequest {
   limit?: number;
 }
 
+export interface MotifSummary {
+  motifId: string;
+  text: string;
+  source: string;
+  status: string;
+  assignedTaskId: string;
+  resolutionRunId: string;
+  resolution: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateMotifRequest {
+  tenantId: string;
+  sessionId: string;
+  requestId: string;
+  text: string;
+  motifId?: string;
+  source?: string;
+}
+
+export interface AssignMotifRequest {
+  tenantId: string;
+  sessionId: string;
+  requestId: string;
+  motifId: string;
+  parentRunId: string;
+}
+
+export interface ResolveMotifRequest {
+  tenantId: string;
+  sessionId: string;
+  requestId: string;
+  motifId: string;
+  resolutionRunId: string;
+  resolution: string;
+}
+
+export interface ListMotifsRequest {
+  tenantId: string;
+  sessionId: string;
+  requestId: string;
+  status?: string;
+  limit?: number;
+}
+
+/** Pluto motif domain — motif-driven exploration with durable records. */
+export interface MotifClient {
+  createMotif(request: CreateMotifRequest): Promise<MotifSummary>;
+  assignMotif(request: AssignMotifRequest): Promise<DelegateRunResult>;
+  resolveMotif(request: ResolveMotifRequest): Promise<MotifSummary[]>;
+  listMotifs(request: ListMotifsRequest): Promise<MotifSummary[]>;
+}
+
 export interface GraphRunStepSummary {
   nodeId: string;
   taskId: string;
@@ -902,7 +956,7 @@ export interface TaskCatalogClient {
   getTask(request: TaskLookupRequest): Promise<TaskRecord>;
 }
 
-export interface DesktopAgentServiceClient extends AgentServiceClient, RunCatalogClient, TaskCatalogClient, ApprovalClient, SessionCatalogClient, HandoffClient, HistoryClient, ScheduleClient, ProfileClient, SettingsClient, WorkspaceClient, CapabilityClient, WebSearchClient, SkillClient, DelegationClient, MemoryClient, ParticipantClient, JupiterClient, WorkspaceFilesClient, EvaluationClient, WorkflowCatalogClient, WorkflowGraphClient {
+export interface DesktopAgentServiceClient extends AgentServiceClient, RunCatalogClient, TaskCatalogClient, ApprovalClient, SessionCatalogClient, HandoffClient, HistoryClient, ScheduleClient, ProfileClient, SettingsClient, WorkspaceClient, CapabilityClient, WebSearchClient, SkillClient, DelegationClient, MemoryClient, ParticipantClient, JupiterClient, WorkspaceFilesClient, EvaluationClient, WorkflowCatalogClient, WorkflowGraphClient, MotifClient {
   readonly mode: DesktopAgentServiceMode;
   readonly identity: DesktopIdentity;
   /** Resolve the backend health before the UI begins using the client. */

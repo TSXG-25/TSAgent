@@ -66,6 +66,10 @@ class SidecarDispatcher:
             LocalTransportMethod.UPSERT_WORKFLOW_GRAPH: self._upsert_workflow_graph,
             LocalTransportMethod.LIST_WORKFLOW_GRAPHS: self._list_workflow_graphs,
             LocalTransportMethod.RUN_GRAPH: self._run_graph,
+            LocalTransportMethod.CREATE_MOTIF: self._create_motif,
+            LocalTransportMethod.ASSIGN_MOTIF: self._assign_motif,
+            LocalTransportMethod.RESOLVE_MOTIF: self._resolve_motif,
+            LocalTransportMethod.LIST_MOTIFS: self._list_motifs,
             LocalTransportMethod.RECORD_EVALUATION: self._record_evaluation,
             LocalTransportMethod.LIST_EVALUATIONS: self._list_evaluations,
             LocalTransportMethod.LIST_WORKSPACE_FILES: self._list_workspace_files,
@@ -413,6 +417,30 @@ class SidecarDispatcher:
 
         request = self._from_dto(UpsertWorkflowGraphRequest.from_dict, params)
         return await self._service.upsert_workflow_graph(request)
+
+    async def _create_motif(self, params: Mapping[str, Any]) -> Any:
+        from ..contracts import CreateMotifRequest
+
+        request = self._from_dto(CreateMotifRequest.from_dict, params)
+        return await self._service.create_motif(request)
+
+    async def _assign_motif(self, params: Mapping[str, Any]) -> Any:
+        from ..contracts import AssignMotifRequest
+
+        request = self._from_dto(AssignMotifRequest.from_dict, params)
+        return await self._service.assign_motif(request)
+
+    async def _resolve_motif(self, params: Mapping[str, Any]) -> Any:
+        from ..contracts import ResolveMotifRequest
+
+        request = self._from_dto(ResolveMotifRequest.from_dict, params)
+        return await self._service.resolve_motif(request)
+
+    async def _list_motifs(self, params: Mapping[str, Any]) -> Any:
+        from ..contracts import ListMotifsRequest
+
+        request = self._from_dto(ListMotifsRequest.from_dict, params)
+        return await self._service.list_motifs(request)
 
     async def _run_graph(self, params: Mapping[str, Any]) -> Any:
         from ..contracts import RunWorkflowGraphRequest

@@ -35,6 +35,7 @@ import {
   type WorkflowDefinitionSummary,
   type WorkflowGraphSummary,
   type GraphRunStepSummary,
+  type MotifSummary,
   type WorkspaceFileSummary,
   type WorkspaceFileRequest,
   type WorkspaceFileContent,
@@ -452,6 +453,22 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
 
   async upsertWorkflowGraph(): Promise<WorkflowGraphSummary> {
     return {} as WorkflowGraphSummary;
+  }
+
+  async createMotif(): Promise<MotifSummary> {
+    return {} as MotifSummary;
+  }
+
+  async assignMotif(): Promise<DelegateRunResult> {
+    return {} as DelegateRunResult;
+  }
+
+  async resolveMotif(): Promise<MotifSummary[]> {
+    return [];
+  }
+
+  async listMotifs(): Promise<MotifSummary[]> {
+    return [];
   }
 
   async runGraph(): Promise<GraphRunStepSummary[]> {

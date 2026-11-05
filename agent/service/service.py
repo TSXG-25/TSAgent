@@ -979,6 +979,106 @@ class AgentService:
             created_at=record.created_at,
         )
 
+    async def create_motif(self, request: Any) -> Any:
+        self._ensure_open()
+        import uuid
+
+        record = self._store.upsert_motif(
+            request.tenant_id,
+            request.motif_id or f"motif-{uuid.uuid4().hex[:10]}",
+            text=request.text.strip(),
+            source=request.source,
+        )
+        return self._motif_summary(record)
+
+    async def assign_motif(self, request: Any) -> Any:
+        """Delegate a motif to Pluto — links the motif to the delegated task;
+        the exploration run resolves it when it has real understanding."""
+        self._ensure_open()
+        motifs = self._store.list_motifs(request.tenant_id, status="open")
+        motif = next((m for m in motifs if m.motif_id == request.motif_id), None)
+        if motif is None:
+            raise AgentServiceError(
+                ServiceErrorCode.INVALID_REQUEST,
+                f"motif not found or already assigned: {request.motif_id}",
+            )
+        from .contracts import DelegateRunRequest
+
+        delegation = await self.delegate_run(
+            DelegateRunRequest(
+                tenant_id=request.tenant_id,
+                user_id=request.user_id,
+                session_id=request.session_id,
+                request_id=f"{request.request_id}-assign",
+                parent_run_id=request.parent_run_id,
+                request_text=(
+                    f"[母题探索] {motif.text}\n"
+                    "自由发挥——围绕这个母题去探索，真正搞明白后回报结论。"
+                ),
+                target_planet="pluto",
+            )
+        )
+        self._store.update_motif(
+            request.tenant_id,
+            request.motif_id,
+            status="exploring",
+            assigned_task_id=delegation["task_id"],
+        )
+        return delegation
+
+    async def resolve_motif(self, request: Any) -> Any:
+        """Motif resolved — record the reported understanding and write it to
+        long-term memory as a governed fact."""
+        self._ensure_open()
+        self._store.update_motif(
+            request.tenant_id,
+            request.motif_id,
+            status="resolved",
+            resolution_run_id=request.resolution_run_id,
+            resolution=request.resolution.strip(),
+        )
+        from agent.memory.long_term import _persist_fact
+
+        _persist_fact(
+            f"{request.tenant_id}:{request.user_id}",
+            "motif",
+            request.motif_id,
+            request.resolution.strip(),
+            scope="user",
+            action="INSERT",
+            evidence_id=request.request_id,
+            source_kind="motif",
+            source_ref=request.motif_id,
+        )
+        return self._motif_summaries(request.tenant_id)
+
+    def _motif_summary(self, record: Any) -> Any:
+        from .contracts import MotifSummary
+
+        return MotifSummary(
+            motif_id=record.motif_id,
+            text=record.text,
+            source=record.source,
+            status=record.status,
+            assigned_task_id=record.assigned_task_id,
+            resolution_run_id=record.resolution_run_id,
+            resolution=record.resolution,
+            created_at=record.created_at,
+            updated_at=record.updated_at,
+        )
+
+    def _motif_summaries(self, tenant_id: str) -> list[Any]:
+        return [self._motif_summary(r) for r in self._store.list_motifs(tenant_id)]
+
+    async def list_motifs(self, request: Any) -> list[Any]:
+        self._ensure_open()
+        records = self._store.list_motifs(
+            request.tenant_id,
+            status=request.status or None,
+            limit=request.limit or 100,
+        )
+        return [self._motif_summary(r) for r in records]
+
     async def upsert_workflow_graph(self, request: Any) -> Any:
         self._ensure_open()
         import json as _json

@@ -27,6 +27,7 @@ import {
   type WorkflowDefinitionSummary,
   type WorkflowGraphSummary,
   type GraphRunStepSummary,
+  type MotifSummary,
   type WorkspaceFileSummary,
   type WorkspaceFileContent,
   type EvaluationSummary,
@@ -194,6 +195,22 @@ class UnavailableDesktopAgentServiceClient implements DesktopAgentServiceClient 
   }
 
   async upsertWorkflowGraph(): Promise<WorkflowGraphSummary> {
+    throw this.error;
+  }
+
+  async createMotif(): Promise<MotifSummary> {
+    throw this.error;
+  }
+
+  async assignMotif(): Promise<DelegateRunResult> {
+    throw this.error;
+  }
+
+  async resolveMotif(): Promise<MotifSummary[]> {
+    throw this.error;
+  }
+
+  async listMotifs(): Promise<MotifSummary[]> {
     throw this.error;
   }
 

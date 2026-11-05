@@ -32,6 +32,7 @@ class SidecarDispatcher:
             LocalTransportMethod.START_RUN: self._start_run,
             LocalTransportMethod.GET_RUN: self._get_run,
             LocalTransportMethod.RESUME_RUN: self._resume_run,
+            LocalTransportMethod.PAUSE_RUN: self._pause_run,
             LocalTransportMethod.CANCEL_RUN: self._cancel_run,
             LocalTransportMethod.LIST_ARTIFACTS: self._list_artifacts,
             LocalTransportMethod.LIST_RUNS: self._list_runs,
@@ -53,6 +54,8 @@ class SidecarDispatcher:
             LocalTransportMethod.UPDATE_SETTINGS: self._update_settings,
             LocalTransportMethod.UPSERT_WORKSPACE: self._upsert_workspace,
             LocalTransportMethod.LIST_WORKSPACES: self._list_workspaces,
+            LocalTransportMethod.LIST_CAPABILITIES: self._list_capabilities,
+            LocalTransportMethod.WEB_SEARCH: self._web_search,
             LocalTransportMethod.READ_EVENTS: self._read_events,
             LocalTransportMethod.SHUTDOWN: self._shutdown,
         }
@@ -271,6 +274,37 @@ class SidecarDispatcher:
 
         request = self._from_dto(ListWorkspacesRequest.from_dict, params)
         return await self._service.list_workspaces(request)
+
+    async def _list_capabilities(self, params: Mapping[str, Any]) -> Any:
+        """Expose the runtime capability registry to the desktop UI — scene
+        'not installed' badges reflect the real registry, not UI guesses."""
+        from agent.registry.capability_registry import registry
+
+        return [
+            {"capability": name, "tools": registry.get_tools_for_capability(name)}
+            for name in registry.get_all_capabilities()
+        ]
+
+    async def _web_search(self, params: Mapping[str, Any]) -> Any:
+        """Mercury search — real provider chain (duckduckgo -> deepseek);
+        surfaces provider errors instead of fabricating results."""
+        from agent.search.providers import run_search
+
+        query = str(params.get("query", "")).strip()
+        if not query:
+            raise ValueError("query must be a non-empty string")
+        outcome = await run_search(query, max_results=int(params.get("max_results", 8)))
+        return {
+            "provider": outcome.provider,
+            "content": outcome.content,
+            "sources": outcome.sources,
+        }
+
+    async def _pause_run(self, params: Mapping[str, Any]) -> Any:
+        from ..contracts import PauseRunRequest
+
+        request = self._from_dto(PauseRunRequest.from_dict, params)
+        return await self._service.pause_run(request)
 
     async def _list_artifacts(self, params: Mapping[str, Any]) -> Any:
         from ..contracts import RunLookupRequest

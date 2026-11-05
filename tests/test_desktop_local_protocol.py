@@ -25,6 +25,7 @@ def test_desktop_method_allowlist_is_frozen() -> None:
         "start_run",
         "get_run",
         "resume_run",
+        "pause_run",
         "cancel_run",
         "list_artifacts",
         "list_runs",
@@ -46,6 +47,8 @@ def test_desktop_method_allowlist_is_frozen() -> None:
         "update_settings",
         "upsert_workspace",
         "list_workspaces",
+        "list_capabilities",
+        "web_search",
         "read_events",
         "shutdown",
     )

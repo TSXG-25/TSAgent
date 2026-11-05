@@ -44,6 +44,14 @@ export type ResumeAction =
   | "REPLAN_FROM_CHECKPOINT"
   | "ABANDON_AND_RESTART";
 
+export interface PauseRunRequest {
+  tenantId: string;
+  sessionId: string;
+  runId: string;
+  requestId: string;
+  requestedBy?: string;
+}
+
 export interface ResumeRunRequest {
   tenantId: string;
   sessionId: string;
@@ -573,6 +581,41 @@ export interface WorkspaceClient {
   listWorkspaces(request: ListWorkspacesRequest): Promise<WorkspaceSummary[]>;
 }
 
+export interface CapabilitySummary {
+  capability: string;
+  tools: string[];
+}
+
+export interface ListCapabilitiesRequest {
+  tenantId: string;
+  sessionId: string;
+  requestId: string;
+}
+
+export interface WebSearchRequest {
+  tenantId: string;
+  sessionId: string;
+  requestId: string;
+  query: string;
+  maxResults?: number;
+}
+
+export interface WebSearchResult {
+  provider: string;
+  content: string;
+  sources: Array<Record<string, unknown>>;
+}
+
+/** Mercury — real web search via the backend provider chain. */
+export interface WebSearchClient {
+  webSearch(request: WebSearchRequest): Promise<WebSearchResult>;
+}
+
+/** Runtime capability registry — drives scene "not installed" states. */
+export interface CapabilityClient {
+  listCapabilities(request: ListCapabilitiesRequest): Promise<CapabilitySummary[]>;
+}
+
 /** Delegation records — Sun-side task tree edges. */
 export interface HandoffClient {
   listHandoffs(request: ListHandoffsRequest): Promise<HandoffSummary[]>;
@@ -591,7 +634,7 @@ export interface TaskCatalogClient {
   getTask(request: TaskLookupRequest): Promise<TaskRecord>;
 }
 
-export interface DesktopAgentServiceClient extends AgentServiceClient, RunCatalogClient, TaskCatalogClient, ApprovalClient, SessionCatalogClient, HandoffClient, HistoryClient, ScheduleClient, ProfileClient, SettingsClient, WorkspaceClient {
+export interface DesktopAgentServiceClient extends AgentServiceClient, RunCatalogClient, TaskCatalogClient, ApprovalClient, SessionCatalogClient, HandoffClient, HistoryClient, ScheduleClient, ProfileClient, SettingsClient, WorkspaceClient, CapabilityClient, WebSearchClient {
   readonly mode: DesktopAgentServiceMode;
   readonly identity: DesktopIdentity;
   /** Resolve the backend health before the UI begins using the client. */

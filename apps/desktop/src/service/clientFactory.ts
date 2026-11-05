@@ -16,6 +16,8 @@ import {
   type HistoryEntry,
   type ScheduleSummary,
   type ProfileSummary,
+  type CapabilitySummary,
+  type WebSearchResult,
   type SettingsSummary,
   type WorkspaceSummary,
   type TaskHandle,
@@ -151,6 +153,14 @@ class UnavailableDesktopAgentServiceClient implements DesktopAgentServiceClient 
     throw this.error;
   }
 
+  async listCapabilities(): Promise<CapabilitySummary[]> {
+    throw this.error;
+  }
+
+  async webSearch(): Promise<WebSearchResult> {
+    throw this.error;
+  }
+
   async createSchedule(): Promise<ScheduleSummary> {
     throw this.error;
   }
@@ -176,6 +186,10 @@ class UnavailableDesktopAgentServiceClient implements DesktopAgentServiceClient 
   }
 
   async cancelRun(_request: CancelRunRequest): Promise<RunSnapshot> {
+    throw this.error;
+  }
+
+  async pauseRun(): Promise<RunSnapshot> {
     throw this.error;
   }
 

@@ -1111,6 +1111,36 @@ class ListWorkspacesRequest:
 
 
 @dataclass(frozen=True)
+class PauseRunRequest:
+    """Identity-complete request to suspend a locally-executing run."""
+
+    tenant_id: str
+    user_id: str
+    session_id: str
+    run_id: str
+    request_id: str
+    requested_by: str = ""
+
+    def __post_init__(self) -> None:
+        _required_identifier(self.tenant_id, "tenant_id")
+        _required_identifier(self.user_id, "user_id")
+        _required_identifier(self.session_id, "session_id")
+        _required_identifier(self.run_id, "run_id")
+        _required_identifier(self.request_id, "request_id")
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "PauseRunRequest":
+        return cls(
+            tenant_id=str(value.get("tenant_id", "")),
+            user_id=str(value.get("user_id", "")),
+            session_id=str(value.get("session_id", "")),
+            run_id=str(value.get("run_id", "")),
+            request_id=str(value.get("request_id", "")),
+            requested_by=str(value.get("requested_by", "")),
+        )
+
+
+@dataclass(frozen=True)
 class HandoffSummary:
     """Public delegation record: source run -> target run/task."""
 

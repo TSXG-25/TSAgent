@@ -5909,6 +5909,7 @@ class SqliteRuntimeStore:
                 "FAILED_TERMINAL": {"run_failed"},
                 "BLOCKED": {"run_blocked"},
                 "WAITING_USER": {"run_waiting_user"},
+                "SUSPENDED": {"run_suspended"},
                 "CANCELLED": {"run_cancelled"},
                 "TIMED_OUT": {"run_timed_out"},
             }
@@ -5921,6 +5922,7 @@ class SqliteRuntimeStore:
                     "FAILED_TERMINAL",
                     "BLOCKED",
                     "WAITING_USER",
+                    "SUSPENDED",
                 },
                 "SUSPENDED": {"RUNNING", "CANCELLING"},
                 "WAITING_USER": {"RUNNING", "CANCELLING"},

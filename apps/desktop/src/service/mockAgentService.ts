@@ -17,6 +17,14 @@ import {
   type CreateScheduleRequest,
   type UpdateScheduleRequest,
   type ListHistoryRequest,
+  type ListApprovalsRequest,
+  type UpdateSettingsRequest,
+  type UpsertProfileRequest,
+  type CreateTaskRequest,
+  type CapabilitySummary,
+  type WebSearchRequest,
+  type WebSearchResult,
+  type DecideApprovalRequest,
   type ProfileSummary,
   type SettingsSummary,
   type WorkspaceSummary,
@@ -159,24 +167,71 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
     return this.listRunsSync();
   }
 
-  async createTask(): Promise<TaskHandle> {
-    throw clientError("UNSUPPORTED_OPERATION", "mock client does not manage tasks");
+  private tasks: TaskRecord[] = [];
+
+  async createTask(request: CreateTaskRequest): Promise<TaskHandle> {
+    const task: TaskRecord = {
+      tenantId: request.tenantId,
+      sessionId: request.sessionId,
+      taskId: request.taskId ?? `task-${Math.random().toString(16).slice(2, 10)}`,
+      parentTaskId: request.parentTaskId ?? "",
+      originPlanet: request.originPlanet ?? "",
+      ownerProfileId: request.ownerProfileId ?? "",
+      createdAt: new Date().toISOString(),
+      status: "queued",
+      runIds: [],
+      childTaskIds: [],
+    };
+    this.tasks = [task, ...this.tasks];
+    return task;
   }
 
   async listTasks(): Promise<TaskRecord[]> {
-    return [];
+    return [...this.tasks, ...[...this.snapshots.values()].map((run) => ({
+      tenantId: run.tenantId,
+      sessionId: run.sessionId,
+      taskId: `task-${run.runId}`,
+      parentTaskId: "",
+      originPlanet: "sun",
+      ownerProfileId: "",
+      createdAt: run.createdAt,
+      status: run.status,
+      runIds: [run.runId],
+      childTaskIds: [],
+    }))];
   }
 
   async getTask(): Promise<TaskRecord> {
     throw clientError("UNSUPPORTED_OPERATION", "mock client does not manage tasks");
   }
 
-  async listApprovals(): Promise<ApprovalSummary[]> {
-    return [];
+  private approvals: ApprovalSummary[] = [
+    {
+      approvalId: "appr-demo-01",
+      runId: "run-2048",
+      action: "file.write",
+      scope: "workspace:/output",
+      params: { path: "output/summary.md" },
+      riskLevel: "R1",
+      status: "PENDING",
+      decidedBy: "",
+      decidedAt: "",
+      createdAt: new Date().toISOString(),
+    },
+  ];
+
+  async listApprovals(request: ListApprovalsRequest): Promise<ApprovalSummary[]> {
+    const status = request.status;
+    return this.approvals.filter((a) => !status || a.status === status);
   }
 
-  async decideApproval(): Promise<ApprovalSummary> {
-    throw clientError("UNSUPPORTED_OPERATION", "mock client does not manage approvals");
+  async decideApproval(request: DecideApprovalRequest): Promise<ApprovalSummary> {
+    this.approvals = this.approvals.map((a) =>
+      a.approvalId === request.approvalId
+        ? { ...a, status: request.decision === "approve" ? "APPROVED" : "DENIED", decidedBy: request.decidedBy ?? "user", decidedAt: new Date().toISOString() }
+        : a,
+    );
+    return this.approvals.find((a) => a.approvalId === request.approvalId)!;
   }
 
   async createSession(): Promise<SessionSummary> {
@@ -184,11 +239,39 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
   }
 
   async listSessions(): Promise<SessionSummary[]> {
-    return [];
+    const bySession = new Map<string, SessionSummary>();
+    for (const run of this.snapshots.values()) {
+      const existing = bySession.get(run.sessionId);
+      bySession.set(run.sessionId, {
+        tenantId: run.tenantId,
+        sessionId: run.sessionId,
+        userId: this.identity.userId,
+        createdAt: existing?.createdAt ?? run.createdAt,
+        runCount: (existing?.runCount ?? 0) + 1,
+        latestRunId: run.runId,
+        latestStatus: run.status,
+        latestUpdatedAt: run.updatedAt,
+      });
+    }
+    return [...bySession.values()];
   }
 
+  private handoffs: HandoffSummary[] = [
+    {
+      handoffId: "handoff-demo-01",
+      sourceRunId: "run-2048",
+      sourceTaskId: "task-run-2048",
+      targetTaskId: "task-sub-research",
+      targetRunId: "",
+      targetPlanet: "mercury",
+      contextRefs: ["artifact:research_notes"],
+      approvalState: "not_required",
+      createdAt: new Date().toISOString(),
+    },
+  ];
+
   async listHandoffs(): Promise<HandoffSummary[]> {
-    return [];
+    return [...this.handoffs];
   }
 
   async upsertWorkspace(): Promise<WorkspaceSummary> {
@@ -199,20 +282,84 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
     return [];
   }
 
-  async updateSettings(): Promise<SettingsSummary> {
-    return {} as SettingsSummary;
+  private settings: SettingsSummary = {
+    providerMode: "api",
+    activeProvider: "deepseek",
+    activeModel: "deepseek-chat",
+    deepseekModel: "deepseek-chat",
+    ollamaModel: "llama3.1",
+  };
+
+  async updateSettings(request: UpdateSettingsRequest): Promise<SettingsSummary> {
+    this.settings = {
+      ...this.settings,
+      ...(request.providerMode !== undefined ? { providerMode: request.providerMode } : {}),
+      ...(request.deepseekModel !== undefined ? { deepseekModel: request.deepseekModel } : {}),
+      ...(request.ollamaModel !== undefined ? { ollamaModel: request.ollamaModel } : {}),
+      ...(request.providerMode === "api" ? { activeProvider: "deepseek", activeModel: this.settings.deepseekModel } : {}),
+      ...(request.providerMode === "local" ? { activeProvider: "ollama", activeModel: this.settings.ollamaModel } : {}),
+    };
+    return { ...this.settings };
   }
 
   async getSettings(): Promise<SettingsSummary> {
-    return {} as SettingsSummary;
+    return { ...this.settings };
   }
 
-  async upsertProfile(): Promise<ProfileSummary> {
-    return {} as ProfileSummary;
+  private profiles: ProfileSummary[] = [
+    {
+      profileId: "profile-navigator",
+      displayName: "Navigator",
+      planetAffinity: "mercury",
+      modelRef: "deepseek-chat",
+      skillRefs: ["browser", "web_search"],
+      permissionPolicy: { risk: "R1" },
+      updatedAt: new Date().toISOString(),
+    },
+    {
+      profileId: "profile-forge",
+      displayName: "Forge",
+      planetAffinity: "mars",
+      modelRef: "deepseek-chat",
+      skillRefs: ["filesystem", "terminal"],
+      permissionPolicy: { risk: "R2" },
+      updatedAt: new Date().toISOString(),
+    },
+  ];
+
+  async upsertProfile(request: UpsertProfileRequest): Promise<ProfileSummary> {
+    const next: ProfileSummary = {
+      profileId: request.profileId,
+      displayName: request.displayName ?? "",
+      planetAffinity: request.planetAffinity ?? "",
+      modelRef: request.modelRef ?? "",
+      skillRefs: request.skillRefs ?? [],
+      permissionPolicy: request.permissionPolicy ?? {},
+      updatedAt: new Date().toISOString(),
+    };
+    this.profiles = [next, ...this.profiles.filter((p) => p.profileId !== next.profileId)];
+    return next;
   }
 
   async listProfiles(): Promise<ProfileSummary[]> {
-    return [];
+    return [...this.profiles];
+  }
+
+  async webSearch(request: WebSearchRequest): Promise<WebSearchResult> {
+    return {
+      provider: "duckduckgo",
+      content: `Results for "${request.query}" — mock search returns canned content; the local client calls the real provider chain.`,
+      sources: [],
+    };
+  }
+
+  async listCapabilities(): Promise<CapabilitySummary[]> {
+    return [
+      { capability: "file_read", tools: ["read_file"] },
+      { capability: "file_write", tools: ["write_file"] },
+      { capability: "web_search", tools: ["duckduckgo_search"] },
+      { capability: "code_execution", tools: ["run_python"] },
+    ];
   }
 
   private schedules: ScheduleSummary[] = [];
@@ -400,6 +547,10 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
     }, 120);
 
     return clone(cancelling);
+  }
+
+  async pauseRun(): Promise<RunSnapshot> {
+    return {} as RunSnapshot;
   }
 
   async resumeRun(request: ResumeRunRequest): Promise<RunHandle> {

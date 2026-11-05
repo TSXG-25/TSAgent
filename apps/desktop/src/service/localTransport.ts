@@ -10,6 +10,7 @@ export const LOCAL_TRANSPORT_METHODS = [
   "start_run",
   "get_run",
   "resume_run",
+  "pause_run",
   "cancel_run",
   "list_artifacts",
   "list_runs",
@@ -31,6 +32,8 @@ export const LOCAL_TRANSPORT_METHODS = [
   "update_settings",
   "upsert_workspace",
   "list_workspaces",
+  "list_capabilities",
+  "web_search",
   "read_events",
   "shutdown",
 ] as const;

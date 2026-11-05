@@ -26,6 +26,7 @@ class LocalTransportMethod(str, Enum):
     START_RUN = "start_run"
     GET_RUN = "get_run"
     RESUME_RUN = "resume_run"
+    PAUSE_RUN = "pause_run"
     CANCEL_RUN = "cancel_run"
     LIST_ARTIFACTS = "list_artifacts"
     LIST_RUNS = "list_runs"
@@ -47,6 +48,8 @@ class LocalTransportMethod(str, Enum):
     UPDATE_SETTINGS = "update_settings"
     UPSERT_WORKSPACE = "upsert_workspace"
     LIST_WORKSPACES = "list_workspaces"
+    LIST_CAPABILITIES = "list_capabilities"
+    WEB_SEARCH = "web_search"
     READ_EVENTS = "read_events"
     SHUTDOWN = "shutdown"
 

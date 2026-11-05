@@ -521,6 +521,13 @@ class AgentLoop:
                 error_code="INVALID_TOOL_ARGUMENT",
             )
 
+        # Cooperative pause: pause_run parks the loop on a gate; resume_run
+        # releases it.  Checked at each tool boundary — a safe boundary with
+        # no in-flight side effect.
+        _gate = getattr(run_context, "_pause_gate", None)
+        if _gate is not None:
+            await _gate.wait()
+
         if tool.executor_tool is None:
             if tool.mcp is not None:
                 from agent.interruption import await_interruptibly

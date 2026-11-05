@@ -1132,6 +1132,54 @@ class AgentService:
 
         return datetime.now(timezone.utc).isoformat()
 
+    async def pause_run(self, request: Any) -> RunHandle:
+        """Suspend a locally-executing run at the next tool boundary.
+
+        The parked asyncio task waits on a gate — no progress is lost, no
+        checkpoint needed; resume_run releases the gate."""
+        import asyncio
+
+        self._ensure_open()
+        async with self._operation_lock:
+            head = self._store.get_run_head(
+                request.tenant_id, request.run_id, session_id=request.session_id
+            )
+            if head is None or head.run_status != "RUNNING":
+                raise AgentServiceError(
+                    ServiceErrorCode.INVALID_REQUEST,
+                    "run is not actively running",
+                )
+            managed = self._runs.get(request.run_id)
+            if managed is None or managed.run_context is None:
+                raise AgentServiceError(
+                    ServiceErrorCode.INVALID_REQUEST,
+                    "run is not executing in this service",
+                )
+            run_context = managed.run_context
+            gate = asyncio.Event()  # starts unset → wait() parks
+            run_context._pause_gate = gate
+            view = run_context.durable_store_view
+            timestamp = self._timestamp()
+            view.transition_run_with_event(
+                run_status="SUSPENDED",
+                event_id=f"run_suspended:{view.run_id}:{view.head().current_revision}",
+                event_type="run_suspended",
+                timestamp=timestamp,
+                payload={
+                    "requested_by": getattr(request, "requested_by", "")
+                    or request.user_id,
+                },
+            )
+            return await self.get_run(
+                RunLookupRequest(
+                    tenant_id=request.tenant_id,
+                    user_id=request.user_id,
+                    session_id=request.session_id,
+                    run_id=request.run_id,
+                    request_id=f"{request.request_id}-read",
+                )
+            )
+
     async def resume_run(self, request: ResumeRunRequest) -> RunHandle:
         import asyncio
 
@@ -1151,6 +1199,33 @@ class AgentService:
                         "run not found",
                     )
                 status = str(head.run_status).upper()
+                # Gate-parked run: the asyncio task is alive, just waiting —
+                # release the gate and transition back; do NOT relaunch.
+                if status == "SUSPENDED":
+                    managed = self._runs.get(request.run_id)
+                    if managed is not None and managed.run_context is not None:
+                        gate = getattr(managed.run_context, "_pause_gate", None)
+                        view = managed.run_context.durable_store_view
+                        view.transition_run_with_event(
+                            run_status="RUNNING",
+                            event_id=f"run_resumed:{view.run_id}:{view.head().current_revision}",
+                            event_type="run_resumed",
+                            timestamp=self._timestamp(),
+                            payload={"reason": "unsuspend"},
+                        )
+                        if gate is not None:
+                            gate.set()
+                        return await self.get_run(
+                            RunLookupRequest(
+                                tenant_id=request.tenant_id,
+                                user_id=request.user_id,
+                                session_id=request.session_id,
+                                run_id=request.run_id,
+                                request_id=f"{request.request_id}-read",
+                            )
+                        )
+                    # No local task (service restarted while suspended) — fall
+                    # through to the normal checkpoint-resume path.
                 if status in {
                     "COMPLETED",
                     "FAILED_TERMINAL",

@@ -33,6 +33,7 @@ import {
   type UpdateSettingsRequest,
   type UpsertWorkspaceRequest,
   type ListWorkspacesRequest,
+  type PauseRunRequest,
   type WorkspaceSummary,
   type UpsertProfileRequest,
   type DecideApprovalRequest,
@@ -40,6 +41,10 @@ import {
   type ListHandoffsRequest,
   type ListHistoryRequest,
   type ListProfilesRequest,
+  type ListCapabilitiesRequest,
+  type CapabilitySummary,
+  type WebSearchRequest,
+  type WebSearchResult,
   type ListSchedulesRequest,
   type ListSessionsRequest,
   type StartRunRequest,
@@ -653,6 +658,32 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
       session_id: request.sessionId, request_id: request.requestId,
       schedule_id: request.scheduleId, status: request.status,
     }));
+  }
+
+  async listCapabilities(request: ListCapabilitiesRequest): Promise<CapabilitySummary[]> {
+    return ((await this.call("list_capabilities", {
+      tenant_id: request.tenantId,
+      session_id: request.sessionId,
+      request_id: request.requestId,
+    })) as Array<{ capability?: unknown; tools?: unknown }>).map((raw) => ({
+      capability: requiredString(raw.capability, "capability"),
+      tools: Array.isArray(raw.tools) ? raw.tools.map(String) : [],
+    }));
+  }
+
+  async webSearch(request: WebSearchRequest): Promise<WebSearchResult> {
+    const raw = await this.call("web_search", {
+      tenant_id: request.tenantId,
+      session_id: request.sessionId,
+      request_id: request.requestId,
+      query: request.query,
+      max_results: request.maxResults ?? 8,
+    }) as { provider?: unknown; content?: unknown; sources?: unknown };
+    return {
+      provider: optionalString(raw.provider) ?? "",
+      content: optionalString(raw.content) ?? "",
+      sources: Array.isArray(raw.sources) ? raw.sources as Array<Record<string, unknown>> : [],
+    };
   }
 
   async listHistory(request: ListHistoryRequest): Promise<HistoryEntry[]> {

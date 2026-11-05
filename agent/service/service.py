@@ -910,10 +910,25 @@ class AgentService:
                 )
         return resolved
 
+    # Sun routing aliases: capability names (English, registry-declared)
+    # expand to the request phrasings that should match them.  The alias
+    # map is the routing knowledge, the match mechanism stays stringy.
+    _CAPABILITY_ALIASES = {
+        "research": ("调研", "研究", "搜索", "查", "资料", "新闻", "news", "search", "web"),
+        "browser": ("浏览器", "网页", "web", "click", "click"),
+        "code": ("代码", "编程", "实现", "写", "修", "bug", "debug", "程序", "code", "coding"),
+        "filesystem": ("文件", "目录", "file", "读", "写入", "filesystem"),
+        "test": ("测试", "单测", "pytest", "验证", "test", "tests"),
+        "analysis": ("分析", "统计", "analysis", "analyze", "data"),
+        "memory": ("记忆", "记住", "memory", "remember"),
+        "schedule": ("定时", "周期", "schedule", "cron", "每天", "每小时"),
+    }
+
     def _route_planet(self, tenant_id: str, request_text: str) -> Any:
-        """Sun v0: score request text against each workspace's declared
-        capabilities; highest score wins.  No registry match → None
-        (universal executor), never a guess."""
+        """Sun v1: score request text against each workspace's declared
+        capabilities — alias-expanded so natural phrasing matches the
+        registry's English capability names.  Highest score wins; no
+        match → None (universal executor), never a guess."""
         import json as _json
 
         workspaces = self._store.list_workspaces(tenant_id)
@@ -921,13 +936,11 @@ class AgentService:
         best = None
         best_score = 0
         for workspace in workspaces:
-            caps = _json.loads(workspace.capabilities_json or "[]")
-            haystacks = [str(workspace.workspace_id), str(workspace.display_name)]
-            haystacks += [str(c) for c in caps]
-            score = sum(
-                1 for needle in haystacks
-                if needle and needle.lower() in text
-            )
+            caps = [str(c) for c in _json.loads(workspace.capabilities_json or "[]")]
+            terms = [str(workspace.workspace_id), str(workspace.display_name)] + caps
+            for cap in caps:
+                terms += list(self._CAPABILITY_ALIASES.get(cap.lower(), ()))
+            score = sum(1 for t in terms if t and t.lower() in text)
             if score > best_score:
                 best = workspace
                 best_score = score

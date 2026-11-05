@@ -15,6 +15,7 @@ import {
   type HealthSnapshot,
   type ListArtifactsRequest,
   type ResumeAction,
+  type PauseRunRequest,
   type ResumeRunRequest,
   type ResumeSummary,
   type RunEvent,
@@ -33,7 +34,7 @@ import {
   type UpdateSettingsRequest,
   type UpsertWorkspaceRequest,
   type ListWorkspacesRequest,
-  type PauseRunRequest,
+
   type WorkspaceSummary,
   type UpsertProfileRequest,
   type DecideApprovalRequest,
@@ -54,6 +55,9 @@ import {
   type ParticipantSummary,
   type SearchArtifactsRequest,
   type JupiterArtifactSummary,
+  type EvaluationSummary,
+  type RecordEvaluationRequest,
+  type ListEvaluationsRequest,
   type ListWorkspaceFilesRequest,
   type WorkspaceFileSummary,
   type WorkspaceFileContent,
@@ -81,7 +85,8 @@ export type LocalClientOperation =
   | "get_task"
   | "list_artifacts"
   | "read_events"
-  | "cancel_run";
+  | "cancel_run"
+  | "pause_run";
 
 export interface LocalAgentServiceClientOptions {
   /** Identity is explicit configuration; there is no default user fallback. */
@@ -263,6 +268,21 @@ function mapArtifact(value: unknown, fallbackRunId: string): ArtifactSummary {
         : undefined,
     createdRevision: numberValue(raw.created_revision ?? 0, "artifact.created_revision"),
     createdAt: typeof raw.created_at === "string" ? raw.created_at : "",
+  };
+}
+
+function mapEvaluation(value: unknown): EvaluationSummary {
+  const raw = isRecord(value) ? value : (() => { throw new Error("evaluation is not an object"); })();
+  return {
+    evalId: requiredString(raw.eval_id, "eval_id"),
+    name: optionalString(raw.name) ?? "",
+    runId: optionalString(raw.run_id) ?? "",
+    baselineRef: optionalString(raw.baseline_ref) ?? "",
+    candidateRef: optionalString(raw.candidate_ref) ?? "",
+    score: Number(raw.score ?? 0),
+    verdict: optionalString(raw.verdict) ?? "neutral",
+    notes: optionalString(raw.notes) ?? "",
+    createdAt: optionalString(raw.created_at) ?? "",
   };
 }
 
@@ -702,6 +722,29 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
     };
   }
 
+  async recordEvaluation(request: RecordEvaluationRequest): Promise<EvaluationSummary> {
+    const raw = (await this.call("record_evaluation", {
+      tenant_id: request.tenantId, user_id: this.identity.userId,
+      session_id: request.sessionId, request_id: request.requestId,
+      name: request.name ?? "", run_id: request.runId ?? "",
+      baseline_ref: request.baselineRef ?? "",
+      candidate_ref: request.candidateRef ?? "",
+      score: request.score ?? 0, verdict: request.verdict ?? "neutral",
+      notes: request.notes ?? "", eval_id: request.evalId ?? "",
+    })) as Record<string, unknown>;
+    return mapEvaluation(raw);
+  }
+
+  async listEvaluations(request: ListEvaluationsRequest): Promise<EvaluationSummary[]> {
+    const result = (await this.call("list_evaluations", {
+      tenant_id: request.tenantId, user_id: this.identity.userId,
+      session_id: request.sessionId, request_id: request.requestId,
+      all_sessions: request.allSessions ?? false,
+      limit: request.limit ?? 200,
+    })) as Array<Record<string, unknown>>;
+    return result.map((v) => mapEvaluation(v));
+  }
+
   async listWorkspaceFiles(request: ListWorkspaceFilesRequest): Promise<WorkspaceFileSummary[]> {
     const result = (await this.call("list_workspace_files", {
       tenant_id: request.tenantId, user_id: this.identity.userId,
@@ -928,6 +971,14 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
       action: request.action,
     };
     return this.project(async () => mapRunHandle(await this.call("resume_run", params)));
+  }
+
+  async pauseRun(request: PauseRunRequest): Promise<RunHandle> {
+    const params: LocalRpcParams = {
+      ...this.lookupParams(request, "pause_run", request.requestId),
+      requested_by: request.requestedBy ?? "",
+    };
+    return this.project(async () => mapRunHandle(await this.call("pause_run", params)));
   }
 
   async listArtifacts(request: ListArtifactsRequest): Promise<ArtifactSummary[]> {

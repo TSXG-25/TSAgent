@@ -909,6 +909,48 @@ class AgentService:
             path=workspace.relative_path(request.path), text=message
         )
 
+    async def record_evaluation(self, request: Any) -> Any:
+        self._ensure_open()
+        import uuid
+
+        record = self._store.record_evaluation(
+            request.tenant_id,
+            request.session_id,
+            request.eval_id or f"eval-{uuid.uuid4().hex[:12]}",
+            name=request.name,
+            run_id=request.run_id,
+            baseline_ref=request.baseline_ref,
+            candidate_ref=request.candidate_ref,
+            score=request.score,
+            verdict=request.verdict,
+            notes=request.notes,
+        )
+        return self._evaluation_summary(record)
+
+    async def list_evaluations(self, request: Any) -> list[Any]:
+        self._ensure_open()
+        records = self._store.list_evaluations(
+            request.tenant_id,
+            session_id=(
+                None if getattr(request, "all_sessions", False)
+                else request.session_id
+            ),
+            limit=getattr(request, "limit", 200) or 200,
+        )
+        return [self._evaluation_summary(r) for r in records]
+
+    @staticmethod
+    def _evaluation_summary(record: Any) -> Any:
+        from .contracts import EvaluationSummary
+
+        return EvaluationSummary(
+            eval_id=record.eval_id, name=record.name, run_id=record.run_id,
+            baseline_ref=record.baseline_ref,
+            candidate_ref=record.candidate_ref, score=record.score,
+            verdict=record.verdict, notes=record.notes,
+            created_at=record.created_at,
+        )
+
     async def list_participants(self, request: Any) -> list[Any]:
         self._ensure_open()
         records = self._store.list_participants(

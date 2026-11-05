@@ -45,6 +45,24 @@ class TaskHead:
 
 
 @dataclass(frozen=True)
+class EvaluationRecord:
+    """An experiment verdict: baseline vs candidate with a score."""
+
+    tenant_id: str
+    session_id: str
+    eval_id: str
+    name: str
+    run_id: str
+    baseline_ref: str
+    candidate_ref: str
+    score: float
+    verdict: str
+    notes: str
+    created_at: str
+    store_generation: str
+
+
+@dataclass(frozen=True)
 class SessionParticipantRecord:
     tenant_id: str
     session_id: str

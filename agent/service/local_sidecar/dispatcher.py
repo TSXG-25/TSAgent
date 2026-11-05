@@ -62,6 +62,8 @@ class SidecarDispatcher:
             LocalTransportMethod.FORGET_FACT: self._forget_fact,
             LocalTransportMethod.LIST_PARTICIPANTS: self._list_participants,
             LocalTransportMethod.SEARCH_ARTIFACTS: self._search_artifacts,
+            LocalTransportMethod.RECORD_EVALUATION: self._record_evaluation,
+            LocalTransportMethod.LIST_EVALUATIONS: self._list_evaluations,
             LocalTransportMethod.LIST_WORKSPACE_FILES: self._list_workspace_files,
             LocalTransportMethod.READ_WORKSPACE_FILE: self._read_workspace_file,
             LocalTransportMethod.WRITE_WORKSPACE_FILE: self._write_workspace_file,
@@ -373,6 +375,18 @@ class SidecarDispatcher:
 
         request = self._from_dto(WorkspaceFileRequest.from_dict, params)
         return await self._service.write_workspace_file(request)
+
+    async def _record_evaluation(self, params: Mapping[str, Any]) -> Any:
+        from ..contracts import RecordEvaluationRequest
+
+        request = self._from_dto(RecordEvaluationRequest.from_dict, params)
+        return await self._service.record_evaluation(request)
+
+    async def _list_evaluations(self, params: Mapping[str, Any]) -> Any:
+        from ..contracts import ListEvaluationsRequest
+
+        request = self._from_dto(ListEvaluationsRequest.from_dict, params)
+        return await self._service.list_evaluations(request)
 
     async def _list_artifacts(self, params: Mapping[str, Any]) -> Any:
         from ..contracts import RunLookupRequest

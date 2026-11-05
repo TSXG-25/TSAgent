@@ -33,7 +33,9 @@ import {
   type ParticipantSummary,
   type JupiterArtifactSummary,
   type WorkspaceFileSummary,
+  type WorkspaceFileRequest,
   type WorkspaceFileContent,
+  type EvaluationSummary,
   type UpsertWorkspaceRequest,
   type DecideApprovalRequest,
   type ProfileSummary,
@@ -397,16 +399,37 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
     };
   }
 
-  async listWorkspaceFiles(): Promise<WorkspaceFileSummary[]> {
+  private wsFiles = new Map<string, string>([
+    ["main.py", 'def main():\n    print("forge")\n'],
+    ["spec.md", "# Spec\n\nDraft spec for the forge workspace.\n"],
+    ["lib/util.py", "def clamp(v, lo, hi):\n    return max(lo, min(hi, v))\n"],
+  ]);
+
+  async recordEvaluation(): Promise<EvaluationSummary> {
+    return {} as EvaluationSummary;
+  }
+
+  async listEvaluations(): Promise<EvaluationSummary[]> {
     return [];
   }
 
-  async readWorkspaceFile(): Promise<WorkspaceFileContent> {
-    return {} as WorkspaceFileContent;
+  async listWorkspaceFiles(): Promise<WorkspaceFileSummary[]> {
+    return [...this.wsFiles.entries()].map(([path, text]) => ({
+      path,
+      size: text.length,
+      modifiedAt: new Date().toISOString(),
+    }));
   }
 
-  async writeWorkspaceFile(): Promise<WorkspaceFileContent> {
-    return {} as WorkspaceFileContent;
+  async readWorkspaceFile(request: WorkspaceFileRequest): Promise<WorkspaceFileContent> {
+    const text = this.wsFiles.get(request.path);
+    if (text === undefined) throw clientError("RUN_NOT_FOUND", `workspace file not found: ${request.path}`);
+    return { path: request.path, text };
+  }
+
+  async writeWorkspaceFile(request: WorkspaceFileRequest): Promise<WorkspaceFileContent> {
+    this.wsFiles.set(request.path, request.content ?? "");
+    return { path: request.path, text: "saved" };
   }
 
   async searchArtifacts(): Promise<JupiterArtifactSummary[]> {

@@ -278,6 +278,7 @@ export interface AgentServiceClient {
   getRun(request: GetRunRequest): Promise<RunSnapshot>;
   cancelRun(request: CancelRunRequest): Promise<RunSnapshot>;
   resumeRun(request: ResumeRunRequest): Promise<RunHandle>;
+  pauseRun(request: PauseRunRequest): Promise<RunHandle>;
   listArtifacts(request: ListArtifactsRequest): Promise<ArtifactSummary[]>;
   readEvents(request: EventStreamRequest): Promise<RunEvent[]>;
   /** Long-poll variant — holds up to ~8s until new durable events arrive. */
@@ -760,6 +761,46 @@ export interface WorkspaceFilesClient {
   writeWorkspaceFile(request: WorkspaceFileRequest): Promise<WorkspaceFileContent>;
 }
 
+export interface EvaluationSummary {
+  evalId: string;
+  name: string;
+  runId: string;
+  baselineRef: string;
+  candidateRef: string;
+  score: number;
+  verdict: string;
+  notes: string;
+  createdAt: string;
+}
+
+export interface RecordEvaluationRequest {
+  tenantId: string;
+  sessionId: string;
+  requestId: string;
+  name?: string;
+  runId?: string;
+  baselineRef?: string;
+  candidateRef?: string;
+  score?: number;
+  verdict?: string;
+  notes?: string;
+  evalId?: string;
+}
+
+export interface ListEvaluationsRequest {
+  tenantId: string;
+  sessionId: string;
+  requestId: string;
+  allSessions?: boolean;
+  limit?: number;
+}
+
+/** Earth — experiment verdicts with baseline/candidate provenance. */
+export interface EvaluationClient {
+  recordEvaluation(request: RecordEvaluationRequest): Promise<EvaluationSummary>;
+  listEvaluations(request: ListEvaluationsRequest): Promise<EvaluationSummary[]>;
+}
+
 /** Jupiter — cross-session artifact index. */
 export interface JupiterClient {
   searchArtifacts(request: SearchArtifactsRequest): Promise<JupiterArtifactSummary[]>;
@@ -794,7 +835,7 @@ export interface TaskCatalogClient {
   getTask(request: TaskLookupRequest): Promise<TaskRecord>;
 }
 
-export interface DesktopAgentServiceClient extends AgentServiceClient, RunCatalogClient, TaskCatalogClient, ApprovalClient, SessionCatalogClient, HandoffClient, HistoryClient, ScheduleClient, ProfileClient, SettingsClient, WorkspaceClient, CapabilityClient, WebSearchClient, SkillClient, DelegationClient, MemoryClient, ParticipantClient, JupiterClient, WorkspaceFilesClient {
+export interface DesktopAgentServiceClient extends AgentServiceClient, RunCatalogClient, TaskCatalogClient, ApprovalClient, SessionCatalogClient, HandoffClient, HistoryClient, ScheduleClient, ProfileClient, SettingsClient, WorkspaceClient, CapabilityClient, WebSearchClient, SkillClient, DelegationClient, MemoryClient, ParticipantClient, JupiterClient, WorkspaceFilesClient, EvaluationClient {
   readonly mode: DesktopAgentServiceMode;
   readonly identity: DesktopIdentity;
   /** Resolve the backend health before the UI begins using the client. */

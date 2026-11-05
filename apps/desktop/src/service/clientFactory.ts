@@ -26,6 +26,7 @@ import {
   type JupiterArtifactSummary,
   type WorkspaceFileSummary,
   type WorkspaceFileContent,
+  type EvaluationSummary,
   type SettingsSummary,
   type WorkspaceSummary,
   type TaskHandle,
@@ -166,6 +167,14 @@ class UnavailableDesktopAgentServiceClient implements DesktopAgentServiceClient 
   }
 
   async webSearch(): Promise<WebSearchResult> {
+    throw this.error;
+  }
+
+  async recordEvaluation(): Promise<EvaluationSummary> {
+    throw this.error;
+  }
+
+  async listEvaluations(): Promise<EvaluationSummary[]> {
     throw this.error;
   }
 

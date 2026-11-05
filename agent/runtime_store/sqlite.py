@@ -32,6 +32,7 @@ from .contracts import (
     AgentProfileRecord,
     ApprovalRecord,
     SessionParticipantRecord,
+    EvaluationRecord,
     WorkspaceRecord,
     HandoffRecord,
     ScheduledTaskRecord,
@@ -534,6 +535,22 @@ class SqliteRuntimeStore:
                     UNIQUE (tenant_id, run_id, event_id),
                     FOREIGN KEY (tenant_id, run_id)
                         REFERENCES run_heads (tenant_id, run_id)
+                );
+
+                CREATE TABLE IF NOT EXISTS evaluations (
+                    tenant_id TEXT NOT NULL,
+                    session_id TEXT NOT NULL,
+                    eval_id TEXT NOT NULL,
+                    name TEXT NOT NULL DEFAULT '',
+                    run_id TEXT NOT NULL DEFAULT '',
+                    baseline_ref TEXT NOT NULL DEFAULT '',
+                    candidate_ref TEXT NOT NULL DEFAULT '',
+                    score REAL NOT NULL DEFAULT 0.0,
+                    verdict TEXT NOT NULL DEFAULT 'neutral',
+                    notes TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    store_generation TEXT NOT NULL,
+                    PRIMARY KEY (tenant_id, eval_id)
                 );
 
                 CREATE TABLE IF NOT EXISTS session_participants (
@@ -2307,6 +2324,101 @@ class SqliteRuntimeStore:
                     "updated_at": str(r["updated_at"]),
                 }
                 for r in rows
+            ]
+
+    def record_evaluation(
+        self,
+        tenant_id: str,
+        session_id: str,
+        eval_id: str,
+        *,
+        name: str = "",
+        run_id: str = "",
+        baseline_ref: str = "",
+        candidate_ref: str = "",
+        score: float = 0.0,
+        verdict: str = "neutral",
+        notes: str = "",
+    ) -> "EvaluationRecord":
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        session_id = _require_text(session_id, "session_id")
+        eval_id = _require_text(eval_id, "eval_id")
+        if verdict not in ("pass", "fail", "neutral"):
+            raise DurableStoreError(
+                StoreErrorCode.INVALID_ARGUMENT,
+                "verdict must be pass, fail or neutral",
+            )
+        with self._write_transaction() as connection:
+            connection.execute(
+                """
+                INSERT INTO evaluations
+                    (tenant_id, session_id, eval_id, name, run_id,
+                     baseline_ref, candidate_ref, score, verdict, notes,
+                     created_at, store_generation)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (tenant_id, eval_id) DO UPDATE SET
+                    name = excluded.name,
+                    run_id = excluded.run_id,
+                    baseline_ref = excluded.baseline_ref,
+                    candidate_ref = excluded.candidate_ref,
+                    score = excluded.score,
+                    verdict = excluded.verdict,
+                    notes = excluded.notes
+                """,
+                (
+                    tenant_id, session_id, eval_id, str(name), str(run_id),
+                    str(baseline_ref), str(candidate_ref), float(score),
+                    str(verdict), str(notes), _now(), self.store_generation,
+                ),
+            )
+            return EvaluationRecord(
+                tenant_id=tenant_id, session_id=session_id, eval_id=eval_id,
+                name=str(name), run_id=str(run_id),
+                baseline_ref=str(baseline_ref),
+                candidate_ref=str(candidate_ref), score=float(score),
+                verdict=str(verdict), notes=str(notes),
+                created_at=_now(), store_generation=self.store_generation,
+            )
+
+    def list_evaluations(
+        self,
+        tenant_id: str,
+        *,
+        session_id: str | None = None,
+        limit: int = 200,
+    ) -> "list[EvaluationRecord]":
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        with self._lock:
+            self._ensure_open()
+            rows = self._connection.execute(
+                """
+                SELECT tenant_id, session_id, eval_id, name, run_id,
+                       baseline_ref, candidate_ref, score, verdict, notes,
+                       created_at, store_generation
+                FROM evaluations
+                WHERE tenant_id = ? AND (? = '' OR session_id = ?)
+                ORDER BY created_at DESC LIMIT ?
+                """,
+                (tenant_id, str(session_id or ""), str(session_id or ""),
+                 int(limit)),
+            ).fetchall()
+            return [
+                EvaluationRecord(
+                    tenant_id=str(r["tenant_id"]),
+                    session_id=str(r["session_id"]),
+                    eval_id=str(r["eval_id"]),
+                    name=str(r["name"]),
+                    run_id=str(r["run_id"]),
+                    baseline_ref=str(r["baseline_ref"]),
+                    candidate_ref=str(r["candidate_ref"]),
+                    score=float(r["score"]),
+                    verdict=str(r["verdict"]),
+                    notes=str(r["notes"]),
+                    created_at=str(r["created_at"]),
+                    store_generation=str(r["store_generation"]),
+                )
+                for r in rows
+                if str(r["store_generation"]) == self.store_generation
             ]
 
     def ensure_session(

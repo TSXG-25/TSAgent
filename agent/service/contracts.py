@@ -1455,6 +1455,98 @@ class WorkspaceFileRequest:
 
 
 @dataclass(frozen=True)
+class EvaluationSummary:
+    eval_id: str
+    name: str
+    run_id: str
+    baseline_ref: str
+    candidate_ref: str
+    score: float
+    verdict: str
+    notes: str
+    created_at: str
+
+    def to_dict(self) -> dict[str, JSONValue]:
+        return {
+            "eval_id": self.eval_id,
+            "name": self.name,
+            "run_id": self.run_id,
+            "baseline_ref": self.baseline_ref,
+            "candidate_ref": self.candidate_ref,
+            "score": self.score,
+            "verdict": self.verdict,
+            "notes": self.notes,
+            "created_at": self.created_at,
+        }
+
+
+@dataclass(frozen=True)
+class RecordEvaluationRequest:
+    tenant_id: str
+    user_id: str
+    session_id: str
+    request_id: str
+    name: str = ""
+    run_id: str = ""
+    baseline_ref: str = ""
+    candidate_ref: str = ""
+    score: float = 0.0
+    verdict: str = "neutral"
+    notes: str = ""
+    eval_id: str = ""
+
+    def __post_init__(self) -> None:
+        _required_identifier(self.tenant_id, "tenant_id")
+        _required_identifier(self.user_id, "user_id")
+        _required_identifier(self.session_id, "session_id")
+        _required_identifier(self.request_id, "request_id")
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "RecordEvaluationRequest":
+        return cls(
+            tenant_id=str(value.get("tenant_id", "")),
+            user_id=str(value.get("user_id", "")),
+            session_id=str(value.get("session_id", "")),
+            request_id=str(value.get("request_id", "")),
+            name=str(value.get("name", "")),
+            run_id=str(value.get("run_id", "")),
+            baseline_ref=str(value.get("baseline_ref", "")),
+            candidate_ref=str(value.get("candidate_ref", "")),
+            score=float(value.get("score", 0) or 0),
+            verdict=str(value.get("verdict", "neutral")),
+            notes=str(value.get("notes", "")),
+            eval_id=str(value.get("eval_id", "")),
+        )
+
+
+@dataclass(frozen=True)
+class ListEvaluationsRequest:
+    tenant_id: str
+    user_id: str
+    session_id: str
+    request_id: str
+    all_sessions: bool = False
+    limit: int = 200
+
+    def __post_init__(self) -> None:
+        _required_identifier(self.tenant_id, "tenant_id")
+        _required_identifier(self.user_id, "user_id")
+        _required_identifier(self.session_id, "session_id")
+        _required_identifier(self.request_id, "request_id")
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "ListEvaluationsRequest":
+        return cls(
+            tenant_id=str(value.get("tenant_id", "")),
+            user_id=str(value.get("user_id", "")),
+            session_id=str(value.get("session_id", "")),
+            request_id=str(value.get("request_id", "")),
+            all_sessions=bool(value.get("all_sessions", False)),
+            limit=int(value.get("limit") or 200),
+        )
+
+
+@dataclass(frozen=True)
 class HandoffSummary:
     """Public delegation record: source run -> target run/task."""
 

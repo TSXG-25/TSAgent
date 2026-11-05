@@ -35,6 +35,9 @@ class SidecarDispatcher:
             LocalTransportMethod.CANCEL_RUN: self._cancel_run,
             LocalTransportMethod.LIST_ARTIFACTS: self._list_artifacts,
             LocalTransportMethod.LIST_RUNS: self._list_runs,
+            LocalTransportMethod.CREATE_TASK: self._create_task,
+            LocalTransportMethod.LIST_TASKS: self._list_tasks,
+            LocalTransportMethod.GET_TASK: self._get_task,
             LocalTransportMethod.READ_EVENTS: self._read_events,
             LocalTransportMethod.SHUTDOWN: self._shutdown,
         }
@@ -145,6 +148,24 @@ class SidecarDispatcher:
 
         request = self._from_dto(ListRunsRequest.from_dict, params)
         return await self._service.list_runs(request)
+
+    async def _create_task(self, params: Mapping[str, Any]) -> Any:
+        from ..contracts import CreateTaskRequest
+
+        request = self._from_dto(CreateTaskRequest.from_dict, params)
+        return await self._service.create_task(request)
+
+    async def _list_tasks(self, params: Mapping[str, Any]) -> Any:
+        from ..contracts import ListTasksRequest
+
+        request = self._from_dto(ListTasksRequest.from_dict, params)
+        return await self._service.list_tasks(request)
+
+    async def _get_task(self, params: Mapping[str, Any]) -> Any:
+        from ..contracts import TaskLookupRequest
+
+        request = self._from_dto(TaskLookupRequest.from_dict, params)
+        return await self._service.get_task(request)
 
     async def _list_artifacts(self, params: Mapping[str, Any]) -> Any:
         from ..contracts import RunLookupRequest

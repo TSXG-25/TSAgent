@@ -2,6 +2,7 @@ import {
   AgentServiceClientError,
   type ArtifactSummary,
   type CancelRunRequest,
+  type CreateTaskRequest,
   type DesktopAgentServiceClient,
   type DesktopIdentity,
   type EventStreamRequest,
@@ -19,6 +20,9 @@ import {
   type RunStatus,
   type ServiceErrorCode,
   type StartRunRequest,
+  type TaskHandle,
+  type TaskLookupRequest,
+  type TaskRecord,
   type VerifierSummary,
 } from "../types/service";
 import {
@@ -30,6 +34,7 @@ import {
 
 export type LocalClientOperation =
   | "get_run"
+  | "get_task"
   | "list_artifacts"
   | "read_events"
   | "cancel_run";
@@ -217,6 +222,29 @@ function mapArtifact(value: unknown, fallbackRunId: string): ArtifactSummary {
   };
 }
 
+function mapTaskHandle(value: unknown): TaskHandle {
+  const raw = isRecord(value) ? value : (() => { throw new Error("task handle is not an object"); })();
+  return {
+    tenantId: requiredString(raw.tenant_id, "tenant_id"),
+    sessionId: requiredString(raw.session_id, "session_id"),
+    taskId: requiredString(raw.task_id, "task_id"),
+    parentTaskId: optionalString(raw.parent_task_id) ?? "",
+    originPlanet: optionalString(raw.origin_planet) ?? "",
+    ownerProfileId: optionalString(raw.owner_profile_id) ?? "",
+    createdAt: requiredString(raw.created_at, "created_at"),
+  };
+}
+
+function mapTaskRecord(value: unknown): TaskRecord {
+  const raw = isRecord(value) ? value : (() => { throw new Error("task snapshot is not an object"); })();
+  return {
+    ...mapTaskHandle(raw),
+    status: optionalString(raw.status) ?? "CREATED",
+    runIds: Array.isArray(raw.run_ids) ? raw.run_ids.map(String) : [],
+    childTaskIds: Array.isArray(raw.child_task_ids) ? raw.child_task_ids.map(String) : [],
+  };
+}
+
 function mapSnapshot(value: unknown): RunSnapshot {
   const raw = isRecord(value) ? value : (() => { throw new Error("RunSnapshot is not an object"); })();
   const status = mapStatus(raw.status);
@@ -339,6 +367,42 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
       }
       return snapshots;
     });
+  }
+
+  async createTask(request: CreateTaskRequest): Promise<TaskHandle> {
+    const params: LocalRpcParams = {
+      tenant_id: request.tenantId,
+      user_id: this.identity.userId,
+      session_id: request.sessionId,
+      request_id: request.requestId,
+      task_id: request.taskId ?? "",
+      parent_task_id: request.parentTaskId ?? "",
+      origin_planet: request.originPlanet ?? "",
+      owner_profile_id: request.ownerProfileId ?? "",
+    };
+    return mapTaskHandle(await this.call("create_task", params));
+  }
+
+  async listTasks(): Promise<TaskRecord[]> {
+    const params: LocalRpcParams = {
+      tenant_id: this.identity.tenantId,
+      user_id: this.identity.userId,
+      session_id: this.identity.sessionId,
+      request_id: this.nextRequestId("get_task"),
+    };
+    const result = (await this.call("list_tasks", params)) as unknown[];
+    return result.map((value) => mapTaskRecord(value));
+  }
+
+  async getTask(request: TaskLookupRequest): Promise<TaskRecord> {
+    const params: LocalRpcParams = {
+      tenant_id: request.tenantId,
+      user_id: this.identity.userId,
+      session_id: request.sessionId,
+      request_id: request.requestId,
+      task_id: request.taskId,
+    };
+    return mapTaskRecord(await this.call("get_task", params));
   }
 
   async startRun(request: StartRunRequest): Promise<RunHandle> {

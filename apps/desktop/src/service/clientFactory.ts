@@ -10,6 +10,8 @@ import {
   type StartRunRequest,
   type GetRunRequest,
   type CancelRunRequest,
+  type TaskHandle,
+  type TaskRecord,
   type ResumeRunRequest,
   type ListArtifactsRequest,
   type EventStreamRequest,
@@ -82,6 +84,18 @@ class UnavailableDesktopAgentServiceClient implements DesktopAgentServiceClient 
   }
 
   async listRuns(): Promise<RunSnapshot[]> {
+    throw this.error;
+  }
+
+  async createTask(): Promise<TaskHandle> {
+    throw this.error;
+  }
+
+  async listTasks(): Promise<TaskRecord[]> {
+    throw this.error;
+  }
+
+  async getTask(): Promise<TaskRecord> {
     throw this.error;
   }
 

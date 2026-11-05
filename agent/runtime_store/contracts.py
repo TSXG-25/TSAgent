@@ -27,6 +27,21 @@ class RunHead:
     store_generation: str
     run_status: str
     updated_at: str
+    task_id: str = ""
+
+
+@dataclass(frozen=True)
+class TaskHead:
+    """The durable head for one Task (parent/child delegation unit)."""
+
+    tenant_id: str
+    session_id: str
+    task_id: str
+    parent_task_id: str
+    origin_planet: str
+    owner_profile_id: str
+    store_generation: str
+    created_at: str
 
 
 @dataclass(frozen=True)

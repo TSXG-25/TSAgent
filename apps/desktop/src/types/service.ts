@@ -288,12 +288,52 @@ export interface DesktopIdentity {
 
 export type DesktopAgentServiceMode = "mock" | "local";
 
+export interface TaskHandle {
+  tenantId: string;
+  sessionId: string;
+  taskId: string;
+  parentTaskId: string;
+  originPlanet: string;
+  ownerProfileId: string;
+  createdAt: string;
+}
+
+export interface TaskRecord extends TaskHandle {
+  status: string;
+  runIds: string[];
+  childTaskIds: string[];
+}
+
+export interface CreateTaskRequest {
+  tenantId: string;
+  sessionId: string;
+  requestId: string;
+  taskId?: string;
+  parentTaskId?: string;
+  originPlanet?: string;
+  ownerProfileId?: string;
+}
+
+export interface TaskLookupRequest {
+  tenantId: string;
+  sessionId: string;
+  requestId: string;
+  taskId: string;
+}
+
 /** Run List is a desktop catalog capability; the core contract remains above. */
 export interface RunCatalogClient {
   listRuns(): Promise<RunSnapshot[]>;
 }
 
-export interface DesktopAgentServiceClient extends AgentServiceClient, RunCatalogClient {
+/** Task tree catalog — delegation units that Runs attach to. */
+export interface TaskCatalogClient {
+  createTask(request: CreateTaskRequest): Promise<TaskHandle>;
+  listTasks(): Promise<TaskRecord[]>;
+  getTask(request: TaskLookupRequest): Promise<TaskRecord>;
+}
+
+export interface DesktopAgentServiceClient extends AgentServiceClient, RunCatalogClient, TaskCatalogClient {
   readonly mode: DesktopAgentServiceMode;
   readonly identity: DesktopIdentity;
   /** Resolve the backend health before the UI begins using the client. */

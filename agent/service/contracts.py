@@ -261,11 +261,14 @@ class StartRunRequest:
     request_id: str
     request_text: str
     run_id: str | None = None
+    task_id: str = ""
     metadata: Mapping[str, JSONValue] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.run_id is not None:
             _required_identifier(self.run_id, "run_id")
+        if self.task_id:
+            _required_identifier(self.task_id, "task_id")
         _validate_identity(
             tenant_id=self.tenant_id,
             user_id=self.user_id,
@@ -288,6 +291,8 @@ class StartRunRequest:
         }
         if self.run_id is not None:
             value["run_id"] = self.run_id
+        if self.task_id:
+            value["task_id"] = self.task_id
         return value
 
     @classmethod
@@ -299,6 +304,7 @@ class StartRunRequest:
             request_id=str(value.get("request_id", "")),
             request_text=str(value.get("request_text", "")),
             run_id=(None if value.get("run_id") is None else str(value.get("run_id"))),
+            task_id=str(value.get("task_id", "")),
             metadata=cast(Mapping[str, JSONValue], value.get("metadata", {}) or {}),
         )
 
@@ -484,6 +490,136 @@ class ListRunsRequest:
             request_id=str(value.get("request_id", "")),
             limit=int(value.get("limit") or 100),
         )
+
+
+@dataclass(frozen=True)
+class CreateTaskRequest:
+    """Request to create one Task (delegation/tree unit) in a session."""
+
+    tenant_id: str
+    user_id: str
+    session_id: str
+    request_id: str
+    parent_task_id: str = ""
+    origin_planet: str = ""
+    owner_profile_id: str = ""
+    task_id: str = ""
+
+    def __post_init__(self) -> None:
+        _required_identifier(self.tenant_id, "tenant_id")
+        _required_identifier(self.user_id, "user_id")
+        _required_identifier(self.session_id, "session_id")
+        _required_identifier(self.request_id, "request_id")
+        if self.task_id:
+            _required_identifier(self.task_id, "task_id")
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "CreateTaskRequest":
+        return cls(
+            tenant_id=str(value.get("tenant_id", "")),
+            user_id=str(value.get("user_id", "")),
+            session_id=str(value.get("session_id", "")),
+            request_id=str(value.get("request_id", "")),
+            parent_task_id=str(value.get("parent_task_id", "")),
+            origin_planet=str(value.get("origin_planet", "")),
+            owner_profile_id=str(value.get("owner_profile_id", "")),
+            task_id=str(value.get("task_id", "")),
+        )
+
+
+@dataclass(frozen=True)
+class ListTasksRequest:
+    """Identity-complete request for the Tasks of one session."""
+
+    tenant_id: str
+    user_id: str
+    session_id: str
+    request_id: str
+    limit: int = 500
+
+    def __post_init__(self) -> None:
+        _required_identifier(self.tenant_id, "tenant_id")
+        _required_identifier(self.user_id, "user_id")
+        _required_identifier(self.session_id, "session_id")
+        _required_identifier(self.request_id, "request_id")
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "ListTasksRequest":
+        return cls(
+            tenant_id=str(value.get("tenant_id", "")),
+            user_id=str(value.get("user_id", "")),
+            session_id=str(value.get("session_id", "")),
+            request_id=str(value.get("request_id", "")),
+            limit=int(value.get("limit") or 500),
+        )
+
+
+@dataclass(frozen=True)
+class TaskLookupRequest:
+    """Identity-complete request for one Task snapshot."""
+
+    tenant_id: str
+    user_id: str
+    session_id: str
+    request_id: str
+    task_id: str
+
+    def __post_init__(self) -> None:
+        _required_identifier(self.tenant_id, "tenant_id")
+        _required_identifier(self.user_id, "user_id")
+        _required_identifier(self.session_id, "session_id")
+        _required_identifier(self.request_id, "request_id")
+        _required_identifier(self.task_id, "task_id")
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "TaskLookupRequest":
+        return cls(
+            tenant_id=str(value.get("tenant_id", "")),
+            user_id=str(value.get("user_id", "")),
+            session_id=str(value.get("session_id", "")),
+            request_id=str(value.get("request_id", "")),
+            task_id=str(value.get("task_id", "")),
+        )
+
+
+@dataclass(frozen=True)
+class TaskHandle:
+    """Public handle for one Task."""
+
+    tenant_id: str
+    session_id: str
+    task_id: str
+    parent_task_id: str
+    origin_planet: str
+    owner_profile_id: str
+    created_at: str
+
+    def to_dict(self) -> dict[str, str]:
+        return {
+            "tenant_id": self.tenant_id,
+            "session_id": self.session_id,
+            "task_id": self.task_id,
+            "parent_task_id": self.parent_task_id,
+            "origin_planet": self.origin_planet,
+            "owner_profile_id": self.owner_profile_id,
+            "created_at": self.created_at,
+        }
+
+
+@dataclass(frozen=True)
+class TaskSnapshot(TaskHandle):
+    """Task head plus derived run tree state."""
+
+    status: str = "CREATED"
+    run_ids: tuple[str, ...] = ()
+    child_task_ids: tuple[str, ...] = ()
+
+    def to_dict(self) -> dict[str, JSONValue]:
+        value: dict[str, JSONValue] = dict(super().to_dict())
+        value["status"] = self.status
+        value["run_ids"] = list(self.run_ids)
+        value["child_task_ids"] = list(self.child_task_ids)
+        return value
 
 
 @dataclass(frozen=True)
@@ -747,6 +883,7 @@ class RunHandle:
     session_id: str
     run_id: str
     request_id: str
+    task_id: str = ""
     status: RunStatus = RunStatus.CREATED
     revision: int = 0
     created_at: str = ""
@@ -770,6 +907,7 @@ class RunHandle:
             "session_id": self.session_id,
             "run_id": self.run_id,
             "request_id": self.request_id,
+            "task_id": self.task_id,
             "status": self.status.value,
             "revision": self.revision,
             "created_at": self.created_at,
@@ -783,6 +921,7 @@ class RunHandle:
             session_id=str(value.get("session_id", "")),
             run_id=str(value.get("run_id", "")),
             request_id=str(value.get("request_id", "")),
+            task_id=str(value.get("task_id", "")),
             status=RunStatus(str(value.get("status", ""))),
             revision=int(value.get("revision", 0)),
             created_at=str(value.get("created_at", "")),
@@ -811,6 +950,7 @@ class RunSnapshot:
     failure_summary: FailureSummary | None = None
     output: RunOutput | None = None
     revision: int = 0
+    task_id: str = ""
 
     def __post_init__(self) -> None:
         _required_identifier(self.tenant_id, "tenant_id")

@@ -10,12 +10,18 @@ from agent.runtime_store import WORKER_LEASE_SECONDS
 
 from .context_factory import ServiceContextFactory
 from .contracts import (
+    CreateTaskRequest,
     EventStreamRequest,
+    ListRunsRequest,
+    ListTasksRequest,
     ResumeRunRequest,
     RunHandle,
     RunLookupRequest,
     RunSnapshot,
     StartRunRequest,
+    TaskHandle,
+    TaskLookupRequest,
+    TaskSnapshot,
 )
 from .errors import AgentServiceError, ServiceErrorCode
 
@@ -185,10 +191,12 @@ class AgentService:
         from .run_projector import encode_request_reference
 
         async with self._operation_lock:
+            task_id = self._resolve_task_id(request)
             try:
                 reservation = self._store.reserve_service_start(
                     request.tenant_id,
                     request.session_id,
+                    task_id=task_id,
                     requested_run_id=getattr(request, "run_id", None),
                     request_id=request.request_id,
                     request_digest=request.request_digest,
@@ -320,6 +328,121 @@ class AgentService:
             )
             snapshots.append(self._run_projector().project(read, lookup))
         return snapshots
+
+    def _resolve_task_id(self, request: StartRunRequest) -> str:
+        """Every Run belongs to a Task; absent an explicit id one is
+        implicitly created so the run tree is always well-formed."""
+        if not request.task_id:
+            import uuid
+
+            head = self._store.create_task_head(
+                request.tenant_id,
+                request.session_id,
+                f"task-{uuid.uuid4().hex[:12]}",
+            )
+            return head.task_id
+        if self._store.get_task_head(
+            request.tenant_id,
+            request.task_id,
+            session_id=request.session_id,
+        ) is None:
+            raise AgentServiceError(
+                ServiceErrorCode.INVALID_REQUEST,
+                "task not found in the requested session scope",
+            )
+        return request.task_id
+
+    async def create_task(self, request: CreateTaskRequest) -> TaskHandle:
+        self._ensure_open()
+        import uuid
+
+        if request.parent_task_id and self._store.get_task_head(
+            request.tenant_id,
+            request.parent_task_id,
+            session_id=request.session_id,
+        ) is None:
+            raise AgentServiceError(
+                ServiceErrorCode.INVALID_REQUEST,
+                "parent task not found in the requested session scope",
+            )
+        head = self._store.create_task_head(
+            request.tenant_id,
+            request.session_id,
+            request.task_id or f"task-{uuid.uuid4().hex[:12]}",
+            parent_task_id=request.parent_task_id,
+            origin_planet=request.origin_planet,
+            owner_profile_id=request.owner_profile_id,
+        )
+        return TaskHandle(
+            tenant_id=head.tenant_id,
+            session_id=head.session_id,
+            task_id=head.task_id,
+            parent_task_id=head.parent_task_id,
+            origin_planet=head.origin_planet,
+            owner_profile_id=head.owner_profile_id,
+            created_at=head.created_at,
+        )
+
+    async def list_tasks(self, request: ListTasksRequest) -> list[TaskSnapshot]:
+        self._ensure_open()
+        heads = self._store.list_task_heads(
+            request.tenant_id,
+            request.session_id,
+            limit=request.limit,
+        )
+        runs = self._store.list_run_heads(
+            request.tenant_id,
+            request.session_id,
+            limit=2000,
+        )
+        run_ids_by_task: dict[str, list[str]] = {}
+        latest_status_by_task: dict[str, str] = {}
+        for run in runs:
+            if not run.task_id:
+                continue
+            run_ids_by_task.setdefault(run.task_id, []).append(run.run_id)
+            latest_status_by_task.setdefault(run.task_id, run.run_status)
+        children_by_parent: dict[str, list[str]] = {}
+        for head in heads:
+            if head.parent_task_id:
+                children_by_parent.setdefault(head.parent_task_id, []).append(head.task_id)
+        return [
+            TaskSnapshot(
+                tenant_id=head.tenant_id,
+                session_id=head.session_id,
+                task_id=head.task_id,
+                parent_task_id=head.parent_task_id,
+                origin_planet=head.origin_planet,
+                owner_profile_id=head.owner_profile_id,
+                created_at=head.created_at,
+                status=latest_status_by_task.get(head.task_id, "CREATED"),
+                run_ids=tuple(run_ids_by_task.get(head.task_id, ())),
+                child_task_ids=tuple(children_by_parent.get(head.task_id, ())),
+            )
+            for head in heads
+        ]
+
+    async def get_task(self, request: TaskLookupRequest) -> TaskSnapshot:
+        self._ensure_open()
+        head = self._store.get_task_head(
+            request.tenant_id,
+            request.task_id,
+            session_id=request.session_id,
+        )
+        if head is None:
+            raise AgentServiceError(
+                ServiceErrorCode.RUN_NOT_FOUND,
+                "task not found in the requested session scope",
+            )
+        snapshots = await self.list_tasks(
+            ListTasksRequest(
+                tenant_id=request.tenant_id,
+                user_id=request.user_id,
+                session_id=request.session_id,
+                request_id=request.request_id,
+            )
+        )
+        return next(s for s in snapshots if s.task_id == head.task_id)
 
     async def resume_run(self, request: ResumeRunRequest) -> RunHandle:
         import asyncio

@@ -28,6 +28,9 @@ def test_desktop_method_allowlist_is_frozen() -> None:
         "cancel_run",
         "list_artifacts",
         "list_runs",
+        "create_task",
+        "list_tasks",
+        "get_task",
         "read_events",
         "shutdown",
     )

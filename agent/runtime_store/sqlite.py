@@ -32,6 +32,7 @@ from .contracts import (
     ServiceStartReservation,
     RunReadSnapshot,
     RunOutputRecord,
+    TaskHead,
 )
 from .errors import DurableStoreError, StoreErrorCode
 
@@ -326,11 +327,24 @@ class SqliteRuntimeStore:
                     updated_at TEXT NOT NULL
                 );
 
+                CREATE TABLE IF NOT EXISTS task_heads (
+                    tenant_id TEXT NOT NULL,
+                    session_id TEXT NOT NULL,
+                    task_id TEXT NOT NULL,
+                    parent_task_id TEXT NOT NULL DEFAULT '',
+                    origin_planet TEXT NOT NULL DEFAULT '',
+                    owner_profile_id TEXT NOT NULL DEFAULT '',
+                    store_generation TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    PRIMARY KEY (tenant_id, task_id)
+                );
+
                 CREATE TABLE IF NOT EXISTS run_heads (
                     tenant_id TEXT NOT NULL,
                     session_id TEXT NOT NULL,
                     run_id TEXT NOT NULL,
                     request_id TEXT NOT NULL,
+                    task_id TEXT NOT NULL DEFAULT '',
                     current_revision INTEGER NOT NULL CHECK (current_revision >= 0),
                     current_digest TEXT NOT NULL,
                     current_writer_id TEXT NOT NULL DEFAULT '',
@@ -549,8 +563,20 @@ class SqliteRuntimeStore:
                     ON run_interruption_intents (tenant_id, cancel_request_id);
                 CREATE INDEX IF NOT EXISTS idx_run_outputs_session_latest
                     ON run_outputs (tenant_id, session_id, created_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_task_heads_session
+                    ON task_heads (tenant_id, session_id, created_at ASC);
                 """
             )
+            # ``CREATE TABLE IF NOT EXISTS`` does not evolve existing
+            # databases; add the column for stores created before it.
+            head_columns = {
+                str(row["name"])
+                for row in connection.execute("PRAGMA table_info(run_heads)")
+            }
+            if "task_id" not in head_columns:
+                connection.execute(
+                    "ALTER TABLE run_heads ADD COLUMN task_id TEXT NOT NULL DEFAULT ''"
+                )
             connection.execute("BEGIN IMMEDIATE")
             row = connection.execute(
                 """
@@ -718,7 +744,7 @@ class SqliteRuntimeStore:
     ) -> sqlite3.Row:
         row = connection.execute(
             """
-            SELECT tenant_id, session_id, run_id, request_id,
+            SELECT tenant_id, session_id, run_id, request_id, task_id,
                    current_revision, current_digest, current_writer_id,
                    current_fence_token, store_generation, run_status, updated_at
             FROM run_heads
@@ -766,6 +792,7 @@ class SqliteRuntimeStore:
             store_generation=str(row["store_generation"]),
             run_status=str(row["run_status"]),
             updated_at=str(row["updated_at"]),
+            task_id=str(row["task_id"]),
         )
 
     def initialize_run(
@@ -775,6 +802,7 @@ class SqliteRuntimeStore:
         run_id: str,
         request_id: str = "",
         *,
+        task_id: str = "",
         run_status: str = "RUNNING",
         expected_store_generation: str | None = None,
     ) -> RunHead:
@@ -788,16 +816,17 @@ class SqliteRuntimeStore:
                 connection.execute(
                     """
                     INSERT INTO run_heads
-                        (tenant_id, session_id, run_id, request_id,
+                        (tenant_id, session_id, run_id, request_id, task_id,
                          current_revision, current_digest, current_writer_id,
                          current_fence_token, store_generation, run_status, updated_at)
-                    VALUES (?, ?, ?, ?, 0, '', '', 0, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, 0, '', '', 0, ?, ?, ?)
                     """,
                     (
                         tenant_id,
                         session_id,
                         run_id,
                         str(request_id),
+                        str(task_id),
                         self.store_generation,
                         run_status,
                         _now(),
@@ -827,6 +856,7 @@ class SqliteRuntimeStore:
         request_digest: str,
         writer_id: str,
         external_reference: str,
+        task_id: str = "",
         expected_store_generation: str | None = None,
     ) -> ServiceStartReservation:
         """Atomically reserve a public ``start_run`` request.
@@ -914,16 +944,17 @@ class SqliteRuntimeStore:
             connection.execute(
                 """
                 INSERT INTO run_heads
-                    (tenant_id, session_id, run_id, request_id,
+                    (tenant_id, session_id, run_id, request_id, task_id,
                      current_revision, current_digest, current_writer_id,
                      current_fence_token, store_generation, run_status, updated_at)
-                VALUES (?, ?, ?, ?, 0, '', ?, 1, ?, 'CREATED', ?)
+                VALUES (?, ?, ?, ?, ?, 0, '', ?, 1, ?, 'CREATED', ?)
                 """,
                 (
                     tenant_id,
                     session_id,
                     run_id,
                     request_id,
+                    task_id,
                     writer_id,
                     self.store_generation,
                     now,
@@ -1078,7 +1109,7 @@ class SqliteRuntimeStore:
             self._ensure_open()
             row = self._connection.execute(
                 """
-                SELECT tenant_id, session_id, run_id, request_id,
+                SELECT tenant_id, session_id, run_id, request_id, task_id,
                        current_revision, current_digest, current_writer_id,
                        current_fence_token, store_generation, run_status, updated_at
                 FROM run_heads
@@ -1105,6 +1136,7 @@ class SqliteRuntimeStore:
         tenant_id: str,
         session_id: str,
         *,
+        task_id: str | None = None,
         limit: int = 100,
     ) -> list[RunHead]:
         tenant_id = _require_text(tenant_id, "tenant_id")
@@ -1113,21 +1145,151 @@ class SqliteRuntimeStore:
             self._ensure_open()
             rows = self._connection.execute(
                 """
-                SELECT tenant_id, session_id, run_id, request_id,
+                SELECT tenant_id, session_id, run_id, request_id, task_id,
                        current_revision, current_digest, current_writer_id,
                        current_fence_token, store_generation, run_status, updated_at
                 FROM run_heads
                 WHERE tenant_id = ? AND session_id = ?
+                  AND (? = '' OR task_id = ?)
                 ORDER BY updated_at DESC
                 LIMIT ?
                 """,
-                (tenant_id, session_id, int(limit)),
+                (
+                    tenant_id,
+                    session_id,
+                    str(task_id or ""),
+                    str(task_id or ""),
+                    int(limit),
+                ),
             ).fetchall()
             return [
                 self._head_contract(row)
                 for row in rows
                 if str(row["store_generation"]) == self.store_generation
             ]
+
+    def create_task_head(
+        self,
+        tenant_id: str,
+        session_id: str,
+        task_id: str,
+        *,
+        parent_task_id: str = "",
+        origin_planet: str = "",
+        owner_profile_id: str = "",
+    ) -> "TaskHead":
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        session_id = _require_text(session_id, "session_id")
+        task_id = _require_text(task_id, "task_id")
+        with self._write_transaction() as connection:
+            existing = connection.execute(
+                """
+                SELECT tenant_id, session_id, task_id, parent_task_id,
+                       origin_planet, owner_profile_id, store_generation, created_at
+                FROM task_heads
+                WHERE tenant_id = ? AND task_id = ?
+                """,
+                (tenant_id, task_id),
+            ).fetchone()
+            if existing is not None:
+                return self._task_contract(existing)
+            connection.execute(
+                """
+                INSERT INTO task_heads
+                    (tenant_id, session_id, task_id, parent_task_id,
+                     origin_planet, owner_profile_id, store_generation, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    tenant_id,
+                    session_id,
+                    task_id,
+                    str(parent_task_id),
+                    str(origin_planet),
+                    str(owner_profile_id),
+                    self.store_generation,
+                    _now(),
+                ),
+            )
+            return TaskHead(
+                tenant_id=tenant_id,
+                session_id=session_id,
+                task_id=task_id,
+                parent_task_id=str(parent_task_id),
+                origin_planet=str(origin_planet),
+                owner_profile_id=str(owner_profile_id),
+                store_generation=self.store_generation,
+                created_at=_now(),
+            )
+
+    def get_task_head(
+        self,
+        tenant_id: str,
+        task_id: str,
+        *,
+        session_id: str | None = None,
+    ) -> "TaskHead | None":
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        task_id = _require_text(task_id, "task_id")
+        with self._lock:
+            self._ensure_open()
+            row = self._connection.execute(
+                """
+                SELECT tenant_id, session_id, task_id, parent_task_id,
+                       origin_planet, owner_profile_id, store_generation, created_at
+                FROM task_heads
+                WHERE tenant_id = ? AND task_id = ?
+                """,
+                (tenant_id, task_id),
+            ).fetchone()
+            if row is None:
+                return None
+            if session_id is not None and str(row["session_id"]) != session_id:
+                return None
+            if str(row["store_generation"]) != self.store_generation:
+                return None
+            return self._task_contract(row)
+
+    def list_task_heads(
+        self,
+        tenant_id: str,
+        session_id: str,
+        *,
+        limit: int = 500,
+    ) -> "list[TaskHead]":
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        session_id = _require_text(session_id, "session_id")
+        with self._lock:
+            self._ensure_open()
+            rows = self._connection.execute(
+                """
+                SELECT tenant_id, session_id, task_id, parent_task_id,
+                       origin_planet, owner_profile_id, store_generation, created_at
+                FROM task_heads
+                WHERE tenant_id = ? AND session_id = ?
+                ORDER BY created_at ASC
+                LIMIT ?
+                """,
+                (tenant_id, session_id, int(limit)),
+            ).fetchall()
+            return [
+                self._task_contract(row)
+                for row in rows
+                if str(row["store_generation"]) == self.store_generation
+            ]
+
+    @staticmethod
+    def _task_contract(row: sqlite3.Row) -> "TaskHead":
+        return TaskHead(
+            tenant_id=str(row["tenant_id"]),
+            session_id=str(row["session_id"]),
+            task_id=str(row["task_id"]),
+            parent_task_id=str(row["parent_task_id"]),
+            origin_planet=str(row["origin_planet"]),
+            owner_profile_id=str(row["owner_profile_id"]),
+            store_generation=str(row["store_generation"]),
+            created_at=str(row["created_at"]),
+        )
 
     @staticmethod
     def _interruption_contract(

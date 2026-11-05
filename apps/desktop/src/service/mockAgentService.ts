@@ -9,6 +9,8 @@ import {
   type EventStreamRequest,
   type GetRunRequest,
   type ListArtifactsRequest,
+  type TaskHandle,
+  type TaskRecord,
   type ResumeRunRequest,
   type RunEvent,
   type RunHandle,
@@ -143,6 +145,18 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
 
   async listRuns(): Promise<RunSnapshot[]> {
     return this.listRunsSync();
+  }
+
+  async createTask(): Promise<TaskHandle> {
+    throw clientError("UNSUPPORTED_OPERATION", "mock client does not manage tasks");
+  }
+
+  async listTasks(): Promise<TaskRecord[]> {
+    return [];
+  }
+
+  async getTask(): Promise<TaskRecord> {
+    throw clientError("UNSUPPORTED_OPERATION", "mock client does not manage tasks");
   }
 
   async startRun(request: StartRunRequest): Promise<RunHandle> {

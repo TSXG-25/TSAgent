@@ -26,10 +26,17 @@ class FileCache:
         self._hits = 0
         self._misses = 0
 
-    def get(self, path: str) -> Optional[str]:
-        """Get cached content for a path. Returns None on miss."""
+    def get(self, path: str, mtime_ns: int = 0) -> Optional[str]:
+        """Get cached content for a path. Returns None on miss.
+
+        When mtime_ns is supplied, an entry whose recorded mtime differs is
+        treated as a miss — edits that bypass record_edit cannot go stale.
+        """
         if path in self._cache:
             entry = self._cache.pop(path)  # move to end (most recent)
+            if entry.mtime_ns and mtime_ns and entry.mtime_ns != mtime_ns:
+                self._misses += 1
+                return None
             if not self._is_expired(entry):
                 self._cache[path] = entry
                 self._hits += 1
@@ -41,7 +48,8 @@ class FileCache:
         self._misses += 1
         return None
 
-    def set(self, path: str, content: str, ttl_seconds: float = 300.0) -> None:
+    def set(self, path: str, content: str, ttl_seconds: float = 300.0,
+            mtime_ns: int = 0) -> None:
         """Store content in cache.
 
         Args:
@@ -60,6 +68,7 @@ class FileCache:
             content=content,
             cached_at=time.monotonic(),
             ttl=ttl_seconds,
+            mtime_ns=mtime_ns,
         )
 
     def invalidate(self, path: str) -> None:
@@ -95,9 +104,11 @@ class FileCache:
 
 
 class CacheEntry:
-    __slots__ = ("content", "cached_at", "ttl")
+    __slots__ = ("content", "cached_at", "ttl", "mtime_ns")
 
-    def __init__(self, content: str, cached_at: float, ttl: float):
+    def __init__(self, content: str, cached_at: float, ttl: float,
+                 mtime_ns: int = 0):
         self.content = content
         self.cached_at = cached_at
         self.ttl = ttl
+        self.mtime_ns = mtime_ns

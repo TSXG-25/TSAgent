@@ -135,14 +135,26 @@ class WorkspaceService:
         self._guard(full, operation="read")
         if full.is_dir():
             raise IsADirectoryError(str(path))
+        key = self.relative_path(full)
+        cache = self._ensure_workspace().cache
+        try:
+            mtime_ns = full.stat().st_mtime_ns
+        except OSError:
+            mtime_ns = 0
+        cached = cache.get(key, mtime_ns=mtime_ns)
+        if cached is not None:
+            self.record_open(key)
+            return cached
         try:
             text = full.read_text(encoding="utf-8")
         except UnicodeDecodeError as exc:
             raise ValueError(
                 f"cannot decode workspace file as text: {path}"
             ) from exc
-        self.record_open(self.relative_path(full))
-        return redact_sensitive_text(text)
+        text = redact_sensitive_text(text)
+        cache.set(key, text, mtime_ns=mtime_ns)
+        self.record_open(key)
+        return text
 
     def write_text(
         self,

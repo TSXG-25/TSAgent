@@ -432,6 +432,7 @@ def test_approval_gate_denies_gated_tool(tmp_path):
     toolset = {
         "shell": LoopTool(
             name="shell", executor_tool="shell", verb="execute", spec={},
+            risk_level="R2",
         ),
     }
 
@@ -473,6 +474,7 @@ def test_approval_gate_passes_approved_tool(tmp_path):
     toolset = {
         "shell": LoopTool(
             name="shell", executor_tool="shell", verb="execute", spec={},
+            risk_level="R2",
         ),
     }
 

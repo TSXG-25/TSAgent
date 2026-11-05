@@ -30,6 +30,14 @@ class LoopTool:
     # Set only for tools discovered via expose_tools; dispatch is the
     # builtin branch, not the executor.
     mcp: Any = None
+    # §4.1 adapter manifest: risk tier drives the approval gate,
+    # side_effects/scope drive authorization, timeout/cancel/produced
+    # kinds feed the runtime policy surface.
+    risk_level: str = "R0"
+    permission_scope: str = ""
+    side_effects: bool = False
+    supports_cancel: bool = True
+    produces: tuple = ()
 
 
 def _fs_spec(
@@ -133,9 +141,14 @@ def build_toolset(
     for name, executor_tool, verb, spec in _FILESYSTEM_TOOLS:
         if name in _MUTATION_TOOL_NAMES and not authorization.allows_file_mutation:
             continue
+        _mutating = name in _MUTATION_TOOL_NAMES
         tools[name] = LoopTool(
             name=name, executor_tool=executor_tool, verb=verb, spec=spec,
             concurrency_safe=name in {"read_file", "list_directory"},
+            risk_level="R1" if _mutating else "R0",
+            permission_scope="workspace",
+            side_effects=_mutating,
+            produces=("file",) if _mutating else (),
         )
 
     def add_registry(name: str, verb: str, *, declares_outputs: bool = False) -> None:
@@ -205,6 +218,9 @@ def build_toolset(
             name="run_workflow",
             executor_tool=None,
             verb="execute",
+            risk_level="R1",
+            permission_scope="workflow",
+            side_effects=True,
             spec=function_tool_spec("run_workflow", "\n".join(lines), {
                 "type": "object",
                 "properties": {
@@ -244,6 +260,9 @@ def build_toolset(
         name="spawn_subtask",
         executor_tool=None,
         verb="execute",
+        risk_level="R1",
+        permission_scope="delegation",
+        side_effects=True,
         spec=function_tool_spec("spawn_subtask", (
             "把一个明确的子任务委派给子 Agent 执行并等待结果。"
             "适合可独立完成的调研、文档、代码片段等任务；子任务有独立的 Run"

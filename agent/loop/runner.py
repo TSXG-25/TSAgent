@@ -29,12 +29,8 @@ from .prompt import build_system_prompt
 from .toolset import LoopTool, build_toolset
 from .workflow_tool import run_workflow_tool, workflow_projections
 
-_APPROVAL_GATED_TOOLS = frozenset({
-    "shell",
-    "process.execute",
-    "run_python",
-    "run_python_file",
-})
+# Approval gate threshold: any tool declaring risk R2+ routes through
+# request_approval before executing (see LoopTool.risk_level).
 
 TOOL_RESULT_CHAR_CAP = 8000
 TRANSCRIPT_CHAR_BUDGET = 48000
@@ -654,7 +650,7 @@ class AgentLoop:
         # One-time human approval for high-impact effects.  The gate parks
         # the run in WAITING_USER until an external decide_approval lands;
         # replay of a decided approval_id returns immediately.
-        if tool.executor_tool in _APPROVAL_GATED_TOOLS:
+        if tool.risk_level >= "R2":
             delegation = getattr(run_context, "delegation", None)
             if delegation is not None:
                 approval_id = f"{getattr(run_context, 'run_id', 'run')}:{call.id}"
@@ -662,14 +658,14 @@ class AgentLoop:
                     record = await delegation.request_approval(
                         run_context,
                         approval_id=approval_id,
-                        action=tool.executor_tool,
+                        action=tool.executor_tool or call.name,
                         scope=str(
                             call.arguments.get("command")
                             or call.arguments.get("path")
                             or call.arguments.get("code", "")
                         )[:500],
                         params=dict(call.arguments),
-                        risk_level="R2",
+                        risk_level=tool.risk_level,
                     )
                 except Exception as exc:
                     return _tool_message(

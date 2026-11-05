@@ -3149,3 +3149,9 @@ html[data-fx="standard"] .ws-root::after { animation: none; }
 .ura-step { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: 11px; }
 .ura-step code { font-size: 9.5px; color: var(--text-faint); }
 .ura-step small { font-size: 9px; color: var(--text-faint); }
+
+/* Venus compose bar */
+.ven-compose { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--line, rgba(255,255,255,.08)); }
+.ven-compose-input { width: 100%; background: rgba(255,255,255,.03); border: 1px solid var(--border-base); border-radius: 2px; color: var(--text-main); font-size: 12px; padding: 8px; resize: none; font-family: inherit; }
+.ven-compose-input:focus { outline: none; border-color: var(--planet-accent); }
+.ven-compose-send { align-self: flex-end; }

@@ -1551,6 +1551,83 @@ class ListEvaluationsRequest:
 
 
 @dataclass(frozen=True)
+class WorkflowGraphSummary:
+    graph_id: str
+    name: str
+    definition_json: str
+    owner: str
+    created_at: str
+    updated_at: str
+
+    def to_dict(self) -> dict[str, JSONValue]:
+        return {
+            "graph_id": self.graph_id,
+            "name": self.name,
+            "definition_json": self.definition_json,
+            "owner": self.owner,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+        }
+
+
+@dataclass(frozen=True)
+class UpsertWorkflowGraphRequest:
+    tenant_id: str
+    user_id: str
+    session_id: str
+    request_id: str
+    graph_id: str
+    name: str = ""
+    definition: Mapping[str, Any] = field(default_factory=dict)
+    owner: str = ""
+
+    def __post_init__(self) -> None:
+        _required_identifier(self.tenant_id, "tenant_id")
+        _required_identifier(self.user_id, "user_id")
+        _required_identifier(self.session_id, "session_id")
+        _required_identifier(self.request_id, "request_id")
+        _required_identifier(self.graph_id, "graph_id")
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "UpsertWorkflowGraphRequest":
+        return cls(
+            tenant_id=str(value.get("tenant_id", "")),
+            user_id=str(value.get("user_id", "")),
+            session_id=str(value.get("session_id", "")),
+            request_id=str(value.get("request_id", "")),
+            graph_id=str(value.get("graph_id", "")),
+            name=str(value.get("name", "")),
+            definition=dict(value.get("definition") or {}),
+            owner=str(value.get("owner", "")),
+        )
+
+
+@dataclass(frozen=True)
+class ListWorkflowGraphsRequest:
+    tenant_id: str
+    user_id: str
+    session_id: str
+    request_id: str
+    limit: int = 200
+
+    def __post_init__(self) -> None:
+        _required_identifier(self.tenant_id, "tenant_id")
+        _required_identifier(self.user_id, "user_id")
+        _required_identifier(self.session_id, "session_id")
+        _required_identifier(self.request_id, "request_id")
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "ListWorkflowGraphsRequest":
+        return cls(
+            tenant_id=str(value.get("tenant_id", "")),
+            user_id=str(value.get("user_id", "")),
+            session_id=str(value.get("session_id", "")),
+            request_id=str(value.get("request_id", "")),
+            limit=int(value.get("limit") or 200),
+        )
+
+
+@dataclass(frozen=True)
 class HandoffSummary:
     """Public delegation record: source run -> target run/task."""
 

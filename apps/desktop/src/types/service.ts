@@ -815,6 +815,38 @@ export interface ListWorkflowsRequest {
   requestId: string;
 }
 
+export interface WorkflowGraphSummary {
+  graphId: string;
+  name: string;
+  definitionJson: string;
+  owner: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UpsertWorkflowGraphRequest {
+  tenantId: string;
+  sessionId: string;
+  requestId: string;
+  graphId: string;
+  name?: string;
+  definition?: Record<string, unknown>;
+  owner?: string;
+}
+
+export interface ListWorkflowGraphsRequest {
+  tenantId: string;
+  sessionId: string;
+  requestId: string;
+  limit?: number;
+}
+
+/** Uranus canvas persistence — durable node-graph definitions. */
+export interface WorkflowGraphClient {
+  upsertWorkflowGraph(request: UpsertWorkflowGraphRequest): Promise<WorkflowGraphSummary>;
+  listWorkflowGraphs(request: ListWorkflowGraphsRequest): Promise<WorkflowGraphSummary[]>;
+}
+
 /** Real workflow definitions — Uranus canvas data face. */
 export interface WorkflowCatalogClient {
   listWorkflows(request: ListWorkflowsRequest): Promise<WorkflowDefinitionSummary[]>;
@@ -854,7 +886,7 @@ export interface TaskCatalogClient {
   getTask(request: TaskLookupRequest): Promise<TaskRecord>;
 }
 
-export interface DesktopAgentServiceClient extends AgentServiceClient, RunCatalogClient, TaskCatalogClient, ApprovalClient, SessionCatalogClient, HandoffClient, HistoryClient, ScheduleClient, ProfileClient, SettingsClient, WorkspaceClient, CapabilityClient, WebSearchClient, SkillClient, DelegationClient, MemoryClient, ParticipantClient, JupiterClient, WorkspaceFilesClient, EvaluationClient, WorkflowCatalogClient {
+export interface DesktopAgentServiceClient extends AgentServiceClient, RunCatalogClient, TaskCatalogClient, ApprovalClient, SessionCatalogClient, HandoffClient, HistoryClient, ScheduleClient, ProfileClient, SettingsClient, WorkspaceClient, CapabilityClient, WebSearchClient, SkillClient, DelegationClient, MemoryClient, ParticipantClient, JupiterClient, WorkspaceFilesClient, EvaluationClient, WorkflowCatalogClient, WorkflowGraphClient {
   readonly mode: DesktopAgentServiceMode;
   readonly identity: DesktopIdentity;
   /** Resolve the backend health before the UI begins using the client. */

@@ -57,6 +57,9 @@ import {
   type JupiterArtifactSummary,
   type ListWorkflowsRequest,
   type WorkflowDefinitionSummary,
+  type WorkflowGraphSummary,
+  type UpsertWorkflowGraphRequest,
+  type ListWorkflowGraphsRequest,
   type EvaluationSummary,
   type RecordEvaluationRequest,
   type ListEvaluationsRequest,
@@ -270,6 +273,18 @@ function mapArtifact(value: unknown, fallbackRunId: string): ArtifactSummary {
         : undefined,
     createdRevision: numberValue(raw.created_revision ?? 0, "artifact.created_revision"),
     createdAt: typeof raw.created_at === "string" ? raw.created_at : "",
+  };
+}
+
+function mapWorkflowGraph(value: unknown): WorkflowGraphSummary {
+  const raw = isRecord(value) ? value : (() => { throw new Error("workflow graph is not an object"); })();
+  return {
+    graphId: requiredString(raw.graph_id, "graph_id"),
+    name: optionalString(raw.name) ?? "",
+    definitionJson: optionalString(raw.definition_json) ?? "{}",
+    owner: optionalString(raw.owner) ?? "",
+    createdAt: optionalString(raw.created_at) ?? "",
+    updatedAt: optionalString(raw.updated_at) ?? "",
   };
 }
 
@@ -784,6 +799,26 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
       path: requiredString(raw.path, "path"),
       text: optionalString(raw.text) ?? "",
     };
+  }
+
+  async upsertWorkflowGraph(request: UpsertWorkflowGraphRequest): Promise<WorkflowGraphSummary> {
+    const raw = (await this.call("upsert_workflow_graph", {
+      tenant_id: request.tenantId, user_id: this.identity.userId,
+      session_id: request.sessionId, request_id: request.requestId,
+      graph_id: request.graphId, name: request.name ?? "",
+      definition: request.definition ?? {},
+      owner: request.owner ?? this.identity.userId,
+    })) as Record<string, unknown>;
+    return mapWorkflowGraph(raw);
+  }
+
+  async listWorkflowGraphs(request: ListWorkflowGraphsRequest): Promise<WorkflowGraphSummary[]> {
+    const result = (await this.call("list_workflow_graphs", {
+      tenant_id: request.tenantId, user_id: this.identity.userId,
+      session_id: request.sessionId, request_id: request.requestId,
+      limit: request.limit ?? 200,
+    })) as Array<Record<string, unknown>>;
+    return result.map((v) => mapWorkflowGraph(v));
   }
 
   async listWorkflows(request: ListWorkflowsRequest): Promise<WorkflowDefinitionSummary[]> {

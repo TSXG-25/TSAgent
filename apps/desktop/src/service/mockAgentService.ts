@@ -33,6 +33,7 @@ import {
   type ParticipantSummary,
   type JupiterArtifactSummary,
   type WorkflowDefinitionSummary,
+  type WorkflowGraphSummary,
   type WorkspaceFileSummary,
   type WorkspaceFileRequest,
   type WorkspaceFileContent,
@@ -446,6 +447,14 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
   async writeWorkspaceFile(request: WorkspaceFileRequest): Promise<WorkspaceFileContent> {
     this.wsFiles.set(request.path, request.content ?? "");
     return { path: request.path, text: "saved" };
+  }
+
+  async upsertWorkflowGraph(): Promise<WorkflowGraphSummary> {
+    return {} as WorkflowGraphSummary;
+  }
+
+  async listWorkflowGraphs(): Promise<WorkflowGraphSummary[]> {
+    return [];
   }
 
   async listWorkflows(): Promise<WorkflowDefinitionSummary[]> {

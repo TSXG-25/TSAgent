@@ -33,6 +33,7 @@ from .contracts import (
     ApprovalRecord,
     SessionParticipantRecord,
     EvaluationRecord,
+    WorkflowGraphRecord,
     WorkspaceRecord,
     HandoffRecord,
     ScheduledTaskRecord,
@@ -535,6 +536,18 @@ class SqliteRuntimeStore:
                     UNIQUE (tenant_id, run_id, event_id),
                     FOREIGN KEY (tenant_id, run_id)
                         REFERENCES run_heads (tenant_id, run_id)
+                );
+
+                CREATE TABLE IF NOT EXISTS workflow_graphs (
+                    tenant_id TEXT NOT NULL,
+                    graph_id TEXT NOT NULL,
+                    name TEXT NOT NULL DEFAULT '',
+                    definition_json TEXT NOT NULL DEFAULT '{}',
+                    owner TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    store_generation TEXT NOT NULL,
+                    PRIMARY KEY (tenant_id, graph_id)
                 );
 
                 CREATE TABLE IF NOT EXISTS evaluations (
@@ -2424,6 +2437,74 @@ class SqliteRuntimeStore:
                     verdict=str(r["verdict"]),
                     notes=str(r["notes"]),
                     created_at=str(r["created_at"]),
+                    store_generation=str(r["store_generation"]),
+                )
+                for r in rows
+                if str(r["store_generation"]) == self.store_generation
+            ]
+
+    def upsert_workflow_graph(
+        self,
+        tenant_id: str,
+        graph_id: str,
+        *,
+        name: str = "",
+        definition_json: str = "{}",
+        owner: str = "",
+    ) -> "WorkflowGraphRecord":
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        graph_id = _require_text(graph_id, "graph_id")
+        now = _now()
+        with self._write_transaction() as connection:
+            connection.execute(
+                """
+                INSERT INTO workflow_graphs
+                    (tenant_id, graph_id, name, definition_json, owner,
+                     created_at, updated_at, store_generation)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (tenant_id, graph_id) DO UPDATE SET
+                    name = excluded.name,
+                    definition_json = excluded.definition_json,
+                    owner = excluded.owner,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    tenant_id, graph_id, str(name), str(definition_json),
+                    str(owner), now, now, self.store_generation,
+                ),
+            )
+            return WorkflowGraphRecord(
+                tenant_id=tenant_id, graph_id=graph_id, name=str(name),
+                definition_json=str(definition_json), owner=str(owner),
+                created_at=now, updated_at=now,
+                store_generation=self.store_generation,
+            )
+
+    def list_workflow_graphs(
+        self, tenant_id: str, *, limit: int = 200
+    ) -> "list[WorkflowGraphRecord]":
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        with self._lock:
+            self._ensure_open()
+            rows = self._connection.execute(
+                """
+                SELECT tenant_id, graph_id, name, definition_json, owner,
+                       created_at, updated_at, store_generation
+                FROM workflow_graphs
+                WHERE tenant_id = ?
+                ORDER BY updated_at DESC LIMIT ?
+                """,
+                (tenant_id, int(limit)),
+            ).fetchall()
+            return [
+                WorkflowGraphRecord(
+                    tenant_id=str(r["tenant_id"]),
+                    graph_id=str(r["graph_id"]),
+                    name=str(r["name"]),
+                    definition_json=str(r["definition_json"]),
+                    owner=str(r["owner"]),
+                    created_at=str(r["created_at"]),
+                    updated_at=str(r["updated_at"]),
                     store_generation=str(r["store_generation"]),
                 )
                 for r in rows

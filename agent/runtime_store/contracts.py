@@ -45,6 +45,20 @@ class TaskHead:
 
 
 @dataclass(frozen=True)
+class WorkflowGraphRecord:
+    """Persisted node-graph definition for Uranus's workflow canvas."""
+
+    tenant_id: str
+    graph_id: str
+    name: str
+    definition_json: str
+    owner: str
+    created_at: str
+    updated_at: str
+    store_generation: str
+
+
+@dataclass(frozen=True)
 class EvaluationRecord:
     """An experiment verdict: baseline vs candidate with a score."""
 

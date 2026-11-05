@@ -951,6 +951,42 @@ class AgentService:
             created_at=record.created_at,
         )
 
+    async def upsert_workflow_graph(self, request: Any) -> Any:
+        self._ensure_open()
+        import json as _json
+
+        record = self._store.upsert_workflow_graph(
+            request.tenant_id,
+            request.graph_id,
+            name=request.name,
+            definition_json=_json.dumps(
+                dict(request.definition or {}), ensure_ascii=False
+            ),
+            owner=request.owner or request.user_id,
+        )
+        return self._graph_summary(record)
+
+    async def list_workflow_graphs(self, request: Any) -> list[Any]:
+        self._ensure_open()
+        records = self._store.list_workflow_graphs(
+            request.tenant_id,
+            limit=getattr(request, "limit", 200) or 200,
+        )
+        return [self._graph_summary(r) for r in records]
+
+    @staticmethod
+    def _graph_summary(record: Any) -> Any:
+        from .contracts import WorkflowGraphSummary
+
+        return WorkflowGraphSummary(
+            graph_id=record.graph_id,
+            name=record.name,
+            definition_json=record.definition_json,
+            owner=record.owner,
+            created_at=record.created_at,
+            updated_at=record.updated_at,
+        )
+
     async def list_participants(self, request: Any) -> list[Any]:
         self._ensure_open()
         records = self._store.list_participants(

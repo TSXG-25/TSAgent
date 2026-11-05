@@ -620,6 +620,29 @@ export interface ListSkillsRequest {
   requestId: string;
 }
 
+export interface DelegateRunRequest {
+  tenantId: string;
+  sessionId: string;
+  requestId: string;
+  parentRunId: string;
+  requestText: string;
+  targetPlanet?: string;
+  profileId?: string;
+  contextRefs?: string[];
+}
+
+export interface DelegateRunResult {
+  taskId: string;
+  handoffId: string;
+  sessionId: string;
+  targetPlanet: string;
+}
+
+/** Durable child-task + handoff provisioning for UI delegation. */
+export interface DelegationClient {
+  delegateRun(request: DelegateRunRequest): Promise<DelegateRunResult>;
+}
+
 /** Real skill index — SKILL.md frontmatter registry. */
 export interface SkillClient {
   listSkills(request: ListSkillsRequest): Promise<SkillSummary[]>;
@@ -704,6 +727,39 @@ export interface SearchArtifactsRequest {
   limit?: number;
 }
 
+export interface WorkspaceFileSummary {
+  path: string;
+  size: number;
+  modifiedAt: string;
+}
+
+export interface WorkspaceFileContent {
+  path: string;
+  text: string;
+}
+
+export interface ListWorkspaceFilesRequest {
+  tenantId: string;
+  sessionId: string;
+  requestId: string;
+  limit?: number;
+}
+
+export interface WorkspaceFileRequest {
+  tenantId: string;
+  sessionId: string;
+  requestId: string;
+  path: string;
+  content?: string;
+}
+
+/** Forge workspace filesystem — guarded read/write surface. */
+export interface WorkspaceFilesClient {
+  listWorkspaceFiles(request: ListWorkspaceFilesRequest): Promise<WorkspaceFileSummary[]>;
+  readWorkspaceFile(request: WorkspaceFileRequest): Promise<WorkspaceFileContent>;
+  writeWorkspaceFile(request: WorkspaceFileRequest): Promise<WorkspaceFileContent>;
+}
+
 /** Jupiter — cross-session artifact index. */
 export interface JupiterClient {
   searchArtifacts(request: SearchArtifactsRequest): Promise<JupiterArtifactSummary[]>;
@@ -738,7 +794,7 @@ export interface TaskCatalogClient {
   getTask(request: TaskLookupRequest): Promise<TaskRecord>;
 }
 
-export interface DesktopAgentServiceClient extends AgentServiceClient, RunCatalogClient, TaskCatalogClient, ApprovalClient, SessionCatalogClient, HandoffClient, HistoryClient, ScheduleClient, ProfileClient, SettingsClient, WorkspaceClient, CapabilityClient, WebSearchClient, SkillClient, MemoryClient, ParticipantClient, JupiterClient {
+export interface DesktopAgentServiceClient extends AgentServiceClient, RunCatalogClient, TaskCatalogClient, ApprovalClient, SessionCatalogClient, HandoffClient, HistoryClient, ScheduleClient, ProfileClient, SettingsClient, WorkspaceClient, CapabilityClient, WebSearchClient, SkillClient, DelegationClient, MemoryClient, ParticipantClient, JupiterClient, WorkspaceFilesClient {
   readonly mode: DesktopAgentServiceMode;
   readonly identity: DesktopIdentity;
   /** Resolve the backend health before the UI begins using the client. */

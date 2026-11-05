@@ -54,7 +54,13 @@ import {
   type ParticipantSummary,
   type SearchArtifactsRequest,
   type JupiterArtifactSummary,
+  type ListWorkspaceFilesRequest,
+  type WorkspaceFileSummary,
+  type WorkspaceFileContent,
+  type WorkspaceFileRequest,
   type SkillSummary,
+  type DelegateRunRequest,
+  type DelegateRunResult,
   type ListSchedulesRequest,
   type ListSessionsRequest,
   type StartRunRequest,
@@ -696,6 +702,43 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
     };
   }
 
+  async listWorkspaceFiles(request: ListWorkspaceFilesRequest): Promise<WorkspaceFileSummary[]> {
+    const result = (await this.call("list_workspace_files", {
+      tenant_id: request.tenantId, user_id: this.identity.userId,
+      session_id: request.sessionId, request_id: request.requestId,
+      limit: request.limit ?? 500,
+    })) as Array<Record<string, unknown>>;
+    return result.map((raw) => ({
+      path: requiredString(raw.path, "path"),
+      size: Number(raw.size ?? 0),
+      modifiedAt: optionalString(raw.modified_at) ?? "",
+    }));
+  }
+
+  async readWorkspaceFile(request: WorkspaceFileRequest): Promise<WorkspaceFileContent> {
+    const raw = (await this.call("read_workspace_file", {
+      tenant_id: request.tenantId, user_id: this.identity.userId,
+      session_id: request.sessionId, request_id: request.requestId,
+      path: request.path,
+    })) as Record<string, unknown>;
+    return {
+      path: requiredString(raw.path, "path"),
+      text: optionalString(raw.text) ?? "",
+    };
+  }
+
+  async writeWorkspaceFile(request: WorkspaceFileRequest): Promise<WorkspaceFileContent> {
+    const raw = (await this.call("write_workspace_file", {
+      tenant_id: request.tenantId, user_id: this.identity.userId,
+      session_id: request.sessionId, request_id: request.requestId,
+      path: request.path, content: request.content ?? "",
+    })) as Record<string, unknown>;
+    return {
+      path: requiredString(raw.path, "path"),
+      text: optionalString(raw.text) ?? "",
+    };
+  }
+
   async searchArtifacts(request: SearchArtifactsRequest): Promise<JupiterArtifactSummary[]> {
     const result = (await this.call("search_artifacts", {
       tenant_id: request.tenantId, user_id: this.identity.userId,
@@ -760,6 +803,24 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
       category: optionalString(raw.category) ?? "",
       key: optionalString(raw.key) ?? "",
       removed: Boolean(raw.removed),
+    };
+  }
+
+  async delegateRun(request: DelegateRunRequest): Promise<DelegateRunResult> {
+    const raw = await this.call("delegate_run", {
+      tenant_id: request.tenantId, user_id: this.identity.userId,
+      session_id: request.sessionId, request_id: request.requestId,
+      parent_run_id: request.parentRunId,
+      request_text: request.requestText,
+      target_planet: request.targetPlanet ?? "",
+      profile_id: request.profileId ?? "",
+      context_refs: request.contextRefs ?? [],
+    }) as Record<string, unknown>;
+    return {
+      taskId: requiredString(raw.task_id, "task_id"),
+      handoffId: requiredString(raw.handoff_id, "handoff_id"),
+      sessionId: optionalString(raw.session_id) ?? "",
+      targetPlanet: optionalString(raw.target_planet) ?? "",
     };
   }
 

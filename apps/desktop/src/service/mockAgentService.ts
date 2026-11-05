@@ -12,6 +12,9 @@ import {
   type ApprovalSummary,
   type SessionSummary,
   type HandoffSummary,
+  type DelegateRunRequest,
+  type CreateSessionRequest,
+  type DelegateRunResult,
   type HistoryEntry,
   type ScheduleSummary,
   type CreateScheduleRequest,
@@ -29,6 +32,8 @@ import {
   type FactForgetResult,
   type ParticipantSummary,
   type JupiterArtifactSummary,
+  type WorkspaceFileSummary,
+  type WorkspaceFileContent,
   type UpsertWorkspaceRequest,
   type DecideApprovalRequest,
   type ProfileSummary,
@@ -240,9 +245,22 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
     return this.approvals.find((a) => a.approvalId === request.approvalId)!;
   }
 
-  async createSession(): Promise<SessionSummary> {
-    throw clientError("UNSUPPORTED_OPERATION", "mock client does not manage sessions");
+  async createSession(request: CreateSessionRequest): Promise<SessionSummary> {
+    const session: SessionSummary = {
+      tenantId: request.tenantId,
+      sessionId: request.sessionId || `session-${Math.random().toString(16).slice(2, 10)}`,
+      userId: request.userId,
+      createdAt: new Date().toISOString(),
+      runCount: 0,
+      latestRunId: "",
+      latestStatus: "idle",
+      latestUpdatedAt: new Date().toISOString(),
+    };
+    this.extraSessions = [session, ...this.extraSessions];
+    return session;
   }
+
+  private extraSessions: SessionSummary[] = [];
 
   async listSessions(): Promise<SessionSummary[]> {
     const bySession = new Map<string, SessionSummary>();
@@ -259,7 +277,7 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
         latestUpdatedAt: run.updatedAt,
       });
     }
-    return [...bySession.values()];
+    return [...this.extraSessions, ...bySession.values()];
   }
 
   private handoffs: HandoffSummary[] = [
@@ -379,6 +397,18 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
     };
   }
 
+  async listWorkspaceFiles(): Promise<WorkspaceFileSummary[]> {
+    return [];
+  }
+
+  async readWorkspaceFile(): Promise<WorkspaceFileContent> {
+    return {} as WorkspaceFileContent;
+  }
+
+  async writeWorkspaceFile(): Promise<WorkspaceFileContent> {
+    return {} as WorkspaceFileContent;
+  }
+
   async searchArtifacts(): Promise<JupiterArtifactSummary[]> {
     return [];
   }
@@ -393,6 +423,29 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
 
   async forgetFact(): Promise<FactForgetResult> {
     return {} as FactForgetResult;
+  }
+
+  async delegateRun(request: DelegateRunRequest): Promise<DelegateRunResult> {
+    const task = await this.createTask({
+      tenantId: request.tenantId,
+      sessionId: request.sessionId,
+      requestId: request.requestId,
+      parentTaskId: request.parentRunId ? `task-${request.parentRunId}` : "",
+      originPlanet: request.targetPlanet ?? "",
+    });
+    const handoff: HandoffSummary = {
+      handoffId: `handoff-${Math.random().toString(16).slice(2, 10)}`,
+      sourceRunId: request.parentRunId,
+      sourceTaskId: request.parentRunId ? `task-${request.parentRunId}` : "",
+      targetTaskId: task.taskId,
+      targetRunId: "",
+      targetPlanet: request.targetPlanet ?? "",
+      contextRefs: request.contextRefs ?? [],
+      approvalState: "not_required",
+      createdAt: new Date().toISOString(),
+    };
+    this.handoffs = [handoff, ...this.handoffs];
+    return { taskId: task.taskId, handoffId: handoff.handoffId, sessionId: request.sessionId, targetPlanet: request.targetPlanet ?? "" };
   }
 
   async listSkills(): Promise<SkillSummary[]> {
@@ -737,6 +790,9 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
   }
 
   async subscribeEvents(request: EventStreamRequest): Promise<RunEvent[]> {
+    // Simulate the long-poll hold — real sidecar blocks ~8s; the mock paces
+    // the loop so chained subscriptions don't hot-spin.
+    await new Promise((resolve) => setTimeout(resolve, 250));
     return this.readEvents(request);
   }
 

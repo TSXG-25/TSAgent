@@ -843,6 +843,72 @@ class AgentService:
             for r in rows
         ]
 
+    def _workspace_service(self) -> Any:
+        """Scoped filesystem view for the Mars/forge workspace surfaces."""
+        root = getattr(self._contexts, "workspace_root", None)
+        if root is None:
+            raise AgentServiceError(
+                ServiceErrorCode.INVALID_REQUEST,
+                "service has no workspace root",
+            )
+        from agent.services.workspace_service import WorkspaceService
+
+        return WorkspaceService.scoped(root)
+
+    async def list_workspace_files(self, request: Any) -> list[Any]:
+        """Mars forge: enumerate workspace files (names only)."""
+        self._ensure_open()
+        import asyncio
+
+        workspace = self._workspace_service()
+        from .contracts import WorkspaceFileSummary
+
+        root = workspace.root
+        entries: list[Any] = []
+        files = await asyncio.to_thread(
+            lambda: sorted(
+                p for p in root.rglob("*")
+                if p.is_file() and ".tsagent" not in p.parts
+            )
+        )
+        for path in files[: (getattr(request, "limit", 500) or 500)]:
+            entries.append(
+                WorkspaceFileSummary(
+                    path=workspace.relative_path(path),
+                    size=path.stat().st_size,
+                    modified_at=str(path.stat().st_mtime_ns),
+                )
+            )
+        return entries
+
+    async def read_workspace_file(self, request: Any) -> Any:
+        """Mars forge editor: read one workspace file (guarded + redacted)."""
+        self._ensure_open()
+        import asyncio
+
+        workspace = self._workspace_service()
+        text = await asyncio.to_thread(workspace.read_text, request.path)
+        from .contracts import WorkspaceFileContent
+
+        return WorkspaceFileContent(
+            path=workspace.relative_path(request.path), text=text
+        )
+
+    async def write_workspace_file(self, request: Any) -> Any:
+        """Mars forge editor: write one workspace file — guarded path rules."""
+        self._ensure_open()
+        import asyncio
+
+        workspace = self._workspace_service()
+        message = await asyncio.to_thread(
+            workspace.write_text, request.path, request.content
+        )
+        from .contracts import WorkspaceFileContent
+
+        return WorkspaceFileContent(
+            path=workspace.relative_path(request.path), text=message
+        )
+
     async def list_participants(self, request: Any) -> list[Any]:
         self._ensure_open()
         records = self._store.list_participants(
@@ -935,6 +1001,70 @@ class AgentService:
                 )
             )
         return entries
+
+    def _validate_store_refs(
+        self, tenant_id: str, session_id: str, run_id: str, refs: Any
+    ) -> list[str]:
+        """Store-level context-ref validation for UI-side delegation —
+        same schemes as the loop path, no live run_context needed."""
+        resolved: list[str] = []
+        for ref in refs or ():
+            raw = str(ref)
+            kind, _, target = raw.partition(":")
+            if kind == "file" and target:
+                root = getattr(self._contexts, "workspace_root", None)
+                if root is None:
+                    raise AgentServiceError(
+                        ServiceErrorCode.INVALID_REQUEST,
+                        "context ref file: requires a workspace",
+                    )
+                import asyncio  # noqa: F401 — sync resolve
+                resolved_path = root / target
+                if not resolved_path.exists():
+                    raise AgentServiceError(
+                        ServiceErrorCode.INVALID_REQUEST,
+                        f"context ref not readable in workspace: {raw}",
+                    )
+                resolved.append(f"file:{target}")
+            elif kind == "task" and target:
+                if self._store.get_task_head(tenant_id, target) is None:
+                    raise AgentServiceError(
+                        ServiceErrorCode.INVALID_REQUEST,
+                        f"context ref task not found: {raw}",
+                    )
+                resolved.append(f"task:{target}")
+            elif kind == "run" and target:
+                if self._store.get_run_head(
+                    tenant_id, target, session_id=session_id
+                ) is None:
+                    raise AgentServiceError(
+                        ServiceErrorCode.INVALID_REQUEST,
+                        f"context ref run not found in session: {raw}",
+                    )
+                resolved.append(f"run:{target}")
+            elif kind == "artifact" and target:
+                snapshot = self._store.read_run_snapshot(
+                    tenant_id, run_id, session_id=session_id
+                )
+                known = {
+                    str(getattr(a, "artifact_id", ""))
+                    for a in getattr(snapshot, "artifacts", ()) or ()
+                } | {
+                    str(getattr(a, "path", ""))
+                    for a in getattr(snapshot, "artifacts", ()) or ()
+                }
+                if target not in known:
+                    raise AgentServiceError(
+                        ServiceErrorCode.INVALID_REQUEST,
+                        f"context ref artifact not produced by this run: {raw}",
+                    )
+                resolved.append(f"artifact:{target}")
+            else:
+                raise AgentServiceError(
+                    ServiceErrorCode.INVALID_REQUEST,
+                    f"unsupported context ref scheme: {raw}",
+                )
+        return resolved
 
     def _resolve_context_refs(
         self, run_context: Any, refs: Any
@@ -1036,6 +1166,69 @@ class AgentService:
                 best = workspace
                 best_score = score
         return best
+
+    async def delegate_run(self, request: Any) -> Any:
+        """UI delegation: child Task + Handoff edge durably provisioned.
+
+        Mirrors spawn_subtask's durable sequence but resolves the parent by
+        run_id — the child Run is started separately via start_run so the
+        desktop controller keeps its hydration path.
+        """
+        self._ensure_open()
+        import json as _json
+        import uuid
+
+        from .errors import AgentServiceError, ServiceErrorCode
+
+        tenant_id, session_id = request.tenant_id, request.session_id
+        parent_head = self._store.get_run_head(
+            tenant_id, request.parent_run_id, session_id=session_id
+        )
+        if parent_head is None:
+            raise AgentServiceError(
+                ServiceErrorCode.RUN_NOT_FOUND,
+                f"run was not found: {request.parent_run_id}",
+            )
+        profile = None
+        if request.profile_id:
+            profile = self._store.get_profile(tenant_id, request.profile_id)
+            if profile is None:
+                raise AgentServiceError(
+                    ServiceErrorCode.INVALID_REQUEST,
+                    f"agent profile not found: {request.profile_id}",
+                )
+        target_planet = request.target_planet or (profile.planet_affinity if profile else "")
+        refs = self._validate_store_refs(
+            tenant_id,
+            session_id,
+            request.parent_run_id,
+            request.context_refs,
+        )
+        child_task = self._store.create_task_head(
+            tenant_id,
+            session_id,
+            f"task-{uuid.uuid4().hex[:12]}",
+            parent_task_id=parent_head.task_id if parent_head else "",
+            origin_planet=target_planet,
+            owner_profile_id=request.profile_id,
+        )
+        handoff = self._store.create_handoff(
+            tenant_id,
+            session_id,
+            f"handoff-{uuid.uuid4().hex[:12]}",
+            source_run_id=request.parent_run_id,
+            source_task_id=parent_head.task_id if parent_head else "",
+            target_task_id=child_task.task_id,
+            target_planet=target_planet,
+            context_refs_json=_json.dumps(refs),
+            approval_state="not_required",
+        )
+        return {
+            "task_id": child_task.task_id,
+            "handoff_id": handoff.handoff_id,
+            "session_id": session_id,
+            "target_planet": target_planet,
+        }
 
     async def create_schedule(self, request: Any) -> Any:
         self._ensure_open()

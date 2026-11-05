@@ -1339,6 +1339,122 @@ class SearchArtifactsRequest:
 
 
 @dataclass(frozen=True)
+class DelegateRunRequest:
+    """UI-side delegation: provision a child Task + durable Handoff edge in
+    one call (the run itself is started via start_run with the task_id)."""
+
+    tenant_id: str
+    user_id: str
+    session_id: str
+    request_id: str
+    parent_run_id: str
+    request_text: str
+    target_planet: str = ""
+    profile_id: str = ""
+    context_refs: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        _required_identifier(self.tenant_id, "tenant_id")
+        _required_identifier(self.user_id, "user_id")
+        _required_identifier(self.session_id, "session_id")
+        _required_identifier(self.request_id, "request_id")
+        _required_identifier(self.parent_run_id, "parent_run_id")
+        if not self.request_text.strip():
+            raise ValueError("request_text must be a non-empty string")
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "DelegateRunRequest":
+        return cls(
+            tenant_id=str(value.get("tenant_id", "")),
+            user_id=str(value.get("user_id", "")),
+            session_id=str(value.get("session_id", "")),
+            request_id=str(value.get("request_id", "")),
+            parent_run_id=str(value.get("parent_run_id", "")),
+            request_text=str(value.get("request_text", "")),
+            target_planet=str(value.get("target_planet", "")),
+            profile_id=str(value.get("profile_id", "")),
+            context_refs=tuple(str(v) for v in (value.get("context_refs") or ())),
+        )
+
+
+@dataclass(frozen=True)
+class WorkspaceFileSummary:
+    path: str
+    size: int
+    modified_at: str
+
+    def to_dict(self) -> dict[str, JSONValue]:
+        return {
+            "path": self.path,
+            "size": self.size,
+            "modified_at": self.modified_at,
+        }
+
+
+@dataclass(frozen=True)
+class WorkspaceFileContent:
+    path: str
+    text: str
+
+    def to_dict(self) -> dict[str, JSONValue]:
+        return {"path": self.path, "text": self.text}
+
+
+@dataclass(frozen=True)
+class ListWorkspaceFilesRequest:
+    tenant_id: str
+    user_id: str
+    session_id: str
+    request_id: str
+    limit: int = 500
+
+    def __post_init__(self) -> None:
+        _required_identifier(self.tenant_id, "tenant_id")
+        _required_identifier(self.user_id, "user_id")
+        _required_identifier(self.session_id, "session_id")
+        _required_identifier(self.request_id, "request_id")
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "ListWorkspaceFilesRequest":
+        return cls(
+            tenant_id=str(value.get("tenant_id", "")),
+            user_id=str(value.get("user_id", "")),
+            session_id=str(value.get("session_id", "")),
+            request_id=str(value.get("request_id", "")),
+            limit=int(value.get("limit") or 500),
+        )
+
+
+@dataclass(frozen=True)
+class WorkspaceFileRequest:
+    tenant_id: str
+    user_id: str
+    session_id: str
+    request_id: str
+    path: str
+    content: str = ""
+
+    def __post_init__(self) -> None:
+        _required_identifier(self.tenant_id, "tenant_id")
+        _required_identifier(self.user_id, "user_id")
+        _required_identifier(self.session_id, "session_id")
+        _required_identifier(self.request_id, "request_id")
+        if not str(self.path).strip():
+            raise ValueError("path must be a non-empty string")
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "WorkspaceFileRequest":
+        return cls(
+            tenant_id=str(value.get("tenant_id", "")),
+            user_id=str(value.get("user_id", "")),
+            session_id=str(value.get("session_id", "")),
+            request_id=str(value.get("request_id", "")),
+            path=str(value.get("path", "")),
+            content=str(value.get("content", "")),
+        )
+
+
+@dataclass(frozen=True)
 class HandoffSummary:
     """Public delegation record: source run -> target run/task."""
 

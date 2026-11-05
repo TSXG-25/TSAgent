@@ -19,10 +19,13 @@ import {
   type CapabilitySummary,
   type WebSearchResult,
   type SkillSummary,
+  type DelegateRunResult,
   type FactRecordSummary,
   type FactForgetResult,
   type ParticipantSummary,
   type JupiterArtifactSummary,
+  type WorkspaceFileSummary,
+  type WorkspaceFileContent,
   type SettingsSummary,
   type WorkspaceSummary,
   type TaskHandle,
@@ -166,6 +169,18 @@ class UnavailableDesktopAgentServiceClient implements DesktopAgentServiceClient 
     throw this.error;
   }
 
+  async listWorkspaceFiles(): Promise<WorkspaceFileSummary[]> {
+    throw this.error;
+  }
+
+  async readWorkspaceFile(): Promise<WorkspaceFileContent> {
+    throw this.error;
+  }
+
+  async writeWorkspaceFile(): Promise<WorkspaceFileContent> {
+    throw this.error;
+  }
+
   async searchArtifacts(): Promise<JupiterArtifactSummary[]> {
     throw this.error;
   }
@@ -183,6 +198,10 @@ class UnavailableDesktopAgentServiceClient implements DesktopAgentServiceClient 
   }
 
   async listSkills(): Promise<SkillSummary[]> {
+    throw this.error;
+  }
+
+  async delegateRun(): Promise<DelegateRunResult> {
     throw this.error;
   }
 

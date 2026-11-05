@@ -57,10 +57,14 @@ class SidecarDispatcher:
             LocalTransportMethod.LIST_CAPABILITIES: self._list_capabilities,
             LocalTransportMethod.WEB_SEARCH: self._web_search,
             LocalTransportMethod.LIST_SKILLS: self._list_skills,
+            LocalTransportMethod.DELEGATE_RUN: self._delegate_run,
             LocalTransportMethod.LIST_FACTS: self._list_facts,
             LocalTransportMethod.FORGET_FACT: self._forget_fact,
             LocalTransportMethod.LIST_PARTICIPANTS: self._list_participants,
             LocalTransportMethod.SEARCH_ARTIFACTS: self._search_artifacts,
+            LocalTransportMethod.LIST_WORKSPACE_FILES: self._list_workspace_files,
+            LocalTransportMethod.READ_WORKSPACE_FILE: self._read_workspace_file,
+            LocalTransportMethod.WRITE_WORKSPACE_FILE: self._write_workspace_file,
             LocalTransportMethod.READ_EVENTS: self._read_events,
             LocalTransportMethod.SUBSCRIBE_EVENTS: self._subscribe_events,
             LocalTransportMethod.SHUTDOWN: self._shutdown,
@@ -312,6 +316,12 @@ class SidecarDispatcher:
         request = self._from_dto(PauseRunRequest.from_dict, params)
         return await self._service.pause_run(request)
 
+    async def _delegate_run(self, params: Mapping[str, Any]) -> Any:
+        from ..contracts import DelegateRunRequest
+
+        request = self._from_dto(DelegateRunRequest.from_dict, params)
+        return await self._service.delegate_run(request)
+
     async def _list_skills(self, params: Mapping[str, Any]) -> Any:
         """Real skill index (SKILL.md frontmatter) — Uranus binds profiles to
         actual skill ids, not made-up names."""
@@ -345,6 +355,24 @@ class SidecarDispatcher:
 
         request = self._from_dto(SearchArtifactsRequest.from_dict, params)
         return await self._service.search_artifacts(request)
+
+    async def _list_workspace_files(self, params: Mapping[str, Any]) -> Any:
+        from ..contracts import ListWorkspaceFilesRequest
+
+        request = self._from_dto(ListWorkspaceFilesRequest.from_dict, params)
+        return await self._service.list_workspace_files(request)
+
+    async def _read_workspace_file(self, params: Mapping[str, Any]) -> Any:
+        from ..contracts import WorkspaceFileRequest
+
+        request = self._from_dto(WorkspaceFileRequest.from_dict, params)
+        return await self._service.read_workspace_file(request)
+
+    async def _write_workspace_file(self, params: Mapping[str, Any]) -> Any:
+        from ..contracts import WorkspaceFileRequest
+
+        request = self._from_dto(WorkspaceFileRequest.from_dict, params)
+        return await self._service.write_workspace_file(request)
 
     async def _list_artifacts(self, params: Mapping[str, Any]) -> Any:
         from ..contracts import RunLookupRequest

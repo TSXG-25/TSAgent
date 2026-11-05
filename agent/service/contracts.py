@@ -751,6 +751,7 @@ class ScheduleSummary:
     schedule_id: str
     session_id: str
     request_text: str
+    user_id: str
     target_planet: str
     interval_seconds: int
     status: str
@@ -765,6 +766,7 @@ class ScheduleSummary:
             "schedule_id": self.schedule_id,
             "session_id": self.session_id,
             "request_text": self.request_text,
+            "user_id": self.user_id,
             "target_planet": self.target_planet,
             "interval_seconds": self.interval_seconds,
             "status": self.status,

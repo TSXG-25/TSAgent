@@ -271,6 +271,7 @@ function mapSchedule(value: unknown): ScheduleSummary {
     scheduleId: requiredString(raw.schedule_id, "schedule_id"),
     sessionId: requiredString(raw.session_id, "session_id"),
     requestText: optionalString(raw.request_text) ?? "",
+    userId: optionalString(raw.user_id) ?? "",
     targetPlanet: optionalString(raw.target_planet) ?? "",
     intervalSeconds: Number(raw.interval_seconds ?? 0),
     status: optionalString(raw.status) ?? "ACTIVE",

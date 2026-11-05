@@ -845,6 +845,7 @@ class AgentService:
             request.session_id,
             request.request_text,
             request.interval_seconds,
+            user_id=request.user_id,
             target_planet=request.target_planet,
         )
         self._ensure_scheduler()
@@ -882,6 +883,7 @@ class AgentService:
             schedule_id=record.schedule_id,
             session_id=record.session_id,
             request_text=record.request_text,
+            user_id=record.user_id,
             target_planet=record.target_planet,
             interval_seconds=record.interval_seconds,
             status=record.status,
@@ -921,7 +923,7 @@ class AgentService:
                     handle = await self.start_run(
                         StartRunRequest(
                             tenant_id=schedule.tenant_id,
-                            user_id="saturn",
+                            user_id=schedule.user_id or "saturn",
                             session_id=(
                                 f"{schedule.session_id}:sched:"
                                 f"{schedule.schedule_id}"

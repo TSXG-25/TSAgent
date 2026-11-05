@@ -68,6 +68,7 @@ class ScheduledTaskRecord:
     schedule_id: str
     session_id: str
     request_text: str
+    user_id: str
     target_planet: str
     interval_seconds: int
     status: str  # ACTIVE | PAUSED

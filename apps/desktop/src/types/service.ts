@@ -433,6 +433,7 @@ export interface ScheduleSummary {
   scheduleId: string;
   sessionId: string;
   requestText: string;
+  userId: string;
   targetPlanet: string;
   intervalSeconds: number;
   status: string;

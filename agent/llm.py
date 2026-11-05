@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from langchain_core.messages import SystemMessage, BaseMessage
+from langchain_core.messages import SystemMessage, BaseMessage, HumanMessage
 from agent.interruption import RunInterruptionRequested, await_interruptibly
 from agent.execution_errors import (
     ProviderError,
@@ -255,7 +255,7 @@ class _OllamaHTTPProvider:
         if "max_tokens" in kwargs:
             options["num_predict"] = kwargs["max_tokens"]
         return {
-            "model": self.model,
+            "model": kwargs.get("model") or self.model,
             "messages": self._chat_messages(messages),
             "tools": [dict(tool) for tool in tools],
             "stream": False,
@@ -445,7 +445,9 @@ async def _deepseek_achat(
 
     on_delta = kwargs.pop("on_delta", None)
     payload: dict[str, Any] = {
-        "model": getattr(provider, "model_name", None) or DEEPSEEK_MODEL,
+        "model": kwargs.get("model")
+        or getattr(provider, "model_name", None)
+        or DEEPSEEK_MODEL,
         "messages": _to_openai_messages(messages),
         "tools": [dict(tool) for tool in tools],
         "tool_choice": "auto",
@@ -530,35 +532,45 @@ async def _deepseek_achat(
 def _inject_time_to_transcript(
     messages: Sequence[Mapping[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Apply the same current-time hint to canonical transcript dicts."""
+    """Append the current-time hint to the LAST user message.
+
+    时间戳放在尾部而非 system 前缀：前缀在多次调用间保持稳定，
+    远端 prefix cache（DeepSeek context caching）才能命中。
+    """
     now_hint = f"[当前时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]"
     rendered = [dict(message) for message in messages]
-    for index, message in enumerate(rendered):
-        if message.get("role") == "system":
+    import re
+    for index in range(len(rendered) - 1, -1, -1):
+        message = rendered[index]
+        if message.get("role") in {"user", "human"}:
             content = str(message.get("content", ""))
             if "[当前时间:" in content:
-                import re
                 content = re.sub(r"\[当前时间: [^\]]+\]", now_hint, content)
             else:
-                content = f"{now_hint}\n{content}"
+                content = f"{content}\n{now_hint}"
             rendered[index] = {**message, "content": content}
             return rendered
     return [{"role": "system", "content": now_hint}] + rendered
 
 
 def _inject_time_to_system(messages: list[BaseMessage]) -> list[BaseMessage]:
+    """Append the current-time hint to the LAST human message.
+
+    与 _inject_time_to_transcript 同策：易变信息放尾部，保住可缓存前缀。
+    """
     now_hint = f"[当前时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]"
     if not messages:
         return [SystemMessage(content=now_hint)]
-    for i, msg in enumerate(messages):
-        if isinstance(msg, SystemMessage):
+    import re
+    for i in range(len(messages) - 1, -1, -1):
+        msg = messages[i]
+        if isinstance(msg, HumanMessage):
             content = msg.content
             if "[当前时间:" in content:
-                import re
-                content = re.sub(r'\[当前时间: [^\]]+\]', now_hint, content)
+                content = re.sub(r"\[当前时间: [^\]]+\]", now_hint, content)
             else:
-                content = f"{now_hint}\n{content}"
-            messages[i] = SystemMessage(content=content)
+                content = f"{content}\n{now_hint}"
+            messages[i] = HumanMessage(content=content)
             return messages
     return [SystemMessage(content=now_hint)] + messages
 
@@ -578,6 +590,11 @@ def _retryable_provider_error(error: object) -> bool:
     if code in ("PROVIDER_TIMEOUT", "PROVIDER_NETWORK"):
         return True
     if code:
+        return False
+    # 本地确定性错误（SDK/客户端 bug）重试无意义：TypeError（如 brotli
+    # 解压签名不匹配）、SyntaxError、AttributeError、KeyError、IndexError
+    if isinstance(error, (TypeError, SyntaxError, AttributeError,
+                          KeyError, IndexError)):
         return False
     text = str(error or "").upper()
     if "HTTP 4" in text or "HTTP 5" in text:

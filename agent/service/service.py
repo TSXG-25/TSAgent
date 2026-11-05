@@ -562,6 +562,16 @@ class AgentService:
                 request_id=f"subtask:{child_task.task_id}",
                 request_text=child_text,
                 task_id=child_task.task_id,
+                metadata={
+                    "agent_profile": {
+                        "profile_id": profile.profile_id,
+                        "model_ref": profile.model_ref,
+                        "skill_refs": _json.loads(profile.skill_refs_json or "[]"),
+                        "permission_policy": _json.loads(
+                            profile.permission_policy_json or "{}"
+                        ),
+                    }
+                } if profile is not None else {},
             )
         )
         self._store.update_handoff_target_run(

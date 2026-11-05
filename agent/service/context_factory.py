@@ -100,7 +100,7 @@ class ServiceContextFactory:
             workspace = workspace.resolve()
         from agent.runtime_context import RunContext
 
-        return session.create_run(
+        context = session.create_run(
             run_id,
             # The Service boundary owns an explicit workspace root.  Passing
             # it here is mandatory: omitting it silently routes the Runtime
@@ -111,6 +111,10 @@ class ServiceContextFactory:
             takeover_writer=takeover_writer,
             worker_lease=True,
         )
+        context.agent_profile = dict(
+            (getattr(request, "metadata", None) or {}).get("agent_profile") or {}
+        )
+        return context
 
     def release_run(self, run: RunContext) -> None:
         if not run.closed:

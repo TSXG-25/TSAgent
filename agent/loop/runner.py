@@ -219,12 +219,43 @@ class AgentLoop:
         budget = self._orch.run_budget
 
         authorization = EffectAuthorization.from_state(state, user_input)
+        # AgentProfile overlay — delegated runs carry the profile the
+        # handoff resolved: permission_policy trims requested_outcomes,
+        # skill_refs narrows the skill catalog, model_ref overrides model.
+        _profile = dict(getattr(run_context, "agent_profile", None) or {})
+        _policy = dict(_profile.get("permission_policy") or {})
+        _denied_outcomes = set()
+        if _policy.get("allow_execution") is False:
+            from agent.cognition.execution_need import RequestedOutcome
+
+            _denied_outcomes |= {
+                RequestedOutcome.CODE_EXECUTION,
+                RequestedOutcome.COMMAND_EXECUTION,
+            }
+        if _policy.get("allow_mutation") is False:
+            from agent.cognition.execution_need import RequestedOutcome
+
+            _denied_outcomes.add(RequestedOutcome.FILE_MUTATION)
+        if _denied_outcomes:
+            from dataclasses import replace
+
+            authorization = replace(
+                authorization,
+                requested_outcomes=tuple(
+                    o
+                    for o in authorization.requested_outcomes
+                    if o not in _denied_outcomes
+                ),
+            )
         workflows = workflow_projections() if (
             authorization.allows_file_mutation or authorization.requires_execution
         ) else []
         from agent.skills import merged_skills
 
         skills = merged_skills(getattr(run_context, "workspace", None))
+        _skill_refs = set(str(s) for s in (_profile.get("skill_refs") or ()))
+        if _skill_refs:
+            skills = {k: v for k, v in skills.items() if k in _skill_refs}
         from agent.mcp.tools import discover_exposed_tools
 
         mcp_tools = await discover_exposed_tools()
@@ -300,6 +331,7 @@ class AgentLoop:
                 transcript,
                 tool_specs,
                 on_delta=_on_delta if event_bus is not None else None,
+                model=str(_profile.get("model_ref") or "") or None,
             )
             _flush_delta()
             self._orch._timings["loop_llm"] = round(

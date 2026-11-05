@@ -408,6 +408,27 @@ export interface ListHandoffsRequest {
   limit?: number;
 }
 
+export interface HistoryEntry {
+  runId: string;
+  taskId: string;
+  requestText: string;
+  answerText: string;
+  status: string;
+  updatedAt: string;
+}
+
+export interface ListHistoryRequest {
+  tenantId: string;
+  sessionId: string;
+  requestId: string;
+  limit?: number;
+}
+
+/** Jupiter history — cross-run request/answer provenance. */
+export interface HistoryClient {
+  listHistory(request: ListHistoryRequest): Promise<HistoryEntry[]>;
+}
+
 /** Delegation records — Sun-side task tree edges. */
 export interface HandoffClient {
   listHandoffs(request: ListHandoffsRequest): Promise<HandoffSummary[]>;
@@ -426,7 +447,7 @@ export interface TaskCatalogClient {
   getTask(request: TaskLookupRequest): Promise<TaskRecord>;
 }
 
-export interface DesktopAgentServiceClient extends AgentServiceClient, RunCatalogClient, TaskCatalogClient, ApprovalClient, SessionCatalogClient, HandoffClient {
+export interface DesktopAgentServiceClient extends AgentServiceClient, RunCatalogClient, TaskCatalogClient, ApprovalClient, SessionCatalogClient, HandoffClient, HistoryClient {
   readonly mode: DesktopAgentServiceMode;
   readonly identity: DesktopIdentity;
   /** Resolve the backend health before the UI begins using the client. */

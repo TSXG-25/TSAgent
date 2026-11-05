@@ -23,9 +23,11 @@ import {
   type ServiceErrorCode,
   type SessionSummary,
   type HandoffSummary,
+  type HistoryEntry,
   type DecideApprovalRequest,
   type ListApprovalsRequest,
   type ListHandoffsRequest,
+  type ListHistoryRequest,
   type ListSessionsRequest,
   type StartRunRequest,
   type TaskHandle,
@@ -227,6 +229,18 @@ function mapArtifact(value: unknown, fallbackRunId: string): ArtifactSummary {
         : undefined,
     createdRevision: numberValue(raw.created_revision ?? 0, "artifact.created_revision"),
     createdAt: typeof raw.created_at === "string" ? raw.created_at : "",
+  };
+}
+
+function mapHistory(value: unknown): HistoryEntry {
+  const raw = isRecord(value) ? value : (() => { throw new Error("history entry is not an object"); })();
+  return {
+    runId: requiredString(raw.run_id, "run_id"),
+    taskId: optionalString(raw.task_id) ?? "",
+    requestText: optionalString(raw.request_text) ?? "",
+    answerText: optionalString(raw.answer_text) ?? "",
+    status: optionalString(raw.status) ?? "",
+    updatedAt: optionalString(raw.updated_at) ?? "",
   };
 }
 
@@ -484,6 +498,18 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
       decided_by: request.decidedBy ?? this.identity.userId,
     };
     return mapApproval(await this.call("decide_approval", params));
+  }
+
+  async listHistory(request: ListHistoryRequest): Promise<HistoryEntry[]> {
+    const params: LocalRpcParams = {
+      tenant_id: request.tenantId,
+      user_id: this.identity.userId,
+      session_id: request.sessionId,
+      request_id: request.requestId,
+      limit: request.limit ?? 200,
+    };
+    const result = (await this.call("list_history", params)) as unknown[];
+    return result.map((value) => mapHistory(value));
   }
 
   async listHandoffs(request: ListHandoffsRequest): Promise<HandoffSummary[]> {

@@ -696,6 +696,55 @@ class SessionSummary:
 
 
 @dataclass(frozen=True)
+class HistoryEntry:
+    """One durable history row: a completed request/answer with provenance."""
+
+    run_id: str
+    task_id: str
+    request_text: str
+    answer_text: str
+    status: str
+    updated_at: str
+
+    def to_dict(self) -> dict[str, JSONValue]:
+        return {
+            "run_id": self.run_id,
+            "task_id": self.task_id,
+            "request_text": self.request_text,
+            "answer_text": self.answer_text,
+            "status": self.status,
+            "updated_at": self.updated_at,
+        }
+
+
+@dataclass(frozen=True)
+class ListHistoryRequest:
+    """Cross-run history query for one session."""
+
+    tenant_id: str
+    user_id: str
+    session_id: str
+    request_id: str
+    limit: int = 200
+
+    def __post_init__(self) -> None:
+        _required_identifier(self.tenant_id, "tenant_id")
+        _required_identifier(self.user_id, "user_id")
+        _required_identifier(self.session_id, "session_id")
+        _required_identifier(self.request_id, "request_id")
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "ListHistoryRequest":
+        return cls(
+            tenant_id=str(value.get("tenant_id", "")),
+            user_id=str(value.get("user_id", "")),
+            session_id=str(value.get("session_id", "")),
+            request_id=str(value.get("request_id", "")),
+            limit=int(value.get("limit") or 200),
+        )
+
+
+@dataclass(frozen=True)
 class HandoffSummary:
     """Public delegation record: source run -> target run/task."""
 

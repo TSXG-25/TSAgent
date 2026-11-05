@@ -21,6 +21,7 @@ export const LOCAL_TRANSPORT_METHODS = [
   "create_session",
   "list_sessions",
   "list_handoffs",
+  "list_history",
   "read_events",
   "shutdown",
 ] as const;

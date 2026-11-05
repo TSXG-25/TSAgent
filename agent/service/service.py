@@ -645,6 +645,46 @@ class AgentService:
             for r in records
         ]
 
+    async def list_history(self, request: Any) -> list[Any]:
+        """Jupiter history: request/answer pairs across the session's runs,
+        derived from durable run records — never a second data source."""
+        self._ensure_open()
+        from .contracts import HistoryEntry
+
+        heads = self._store.list_run_heads(
+            request.tenant_id, request.session_id, limit=request.limit
+        )
+        entries: list[Any] = []
+        for head in reversed(heads):  # chronological
+            try:
+                read = self._store.read_run_snapshot(
+                    request.tenant_id, head.run_id, session_id=request.session_id
+                )
+            except DurableStoreError:
+                continue
+            record = {}
+            if read.start_intent is not None:
+                try:
+                    import json as _json
+
+                    reference = getattr(read.start_intent, "external_reference", "") or ""
+                    record = _json.loads(reference[reference.index("{"):])
+                except (TypeError, ValueError):
+                    record = {}
+            entries.append(
+                HistoryEntry(
+                    run_id=head.run_id,
+                    task_id=head.task_id,
+                    request_text=str(record.get("request_text", "")),
+                    answer_text=(
+                        read.output.text[:4000] if read.output else ""
+                    ),
+                    status=head.run_status,
+                    updated_at=head.updated_at,
+                )
+            )
+        return entries
+
     async def request_approval(
         self,
         run_context: Any,

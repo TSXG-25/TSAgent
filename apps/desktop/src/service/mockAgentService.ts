@@ -12,6 +12,7 @@ import {
   type ApprovalSummary,
   type SessionSummary,
   type HandoffSummary,
+  type HistoryEntry,
   type TaskHandle,
   type TaskRecord,
   type ResumeRunRequest,
@@ -179,6 +180,10 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
   }
 
   async listHandoffs(): Promise<HandoffSummary[]> {
+    return [];
+  }
+
+  async listHistory(): Promise<HistoryEntry[]> {
     return [];
   }
 

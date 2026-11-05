@@ -13,6 +13,7 @@ import {
   type ApprovalSummary,
   type SessionSummary,
   type HandoffSummary,
+  type HistoryEntry,
   type TaskHandle,
   type TaskRecord,
   type ResumeRunRequest,
@@ -119,6 +120,10 @@ class UnavailableDesktopAgentServiceClient implements DesktopAgentServiceClient 
   }
 
   async listHandoffs(): Promise<HandoffSummary[]> {
+    throw this.error;
+  }
+
+  async listHistory(): Promise<HistoryEntry[]> {
     throw this.error;
   }
 

@@ -45,6 +45,24 @@ class TaskHead:
 
 
 @dataclass(frozen=True)
+class HandoffRecord:
+    """Durable delegation handoff between two runs/tasks."""
+
+    tenant_id: str
+    session_id: str
+    handoff_id: str
+    source_run_id: str
+    source_task_id: str
+    target_task_id: str
+    target_run_id: str
+    target_planet: str
+    context_refs_json: str
+    approval_state: str
+    created_at: str
+    store_generation: str
+
+
+@dataclass(frozen=True)
 class SessionHead:
     """Registered identity scope for one session (first-class entity)."""
 

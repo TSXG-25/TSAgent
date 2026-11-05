@@ -42,6 +42,7 @@ class SidecarDispatcher:
             LocalTransportMethod.DECIDE_APPROVAL: self._decide_approval,
             LocalTransportMethod.CREATE_SESSION: self._create_session,
             LocalTransportMethod.LIST_SESSIONS: self._list_sessions,
+            LocalTransportMethod.LIST_HANDOFFS: self._list_handoffs,
             LocalTransportMethod.READ_EVENTS: self._read_events,
             LocalTransportMethod.SHUTDOWN: self._shutdown,
         }
@@ -194,6 +195,12 @@ class SidecarDispatcher:
 
         request = self._from_dto(ListSessionsRequest.from_dict, params)
         return await self._service.list_sessions(request)
+
+    async def _list_handoffs(self, params: Mapping[str, Any]) -> Any:
+        from ..contracts import ListHandoffsRequest
+
+        request = self._from_dto(ListHandoffsRequest.from_dict, params)
+        return await self._service.list_handoffs(request)
 
     async def _list_artifacts(self, params: Mapping[str, Any]) -> Any:
         from ..contracts import RunLookupRequest

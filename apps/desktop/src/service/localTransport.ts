@@ -20,6 +20,7 @@ export const LOCAL_TRANSPORT_METHODS = [
   "decide_approval",
   "create_session",
   "list_sessions",
+  "list_handoffs",
   "read_events",
   "shutdown",
 ] as const;

@@ -35,6 +35,7 @@ def test_desktop_method_allowlist_is_frozen() -> None:
         "decide_approval",
         "create_session",
         "list_sessions",
+        "list_handoffs",
         "read_events",
         "shutdown",
     )

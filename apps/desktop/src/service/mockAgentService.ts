@@ -11,6 +11,7 @@ import {
   type ListArtifactsRequest,
   type ApprovalSummary,
   type SessionSummary,
+  type HandoffSummary,
   type TaskHandle,
   type TaskRecord,
   type ResumeRunRequest,
@@ -174,6 +175,10 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
   }
 
   async listSessions(): Promise<SessionSummary[]> {
+    return [];
+  }
+
+  async listHandoffs(): Promise<HandoffSummary[]> {
     return [];
   }
 

@@ -30,6 +30,7 @@ from .contracts import (
     RevisionRecord,
     RunHead,
     ApprovalRecord,
+    HandoffRecord,
     ServiceStartReservation,
     SessionHead,
     RunReadSnapshot,
@@ -523,6 +524,22 @@ class SqliteRuntimeStore:
                     UNIQUE (tenant_id, run_id, event_id),
                     FOREIGN KEY (tenant_id, run_id)
                         REFERENCES run_heads (tenant_id, run_id)
+                );
+
+                CREATE TABLE IF NOT EXISTS run_handoffs (
+                    tenant_id TEXT NOT NULL,
+                    session_id TEXT NOT NULL,
+                    handoff_id TEXT NOT NULL,
+                    source_run_id TEXT NOT NULL,
+                    source_task_id TEXT NOT NULL DEFAULT '',
+                    target_task_id TEXT NOT NULL DEFAULT '',
+                    target_run_id TEXT NOT NULL DEFAULT '',
+                    target_planet TEXT NOT NULL DEFAULT '',
+                    context_refs_json TEXT NOT NULL DEFAULT '[]',
+                    approval_state TEXT NOT NULL DEFAULT 'not_required',
+                    created_at TEXT NOT NULL,
+                    store_generation TEXT NOT NULL,
+                    PRIMARY KEY (tenant_id, handoff_id)
                 );
 
                 CREATE TABLE IF NOT EXISTS run_approvals (
@@ -1534,6 +1551,128 @@ class SqliteRuntimeStore:
                     "approval already decided with a different outcome",
                 )
             return self._approval_contract(row)
+
+    def create_handoff(
+        self,
+        tenant_id: str,
+        session_id: str,
+        handoff_id: str,
+        *,
+        source_run_id: str,
+        source_task_id: str = "",
+        target_task_id: str = "",
+        target_run_id: str = "",
+        target_planet: str = "",
+        context_refs_json: str = "[]",
+        approval_state: str = "not_required",
+    ) -> "HandoffRecord":
+        """Durable delegation record; idempotent on handoff_id."""
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        session_id = _require_text(session_id, "session_id")
+        handoff_id = _require_text(handoff_id, "handoff_id")
+        with self._write_transaction() as connection:
+            row = connection.execute(
+                """
+                SELECT tenant_id, session_id, handoff_id, source_run_id,
+                       source_task_id, target_task_id, target_run_id,
+                       target_planet, context_refs_json, approval_state,
+                       created_at, store_generation
+                FROM run_handoffs
+                WHERE tenant_id = ? AND handoff_id = ?
+                """,
+                (tenant_id, handoff_id),
+            ).fetchone()
+            if row is not None:
+                return self._handoff_contract(row)
+            connection.execute(
+                """
+                INSERT INTO run_handoffs
+                    (tenant_id, session_id, handoff_id, source_run_id,
+                     source_task_id, target_task_id, target_run_id,
+                     target_planet, context_refs_json, approval_state,
+                     created_at, store_generation)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    tenant_id, session_id, handoff_id, source_run_id,
+                    str(source_task_id), str(target_task_id), str(target_run_id),
+                    str(target_planet), str(context_refs_json),
+                    str(approval_state), _now(), self.store_generation,
+                ),
+            )
+            return HandoffRecord(
+                tenant_id=tenant_id, session_id=session_id,
+                handoff_id=handoff_id, source_run_id=source_run_id,
+                source_task_id=str(source_task_id),
+                target_task_id=str(target_task_id),
+                target_run_id=str(target_run_id),
+                target_planet=str(target_planet),
+                context_refs_json=str(context_refs_json),
+                approval_state=str(approval_state),
+                created_at=_now(), store_generation=self.store_generation,
+            )
+
+    def list_handoffs(
+        self,
+        tenant_id: str,
+        session_id: str,
+        *,
+        limit: int = 500,
+    ) -> "list[HandoffRecord]":
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        session_id = _require_text(session_id, "session_id")
+        with self._lock:
+            self._ensure_open()
+            rows = self._connection.execute(
+                """
+                SELECT tenant_id, session_id, handoff_id, source_run_id,
+                       source_task_id, target_task_id, target_run_id,
+                       target_planet, context_refs_json, approval_state,
+                       created_at, store_generation
+                FROM run_handoffs
+                WHERE tenant_id = ? AND session_id = ?
+                ORDER BY created_at ASC
+                LIMIT ?
+                """,
+                (tenant_id, session_id, int(limit)),
+            ).fetchall()
+            return [
+                self._handoff_contract(row)
+                for row in rows
+                if str(row["store_generation"]) == self.store_generation
+            ]
+
+    def update_handoff_target_run(
+        self,
+        tenant_id: str,
+        handoff_id: str,
+        target_run_id: str,
+    ) -> None:
+        with self._write_transaction() as connection:
+            connection.execute(
+                """
+                UPDATE run_handoffs SET target_run_id = ?
+                WHERE tenant_id = ? AND handoff_id = ?
+                """,
+                (str(target_run_id), tenant_id, handoff_id),
+            )
+
+    @staticmethod
+    def _handoff_contract(row: sqlite3.Row) -> "HandoffRecord":
+        return HandoffRecord(
+            tenant_id=str(row["tenant_id"]),
+            session_id=str(row["session_id"]),
+            handoff_id=str(row["handoff_id"]),
+            source_run_id=str(row["source_run_id"]),
+            source_task_id=str(row["source_task_id"]),
+            target_task_id=str(row["target_task_id"]),
+            target_run_id=str(row["target_run_id"]),
+            target_planet=str(row["target_planet"]),
+            context_refs_json=str(row["context_refs_json"]),
+            approval_state=str(row["approval_state"]),
+            created_at=str(row["created_at"]),
+            store_generation=str(row["store_generation"]),
+        )
 
     def ensure_session(
         self,

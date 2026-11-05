@@ -22,8 +22,10 @@ import {
   type RunStatus,
   type ServiceErrorCode,
   type SessionSummary,
+  type HandoffSummary,
   type DecideApprovalRequest,
   type ListApprovalsRequest,
+  type ListHandoffsRequest,
   type ListSessionsRequest,
   type StartRunRequest,
   type TaskHandle,
@@ -225,6 +227,21 @@ function mapArtifact(value: unknown, fallbackRunId: string): ArtifactSummary {
         : undefined,
     createdRevision: numberValue(raw.created_revision ?? 0, "artifact.created_revision"),
     createdAt: typeof raw.created_at === "string" ? raw.created_at : "",
+  };
+}
+
+function mapHandoff(value: unknown): HandoffSummary {
+  const raw = isRecord(value) ? value : (() => { throw new Error("handoff is not an object"); })();
+  return {
+    handoffId: requiredString(raw.handoff_id, "handoff_id"),
+    sourceRunId: optionalString(raw.source_run_id) ?? "",
+    sourceTaskId: optionalString(raw.source_task_id) ?? "",
+    targetTaskId: optionalString(raw.target_task_id) ?? "",
+    targetRunId: optionalString(raw.target_run_id) ?? "",
+    targetPlanet: optionalString(raw.target_planet) ?? "",
+    contextRefs: Array.isArray(raw.context_refs) ? raw.context_refs.map(String) : [],
+    approvalState: optionalString(raw.approval_state) ?? "not_required",
+    createdAt: requiredString(raw.created_at, "created_at"),
   };
 }
 
@@ -467,6 +484,18 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
       decided_by: request.decidedBy ?? this.identity.userId,
     };
     return mapApproval(await this.call("decide_approval", params));
+  }
+
+  async listHandoffs(request: ListHandoffsRequest): Promise<HandoffSummary[]> {
+    const params: LocalRpcParams = {
+      tenant_id: request.tenantId,
+      user_id: this.identity.userId,
+      session_id: request.sessionId,
+      request_id: request.requestId,
+      limit: request.limit ?? 500,
+    };
+    const result = (await this.call("list_handoffs", params)) as unknown[];
+    return result.map((value) => mapHandoff(value));
   }
 
   async createSession(request: CreateSessionRequest): Promise<SessionSummary> {

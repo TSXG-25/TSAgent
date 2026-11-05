@@ -521,6 +521,18 @@ class AgentService:
             owner_profile_id=profile_id,
         )
         child_session_id = f"{session_id}:subtask:{child_task.task_id}"
+        import json as _json
+        handoff = self._store.create_handoff(
+            tenant_id,
+            session_id,
+            f"handoff:{child_task.task_id}",
+            source_run_id=run_context.run_id,
+            source_task_id=parent_head.task_id if parent_head else "",
+            target_task_id=child_task.task_id,
+            target_planet=target_planet,
+            context_refs_json=_json.dumps([str(r) for r in context_refs]),
+            approval_state="not_required",
+        )
         handle = await self.start_run(
             StartRunRequest(
                 tenant_id=tenant_id,
@@ -530,6 +542,9 @@ class AgentService:
                 request_text=request_text,
                 task_id=child_task.task_id,
             )
+        )
+        self._store.update_handoff_target_run(
+            tenant_id, handoff.handoff_id, handle.run_id
         )
         view.store.append_event(
             view.tenant_id,
@@ -603,6 +618,32 @@ class AgentService:
             f"子任务 {handle.run_id} 结束于 {snapshot.status.value}"
             + (f": {output[:2000]}" if output else "")
         )
+
+    async def list_handoffs(self, request: Any) -> list[Any]:
+        self._ensure_open()
+        import json as _json
+
+        records = self._store.list_handoffs(
+            request.tenant_id, request.session_id, limit=request.limit
+        )
+        from .contracts import HandoffSummary
+
+        return [
+            HandoffSummary(
+                handoff_id=r.handoff_id,
+                source_run_id=r.source_run_id,
+                source_task_id=r.source_task_id,
+                target_task_id=r.target_task_id,
+                target_run_id=r.target_run_id,
+                target_planet=r.target_planet,
+                context_refs=tuple(
+                    str(v) for v in _json.loads(r.context_refs_json or "[]")
+                ),
+                approval_state=r.approval_state,
+                created_at=r.created_at,
+            )
+            for r in records
+        ]
 
     async def request_approval(
         self,

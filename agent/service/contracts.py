@@ -696,6 +696,61 @@ class SessionSummary:
 
 
 @dataclass(frozen=True)
+class HandoffSummary:
+    """Public delegation record: source run -> target run/task."""
+
+    handoff_id: str
+    source_run_id: str
+    source_task_id: str
+    target_task_id: str
+    target_run_id: str
+    target_planet: str
+    context_refs: tuple[str, ...]
+    approval_state: str
+    created_at: str
+
+    def to_dict(self) -> dict[str, JSONValue]:
+        return {
+            "handoff_id": self.handoff_id,
+            "source_run_id": self.source_run_id,
+            "source_task_id": self.source_task_id,
+            "target_task_id": self.target_task_id,
+            "target_run_id": self.target_run_id,
+            "target_planet": self.target_planet,
+            "context_refs": list(self.context_refs),
+            "approval_state": self.approval_state,
+            "created_at": self.created_at,
+        }
+
+
+@dataclass(frozen=True)
+class ListHandoffsRequest:
+    """Identity-complete handoff query for one session."""
+
+    tenant_id: str
+    user_id: str
+    session_id: str
+    request_id: str
+    limit: int = 500
+
+    def __post_init__(self) -> None:
+        _required_identifier(self.tenant_id, "tenant_id")
+        _required_identifier(self.user_id, "user_id")
+        _required_identifier(self.session_id, "session_id")
+        _required_identifier(self.request_id, "request_id")
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "ListHandoffsRequest":
+        return cls(
+            tenant_id=str(value.get("tenant_id", "")),
+            user_id=str(value.get("user_id", "")),
+            session_id=str(value.get("session_id", "")),
+            request_id=str(value.get("request_id", "")),
+            limit=int(value.get("limit") or 500),
+        )
+
+
+@dataclass(frozen=True)
 class ApprovalSummary:
     """Public approval card: request context plus the decision state."""
 

@@ -389,6 +389,30 @@ export interface ListSessionsRequest {
   limit?: number;
 }
 
+export interface HandoffSummary {
+  handoffId: string;
+  sourceRunId: string;
+  sourceTaskId: string;
+  targetTaskId: string;
+  targetRunId: string;
+  targetPlanet: string;
+  contextRefs: string[];
+  approvalState: string;
+  createdAt: string;
+}
+
+export interface ListHandoffsRequest {
+  tenantId: string;
+  sessionId: string;
+  requestId: string;
+  limit?: number;
+}
+
+/** Delegation records — Sun-side task tree edges. */
+export interface HandoffClient {
+  listHandoffs(request: ListHandoffsRequest): Promise<HandoffSummary[]>;
+}
+
 /** Session catalog — first-class identity scopes for runs/tasks. */
 export interface SessionCatalogClient {
   createSession(request: CreateSessionRequest): Promise<SessionSummary>;
@@ -402,7 +426,7 @@ export interface TaskCatalogClient {
   getTask(request: TaskLookupRequest): Promise<TaskRecord>;
 }
 
-export interface DesktopAgentServiceClient extends AgentServiceClient, RunCatalogClient, TaskCatalogClient, ApprovalClient, SessionCatalogClient {
+export interface DesktopAgentServiceClient extends AgentServiceClient, RunCatalogClient, TaskCatalogClient, ApprovalClient, SessionCatalogClient, HandoffClient {
   readonly mode: DesktopAgentServiceMode;
   readonly identity: DesktopIdentity;
   /** Resolve the backend health before the UI begins using the client. */

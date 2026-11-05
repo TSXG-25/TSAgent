@@ -36,6 +36,7 @@ class LocalTransportMethod(str, Enum):
     DECIDE_APPROVAL = "decide_approval"
     CREATE_SESSION = "create_session"
     LIST_SESSIONS = "list_sessions"
+    LIST_HANDOFFS = "list_handoffs"
     READ_EVENTS = "read_events"
     SHUTDOWN = "shutdown"
 

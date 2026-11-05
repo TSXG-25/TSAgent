@@ -55,6 +55,8 @@ import {
   type ParticipantSummary,
   type SearchArtifactsRequest,
   type JupiterArtifactSummary,
+  type ListWorkflowsRequest,
+  type WorkflowDefinitionSummary,
   type EvaluationSummary,
   type RecordEvaluationRequest,
   type ListEvaluationsRequest,
@@ -782,6 +784,18 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
       path: requiredString(raw.path, "path"),
       text: optionalString(raw.text) ?? "",
     };
+  }
+
+  async listWorkflows(request: ListWorkflowsRequest): Promise<WorkflowDefinitionSummary[]> {
+    const result = (await this.call("list_workflows", {
+      tenant_id: request.tenantId, user_id: this.identity.userId,
+      session_id: request.sessionId, request_id: request.requestId,
+    })) as Array<Record<string, unknown>>;
+    return result.map((raw) => ({
+      workflowId: requiredString(raw.workflow_id, "workflow_id"),
+      description: optionalString(raw.description) ?? "",
+      version: optionalString(raw.version) ?? "",
+    }));
   }
 
   async searchArtifacts(request: SearchArtifactsRequest): Promise<JupiterArtifactSummary[]> {

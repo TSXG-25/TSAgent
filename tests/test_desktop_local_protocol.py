@@ -56,6 +56,7 @@ def test_desktop_method_allowlist_is_frozen() -> None:
         "forget_fact",
         "list_participants",
         "search_artifacts",
+        "list_workflows",
         "record_evaluation",
         "list_evaluations",
         "list_workspace_files",

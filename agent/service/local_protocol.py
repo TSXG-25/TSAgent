@@ -57,6 +57,7 @@ class LocalTransportMethod(str, Enum):
     FORGET_FACT = "forget_fact"
     LIST_PARTICIPANTS = "list_participants"
     SEARCH_ARTIFACTS = "search_artifacts"
+    LIST_WORKFLOWS = "list_workflows"
     RECORD_EVALUATION = "record_evaluation"
     LIST_EVALUATIONS = "list_evaluations"
     LIST_WORKSPACE_FILES = "list_workspace_files"

@@ -24,6 +24,8 @@ _REQUEST_PREFIX = "tsagent-service-request-v1:"
 
 
 def encode_request_reference(request: Any, *, run_id: str) -> str:
+    from .contracts import _thaw_json
+
     payload = {
         "tenant_id": request.tenant_id,
         "user_id": request.user_id,
@@ -31,7 +33,7 @@ def encode_request_reference(request: Any, *, run_id: str) -> str:
         "run_id": run_id,
         "request_id": request.request_id,
         "request_text": getattr(request, "request_text", ""),
-        "metadata": dict(getattr(request, "metadata", {}) or {}),
+        "metadata": _thaw_json(getattr(request, "metadata", {}) or {}),
     }
     return _REQUEST_PREFIX + json.dumps(
         payload,

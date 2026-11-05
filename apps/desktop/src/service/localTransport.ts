@@ -41,6 +41,7 @@ export const LOCAL_TRANSPORT_METHODS = [
   "forget_fact",
   "list_participants",
   "search_artifacts",
+  "list_workflows",
   "record_evaluation",
   "list_evaluations",
   "list_workspace_files",

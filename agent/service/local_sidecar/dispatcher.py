@@ -62,6 +62,7 @@ class SidecarDispatcher:
             LocalTransportMethod.FORGET_FACT: self._forget_fact,
             LocalTransportMethod.LIST_PARTICIPANTS: self._list_participants,
             LocalTransportMethod.SEARCH_ARTIFACTS: self._search_artifacts,
+            LocalTransportMethod.LIST_WORKFLOWS: self._list_workflows,
             LocalTransportMethod.RECORD_EVALUATION: self._record_evaluation,
             LocalTransportMethod.LIST_EVALUATIONS: self._list_evaluations,
             LocalTransportMethod.LIST_WORKSPACE_FILES: self._list_workspace_files,
@@ -387,6 +388,22 @@ class SidecarDispatcher:
 
         request = self._from_dto(ListEvaluationsRequest.from_dict, params)
         return await self._service.list_evaluations(request)
+
+    async def _list_workflows(self, params: Mapping[str, Any]) -> Any:
+        """Real workflow definitions — Uranus canvas binds nodes to actual
+        registered workflows, not made-up names."""
+        import workflows  # importing the package registers each Workflow
+        from agent.registry.workflow_registry import workflow_registry
+
+        return [
+            {
+                "workflow_id": name,
+                "description": getattr(wf, "description", "") or "",
+                "version": getattr(wf, "version", "") or "",
+            }
+            for name in workflow_registry.list()
+            for wf in [workflow_registry.get(name)]
+        ]
 
     async def _list_artifacts(self, params: Mapping[str, Any]) -> Any:
         from ..contracts import RunLookupRequest

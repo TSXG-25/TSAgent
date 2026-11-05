@@ -24,6 +24,7 @@ import {
   type FactForgetResult,
   type ParticipantSummary,
   type JupiterArtifactSummary,
+  type WorkflowDefinitionSummary,
   type WorkspaceFileSummary,
   type WorkspaceFileContent,
   type EvaluationSummary,
@@ -187,6 +188,10 @@ class UnavailableDesktopAgentServiceClient implements DesktopAgentServiceClient 
   }
 
   async writeWorkspaceFile(): Promise<WorkspaceFileContent> {
+    throw this.error;
+  }
+
+  async listWorkflows(): Promise<WorkflowDefinitionSummary[]> {
     throw this.error;
   }
 

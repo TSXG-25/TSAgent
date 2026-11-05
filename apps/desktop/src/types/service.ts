@@ -803,6 +803,23 @@ export interface EvaluationClient {
   listEvaluations(request: ListEvaluationsRequest): Promise<EvaluationSummary[]>;
 }
 
+export interface WorkflowDefinitionSummary {
+  workflowId: string;
+  description: string;
+  version: string;
+}
+
+export interface ListWorkflowsRequest {
+  tenantId: string;
+  sessionId: string;
+  requestId: string;
+}
+
+/** Real workflow definitions — Uranus canvas data face. */
+export interface WorkflowCatalogClient {
+  listWorkflows(request: ListWorkflowsRequest): Promise<WorkflowDefinitionSummary[]>;
+}
+
 /** Jupiter — cross-session artifact index. */
 export interface JupiterClient {
   searchArtifacts(request: SearchArtifactsRequest): Promise<JupiterArtifactSummary[]>;
@@ -837,7 +854,7 @@ export interface TaskCatalogClient {
   getTask(request: TaskLookupRequest): Promise<TaskRecord>;
 }
 
-export interface DesktopAgentServiceClient extends AgentServiceClient, RunCatalogClient, TaskCatalogClient, ApprovalClient, SessionCatalogClient, HandoffClient, HistoryClient, ScheduleClient, ProfileClient, SettingsClient, WorkspaceClient, CapabilityClient, WebSearchClient, SkillClient, DelegationClient, MemoryClient, ParticipantClient, JupiterClient, WorkspaceFilesClient, EvaluationClient {
+export interface DesktopAgentServiceClient extends AgentServiceClient, RunCatalogClient, TaskCatalogClient, ApprovalClient, SessionCatalogClient, HandoffClient, HistoryClient, ScheduleClient, ProfileClient, SettingsClient, WorkspaceClient, CapabilityClient, WebSearchClient, SkillClient, DelegationClient, MemoryClient, ParticipantClient, JupiterClient, WorkspaceFilesClient, EvaluationClient, WorkflowCatalogClient {
   readonly mode: DesktopAgentServiceMode;
   readonly identity: DesktopIdentity;
   /** Resolve the backend health before the UI begins using the client. */

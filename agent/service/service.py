@@ -65,6 +65,7 @@ class AgentService:
         self._defer_context_creation = defer_context_creation
         self._runs: dict[str, _ManagedRun] = {}
         self._approval_waiters: dict[str, Any] = {}
+        self._scheduler_task: Any | None = None
         self._task_errors: dict[str, AgentServiceError] = {}
         self._operation_lock = asyncio.Lock()
         self._closed = False
@@ -684,6 +685,114 @@ class AgentService:
                 )
             )
         return entries
+
+    async def create_schedule(self, request: Any) -> Any:
+        self._ensure_open()
+        import uuid
+
+        from .contracts import ScheduleSummary
+
+        record = self._store.create_schedule(
+            request.tenant_id,
+            request.schedule_id or f"sched-{uuid.uuid4().hex[:12]}",
+            request.session_id,
+            request.request_text,
+            request.interval_seconds,
+            target_planet=request.target_planet,
+        )
+        self._ensure_scheduler()
+        return self._schedule_summary(record)
+
+    async def list_schedules(self, request: Any) -> list[Any]:
+        self._ensure_open()
+        self._ensure_scheduler()
+        records = self._store.list_schedules(
+            request.tenant_id,
+            session_id=request.session_id,
+            status="ACTIVE",
+            limit=request.limit,
+        ) + self._store.list_schedules(
+            request.tenant_id,
+            session_id=request.session_id,
+            status="PAUSED",
+            limit=request.limit,
+        )
+        return [self._schedule_summary(r) for r in records]
+
+    async def update_schedule(self, request: Any) -> Any:
+        self._ensure_open()
+        record = self._store.update_schedule_status(
+            request.tenant_id, request.schedule_id, request.status
+        )
+        self._ensure_scheduler()
+        return self._schedule_summary(record)
+
+    @staticmethod
+    def _schedule_summary(record: Any) -> Any:
+        from .contracts import ScheduleSummary
+
+        return ScheduleSummary(
+            schedule_id=record.schedule_id,
+            session_id=record.session_id,
+            request_text=record.request_text,
+            target_planet=record.target_planet,
+            interval_seconds=record.interval_seconds,
+            status=record.status,
+            next_fire_at=record.next_fire_at,
+            last_fired_at=record.last_fired_at,
+            last_run_id=record.last_run_id,
+            fire_count=record.fire_count,
+            created_at=record.created_at,
+        )
+
+    def _ensure_scheduler(self) -> None:
+        import asyncio
+
+        if self._scheduler_task is None or self._scheduler_task.done():
+            self._scheduler_task = asyncio.create_task(
+                self._scheduler_loop(), name="tsagent-scheduler"
+            )
+
+    async def _scheduler_loop(self) -> None:
+        """Saturn: claim due schedules -> fire one Run per tick.
+
+        Each fire gets a derived session (independent context, no
+        one-active-run-per-session conflict).  The durable claim advances
+        next_fire_at atomically so a restart cannot double-fire.
+        """
+        import asyncio
+        from datetime import datetime, timezone
+
+        while True:
+            await asyncio.sleep(1.0)
+            if self._closed:
+                return
+            now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            claimed = self._store.claim_due_schedules_all(now, limit=10)
+            for schedule in claimed:
+                try:
+                    handle = await self.start_run(
+                        StartRunRequest(
+                            tenant_id=schedule.tenant_id,
+                            user_id="saturn",
+                            session_id=(
+                                f"{schedule.session_id}:sched:"
+                                f"{schedule.schedule_id}"
+                            ),
+                            request_id=(
+                                f"sched:{schedule.schedule_id}:"
+                                f"{schedule.fire_count}"
+                            ),
+                            request_text=schedule.request_text,
+                        )
+                    )
+                    self._store.update_schedule_run(
+                        schedule.tenant_id, schedule.schedule_id, handle.run_id
+                    )
+                except Exception:
+                    import traceback
+
+                    traceback.print_exc()
 
     async def request_approval(
         self,

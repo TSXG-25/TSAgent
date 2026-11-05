@@ -13,6 +13,7 @@ import {
   type SessionSummary,
   type HandoffSummary,
   type HistoryEntry,
+  type ScheduleSummary,
   type TaskHandle,
   type TaskRecord,
   type ResumeRunRequest,
@@ -181,6 +182,18 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
 
   async listHandoffs(): Promise<HandoffSummary[]> {
     return [];
+  }
+
+  async createSchedule(): Promise<ScheduleSummary> {
+    return {} as ScheduleSummary;
+  }
+
+  async listSchedules(): Promise<ScheduleSummary[]> {
+    return [];
+  }
+
+  async updateSchedule(): Promise<ScheduleSummary> {
+    return {} as ScheduleSummary;
   }
 
   async listHistory(): Promise<HistoryEntry[]> {

@@ -429,6 +429,52 @@ export interface HistoryClient {
   listHistory(request: ListHistoryRequest): Promise<HistoryEntry[]>;
 }
 
+export interface ScheduleSummary {
+  scheduleId: string;
+  sessionId: string;
+  requestText: string;
+  targetPlanet: string;
+  intervalSeconds: number;
+  status: string;
+  nextFireAt: string;
+  lastFiredAt: string;
+  lastRunId: string;
+  fireCount: number;
+  createdAt: string;
+}
+
+export interface CreateScheduleRequest {
+  tenantId: string;
+  sessionId: string;
+  requestId: string;
+  requestText: string;
+  intervalSeconds: number;
+  targetPlanet?: string;
+  scheduleId?: string;
+}
+
+export interface ListSchedulesRequest {
+  tenantId: string;
+  sessionId: string;
+  requestId: string;
+  limit?: number;
+}
+
+export interface UpdateScheduleRequest {
+  tenantId: string;
+  sessionId: string;
+  requestId: string;
+  scheduleId: string;
+  status: "ACTIVE" | "PAUSED" | "DELETED";
+}
+
+/** Saturn — recurring tasks that fire Runs on a durable schedule. */
+export interface ScheduleClient {
+  createSchedule(request: CreateScheduleRequest): Promise<ScheduleSummary>;
+  listSchedules(request: ListSchedulesRequest): Promise<ScheduleSummary[]>;
+  updateSchedule(request: UpdateScheduleRequest): Promise<ScheduleSummary>;
+}
+
 /** Delegation records — Sun-side task tree edges. */
 export interface HandoffClient {
   listHandoffs(request: ListHandoffsRequest): Promise<HandoffSummary[]>;
@@ -447,7 +493,7 @@ export interface TaskCatalogClient {
   getTask(request: TaskLookupRequest): Promise<TaskRecord>;
 }
 
-export interface DesktopAgentServiceClient extends AgentServiceClient, RunCatalogClient, TaskCatalogClient, ApprovalClient, SessionCatalogClient, HandoffClient, HistoryClient {
+export interface DesktopAgentServiceClient extends AgentServiceClient, RunCatalogClient, TaskCatalogClient, ApprovalClient, SessionCatalogClient, HandoffClient, HistoryClient, ScheduleClient {
   readonly mode: DesktopAgentServiceMode;
   readonly identity: DesktopIdentity;
   /** Resolve the backend health before the UI begins using the client. */

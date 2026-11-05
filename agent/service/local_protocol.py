@@ -38,6 +38,9 @@ class LocalTransportMethod(str, Enum):
     LIST_SESSIONS = "list_sessions"
     LIST_HANDOFFS = "list_handoffs"
     LIST_HISTORY = "list_history"
+    CREATE_SCHEDULE = "create_schedule"
+    LIST_SCHEDULES = "list_schedules"
+    UPDATE_SCHEDULE = "update_schedule"
     READ_EVENTS = "read_events"
     SHUTDOWN = "shutdown"
 

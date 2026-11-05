@@ -745,6 +745,128 @@ class ListHistoryRequest:
 
 
 @dataclass(frozen=True)
+class ScheduleSummary:
+    """Public schedule card for one recurring task."""
+
+    schedule_id: str
+    session_id: str
+    request_text: str
+    target_planet: str
+    interval_seconds: int
+    status: str
+    next_fire_at: str
+    last_fired_at: str
+    last_run_id: str
+    fire_count: int
+    created_at: str
+
+    def to_dict(self) -> dict[str, JSONValue]:
+        return {
+            "schedule_id": self.schedule_id,
+            "session_id": self.session_id,
+            "request_text": self.request_text,
+            "target_planet": self.target_planet,
+            "interval_seconds": self.interval_seconds,
+            "status": self.status,
+            "next_fire_at": self.next_fire_at,
+            "last_fired_at": self.last_fired_at,
+            "last_run_id": self.last_run_id,
+            "fire_count": self.fire_count,
+            "created_at": self.created_at,
+        }
+
+
+@dataclass(frozen=True)
+class CreateScheduleRequest:
+    tenant_id: str
+    user_id: str
+    session_id: str
+    request_id: str
+    request_text: str
+    interval_seconds: int
+    target_planet: str = ""
+    schedule_id: str = ""
+
+    def __post_init__(self) -> None:
+        _required_identifier(self.tenant_id, "tenant_id")
+        _required_identifier(self.user_id, "user_id")
+        _required_identifier(self.session_id, "session_id")
+        _required_identifier(self.request_id, "request_id")
+        if not self.request_text.strip():
+            raise ValueError("request_text must be a non-empty string")
+        if int(self.interval_seconds) < 1:
+            raise ValueError("interval_seconds must be positive")
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "CreateScheduleRequest":
+        return cls(
+            tenant_id=str(value.get("tenant_id", "")),
+            user_id=str(value.get("user_id", "")),
+            session_id=str(value.get("session_id", "")),
+            request_id=str(value.get("request_id", "")),
+            request_text=str(value.get("request_text", "")),
+            interval_seconds=int(value.get("interval_seconds", 0)),
+            target_planet=str(value.get("target_planet", "")),
+            schedule_id=str(value.get("schedule_id", "")),
+        )
+
+
+@dataclass(frozen=True)
+class ListSchedulesRequest:
+    tenant_id: str
+    user_id: str
+    session_id: str
+    request_id: str
+    limit: int = 200
+
+    def __post_init__(self) -> None:
+        _required_identifier(self.tenant_id, "tenant_id")
+        _required_identifier(self.user_id, "user_id")
+        _required_identifier(self.session_id, "session_id")
+        _required_identifier(self.request_id, "request_id")
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "ListSchedulesRequest":
+        return cls(
+            tenant_id=str(value.get("tenant_id", "")),
+            user_id=str(value.get("user_id", "")),
+            session_id=str(value.get("session_id", "")),
+            request_id=str(value.get("request_id", "")),
+            limit=int(value.get("limit") or 200),
+        )
+
+
+@dataclass(frozen=True)
+class UpdateScheduleRequest:
+    tenant_id: str
+    user_id: str
+    session_id: str
+    request_id: str
+    schedule_id: str
+    status: str  # ACTIVE | PAUSED | DELETED
+
+    def __post_init__(self) -> None:
+        _required_identifier(self.tenant_id, "tenant_id")
+        _required_identifier(self.user_id, "user_id")
+        _required_identifier(self.session_id, "session_id")
+        _required_identifier(self.request_id, "request_id")
+        _required_identifier(self.schedule_id, "schedule_id")
+        if self.status not in ("ACTIVE", "PAUSED", "DELETED"):
+            raise ValueError("status must be ACTIVE, PAUSED or DELETED")
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "UpdateScheduleRequest":
+        return cls(
+            tenant_id=str(value.get("tenant_id", "")),
+            user_id=str(value.get("user_id", "")),
+            session_id=str(value.get("session_id", "")),
+            request_id=str(value.get("request_id", "")),
+            schedule_id=str(value.get("schedule_id", "")),
+            status=str(value.get("status", "")).upper(),
+        )
+
+
+@dataclass(frozen=True)
 class HandoffSummary:
     """Public delegation record: source run -> target run/task."""
 

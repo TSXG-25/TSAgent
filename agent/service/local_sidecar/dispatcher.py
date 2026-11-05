@@ -44,6 +44,9 @@ class SidecarDispatcher:
             LocalTransportMethod.LIST_SESSIONS: self._list_sessions,
             LocalTransportMethod.LIST_HANDOFFS: self._list_handoffs,
             LocalTransportMethod.LIST_HISTORY: self._list_history,
+            LocalTransportMethod.CREATE_SCHEDULE: self._create_schedule,
+            LocalTransportMethod.LIST_SCHEDULES: self._list_schedules,
+            LocalTransportMethod.UPDATE_SCHEDULE: self._update_schedule,
             LocalTransportMethod.READ_EVENTS: self._read_events,
             LocalTransportMethod.SHUTDOWN: self._shutdown,
         }
@@ -208,6 +211,24 @@ class SidecarDispatcher:
 
         request = self._from_dto(ListHistoryRequest.from_dict, params)
         return await self._service.list_history(request)
+
+    async def _create_schedule(self, params: Mapping[str, Any]) -> Any:
+        from ..contracts import CreateScheduleRequest
+
+        request = self._from_dto(CreateScheduleRequest.from_dict, params)
+        return await self._service.create_schedule(request)
+
+    async def _list_schedules(self, params: Mapping[str, Any]) -> Any:
+        from ..contracts import ListSchedulesRequest
+
+        request = self._from_dto(ListSchedulesRequest.from_dict, params)
+        return await self._service.list_schedules(request)
+
+    async def _update_schedule(self, params: Mapping[str, Any]) -> Any:
+        from ..contracts import UpdateScheduleRequest
+
+        request = self._from_dto(UpdateScheduleRequest.from_dict, params)
+        return await self._service.update_schedule(request)
 
     async def _list_artifacts(self, params: Mapping[str, Any]) -> Any:
         from ..contracts import RunLookupRequest

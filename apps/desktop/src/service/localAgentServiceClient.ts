@@ -3,6 +3,7 @@ import {
   type ApprovalSummary,
   type ArtifactSummary,
   type CancelRunRequest,
+  type CreateScheduleRequest,
   type CreateSessionRequest,
   type CreateTaskRequest,
   type DesktopAgentServiceClient,
@@ -24,10 +25,13 @@ import {
   type SessionSummary,
   type HandoffSummary,
   type HistoryEntry,
+  type ScheduleSummary,
+  type UpdateScheduleRequest,
   type DecideApprovalRequest,
   type ListApprovalsRequest,
   type ListHandoffsRequest,
   type ListHistoryRequest,
+  type ListSchedulesRequest,
   type ListSessionsRequest,
   type StartRunRequest,
   type TaskHandle,
@@ -229,6 +233,23 @@ function mapArtifact(value: unknown, fallbackRunId: string): ArtifactSummary {
         : undefined,
     createdRevision: numberValue(raw.created_revision ?? 0, "artifact.created_revision"),
     createdAt: typeof raw.created_at === "string" ? raw.created_at : "",
+  };
+}
+
+function mapSchedule(value: unknown): ScheduleSummary {
+  const raw = isRecord(value) ? value : (() => { throw new Error("schedule is not an object"); })();
+  return {
+    scheduleId: requiredString(raw.schedule_id, "schedule_id"),
+    sessionId: requiredString(raw.session_id, "session_id"),
+    requestText: optionalString(raw.request_text) ?? "",
+    targetPlanet: optionalString(raw.target_planet) ?? "",
+    intervalSeconds: Number(raw.interval_seconds ?? 0),
+    status: optionalString(raw.status) ?? "ACTIVE",
+    nextFireAt: optionalString(raw.next_fire_at) ?? "",
+    lastFiredAt: optionalString(raw.last_fired_at) ?? "",
+    lastRunId: optionalString(raw.last_run_id) ?? "",
+    fireCount: Number(raw.fire_count ?? 0),
+    createdAt: optionalString(raw.created_at) ?? "",
   };
 }
 
@@ -498,6 +519,34 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
       decided_by: request.decidedBy ?? this.identity.userId,
     };
     return mapApproval(await this.call("decide_approval", params));
+  }
+
+  async createSchedule(request: CreateScheduleRequest): Promise<ScheduleSummary> {
+    return mapSchedule(await this.call("create_schedule", {
+      tenant_id: request.tenantId, user_id: this.identity.userId,
+      session_id: request.sessionId, request_id: request.requestId,
+      request_text: request.requestText,
+      interval_seconds: request.intervalSeconds,
+      target_planet: request.targetPlanet ?? "",
+      schedule_id: request.scheduleId ?? "",
+    }));
+  }
+
+  async listSchedules(request: ListSchedulesRequest): Promise<ScheduleSummary[]> {
+    const result = (await this.call("list_schedules", {
+      tenant_id: request.tenantId, user_id: this.identity.userId,
+      session_id: request.sessionId, request_id: request.requestId,
+      limit: request.limit ?? 200,
+    })) as unknown[];
+    return result.map((value) => mapSchedule(value));
+  }
+
+  async updateSchedule(request: UpdateScheduleRequest): Promise<ScheduleSummary> {
+    return mapSchedule(await this.call("update_schedule", {
+      tenant_id: request.tenantId, user_id: this.identity.userId,
+      session_id: request.sessionId, request_id: request.requestId,
+      schedule_id: request.scheduleId, status: request.status,
+    }));
   }
 
   async listHistory(request: ListHistoryRequest): Promise<HistoryEntry[]> {

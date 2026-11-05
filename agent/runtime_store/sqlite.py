@@ -31,6 +31,7 @@ from .contracts import (
     RunHead,
     ApprovalRecord,
     HandoffRecord,
+    ScheduledTaskRecord,
     ServiceStartReservation,
     SessionHead,
     RunReadSnapshot,
@@ -61,6 +62,12 @@ _MAX_WAL_AUTOCHECKPOINT = 100_000
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _now_plus(seconds: int) -> str:
+    return (
+        datetime.now(timezone.utc) + timedelta(seconds=int(seconds))
+    ).isoformat().replace("+00:00", "Z")
 
 
 def _worker_lease_expiry() -> str:
@@ -524,6 +531,23 @@ class SqliteRuntimeStore:
                     UNIQUE (tenant_id, run_id, event_id),
                     FOREIGN KEY (tenant_id, run_id)
                         REFERENCES run_heads (tenant_id, run_id)
+                );
+
+                CREATE TABLE IF NOT EXISTS scheduled_tasks (
+                    tenant_id TEXT NOT NULL,
+                    schedule_id TEXT NOT NULL,
+                    session_id TEXT NOT NULL,
+                    request_text TEXT NOT NULL,
+                    target_planet TEXT NOT NULL DEFAULT '',
+                    interval_seconds INTEGER NOT NULL CHECK (interval_seconds > 0),
+                    status TEXT NOT NULL DEFAULT 'ACTIVE',
+                    next_fire_at TEXT NOT NULL,
+                    last_fired_at TEXT NOT NULL DEFAULT '',
+                    last_run_id TEXT NOT NULL DEFAULT '',
+                    fire_count INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL,
+                    store_generation TEXT NOT NULL,
+                    PRIMARY KEY (tenant_id, schedule_id)
                 );
 
                 CREATE TABLE IF NOT EXISTS run_handoffs (
@@ -1670,6 +1694,258 @@ class SqliteRuntimeStore:
             target_planet=str(row["target_planet"]),
             context_refs_json=str(row["context_refs_json"]),
             approval_state=str(row["approval_state"]),
+            created_at=str(row["created_at"]),
+            store_generation=str(row["store_generation"]),
+        )
+
+    def create_schedule(
+        self,
+        tenant_id: str,
+        schedule_id: str,
+        session_id: str,
+        request_text: str,
+        interval_seconds: int,
+        *,
+        target_planet: str = "",
+        next_fire_at: str = "",
+    ) -> "ScheduledTaskRecord":
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        schedule_id = _require_text(schedule_id, "schedule_id")
+        session_id = _require_text(session_id, "session_id")
+        request_text = _require_text(request_text, "request_text")
+        interval_seconds = int(interval_seconds)
+        if interval_seconds < 1:
+            raise DurableStoreError(
+                StoreErrorCode.INVALID_ARGUMENT,
+                "interval_seconds must be positive",
+            )
+        with self._write_transaction() as connection:
+            row = connection.execute(
+                """
+                SELECT tenant_id, schedule_id, session_id, request_text,
+                       target_planet, interval_seconds, status, next_fire_at,
+                       last_fired_at, last_run_id, fire_count, created_at,
+                       store_generation
+                FROM scheduled_tasks
+                WHERE tenant_id = ? AND schedule_id = ?
+                """,
+                (tenant_id, schedule_id),
+            ).fetchone()
+            if row is not None:
+                return self._schedule_contract(row)
+            connection.execute(
+                """
+                INSERT INTO scheduled_tasks
+                    (tenant_id, schedule_id, session_id, request_text,
+                     target_planet, interval_seconds, status, next_fire_at,
+                     last_fired_at, last_run_id, fire_count, created_at,
+                     store_generation)
+                VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE', ?, '', '', 0, ?, ?)
+                """,
+                (
+                    tenant_id, schedule_id, session_id, request_text,
+                    str(target_planet), interval_seconds,
+                    str(next_fire_at or _now()), _now(), self.store_generation,
+                ),
+            )
+            return ScheduledTaskRecord(
+                tenant_id=tenant_id, schedule_id=schedule_id,
+                session_id=session_id, request_text=request_text,
+                target_planet=str(target_planet),
+                interval_seconds=interval_seconds, status="ACTIVE",
+                next_fire_at=str(next_fire_at or _now()),
+                last_fired_at="", last_run_id="", fire_count=0,
+                created_at=_now(), store_generation=self.store_generation,
+            )
+
+    def list_schedules(
+        self,
+        tenant_id: str,
+        *,
+        session_id: str | None = None,
+        status: str | None = None,
+        limit: int = 200,
+    ) -> "list[ScheduledTaskRecord]":
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        with self._lock:
+            self._ensure_open()
+            rows = self._connection.execute(
+                """
+                SELECT tenant_id, schedule_id, session_id, request_text,
+                       target_planet, interval_seconds, status, next_fire_at,
+                       last_fired_at, last_run_id, fire_count, created_at,
+                       store_generation
+                FROM scheduled_tasks
+                WHERE tenant_id = ?
+                  AND (? = '' OR session_id = ?)
+                  AND (? = '' OR status = ?)
+                ORDER BY created_at ASC
+                LIMIT ?
+                """,
+                (
+                    tenant_id,
+                    str(session_id or ""),
+                    str(session_id or ""),
+                    str(status or ""),
+                    str(status or ""),
+                    int(limit),
+                ),
+            ).fetchall()
+            return [
+                self._schedule_contract(row)
+                for row in rows
+                if str(row["store_generation"]) == self.store_generation
+            ]
+
+    def update_schedule_status(
+        self,
+        tenant_id: str,
+        schedule_id: str,
+        status: str,
+    ) -> "ScheduledTaskRecord":
+        """ACTIVE/PAUSED lifecycle for one schedule."""
+        if status not in ("ACTIVE", "PAUSED", "DELETED"):
+            raise DurableStoreError(
+                StoreErrorCode.INVALID_ARGUMENT,
+                "schedule status must be ACTIVE, PAUSED or DELETED",
+            )
+        with self._write_transaction() as connection:
+            connection.execute(
+                """
+                UPDATE scheduled_tasks SET status = ?
+                WHERE tenant_id = ? AND schedule_id = ?
+                """,
+                (status, tenant_id, schedule_id),
+            )
+            row = connection.execute(
+                """
+                SELECT tenant_id, schedule_id, session_id, request_text,
+                       target_planet, interval_seconds, status, next_fire_at,
+                       last_fired_at, last_run_id, fire_count, created_at,
+                       store_generation
+                FROM scheduled_tasks
+                WHERE tenant_id = ? AND schedule_id = ?
+                """,
+                (tenant_id, schedule_id),
+            ).fetchone()
+            if row is None:
+                raise DurableStoreError(
+                    StoreErrorCode.IDENTITY_MISMATCH,
+                    "schedule not found in the requested scope",
+                )
+            return self._schedule_contract(row)
+
+    def claim_due_schedules(
+        self,
+        tenant_id: str,
+        now_iso: str,
+        *,
+        limit: int = 10,
+    ) -> "list[ScheduledTaskRecord]":
+        """Atomically claim ACTIVE schedules whose fire time has passed —
+        advances next_fire_at/fire_count so a restart cannot double-fire."""
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        with self._write_transaction() as connection:
+            rows = connection.execute(
+                """
+                SELECT tenant_id, schedule_id, session_id, request_text,
+                       target_planet, interval_seconds, status, next_fire_at,
+                       last_fired_at, last_run_id, fire_count, created_at,
+                       store_generation
+                FROM scheduled_tasks
+                WHERE tenant_id = ? AND status = 'ACTIVE' AND next_fire_at <= ?
+                ORDER BY next_fire_at ASC
+                LIMIT ?
+                """,
+                (tenant_id, now_iso, int(limit)),
+            ).fetchall()
+            claimed = []
+            for row in rows:
+                if str(row["store_generation"]) != self.store_generation:
+                    continue
+                interval = int(row["interval_seconds"])
+                next_fire = _now_plus(interval)
+                connection.execute(
+                    """
+                    UPDATE scheduled_tasks
+                    SET last_fired_at = ?, next_fire_at = ?,
+                        fire_count = fire_count + 1
+                    WHERE tenant_id = ? AND schedule_id = ?
+                    """,
+                    (now_iso, next_fire, tenant_id, row["schedule_id"]),
+                )
+                claimed.append(
+                    ScheduledTaskRecord(
+                        tenant_id=str(row["tenant_id"]),
+                        schedule_id=str(row["schedule_id"]),
+                        session_id=str(row["session_id"]),
+                        request_text=str(row["request_text"]),
+                        target_planet=str(row["target_planet"]),
+                        interval_seconds=interval,
+                        status=str(row["status"]),
+                        next_fire_at=next_fire,
+                        last_fired_at=now_iso,
+                        last_run_id=str(row["last_run_id"]),
+                        fire_count=int(row["fire_count"]) + 1,
+                        created_at=str(row["created_at"]),
+                        store_generation=str(row["store_generation"]),
+                    )
+                )
+            return claimed
+
+    def claim_due_schedules_all(
+        self,
+        now_iso: str,
+        *,
+        limit: int = 10,
+    ) -> "list[ScheduledTaskRecord]":
+        """Service-level due-claim across tenants (scheduler loop)."""
+        with self._lock:
+            self._ensure_open()
+            rows = self._connection.execute(
+                """
+                SELECT DISTINCT tenant_id FROM scheduled_tasks
+                WHERE status = 'ACTIVE' AND next_fire_at <= ?
+                LIMIT ?
+                """,
+                (now_iso, int(limit)),
+            ).fetchall()
+        claimed: list[ScheduledTaskRecord] = []
+        for row in rows:
+            claimed.extend(
+                self.claim_due_schedules(str(row["tenant_id"]), now_iso, limit=limit)
+            )
+        return claimed
+
+    def update_schedule_run(
+        self,
+        tenant_id: str,
+        schedule_id: str,
+        run_id: str,
+    ) -> None:
+        with self._write_transaction() as connection:
+            connection.execute(
+                """
+                UPDATE scheduled_tasks SET last_run_id = ?
+                WHERE tenant_id = ? AND schedule_id = ?
+                """,
+                (str(run_id), tenant_id, schedule_id),
+            )
+
+    @staticmethod
+    def _schedule_contract(row: sqlite3.Row) -> "ScheduledTaskRecord":
+        return ScheduledTaskRecord(
+            tenant_id=str(row["tenant_id"]),
+            schedule_id=str(row["schedule_id"]),
+            session_id=str(row["session_id"]),
+            request_text=str(row["request_text"]),
+            target_planet=str(row["target_planet"]),
+            interval_seconds=int(row["interval_seconds"]),
+            status=str(row["status"]),
+            next_fire_at=str(row["next_fire_at"]),
+            last_fired_at=str(row["last_fired_at"]),
+            last_run_id=str(row["last_run_id"]),
+            fire_count=int(row["fire_count"]),
             created_at=str(row["created_at"]),
             store_generation=str(row["store_generation"]),
         )

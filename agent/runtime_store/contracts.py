@@ -45,6 +45,25 @@ class TaskHead:
 
 
 @dataclass(frozen=True)
+class ScheduledTaskRecord:
+    """Durable recurring-task schedule (Saturn domain)."""
+
+    tenant_id: str
+    schedule_id: str
+    session_id: str
+    request_text: str
+    target_planet: str
+    interval_seconds: int
+    status: str  # ACTIVE | PAUSED
+    next_fire_at: str
+    last_fired_at: str
+    last_run_id: str
+    fire_count: int
+    created_at: str
+    store_generation: str
+
+
+@dataclass(frozen=True)
 class HandoffRecord:
     """Durable delegation handoff between two runs/tasks."""
 

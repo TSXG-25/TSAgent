@@ -2224,7 +2224,11 @@ class RunEvent:
             "workflow_id": self.workflow_id,
             "stage_id": self.stage_id,
             "task_id": self.task_id,
-            "event_type": self.event_type.value,
+            "event_type": (
+                self.event_type.value
+                if isinstance(self.event_type, EventType)
+                else str(self.event_type)
+            ),
             "public_type": self.public_type,
             "timestamp": self.timestamp,
             "payload": _thaw_json(self.payload),

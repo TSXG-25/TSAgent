@@ -17,6 +17,7 @@ sentence-transformers
 fastmcp
 mcp==1.27.2
 duckduckgo-mcp-server[browser]==0.6.1
+mcp-server-time==2025.9.25
 fastapi==0.115.12
 starlette==0.46.2
 
@@ -36,3 +37,9 @@ torchvision
 torchaudio
 # Static cross-module contract verification (CI and local development)
 mypy==1.17.1
+
+markitdown-mcp==0.0.1a3
+excel-mcp-server==0.1.8
+
+# Neptune media rendering + Mercury computer-use
+playwright>=1.64

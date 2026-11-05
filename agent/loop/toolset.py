@@ -243,7 +243,7 @@ def build_toolset(
     tools["spawn_subtask"] = LoopTool(
         name="spawn_subtask",
         executor_tool=None,
-        verb="delegate",
+        verb="execute",
         spec=function_tool_spec("spawn_subtask", (
             "把一个明确的子任务委派给子 Agent 执行并等待结果。"
             "适合可独立完成的调研、文档、代码片段等任务；子任务有独立的 Run"

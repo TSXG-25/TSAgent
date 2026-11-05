@@ -407,3 +407,83 @@ def test_reme_search_tool_reports_results_and_unavailability(
         assert "ERROR[MEMORY_UNAVAILABLE]" in msg["content"]
 
     asyncio.run(scenario())
+
+
+def test_approval_gate_denies_gated_tool(tmp_path):
+    """Gated executor tools park on request_approval; DENIED -> tool error."""
+    from types import SimpleNamespace
+    from agent.event_bus import EventBus
+    from agent.loop.toolset import LoopTool
+
+    calls = []
+
+    class FakeDelegation:
+        async def request_approval(self, run_context, **kwargs):
+            calls.append(kwargs)
+            return SimpleNamespace(status="DENIED")
+
+    orch = _orchestrator(tmp_path)
+    orch.run_context.delegation = FakeDelegation()
+    orch.run_context.run_id = "run-gate"
+    state = _mutation_state(
+        requested_outcomes=["USER_VISIBLE_OUTPUT", "COMMAND_EXECUTION"],
+        artifact_required=False,
+    )
+    toolset = {
+        "shell": LoopTool(
+            name="shell", executor_tool="shell", verb="execute", spec={},
+        ),
+    }
+
+    async def scenario():
+        loop = AgentLoop(orch)
+        call = ToolCall(id="c1", name="shell", arguments={"command": "rm -rf /"})
+        msg = await loop._dispatch(
+            call, toolset, state, index=1,
+            run_context=orch.run_context, user_id="u", user_input="执行",
+        )
+        assert msg.get("ok") is False or "拒绝" in msg["content"]
+        assert "ERROR[APPROVAL_DENIED]" in msg["content"] or "拒绝" in msg["content"]
+        assert state["authorization_denials"][0]["reason"] == "user_denied"
+        assert calls[0]["approval_id"] == "run-gate:c1"
+        assert calls[0]["risk_level"] == "R2"
+
+    asyncio.run(scenario())
+
+
+def test_approval_gate_passes_approved_tool(tmp_path):
+    """APPROVED -> execution proceeds past the gate."""
+    from types import SimpleNamespace
+
+    class FakeDelegation:
+        async def request_approval(self, run_context, **kwargs):
+            return SimpleNamespace(status="APPROVED")
+
+    orch = _orchestrator(tmp_path)
+    orch.run_context.delegation = FakeDelegation()
+    orch.run_context.run_id = "run-gate2"
+    state = _mutation_state(
+        requested_outcomes=["USER_VISIBLE_OUTPUT", "COMMAND_EXECUTION"],
+        artifact_required=False,
+    )
+
+    # A gated tool whose executor "succeeds" — verify the gate released into
+    # the normal execution path rather than an approval error.
+    from agent.loop.toolset import LoopTool
+    toolset = {
+        "shell": LoopTool(
+            name="shell", executor_tool="shell", verb="execute", spec={},
+        ),
+    }
+
+    async def scenario():
+        loop = AgentLoop(orch)
+        call = ToolCall(id="c9", name="shell", arguments={"command": "echo hi"})
+        msg = await loop._dispatch(
+            call, toolset, state, index=1,
+            run_context=orch.run_context, user_id="u", user_input="执行",
+        )
+        # Whatever the executor does next, it is not the approval gate.
+        assert "APPROVAL" not in msg["content"]
+
+    asyncio.run(scenario())

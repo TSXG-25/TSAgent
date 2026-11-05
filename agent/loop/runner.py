@@ -29,6 +29,13 @@ from .prompt import build_system_prompt
 from .toolset import LoopTool, build_toolset
 from .workflow_tool import run_workflow_tool, workflow_projections
 
+_APPROVAL_GATED_TOOLS = frozenset({
+    "shell",
+    "process.execute",
+    "run_python",
+    "run_python_file",
+})
+
 TOOL_RESULT_CHAR_CAP = 8000
 TRANSCRIPT_CHAR_BUDGET = 48000
 COMPACT_KEEP_TAIL = 4
@@ -611,6 +618,44 @@ class AgentLoop:
             })
             return _tool_message(call, violation, ok=False,
                                  error_code="EFFECT_SCOPE_VIOLATION")
+
+        # One-time human approval for high-impact effects.  The gate parks
+        # the run in WAITING_USER until an external decide_approval lands;
+        # replay of a decided approval_id returns immediately.
+        if tool.executor_tool in _APPROVAL_GATED_TOOLS:
+            delegation = getattr(run_context, "delegation", None)
+            if delegation is not None:
+                approval_id = f"{getattr(run_context, 'run_id', 'run')}:{call.id}"
+                try:
+                    record = await delegation.request_approval(
+                        run_context,
+                        approval_id=approval_id,
+                        action=tool.executor_tool,
+                        scope=str(
+                            call.arguments.get("command")
+                            or call.arguments.get("path")
+                            or call.arguments.get("code", "")
+                        )[:500],
+                        params=dict(call.arguments),
+                        risk_level="R2",
+                    )
+                except Exception as exc:
+                    return _tool_message(
+                        call,
+                        "审批请求失败: " + stable_error_message(exc),
+                        ok=False, error_code="APPROVAL_FAILED",
+                    )
+                if getattr(record, "status", "PENDING") == "DENIED":
+                    denials = state.setdefault("authorization_denials", [])
+                    denials.append({
+                        "tool": tool.executor_tool,
+                        "args": dict(call.arguments),
+                        "reason": "user_denied",
+                    })
+                    return _tool_message(
+                        call, "用户拒绝了该操作", ok=False,
+                        error_code="APPROVAL_DENIED",
+                    )
 
         task_dict = _task_for_call(call, tool, index)
         plan_tasks = state.setdefault("plan", [])

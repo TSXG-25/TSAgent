@@ -511,6 +511,9 @@ class AgentService:
         parent_head = self._store.get_run_head(
             tenant_id, run_context.run_id, session_id=session_id
         )
+        resolved_refs = self._resolve_context_refs(
+            run_context, context_refs
+        )
         profile = None
         if profile_id:
             profile = self._store.get_profile(tenant_id, profile_id)
@@ -531,10 +534,13 @@ class AgentService:
             owner_profile_id=profile_id,
         )
         child_text = request_text
+        if resolved_refs:
+            lines = "\n".join(f"- {r}" for r in resolved_refs)
+            child_text = f"{request_text}\n\n上下文引用（已验证可用）:\n{lines}"
         if profile is not None:
             label = profile.display_name or profile.profile_id
             planet = f" @{profile.planet_affinity}" if profile.planet_affinity else ""
-            child_text = f"[Agent: {label}{planet}]\n{request_text}"
+            child_text = f"[Agent: {label}{planet}]\n{child_text}"
         child_session_id = f"{session_id}:subtask:{child_task.task_id}"
         import json as _json
         handoff = self._store.create_handoff(
@@ -545,7 +551,7 @@ class AgentService:
             source_task_id=parent_head.task_id if parent_head else "",
             target_task_id=child_task.task_id,
             target_planet=target_planet,
-            context_refs_json=_json.dumps([str(r) for r in context_refs]),
+            context_refs_json=_json.dumps(resolved_refs),
             approval_state="not_required",
         )
         handle = await self.start_run(
@@ -761,6 +767,71 @@ class AgentService:
                 )
             )
         return entries
+
+    def _resolve_context_refs(
+        self, run_context: Any, refs: Any
+    ) -> list[str]:
+        """Validate each context ref against its domain — delegation only
+        carries references that actually resolve (no dead pointers)."""
+        view = run_context.durable_store_view
+        workspace = getattr(run_context, "workspace", None)
+        resolved: list[str] = []
+        for ref in refs or ():
+            raw = str(ref)
+            kind, _, target = raw.partition(":")
+            if kind == "file" and target:
+                if workspace is None:
+                    raise AgentServiceError(
+                        ServiceErrorCode.INVALID_REQUEST,
+                        "context ref file: requires a workspace",
+                    )
+                try:
+                    workspace.resolve_path(target, must_exist=True)
+                except Exception as error:
+                    raise AgentServiceError(
+                        ServiceErrorCode.INVALID_REQUEST,
+                        f"context ref not readable in workspace: {raw}",
+                    ) from error
+                resolved.append(f"file:{target}")
+            elif kind == "task" and target:
+                if self._store.get_task_head(view.tenant_id, target) is None:
+                    raise AgentServiceError(
+                        ServiceErrorCode.INVALID_REQUEST,
+                        f"context ref task not found: {raw}",
+                    )
+                resolved.append(f"task:{target}")
+            elif kind == "run" and target:
+                if self._store.get_run_head(
+                    view.tenant_id, target, session_id=view.session_id
+                ) is None:
+                    raise AgentServiceError(
+                        ServiceErrorCode.INVALID_REQUEST,
+                        f"context ref run not found in session: {raw}",
+                    )
+                resolved.append(f"run:{target}")
+            elif kind == "artifact" and target:
+                snapshot = self._store.read_run_snapshot(
+                    view.tenant_id, view.run_id, session_id=view.session_id
+                )
+                known = {
+                    str(getattr(a, "artifact_id", ""))
+                    for a in getattr(snapshot, "artifacts", ()) or ()
+                } | {
+                    str(getattr(a, "path", ""))
+                    for a in getattr(snapshot, "artifacts", ()) or ()
+                }
+                if target not in known:
+                    raise AgentServiceError(
+                        ServiceErrorCode.INVALID_REQUEST,
+                        f"context ref artifact not produced by this run: {raw}",
+                    )
+                resolved.append(f"artifact:{target}")
+            else:
+                raise AgentServiceError(
+                    ServiceErrorCode.INVALID_REQUEST,
+                    f"unsupported context ref scheme: {raw}",
+                )
+        return resolved
 
     async def create_schedule(self, request: Any) -> Any:
         self._ensure_open()

@@ -33,13 +33,14 @@ def test_spawn_subtask_creates_child_tree_and_returns_result() -> None:
                     run_id="parent-run",
                     user_id="ha-user",
                     durable_store_view=view,
+                    workspace=None,
                 )
 
                 text = await service.spawn_subtask(
                     run_context,
                     request_text="child research task",
                     target_planet="mercury",
-                    context_refs=("file:a.py",),
+                    context_refs=("run:parent-run", "task:task-parent"),
                 )
                 assert isinstance(text, str) and text
 
@@ -63,8 +64,20 @@ def test_spawn_subtask_creates_child_tree_and_returns_result() -> None:
                     e for e in events if e.event_type == "task.delegated"
                 )
                 payload = json.loads(delegated.payload_json)
-                assert payload["context_refs"] == ["file:a.py"]
+                assert payload["context_refs"] == ["run:parent-run", "task:task-parent"]
                 assert payload["child_task_id"] == children[0].task_id
+
+                # Unresolvable refs are rejected before any delegation.
+                import pytest
+
+                from agent.service.errors import AgentServiceError
+
+                with pytest.raises(AgentServiceError):
+                    await service.spawn_subtask(
+                        run_context,
+                        request_text="bad ref",
+                        context_refs=("run:no-such-run",),
+                    )
             finally:
                 await service.close()
 

@@ -514,6 +514,16 @@ class AgentService:
         resolved_refs = self._resolve_context_refs(
             run_context, context_refs
         )
+        # Sun routing: an unspecified target resolves against the workspace
+        # capability registry; the routed planet contributes its default
+        # profile when the caller did not name one.
+        routed_planet = ""
+        if not target_planet and not profile_id:
+            route = self._route_planet(tenant_id, request_text)
+            if route is not None:
+                target_planet = route.workspace_id
+                routed_planet = route.workspace_id
+                profile_id = route.default_profile_id or profile_id
         profile = None
         if profile_id:
             profile = self._store.get_profile(tenant_id, profile_id)
@@ -591,7 +601,8 @@ class AgentService:
                 "parent_task_id": child_task.parent_task_id,
                 "target_planet": target_planet,
                 "profile_id": profile_id,
-                "context_refs": [str(ref) for ref in context_refs],
+                "routed_by": "sun" if routed_planet else "caller",
+                "context_refs": resolved_refs,
             },
             run_revision=view.head().current_revision,
             expected_store_generation=view.store_generation,
@@ -898,6 +909,29 @@ class AgentService:
                     f"unsupported context ref scheme: {raw}",
                 )
         return resolved
+
+    def _route_planet(self, tenant_id: str, request_text: str) -> Any:
+        """Sun v0: score request text against each workspace's declared
+        capabilities; highest score wins.  No registry match → None
+        (universal executor), never a guess."""
+        import json as _json
+
+        workspaces = self._store.list_workspaces(tenant_id)
+        text = request_text.lower()
+        best = None
+        best_score = 0
+        for workspace in workspaces:
+            caps = _json.loads(workspace.capabilities_json or "[]")
+            haystacks = [str(workspace.workspace_id), str(workspace.display_name)]
+            haystacks += [str(c) for c in caps]
+            score = sum(
+                1 for needle in haystacks
+                if needle and needle.lower() in text
+            )
+            if score > best_score:
+                best = workspace
+                best_score = score
+        return best
 
     async def create_schedule(self, request: Any) -> Any:
         self._ensure_open()

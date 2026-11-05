@@ -20,6 +20,7 @@
 - 语义理解由 Provider 完成；明确的命令/执行事实与完成证据由 Runtime 约束
 """
 import json
+import os
 import re
 
 from agent.llm import llm as default_llm
@@ -80,12 +81,10 @@ Gate B 由执行后的验证器负责，不由你判断。artifact_required 表�
 {
     "artifact_required": false,
     "requested_outcomes": ["USER_VISIBLE_OUTPUT"],
-    "summary": "一句话说明用户要收到什么（成品或文本回答）",
     "domain": "开发|知识|闲聊|创作|运维|记忆|文件|办公|数学|翻译|日程|网络|未知",
     "action": "简短动作描述（英文，如 modify、read、explain、search、code）",
     "target": "用户指定的目标对象（如果有），如文件路径、类名、函数名",
     "entities": ["目标中提到的其他关键实体"],
-    "confidence": 0.95,
     "resolved_request": "独立可执行的完整请求，保留所有要求，只补全有上下文依据的指代",
     "conversation_relation": "new_request|reference|correction",
     "delivery_requirements": [],
@@ -109,13 +108,16 @@ Domain 说明：
 2. 天气/新闻/百科问答 → domain="知识"
 3. 代码/Bug修复/技术问题 → domain="开发"
 4. 写诗/写故事/创作 → domain="创作"；是否执行仍按交付形式判断，不能由 domain 决定
-5. 如果无法确定 → domain="未知", confidence<0.5
+5. 如果无法确定 → domain="未知"
 6. 如果用户输入省略了目标，但上下文中有当前文件或上一轮目标，使用上下文信息补全
 7. 如果用户使用"这里"、"它"、"这个"等代词，根据上下文推断所指对象
 
 8. requested_outcomes 按用户要的实际交付选择：USER_VISIBLE_OUTPUT、FILE_READ、FILE_MUTATION、CODE_EXECUTION、COMMAND_EXECUTION。
    请求开发可用程序/计算器/应用，需要 FILE_MUTATION；是否要求告知位置不影响这个判定。
    解释概念、展示代码示例、讨论偏好不要求修改文件。命令执行、代码运行只在用户要求时选择。
+   COMMAND_EXECUTION 仅指命令行/终端/脚本执行；浏览器打开网页、点击、输入、抓取内容
+   以及网页搜索都属于网络读取类操作，不是 COMMAND_EXECUTION——这类任务通常只要
+   USER_VISIBLE_OUTPUT（用户要求存文件时再加 FILE_MUTATION）。
    artifact_required：需要交付新建或修改后的非空文件时为 true；仅删除文件/纯回答时为 false。
    artifact_required=true 时，delivery_requirements 至少有一项，且每项包含 id、kind="file"、正整数 quantity、
    target（没有显式路径时为空字符串）和 acceptance_criteria 数组。artifact_required=false 时数组为空。
@@ -202,6 +204,81 @@ def _merge_entities(intent_entities: list[str], context: CognitiveContext) -> li
     return result
 
 
+_CHEAP_CHAT_RE = re.compile(
+    r"^(?:"
+    r"你好|您好|哈喽|嗨|喂|早上好|上午好|下午好|晚上好|早|在吗|在不在|"
+    r"谢谢|谢谢你|感谢|辛苦了|好的|好|嗯|嗯嗯|收到|再见|拜拜|晚安|你是谁|"
+    r"hi|hello|hey|yo|hiya|howdy|sup|thanks|thank you|thx|ty|"
+    r"ok(?:ay)?|good (?:morning|afternoon|evening|night)|bye|goodbye|see you|who are you"
+    r")\s*[.!！?？。~～…]*\s*$",
+    re.IGNORECASE,
+)
+_CHEAP_CHAT_MAX_LEN = 24
+
+
+def _cheap_chat_intent(context: CognitiveContext) -> IntentResult | None:
+    """确定性寒暄/礼节短句直接出 chat intent，省掉一次 intent LLM 调用。
+
+    只匹配整句无诉求的短语；任何带动作/文件名/疑问结构的输入都走 LLM。
+    """
+    text = (context.query or "").strip()
+    if not text or len(text) > _CHEAP_CHAT_MAX_LEN or not _CHEAP_CHAT_RE.match(text):
+        return None
+    return IntentResult(
+        domain=DOMAIN_CHAT,
+        action="greet",
+        confidence=1.0,
+        requires_execution=False,
+        summary="寒暄/礼节性输入（规则分流，未调用 LLM）",
+        raw_input=text,
+        requested_outcomes=(RequestedOutcome.USER_VISIBLE_OUTPUT,),
+    )
+
+
+INTENT_MODEL_ENV = "TSAGENT_INTENT_MODEL"
+
+
+def _build_intent_llm():
+    """Resolve the LLM used for intent analysis.
+
+    ``TSAGENT_INTENT_MODEL`` 指向同一 DeepSeek/OpenAI 兼容端点上的另一个
+    （通常更便宜的）模型；未设置时用主 router。专用模型报错时回落主
+    router——Provider 故障是本仓库已验证的真实失败模式，intent 不应因
+    专用通道故障整线不可用。
+    """
+    model = os.getenv(INTENT_MODEL_ENV, "").strip()
+    if not model:
+        return default_llm
+    from langchain_openai import ChatOpenAI
+    from agent.llm import (
+        DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, LLM_REQUEST_TIMEOUT,
+    )
+
+    dedicated = ChatOpenAI(
+        model=model,
+        openai_api_key=DEEPSEEK_API_KEY,
+        openai_api_base=DEEPSEEK_BASE_URL,
+        temperature=0,
+        timeout=LLM_REQUEST_TIMEOUT,
+        max_retries=0,
+    )
+
+    class _FallbackLLM:
+        def invoke(self, messages, **kw):
+            try:
+                return dedicated.invoke(messages, **kw)
+            except Exception:
+                return default_llm.invoke(messages, **kw)
+
+        async def ainvoke(self, messages, **kw):
+            try:
+                return await dedicated.ainvoke(messages, **kw)
+            except Exception:
+                return await default_llm.ainvoke(messages, **kw)
+
+    return _FallbackLLM()
+
+
 class IntentEngine:
     """意图理解引擎。
 
@@ -214,7 +291,15 @@ class IntentEngine:
 
     def __init__(self):
         self._llm_fallback_count = 0
-        self._llm = default_llm
+        self._llm = _build_intent_llm()
+
+    def set_llm(self, llm) -> None:
+        """切换 intent 分析使用的 LLM（注入测试 double 或自定义 provider）。"""
+        self._llm = llm
+
+    def reset_llm(self) -> None:
+        """恢复 env 解析出的默认 intent LLM。"""
+        self._llm = _build_intent_llm()
 
     @staticmethod
     def _merge_llm_analysis(
@@ -243,12 +328,16 @@ class IntentEngine:
 
     def analyze(self, context: CognitiveContext) -> IntentResult:
         """Synchronous compatibility API for non-Runtime callers."""
-        result = self._llm_analyze(context.query, context)
+        result = _cheap_chat_intent(context) or self._llm_analyze(
+            context.query, context
+        )
         return self._merge_llm_analysis(result, context)
 
     async def analyze_async(self, context: CognitiveContext) -> IntentResult:
         """Runtime API; Provider fallback remains cancellable and observable."""
-        result = await self._llm_analyze_async(context.query, context)
+        result = _cheap_chat_intent(context) or await self._llm_analyze_async(
+            context.query, context
+        )
         return self._merge_llm_analysis(result, context)
 
     @staticmethod
@@ -449,9 +538,9 @@ class IntentEngine:
             target=obj.get("target", ""),
             entities=obj.get("entities", []),
             current_file=context.current_file or "",
-            confidence=obj.get("confidence", 0.5),
+            confidence=1.0,
             requires_execution=requires_exec,
-            summary=obj.get("summary", ""),
+            summary="",
             raw_input=user_input,
             artifact_required=artifact_required,
             resolved_request=resolved_request,

@@ -45,6 +45,21 @@ class TaskHead:
 
 
 @dataclass(frozen=True)
+class WorkspaceRecord:
+    """A registered planet/scene with its declared capabilities."""
+
+    tenant_id: str
+    workspace_id: str
+    display_name: str
+    capabilities_json: str
+    default_profile_id: str
+    description: str
+    created_at: str
+    updated_at: str
+    store_generation: str
+
+
+@dataclass(frozen=True)
 class AgentProfileRecord:
     """Swappable agent binding for a planet/scene."""
 

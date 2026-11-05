@@ -29,6 +29,8 @@ export const LOCAL_TRANSPORT_METHODS = [
   "list_profiles",
   "get_settings",
   "update_settings",
+  "upsert_workspace",
+  "list_workspaces",
   "read_events",
   "shutdown",
 ] as const;

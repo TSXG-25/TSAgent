@@ -31,6 +31,7 @@ from .contracts import (
     RunHead,
     AgentProfileRecord,
     ApprovalRecord,
+    WorkspaceRecord,
     HandoffRecord,
     ScheduledTaskRecord,
     ServiceStartReservation,
@@ -532,6 +533,19 @@ class SqliteRuntimeStore:
                     UNIQUE (tenant_id, run_id, event_id),
                     FOREIGN KEY (tenant_id, run_id)
                         REFERENCES run_heads (tenant_id, run_id)
+                );
+
+                CREATE TABLE IF NOT EXISTS workspace_registry (
+                    tenant_id TEXT NOT NULL,
+                    workspace_id TEXT NOT NULL,
+                    display_name TEXT NOT NULL DEFAULT '',
+                    capabilities_json TEXT NOT NULL DEFAULT '[]',
+                    default_profile_id TEXT NOT NULL DEFAULT '',
+                    description TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    store_generation TEXT NOT NULL,
+                    PRIMARY KEY (tenant_id, workspace_id)
                 );
 
                 CREATE TABLE IF NOT EXISTS agent_profiles (
@@ -2079,6 +2093,89 @@ class SqliteRuntimeStore:
             model_ref=str(row["model_ref"]),
             skill_refs_json=str(row["skill_refs_json"]),
             permission_policy_json=str(row["permission_policy_json"]),
+            created_at=str(row["created_at"]),
+            updated_at=str(row["updated_at"]),
+            store_generation=str(row["store_generation"]),
+        )
+
+    def upsert_workspace(
+        self,
+        tenant_id: str,
+        workspace_id: str,
+        *,
+        display_name: str = "",
+        capabilities_json: str = "[]",
+        default_profile_id: str = "",
+        description: str = "",
+    ) -> "WorkspaceRecord":
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        workspace_id = _require_text(workspace_id, "workspace_id")
+        with self._write_transaction() as connection:
+            connection.execute(
+                """
+                INSERT INTO workspace_registry
+                    (tenant_id, workspace_id, display_name, capabilities_json,
+                     default_profile_id, description, created_at, updated_at,
+                     store_generation)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (tenant_id, workspace_id) DO UPDATE SET
+                    display_name = excluded.display_name,
+                    capabilities_json = excluded.capabilities_json,
+                    default_profile_id = excluded.default_profile_id,
+                    description = excluded.description,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    tenant_id, workspace_id, str(display_name),
+                    str(capabilities_json), str(default_profile_id),
+                    str(description), _now(), _now(), self.store_generation,
+                ),
+            )
+            row = connection.execute(
+                """
+                SELECT tenant_id, workspace_id, display_name, capabilities_json,
+                       default_profile_id, description, created_at, updated_at,
+                       store_generation
+                FROM workspace_registry
+                WHERE tenant_id = ? AND workspace_id = ?
+                """,
+                (tenant_id, workspace_id),
+            ).fetchone()
+            return self._workspace_contract(row)
+
+    def list_workspaces(
+        self, tenant_id: str, *, limit: int = 50
+    ) -> "list[WorkspaceRecord]":
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        with self._lock:
+            self._ensure_open()
+            rows = self._connection.execute(
+                """
+                SELECT tenant_id, workspace_id, display_name, capabilities_json,
+                       default_profile_id, description, created_at, updated_at,
+                       store_generation
+                FROM workspace_registry
+                WHERE tenant_id = ?
+                ORDER BY workspace_id ASC
+                LIMIT ?
+                """,
+                (tenant_id, int(limit)),
+            ).fetchall()
+            return [
+                self._workspace_contract(row)
+                for row in rows
+                if str(row["store_generation"]) == self.store_generation
+            ]
+
+    @staticmethod
+    def _workspace_contract(row: sqlite3.Row) -> "WorkspaceRecord":
+        return WorkspaceRecord(
+            tenant_id=str(row["tenant_id"]),
+            workspace_id=str(row["workspace_id"]),
+            display_name=str(row["display_name"]),
+            capabilities_json=str(row["capabilities_json"]),
+            default_profile_id=str(row["default_profile_id"]),
+            description=str(row["description"]),
             created_at=str(row["created_at"]),
             updated_at=str(row["updated_at"]),
             store_generation=str(row["store_generation"]),

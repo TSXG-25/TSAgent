@@ -19,6 +19,7 @@ import {
   type ListHistoryRequest,
   type ProfileSummary,
   type SettingsSummary,
+  type WorkspaceSummary,
   type TaskHandle,
   type TaskRecord,
   type ResumeRunRequest,
@@ -187,6 +188,14 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
   }
 
   async listHandoffs(): Promise<HandoffSummary[]> {
+    return [];
+  }
+
+  async upsertWorkspace(): Promise<WorkspaceSummary> {
+    return {} as WorkspaceSummary;
+  }
+
+  async listWorkspaces(): Promise<WorkspaceSummary[]> {
     return [];
   }
 

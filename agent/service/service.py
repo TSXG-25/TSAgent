@@ -755,6 +755,45 @@ class AgentService:
             router._ollama = None
         return await self.get_settings(request)
 
+    async def upsert_workspace(self, request: Any) -> Any:
+        self._ensure_open()
+        import json as _json
+
+        record = self._store.upsert_workspace(
+            request.tenant_id,
+            request.workspace_id,
+            display_name=request.display_name,
+            capabilities_json=_json.dumps(list(request.capabilities)),
+            default_profile_id=request.default_profile_id,
+            description=request.description,
+        )
+        return self._workspace_summary(record)
+
+    async def list_workspaces(self, request: Any) -> list[Any]:
+        self._ensure_open()
+        return [
+            self._workspace_summary(r)
+            for r in self._store.list_workspaces(
+                request.tenant_id, limit=request.limit
+            )
+        ]
+
+    @staticmethod
+    def _workspace_summary(record: Any) -> Any:
+        import json as _json
+        from .contracts import WorkspaceSummary
+
+        return WorkspaceSummary(
+            workspace_id=record.workspace_id,
+            display_name=record.display_name,
+            capabilities=tuple(
+                str(v) for v in _json.loads(record.capabilities_json or "[]")
+            ),
+            default_profile_id=record.default_profile_id,
+            description=record.description,
+            updated_at=record.updated_at,
+        )
+
     async def list_history(self, request: Any) -> list[Any]:
         """Jupiter history: request/answer pairs across the session's runs,
         derived from durable run records — never a second data source."""

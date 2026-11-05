@@ -1032,6 +1032,85 @@ class UpdateSettingsRequest:
 
 
 @dataclass(frozen=True)
+class WorkspaceSummary:
+    workspace_id: str
+    display_name: str
+    capabilities: tuple[str, ...]
+    default_profile_id: str
+    description: str
+    updated_at: str
+
+    def to_dict(self) -> dict[str, JSONValue]:
+        return {
+            "workspace_id": self.workspace_id,
+            "display_name": self.display_name,
+            "capabilities": list(self.capabilities),
+            "default_profile_id": self.default_profile_id,
+            "description": self.description,
+            "updated_at": self.updated_at,
+        }
+
+
+@dataclass(frozen=True)
+class UpsertWorkspaceRequest:
+    tenant_id: str
+    user_id: str
+    session_id: str
+    request_id: str
+    workspace_id: str
+    display_name: str = ""
+    capabilities: tuple[str, ...] = ()
+    default_profile_id: str = ""
+    description: str = ""
+
+    def __post_init__(self) -> None:
+        _required_identifier(self.tenant_id, "tenant_id")
+        _required_identifier(self.user_id, "user_id")
+        _required_identifier(self.session_id, "session_id")
+        _required_identifier(self.request_id, "request_id")
+        _required_identifier(self.workspace_id, "workspace_id")
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "UpsertWorkspaceRequest":
+        return cls(
+            tenant_id=str(value.get("tenant_id", "")),
+            user_id=str(value.get("user_id", "")),
+            session_id=str(value.get("session_id", "")),
+            request_id=str(value.get("request_id", "")),
+            workspace_id=str(value.get("workspace_id", "")),
+            display_name=str(value.get("display_name", "")),
+            capabilities=tuple(str(v) for v in (value.get("capabilities") or ())),
+            default_profile_id=str(value.get("default_profile_id", "")),
+            description=str(value.get("description", "")),
+        )
+
+
+@dataclass(frozen=True)
+class ListWorkspacesRequest:
+    tenant_id: str
+    user_id: str
+    session_id: str
+    request_id: str
+    limit: int = 50
+
+    def __post_init__(self) -> None:
+        _required_identifier(self.tenant_id, "tenant_id")
+        _required_identifier(self.user_id, "user_id")
+        _required_identifier(self.session_id, "session_id")
+        _required_identifier(self.request_id, "request_id")
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "ListWorkspacesRequest":
+        return cls(
+            tenant_id=str(value.get("tenant_id", "")),
+            user_id=str(value.get("user_id", "")),
+            session_id=str(value.get("session_id", "")),
+            request_id=str(value.get("request_id", "")),
+            limit=int(value.get("limit") or 50),
+        )
+
+
+@dataclass(frozen=True)
 class HandoffSummary:
     """Public delegation record: source run -> target run/task."""
 

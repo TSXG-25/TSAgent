@@ -31,6 +31,9 @@ import {
   type SettingsSummary,
   type UpdateScheduleRequest,
   type UpdateSettingsRequest,
+  type UpsertWorkspaceRequest,
+  type ListWorkspacesRequest,
+  type WorkspaceSummary,
   type UpsertProfileRequest,
   type DecideApprovalRequest,
   type ListApprovalsRequest,
@@ -239,6 +242,18 @@ function mapArtifact(value: unknown, fallbackRunId: string): ArtifactSummary {
         : undefined,
     createdRevision: numberValue(raw.created_revision ?? 0, "artifact.created_revision"),
     createdAt: typeof raw.created_at === "string" ? raw.created_at : "",
+  };
+}
+
+function mapWorkspace(value: unknown): WorkspaceSummary {
+  const raw = isRecord(value) ? value : (() => { throw new Error("workspace is not an object"); })();
+  return {
+    workspaceId: requiredString(raw.workspace_id, "workspace_id"),
+    displayName: optionalString(raw.display_name) ?? "",
+    capabilities: Array.isArray(raw.capabilities) ? raw.capabilities.map(String) : [],
+    defaultProfileId: optionalString(raw.default_profile_id) ?? "",
+    description: optionalString(raw.description) ?? "",
+    updatedAt: optionalString(raw.updated_at) ?? "",
   };
 }
 
@@ -550,6 +565,27 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
       decided_by: request.decidedBy ?? this.identity.userId,
     };
     return mapApproval(await this.call("decide_approval", params));
+  }
+
+  async upsertWorkspace(request: UpsertWorkspaceRequest): Promise<WorkspaceSummary> {
+    return mapWorkspace(await this.call("upsert_workspace", {
+      tenant_id: request.tenantId, user_id: this.identity.userId,
+      session_id: request.sessionId, request_id: request.requestId,
+      workspace_id: request.workspaceId,
+      display_name: request.displayName ?? "",
+      capabilities: request.capabilities ?? [],
+      default_profile_id: request.defaultProfileId ?? "",
+      description: request.description ?? "",
+    }));
+  }
+
+  async listWorkspaces(request: ListWorkspacesRequest): Promise<WorkspaceSummary[]> {
+    const result = (await this.call("list_workspaces", {
+      tenant_id: request.tenantId, user_id: this.identity.userId,
+      session_id: request.sessionId, request_id: request.requestId,
+      limit: request.limit ?? 50,
+    })) as unknown[];
+    return result.map((value) => mapWorkspace(value));
   }
 
   async updateSettings(request: UpdateSettingsRequest): Promise<SettingsSummary> {

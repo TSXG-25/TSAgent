@@ -540,6 +540,39 @@ export interface SettingsClient {
   updateSettings(request: UpdateSettingsRequest): Promise<SettingsSummary>;
 }
 
+export interface WorkspaceSummary {
+  workspaceId: string;
+  displayName: string;
+  capabilities: string[];
+  defaultProfileId: string;
+  description: string;
+  updatedAt: string;
+}
+
+export interface UpsertWorkspaceRequest {
+  tenantId: string;
+  sessionId: string;
+  requestId: string;
+  workspaceId: string;
+  displayName?: string;
+  capabilities?: string[];
+  defaultProfileId?: string;
+  description?: string;
+}
+
+export interface ListWorkspacesRequest {
+  tenantId: string;
+  sessionId: string;
+  requestId: string;
+  limit?: number;
+}
+
+/** Planet/scene capability registry. */
+export interface WorkspaceClient {
+  upsertWorkspace(request: UpsertWorkspaceRequest): Promise<WorkspaceSummary>;
+  listWorkspaces(request: ListWorkspacesRequest): Promise<WorkspaceSummary[]>;
+}
+
 /** Delegation records — Sun-side task tree edges. */
 export interface HandoffClient {
   listHandoffs(request: ListHandoffsRequest): Promise<HandoffSummary[]>;
@@ -558,7 +591,7 @@ export interface TaskCatalogClient {
   getTask(request: TaskLookupRequest): Promise<TaskRecord>;
 }
 
-export interface DesktopAgentServiceClient extends AgentServiceClient, RunCatalogClient, TaskCatalogClient, ApprovalClient, SessionCatalogClient, HandoffClient, HistoryClient, ScheduleClient, ProfileClient, SettingsClient {
+export interface DesktopAgentServiceClient extends AgentServiceClient, RunCatalogClient, TaskCatalogClient, ApprovalClient, SessionCatalogClient, HandoffClient, HistoryClient, ScheduleClient, ProfileClient, SettingsClient, WorkspaceClient {
   readonly mode: DesktopAgentServiceMode;
   readonly identity: DesktopIdentity;
   /** Resolve the backend health before the UI begins using the client. */

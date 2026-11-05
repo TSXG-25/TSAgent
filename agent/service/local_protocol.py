@@ -45,6 +45,8 @@ class LocalTransportMethod(str, Enum):
     LIST_PROFILES = "list_profiles"
     GET_SETTINGS = "get_settings"
     UPDATE_SETTINGS = "update_settings"
+    UPSERT_WORKSPACE = "upsert_workspace"
+    LIST_WORKSPACES = "list_workspaces"
     READ_EVENTS = "read_events"
     SHUTDOWN = "shutdown"
 

@@ -51,6 +51,8 @@ class SidecarDispatcher:
             LocalTransportMethod.LIST_PROFILES: self._list_profiles,
             LocalTransportMethod.GET_SETTINGS: self._get_settings,
             LocalTransportMethod.UPDATE_SETTINGS: self._update_settings,
+            LocalTransportMethod.UPSERT_WORKSPACE: self._upsert_workspace,
+            LocalTransportMethod.LIST_WORKSPACES: self._list_workspaces,
             LocalTransportMethod.READ_EVENTS: self._read_events,
             LocalTransportMethod.SHUTDOWN: self._shutdown,
         }
@@ -257,6 +259,18 @@ class SidecarDispatcher:
 
         request = self._from_dto(UpdateSettingsRequest.from_dict, params)
         return await self._service.update_settings(request)
+
+    async def _upsert_workspace(self, params: Mapping[str, Any]) -> Any:
+        from ..contracts import UpsertWorkspaceRequest
+
+        request = self._from_dto(UpsertWorkspaceRequest.from_dict, params)
+        return await self._service.upsert_workspace(request)
+
+    async def _list_workspaces(self, params: Mapping[str, Any]) -> Any:
+        from ..contracts import ListWorkspacesRequest
+
+        request = self._from_dto(ListWorkspacesRequest.from_dict, params)
+        return await self._service.list_workspaces(request)
 
     async def _list_artifacts(self, params: Mapping[str, Any]) -> Any:
         from ..contracts import RunLookupRequest

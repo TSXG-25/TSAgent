@@ -18,6 +18,9 @@ import {
   type ProfileSummary,
   type CapabilitySummary,
   type WebSearchResult,
+  type SkillSummary,
+  type FactRecordSummary,
+  type FactForgetResult,
   type SettingsSummary,
   type WorkspaceSummary,
   type TaskHandle,
@@ -158,6 +161,18 @@ class UnavailableDesktopAgentServiceClient implements DesktopAgentServiceClient 
   }
 
   async webSearch(): Promise<WebSearchResult> {
+    throw this.error;
+  }
+
+  async listFacts(): Promise<FactRecordSummary[]> {
+    throw this.error;
+  }
+
+  async forgetFact(): Promise<FactForgetResult> {
+    throw this.error;
+  }
+
+  async listSkills(): Promise<SkillSummary[]> {
     throw this.error;
   }
 

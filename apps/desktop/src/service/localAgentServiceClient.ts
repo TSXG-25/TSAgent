@@ -45,6 +45,12 @@ import {
   type CapabilitySummary,
   type WebSearchRequest,
   type WebSearchResult,
+  type ListFactsRequest,
+  type ListSkillsRequest,
+  type FactRecordSummary,
+  type FactForgetResult,
+  type ForgetFactRequest,
+  type SkillSummary,
   type ListSchedulesRequest,
   type ListSessionsRequest,
   type StartRunRequest,
@@ -684,6 +690,51 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
       content: optionalString(raw.content) ?? "",
       sources: Array.isArray(raw.sources) ? raw.sources as Array<Record<string, unknown>> : [],
     };
+  }
+
+  async listFacts(request: ListFactsRequest): Promise<FactRecordSummary[]> {
+    const result = (await this.call("list_facts", {
+      tenant_id: request.tenantId, user_id: this.identity.userId,
+      session_id: request.sessionId, request_id: request.requestId,
+      scope: request.scope ?? "", limit: request.limit ?? 500,
+    })) as Array<Record<string, unknown>>;
+    return result.map((raw) => ({
+      category: optionalString(raw.category) ?? "",
+      key: optionalString(raw.key) ?? "",
+      value: optionalString(raw.value) ?? "",
+      scope: optionalString(raw.scope) ?? "",
+      evidenceId: optionalString(raw.evidence_id) ?? "",
+      sourceKind: optionalString(raw.source_kind) ?? "",
+      sourceRef: optionalString(raw.source_ref) ?? "",
+      revision: Number(raw.revision ?? 1),
+      createdAt: optionalString(raw.created_at) ?? "",
+    }));
+  }
+
+  async forgetFact(request: ForgetFactRequest): Promise<FactForgetResult> {
+    const raw = (await this.call("forget_fact", {
+      tenant_id: request.tenantId, user_id: this.identity.userId,
+      session_id: request.sessionId, request_id: request.requestId,
+      category: request.category, key: request.key,
+      scope: request.scope ?? "",
+    })) as Record<string, unknown>;
+    return {
+      category: optionalString(raw.category) ?? "",
+      key: optionalString(raw.key) ?? "",
+      removed: Boolean(raw.removed),
+    };
+  }
+
+  async listSkills(request: ListSkillsRequest): Promise<SkillSummary[]> {
+    return ((await this.call("list_skills", {
+      tenant_id: request.tenantId,
+      session_id: request.sessionId,
+      request_id: request.requestId,
+    })) as Array<{ skill_id?: unknown; name?: unknown; description?: unknown }>).map((raw) => ({
+      skillId: requiredString(raw.skill_id, "skill_id"),
+      name: optionalString(raw.name) ?? "",
+      description: optionalString(raw.description) ?? "",
+    }));
   }
 
   async listHistory(request: ListHistoryRequest): Promise<HistoryEntry[]> {

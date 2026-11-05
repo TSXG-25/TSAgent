@@ -1141,6 +1141,106 @@ class PauseRunRequest:
 
 
 @dataclass(frozen=True)
+class FactRecordSummary:
+    """One remembered fact with governance provenance."""
+
+    category: str
+    key: str
+    value: str
+    scope: str
+    evidence_id: str
+    source_kind: str
+    source_ref: str
+    revision: int
+    created_at: str
+
+    def to_dict(self) -> dict[str, JSONValue]:
+        return {
+            "category": self.category,
+            "key": self.key,
+            "value": self.value,
+            "scope": self.scope,
+            "evidence_id": self.evidence_id,
+            "source_kind": self.source_kind,
+            "source_ref": self.source_ref,
+            "revision": self.revision,
+            "created_at": self.created_at,
+        }
+
+
+@dataclass(frozen=True)
+class FactForgetResult:
+    category: str
+    key: str
+    removed: bool
+
+    def to_dict(self) -> dict[str, JSONValue]:
+        return {
+            "category": self.category,
+            "key": self.key,
+            "removed": self.removed,
+        }
+
+
+@dataclass(frozen=True)
+class ListFactsRequest:
+    tenant_id: str
+    user_id: str
+    session_id: str
+    request_id: str
+    scope: str = ""
+    limit: int = 500
+
+    def __post_init__(self) -> None:
+        _required_identifier(self.tenant_id, "tenant_id")
+        _required_identifier(self.user_id, "user_id")
+        _required_identifier(self.session_id, "session_id")
+        _required_identifier(self.request_id, "request_id")
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "ListFactsRequest":
+        return cls(
+            tenant_id=str(value.get("tenant_id", "")),
+            user_id=str(value.get("user_id", "")),
+            session_id=str(value.get("session_id", "")),
+            request_id=str(value.get("request_id", "")),
+            scope=str(value.get("scope", "")),
+            limit=int(value.get("limit") or 500),
+        )
+
+
+@dataclass(frozen=True)
+class ForgetFactRequest:
+    tenant_id: str
+    user_id: str
+    session_id: str
+    request_id: str
+    category: str
+    key: str
+    scope: str = ""
+
+    def __post_init__(self) -> None:
+        _required_identifier(self.tenant_id, "tenant_id")
+        _required_identifier(self.user_id, "user_id")
+        _required_identifier(self.session_id, "session_id")
+        _required_identifier(self.request_id, "request_id")
+        _required_identifier(self.category, "category")
+        _required_identifier(self.key, "key")
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "ForgetFactRequest":
+        return cls(
+            tenant_id=str(value.get("tenant_id", "")),
+            user_id=str(value.get("user_id", "")),
+            session_id=str(value.get("session_id", "")),
+            request_id=str(value.get("request_id", "")),
+            category=str(value.get("category", "")),
+            key=str(value.get("key", "")),
+            scope=str(value.get("scope", "")),
+        )
+
+
+@dataclass(frozen=True)
 class HandoffSummary:
     """Public delegation record: source run -> target run/task."""
 

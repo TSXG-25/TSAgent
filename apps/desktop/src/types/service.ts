@@ -606,6 +606,23 @@ export interface WebSearchResult {
   sources: Array<Record<string, unknown>>;
 }
 
+export interface SkillSummary {
+  skillId: string;
+  name: string;
+  description: string;
+}
+
+export interface ListSkillsRequest {
+  tenantId: string;
+  sessionId: string;
+  requestId: string;
+}
+
+/** Real skill index — SKILL.md frontmatter registry. */
+export interface SkillClient {
+  listSkills(request: ListSkillsRequest): Promise<SkillSummary[]>;
+}
+
 /** Mercury — real web search via the backend provider chain. */
 export interface WebSearchClient {
   webSearch(request: WebSearchRequest): Promise<WebSearchResult>;
@@ -614,6 +631,47 @@ export interface WebSearchClient {
 /** Runtime capability registry — drives scene "not installed" states. */
 export interface CapabilityClient {
   listCapabilities(request: ListCapabilitiesRequest): Promise<CapabilitySummary[]>;
+}
+
+export interface FactRecordSummary {
+  category: string;
+  key: string;
+  value: string;
+  scope: string;
+  evidenceId: string;
+  sourceKind: string;
+  sourceRef: string;
+  revision: number;
+  createdAt: string;
+}
+
+export interface ListFactsRequest {
+  tenantId: string;
+  sessionId: string;
+  requestId: string;
+  scope?: string;
+  limit?: number;
+}
+
+export interface ForgetFactRequest {
+  tenantId: string;
+  sessionId: string;
+  requestId: string;
+  category: string;
+  key: string;
+  scope?: string;
+}
+
+export interface FactForgetResult {
+  category: string;
+  key: string;
+  removed: boolean;
+}
+
+/** Memory governance — see/forget what the agent remembers. */
+export interface MemoryClient {
+  listFacts(request: ListFactsRequest): Promise<FactRecordSummary[]>;
+  forgetFact(request: ForgetFactRequest): Promise<FactForgetResult>;
 }
 
 /** Delegation records — Sun-side task tree edges. */
@@ -634,7 +692,7 @@ export interface TaskCatalogClient {
   getTask(request: TaskLookupRequest): Promise<TaskRecord>;
 }
 
-export interface DesktopAgentServiceClient extends AgentServiceClient, RunCatalogClient, TaskCatalogClient, ApprovalClient, SessionCatalogClient, HandoffClient, HistoryClient, ScheduleClient, ProfileClient, SettingsClient, WorkspaceClient, CapabilityClient, WebSearchClient {
+export interface DesktopAgentServiceClient extends AgentServiceClient, RunCatalogClient, TaskCatalogClient, ApprovalClient, SessionCatalogClient, HandoffClient, HistoryClient, ScheduleClient, ProfileClient, SettingsClient, WorkspaceClient, CapabilityClient, WebSearchClient, SkillClient, MemoryClient {
   readonly mode: DesktopAgentServiceMode;
   readonly identity: DesktopIdentity;
   /** Resolve the backend health before the UI begins using the client. */

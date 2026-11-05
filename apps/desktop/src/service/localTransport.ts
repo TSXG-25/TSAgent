@@ -34,6 +34,9 @@ export const LOCAL_TRANSPORT_METHODS = [
   "list_workspaces",
   "list_capabilities",
   "web_search",
+  "list_skills",
+  "list_facts",
+  "forget_fact",
   "read_events",
   "shutdown",
 ] as const;

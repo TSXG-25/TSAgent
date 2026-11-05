@@ -56,6 +56,9 @@ class SidecarDispatcher:
             LocalTransportMethod.LIST_WORKSPACES: self._list_workspaces,
             LocalTransportMethod.LIST_CAPABILITIES: self._list_capabilities,
             LocalTransportMethod.WEB_SEARCH: self._web_search,
+            LocalTransportMethod.LIST_SKILLS: self._list_skills,
+            LocalTransportMethod.LIST_FACTS: self._list_facts,
+            LocalTransportMethod.FORGET_FACT: self._forget_fact,
             LocalTransportMethod.READ_EVENTS: self._read_events,
             LocalTransportMethod.SHUTDOWN: self._shutdown,
         }
@@ -305,6 +308,28 @@ class SidecarDispatcher:
 
         request = self._from_dto(PauseRunRequest.from_dict, params)
         return await self._service.pause_run(request)
+
+    async def _list_skills(self, params: Mapping[str, Any]) -> Any:
+        """Real skill index (SKILL.md frontmatter) — Uranus binds profiles to
+        actual skill ids, not made-up names."""
+        from agent.skills import skills_index
+
+        return [
+            {"skill_id": sid, "name": s.name, "description": s.description}
+            for sid, s in skills_index().items()
+        ]
+
+    async def _list_facts(self, params: Mapping[str, Any]) -> Any:
+        from ..contracts import ListFactsRequest
+
+        request = self._from_dto(ListFactsRequest.from_dict, params)
+        return await self._service.list_facts(request)
+
+    async def _forget_fact(self, params: Mapping[str, Any]) -> Any:
+        from ..contracts import ForgetFactRequest
+
+        request = self._from_dto(ForgetFactRequest.from_dict, params)
+        return await self._service.forget_fact(request)
 
     async def _list_artifacts(self, params: Mapping[str, Any]) -> Any:
         from ..contracts import RunLookupRequest

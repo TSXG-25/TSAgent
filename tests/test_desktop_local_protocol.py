@@ -49,6 +49,9 @@ def test_desktop_method_allowlist_is_frozen() -> None:
         "list_workspaces",
         "list_capabilities",
         "web_search",
+        "list_skills",
+        "list_facts",
+        "forget_fact",
         "read_events",
         "shutdown",
     )

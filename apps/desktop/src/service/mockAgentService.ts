@@ -24,6 +24,10 @@ import {
   type CapabilitySummary,
   type WebSearchRequest,
   type WebSearchResult,
+  type SkillSummary,
+  type FactRecordSummary,
+  type FactForgetResult,
+  type UpsertWorkspaceRequest,
   type DecideApprovalRequest,
   type ProfileSummary,
   type SettingsSummary,
@@ -274,12 +278,32 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
     return [...this.handoffs];
   }
 
-  async upsertWorkspace(): Promise<WorkspaceSummary> {
-    return {} as WorkspaceSummary;
+  async upsertWorkspace(request: UpsertWorkspaceRequest): Promise<WorkspaceSummary> {
+    const next: WorkspaceSummary = {
+      workspaceId: request.workspaceId,
+      displayName: request.displayName ?? "",
+      capabilities: request.capabilities ?? [],
+      defaultProfileId: request.defaultProfileId ?? "",
+      description: request.description ?? "",
+      updatedAt: new Date().toISOString(),
+    };
+    this.workspaces = [next, ...this.workspaces.filter((w) => w.workspaceId !== next.workspaceId)];
+    return next;
   }
 
+  private workspaces: WorkspaceSummary[] = [
+    {
+      workspaceId: "ws-forge-default",
+      displayName: "Forge Default",
+      capabilities: ["file_write", "code_execution"],
+      defaultProfileId: "profile-forge",
+      description: "Engineering workspace for Mars/Forge runs",
+      updatedAt: new Date().toISOString(),
+    },
+  ];
+
   async listWorkspaces(): Promise<WorkspaceSummary[]> {
-    return [];
+    return [...this.workspaces];
   }
 
   private settings: SettingsSummary = {
@@ -351,6 +375,21 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
       content: `Results for "${request.query}" — mock search returns canned content; the local client calls the real provider chain.`,
       sources: [],
     };
+  }
+
+  async listFacts(): Promise<FactRecordSummary[]> {
+    return [];
+  }
+
+  async forgetFact(): Promise<FactForgetResult> {
+    return {} as FactForgetResult;
+  }
+
+  async listSkills(): Promise<SkillSummary[]> {
+    return [
+      { skillId: "web-research", name: "Web Research", description: "Search and cite sources for a topic" },
+      { skillId: "code-refactor", name: "Code Refactor", description: "Refactor a module keeping tests green" },
+    ];
   }
 
   async listCapabilities(): Promise<CapabilitySummary[]> {

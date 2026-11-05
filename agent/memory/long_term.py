@@ -368,6 +368,63 @@ def clear_summaries(user_id: str, *, scope: str | None = None) -> None:
         pass
 
 
+def forget_fact(
+    user_id: str,
+    category: str,
+    key: str,
+    *,
+    scope: str | None = None,
+) -> bool:
+    """Governance: delete one fact by (category, key). Returns True if a row
+    was removed — the user owns what the agent remembers."""
+    scope_clause = "" if scope is None else " AND scope = ?"
+    params = (user_id, category, key) if scope is None else (
+        user_id, category, key, scope
+    )
+    _init_facts_db()
+    with sqlite3.connect(FACTS_DB_PATH) as conn:
+        cur = conn.execute(
+            f"DELETE FROM facts WHERE user_id = ? AND category = ? AND key = ?"
+            + scope_clause,
+            params,
+        )
+        return cur.rowcount > 0
+
+
+def list_fact_records(
+    user_id: str, *, scope: str | None = None, limit: int = 500
+) -> list[dict[str, Any]]:
+    """Governance read: facts with provenance (source_kind/source_ref/
+    revision), the fields the plan's memory-governance surface needs."""
+    _init_facts_db()
+    with sqlite3.connect(FACTS_DB_PATH) as conn:
+        if scope is None:
+            rows = conn.execute(
+                """SELECT category, key, value, scope, evidence_id,
+                          source_kind, source_ref, revision, created_at
+                   FROM facts WHERE user_id = ?
+                   ORDER BY created_at DESC LIMIT ?""",
+                (user_id, int(limit)),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """SELECT category, key, value, scope, evidence_id,
+                          source_kind, source_ref, revision, created_at
+                   FROM facts WHERE user_id = ? AND scope = ?
+                   ORDER BY created_at DESC LIMIT ?""",
+                (user_id, scope, int(limit)),
+            ).fetchall()
+    return [
+        {
+            "category": str(r[0]), "key": str(r[1]), "value": str(r[2]),
+            "scope": str(r[3]), "evidence_id": str(r[4]),
+            "source_kind": str(r[5]), "source_ref": str(r[6]),
+            "revision": int(r[7]), "created_at": str(r[8]),
+        }
+        for r in rows
+    ]
+
+
 def clear_facts(user_id: str, *, scope: str | None = None) -> None:
     """Clear extracted facts for one namespace and optional learning scope."""
     try:

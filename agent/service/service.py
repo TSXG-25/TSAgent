@@ -805,6 +805,43 @@ class AgentService:
             updated_at=record.updated_at,
         )
 
+    async def list_facts(self, request: Any) -> list[Any]:
+        """Memory governance read — facts with provenance."""
+        self._ensure_open()
+        import asyncio
+
+        from ..memory.long_term import list_fact_records
+
+        records = await asyncio.to_thread(
+            list_fact_records,
+            f"{request.tenant_id}:{request.user_id}",
+            scope=getattr(request, "scope", None) or None,
+            limit=getattr(request, "limit", 500) or 500,
+        )
+        from .contracts import FactRecordSummary
+
+        return [FactRecordSummary(**r) for r in records]
+
+    async def forget_fact(self, request: Any) -> Any:
+        """Memory governance delete — the user removes one remembered fact."""
+        self._ensure_open()
+        import asyncio
+
+        from ..memory.long_term import forget_fact
+
+        removed = await asyncio.to_thread(
+            forget_fact,
+            f"{request.tenant_id}:{request.user_id}",
+            request.category,
+            request.key,
+            scope=getattr(request, "scope", None) or None,
+        )
+        from .contracts import FactForgetResult
+
+        return FactForgetResult(
+            category=request.category, key=request.key, removed=bool(removed)
+        )
+
     async def list_history(self, request: Any) -> list[Any]:
         """Jupiter history: request/answer pairs across the session's runs,
         derived from durable run records — never a second data source."""

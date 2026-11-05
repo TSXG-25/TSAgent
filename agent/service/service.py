@@ -1454,9 +1454,25 @@ class AgentService:
         try:
             view.transition_run_with_event(
                 run_status="WAITING_USER",
-                event_id=f"approval-requested:{view.run_id}:{record.approval_id}",
+                event_id=f"run_waiting_user:{view.run_id}:{record.approval_id}",
+                event_type="run_waiting_user",
+                timestamp=timestamp,
+                payload={
+                    "approval_id": record.approval_id,
+                    "action": record.action,
+                    "scope": record.scope,
+                    "risk_level": record.risk_level,
+                    "params": dict(params or {}),
+                },
+            )
+            view.store.append_event(
+                view.tenant_id,
+                view.session_id,
+                view.run_id,
+                event_id=f"approval.requested:{view.run_id}:{record.approval_id}",
                 event_type="approval.requested",
                 timestamp=timestamp,
+                run_revision=view.head().current_revision,
                 payload={
                     "approval_id": record.approval_id,
                     "action": record.action,
@@ -1471,9 +1487,23 @@ class AgentService:
             )
             view.transition_run_with_event(
                 run_status="RUNNING",
-                event_id=f"approval-decided:{view.run_id}:{record.approval_id}",
+                event_id=f"run_resumed:{view.run_id}:{record.approval_id}",
+                event_type="run_resumed",
+                timestamp=self._timestamp(),
+                payload={
+                    "approval_id": record.approval_id,
+                    "decision": decided.status,
+                    "decided_by": decided.decided_by,
+                },
+            )
+            view.store.append_event(
+                view.tenant_id,
+                view.session_id,
+                view.run_id,
+                event_id=f"approval.decided:{view.run_id}:{record.approval_id}",
                 event_type="approval.decided",
                 timestamp=self._timestamp(),
+                run_revision=view.head().current_revision,
                 payload={
                     "approval_id": record.approval_id,
                     "decision": decided.status,

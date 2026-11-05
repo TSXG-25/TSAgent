@@ -525,9 +525,19 @@ export interface GetSettingsRequest {
   requestId: string;
 }
 
+export interface UpdateSettingsRequest {
+  tenantId: string;
+  sessionId: string;
+  requestId: string;
+  providerMode?: string;
+  deepseekModel?: string;
+  ollamaModel?: string;
+}
+
 /** Runtime/provider settings surface. */
 export interface SettingsClient {
   getSettings(request: GetSettingsRequest): Promise<SettingsSummary>;
+  updateSettings(request: UpdateSettingsRequest): Promise<SettingsSummary>;
 }
 
 /** Delegation records — Sun-side task tree edges. */

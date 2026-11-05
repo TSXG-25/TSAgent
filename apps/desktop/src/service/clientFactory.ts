@@ -126,6 +126,10 @@ class UnavailableDesktopAgentServiceClient implements DesktopAgentServiceClient 
     throw this.error;
   }
 
+  async updateSettings(): Promise<SettingsSummary> {
+    throw this.error;
+  }
+
   async getSettings(): Promise<SettingsSummary> {
     throw this.error;
   }

@@ -50,6 +50,7 @@ class SidecarDispatcher:
             LocalTransportMethod.UPSERT_PROFILE: self._upsert_profile,
             LocalTransportMethod.LIST_PROFILES: self._list_profiles,
             LocalTransportMethod.GET_SETTINGS: self._get_settings,
+            LocalTransportMethod.UPDATE_SETTINGS: self._update_settings,
             LocalTransportMethod.READ_EVENTS: self._read_events,
             LocalTransportMethod.SHUTDOWN: self._shutdown,
         }
@@ -250,6 +251,12 @@ class SidecarDispatcher:
 
         request = self._from_dto(GetSettingsRequest.from_dict, params)
         return await self._service.get_settings(request)
+
+    async def _update_settings(self, params: Mapping[str, Any]) -> Any:
+        from ..contracts import UpdateSettingsRequest
+
+        request = self._from_dto(UpdateSettingsRequest.from_dict, params)
+        return await self._service.update_settings(request)
 
     async def _list_artifacts(self, params: Mapping[str, Any]) -> Any:
         from ..contracts import RunLookupRequest

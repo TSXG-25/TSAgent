@@ -997,6 +997,41 @@ class GetSettingsRequest:
 
 
 @dataclass(frozen=True)
+class UpdateSettingsRequest:
+    tenant_id: str
+    user_id: str
+    session_id: str
+    request_id: str
+    provider_mode: str = ""
+    deepseek_model: str = ""
+    ollama_model: str = ""
+
+    def __post_init__(self) -> None:
+        _required_identifier(self.tenant_id, "tenant_id")
+        _required_identifier(self.user_id, "user_id")
+        _required_identifier(self.session_id, "session_id")
+        _required_identifier(self.request_id, "request_id")
+        if self.provider_mode and self.provider_mode not in (
+            "auto", "deepseek", "ollama"
+        ):
+            raise ValueError(
+                "provider_mode must be auto, deepseek or ollama"
+            )
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "UpdateSettingsRequest":
+        return cls(
+            tenant_id=str(value.get("tenant_id", "")),
+            user_id=str(value.get("user_id", "")),
+            session_id=str(value.get("session_id", "")),
+            request_id=str(value.get("request_id", "")),
+            provider_mode=str(value.get("provider_mode", "")),
+            deepseek_model=str(value.get("deepseek_model", "")),
+            ollama_model=str(value.get("ollama_model", "")),
+        )
+
+
+@dataclass(frozen=True)
 class HandoffSummary:
     """Public delegation record: source run -> target run/task."""
 

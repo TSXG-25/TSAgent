@@ -14,6 +14,9 @@ import {
   type HandoffSummary,
   type HistoryEntry,
   type ScheduleSummary,
+  type CreateScheduleRequest,
+  type UpdateScheduleRequest,
+  type ListHistoryRequest,
   type ProfileSummary,
   type SettingsSummary,
   type TaskHandle,
@@ -131,6 +134,7 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
 
   constructor(seed: RunView[] = createMockRuns(), identity: DesktopIdentity = DEFAULT_IDENTITY) {
     this.identity = { ...identity };
+    this.seedSchedules();
     seed.forEach((run, index) => this.addSeedRun(run, index));
   }
 
@@ -186,6 +190,10 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
     return [];
   }
 
+  async updateSettings(): Promise<SettingsSummary> {
+    return {} as SettingsSummary;
+  }
+
   async getSettings(): Promise<SettingsSummary> {
     return {} as SettingsSummary;
   }
@@ -198,20 +206,81 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
     return [];
   }
 
-  async createSchedule(): Promise<ScheduleSummary> {
-    return {} as ScheduleSummary;
+  private schedules: ScheduleSummary[] = [];
+
+  private seedSchedules(): void {
+    this.schedules = [
+    {
+      scheduleId: "sched-nightly-index",
+      sessionId: this.identity.sessionId,
+      userId: this.identity.userId,
+      requestText: "同步知识索引并产出摘要 artifact",
+      targetPlanet: "jupiter",
+      intervalSeconds: 86400,
+      status: "ACTIVE",
+      nextFireAt: new Date(Date.now() + 86400e3).toISOString(),
+      lastFiredAt: "",
+      lastRunId: "",
+      fireCount: 0,
+      createdAt: new Date().toISOString(),
+    },
+    {
+      scheduleId: "sched-weekly-report",
+      sessionId: this.identity.sessionId,
+      userId: this.identity.userId,
+      requestText: "起草本周进展汇报（Venus 草稿）",
+      targetPlanet: "venus",
+      intervalSeconds: 604800,
+      status: "PAUSED",
+      nextFireAt: new Date(Date.now() + 604800e3).toISOString(),
+      lastFiredAt: "",
+      lastRunId: "",
+      fireCount: 0,
+      createdAt: new Date().toISOString(),
+    },
+    ];
+  }
+
+  async createSchedule(request: CreateScheduleRequest): Promise<ScheduleSummary> {
+    const schedule: ScheduleSummary = {
+      scheduleId: request.scheduleId ?? `sched-${Math.random().toString(16).slice(2, 10)}`,
+      sessionId: request.sessionId,
+      userId: this.identity.userId,
+      requestText: request.requestText,
+      targetPlanet: request.targetPlanet ?? "",
+      intervalSeconds: request.intervalSeconds,
+      status: "ACTIVE",
+      nextFireAt: new Date(Date.now() + request.intervalSeconds * 1000).toISOString(),
+      lastFiredAt: "",
+      lastRunId: "",
+      fireCount: 0,
+      createdAt: new Date().toISOString(),
+    };
+    this.schedules = [schedule, ...this.schedules];
+    return schedule;
   }
 
   async listSchedules(): Promise<ScheduleSummary[]> {
-    return [];
+    return [...this.schedules];
   }
 
-  async updateSchedule(): Promise<ScheduleSummary> {
-    return {} as ScheduleSummary;
+  async updateSchedule(request: UpdateScheduleRequest): Promise<ScheduleSummary> {
+    this.schedules = this.schedules.map((s) =>
+      s.scheduleId === request.scheduleId ? { ...s, status: request.status } : s,
+    );
+    return this.schedules.find((s) => s.scheduleId === request.scheduleId)!;
   }
 
-  async listHistory(): Promise<HistoryEntry[]> {
-    return [];
+  async listHistory(request: ListHistoryRequest): Promise<HistoryEntry[]> {
+    return this.listRuns()
+      .then((runs) => runs.slice(0, request.limit ?? 200).map((run) => ({
+        runId: run.runId,
+        taskId: "",
+        requestText: run.requestText,
+        answerText: "",
+        status: run.status,
+        updatedAt: run.updatedAt,
+      })));
   }
 
   async startRun(request: StartRunRequest): Promise<RunHandle> {

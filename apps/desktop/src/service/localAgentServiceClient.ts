@@ -30,6 +30,7 @@ import {
   type ScheduleSummary,
   type SettingsSummary,
   type UpdateScheduleRequest,
+  type UpdateSettingsRequest,
   type UpsertProfileRequest,
   type DecideApprovalRequest,
   type ListApprovalsRequest,
@@ -549,6 +550,16 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
       decided_by: request.decidedBy ?? this.identity.userId,
     };
     return mapApproval(await this.call("decide_approval", params));
+  }
+
+  async updateSettings(request: UpdateSettingsRequest): Promise<SettingsSummary> {
+    return mapSettings(await this.call("update_settings", {
+      tenant_id: request.tenantId, user_id: this.identity.userId,
+      session_id: request.sessionId, request_id: request.requestId,
+      provider_mode: request.providerMode ?? "",
+      deepseek_model: request.deepseekModel ?? "",
+      ollama_model: request.ollamaModel ?? "",
+    }));
   }
 
   async getSettings(request: GetSettingsRequest): Promise<SettingsSummary> {

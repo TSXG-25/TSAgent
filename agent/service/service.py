@@ -738,6 +738,23 @@ class AgentService:
             ollama_model=_llm_module.OLLAMA_MODEL,
         )
 
+    async def update_settings(self, request: Any) -> Any:
+        """Live provider/model changes — same in-process semantics as the
+        CLI /model command; next request picks them up."""
+        self._ensure_open()
+        from .. import llm as _llm_module
+
+        router = _llm_module.llm
+        if request.provider_mode:
+            router._provider_mode = request.provider_mode
+        if request.deepseek_model:
+            _llm_module.DEEPSEEK_MODEL = request.deepseek_model
+            router._deepseek = None
+        if request.ollama_model:
+            _llm_module.OLLAMA_MODEL = request.ollama_model
+            router._ollama = None
+        return await self.get_settings(request)
+
     async def list_history(self, request: Any) -> list[Any]:
         """Jupiter history: request/answer pairs across the session's runs,
         derived from durable run records — never a second data source."""

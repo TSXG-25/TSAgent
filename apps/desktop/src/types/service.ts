@@ -841,9 +841,25 @@ export interface ListWorkflowGraphsRequest {
   limit?: number;
 }
 
+export interface GraphRunStepSummary {
+  nodeId: string;
+  taskId: string;
+  runId: string;
+  sessionId: string;
+}
+
+export interface RunWorkflowGraphRequest {
+  tenantId: string;
+  sessionId: string;
+  requestId: string;
+  graphId: string;
+  parentRunId: string;
+}
+
 /** Uranus canvas persistence — durable node-graph definitions. */
 export interface WorkflowGraphClient {
   upsertWorkflowGraph(request: UpsertWorkflowGraphRequest): Promise<WorkflowGraphSummary>;
+  runGraph(request: RunWorkflowGraphRequest): Promise<GraphRunStepSummary[]>;
   listWorkflowGraphs(request: ListWorkflowGraphsRequest): Promise<WorkflowGraphSummary[]>;
 }
 

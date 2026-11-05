@@ -34,6 +34,7 @@ import {
   type JupiterArtifactSummary,
   type WorkflowDefinitionSummary,
   type WorkflowGraphSummary,
+  type GraphRunStepSummary,
   type WorkspaceFileSummary,
   type WorkspaceFileRequest,
   type WorkspaceFileContent,
@@ -451,6 +452,10 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
 
   async upsertWorkflowGraph(): Promise<WorkflowGraphSummary> {
     return {} as WorkflowGraphSummary;
+  }
+
+  async runGraph(): Promise<GraphRunStepSummary[]> {
+    return [];
   }
 
   async listWorkflowGraphs(): Promise<WorkflowGraphSummary[]> {

@@ -38,6 +38,34 @@ class _ManagedRun:
     task: asyncio.Task[None]
 
 
+def _topo_task_order(task_nodes: list, edges: list) -> list:
+    """Kahn's sort over task nodes — edges define execution order; cycles fail."""
+    ids = {str(n.get("id")) for n in task_nodes}
+    indeg = {i: 0 for i in ids}
+    adj: dict[str, list[str]] = {i: [] for i in ids}
+    for e in edges:
+        src_, dst_ = str(e.get("from")), str(e.get("to"))
+        if src_ in ids and dst_ in ids:
+            adj[src_].append(dst_)
+            indeg[dst_] += 1
+    queue = sorted(i for i, d in indeg.items() if d == 0)
+    order: list = []
+    by_id = {str(n.get("id")): n for n in task_nodes}
+    while queue:
+        cur = queue.pop(0)
+        order.append(by_id[cur])
+        for nxt in adj[cur]:
+            indeg[nxt] -= 1
+            if indeg[nxt] == 0:
+                queue.append(nxt)
+    if len(order) != len(task_nodes):
+        raise AgentServiceError(
+            ServiceErrorCode.INVALID_REQUEST,
+            "workflow graph contains a cycle",
+        )
+    return order
+
+
 class AgentService:
     """Stable service facade over the existing durable Runtime path."""
 
@@ -954,17 +982,90 @@ class AgentService:
     async def upsert_workflow_graph(self, request: Any) -> Any:
         self._ensure_open()
         import json as _json
+        from .contracts import _thaw_json
 
         record = self._store.upsert_workflow_graph(
             request.tenant_id,
             request.graph_id,
             name=request.name,
             definition_json=_json.dumps(
-                dict(request.definition or {}), ensure_ascii=False
+                _thaw_json(dict(request.definition or {})), ensure_ascii=False
             ),
             owner=request.owner or request.user_id,
         )
         return self._graph_summary(record)
+
+    async def run_graph(self, request: Any) -> list[Any]:
+        """Execute a persisted canvas graph — task nodes run sequentially in
+        edge order as delegated child runs.  input nodes provide {name}
+        substitutions into request_text; the graph is a plan template, not a
+        program — each run is a real run with full lifecycle semantics."""
+        self._ensure_open()
+        import json as _json
+
+        record = self._store.get_workflow_graph(request.tenant_id, request.graph_id)
+        if record is None:
+            raise AgentServiceError(
+                ServiceErrorCode.RUN_NOT_FOUND,
+                f"workflow graph not found: {request.graph_id}",
+            )
+        definition = _json.loads(record.definition_json)
+        nodes = {str(n.get("id")): n for n in definition.get("nodes", [])}
+        edges = definition.get("edges", [])
+        inputs = {
+            str(n.get("name")): str(n.get("value", ""))
+            for n in nodes.values() if n.get("type") == "input"
+        }
+        task_nodes = [n for n in nodes.values() if n.get("type") == "task"]
+        order = _topo_task_order(task_nodes, edges)
+        steps = []
+        parent_run_id = request.parent_run_id
+        from .contracts import DelegateRunRequest, GraphRunStepSummary, StartRunRequest
+
+        delegate_session = request.session_id
+        for node in order:
+            request_text = str(node.get("request_text", "")).strip()
+            if not request_text:
+                raise AgentServiceError(
+                    ServiceErrorCode.INVALID_REQUEST,
+                    f"task node has no request_text: {node.get('id')}",
+                )
+            for key, value in inputs.items():
+                request_text = request_text.replace("{" + key + "}", value)
+            delegation = await self.delegate_run(
+                DelegateRunRequest(
+                    tenant_id=request.tenant_id,
+                    user_id=request.user_id,
+                    session_id=delegate_session,
+                    request_id=f"{request.request_id}-{node['id']}",
+                    parent_run_id=parent_run_id,
+                    request_text=request_text,
+                    target_planet=str(node.get("target_planet", "")),
+                    profile_id=str(node.get("profile_id", "")),
+                )
+            )
+            child_session = f"{delegate_session}:subtask:{delegation['task_id']}"
+            started = await self.start_run(
+                StartRunRequest(
+                    tenant_id=request.tenant_id,
+                    user_id=request.user_id,
+                    session_id=child_session,
+                    request_id=f"{request.request_id}-{node['id']}-run",
+                    request_text=request_text,
+                    task_id=delegation["task_id"],
+                )
+            )
+            steps.append(
+                GraphRunStepSummary(
+                    node_id=str(node["id"]),
+                    task_id=delegation["task_id"],
+                    run_id=started.run_id,
+                    session_id=child_session,
+                )
+            )
+            parent_run_id = started.run_id
+            delegate_session = child_session
+        return steps
 
     async def list_workflow_graphs(self, request: Any) -> list[Any]:
         self._ensure_open()

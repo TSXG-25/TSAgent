@@ -59,6 +59,7 @@ def test_desktop_method_allowlist_is_frozen() -> None:
         "list_workflows",
         "upsert_workflow_graph",
         "list_workflow_graphs",
+        "run_graph",
         "record_evaluation",
         "list_evaluations",
         "list_workspace_files",

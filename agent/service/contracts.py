@@ -1628,6 +1628,53 @@ class ListWorkflowGraphsRequest:
 
 
 @dataclass(frozen=True)
+class RunWorkflowGraphRequest:
+    """Run a persisted canvas graph — task nodes execute sequentially in
+    edge order as delegated child runs (C+ semantics)."""
+
+    tenant_id: str
+    user_id: str
+    session_id: str
+    request_id: str
+    graph_id: str
+    parent_run_id: str = ""
+
+    def __post_init__(self) -> None:
+        _required_identifier(self.tenant_id, "tenant_id")
+        _required_identifier(self.user_id, "user_id")
+        _required_identifier(self.session_id, "session_id")
+        _required_identifier(self.request_id, "request_id")
+        _required_identifier(self.graph_id, "graph_id")
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "RunWorkflowGraphRequest":
+        return cls(
+            tenant_id=str(value.get("tenant_id", "")),
+            user_id=str(value.get("user_id", "")),
+            session_id=str(value.get("session_id", "")),
+            request_id=str(value.get("request_id", "")),
+            graph_id=str(value.get("graph_id", "")),
+            parent_run_id=str(value.get("parent_run_id", "")),
+        )
+
+
+@dataclass(frozen=True)
+class GraphRunStepSummary:
+    node_id: str
+    task_id: str
+    run_id: str
+    session_id: str
+
+    def to_dict(self) -> dict[str, JSONValue]:
+        return {
+            "node_id": self.node_id,
+            "task_id": self.task_id,
+            "run_id": self.run_id,
+            "session_id": self.session_id,
+        }
+
+
+@dataclass(frozen=True)
 class HandoffSummary:
     """Public delegation record: source run -> target run/task."""
 

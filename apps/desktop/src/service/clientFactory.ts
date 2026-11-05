@@ -26,6 +26,7 @@ import {
   type JupiterArtifactSummary,
   type WorkflowDefinitionSummary,
   type WorkflowGraphSummary,
+  type GraphRunStepSummary,
   type WorkspaceFileSummary,
   type WorkspaceFileContent,
   type EvaluationSummary,
@@ -193,6 +194,10 @@ class UnavailableDesktopAgentServiceClient implements DesktopAgentServiceClient 
   }
 
   async upsertWorkflowGraph(): Promise<WorkflowGraphSummary> {
+    throw this.error;
+  }
+
+  async runGraph(): Promise<GraphRunStepSummary[]> {
     throw this.error;
   }
 

@@ -2443,6 +2443,37 @@ class SqliteRuntimeStore:
                 if str(r["store_generation"]) == self.store_generation
             ]
 
+    def get_workflow_graph(
+        self, tenant_id: str, graph_id: str
+    ) -> "WorkflowGraphRecord | None":
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        graph_id = _require_text(graph_id, "graph_id")
+        with self._lock:
+            self._ensure_open()
+            row = self._connection.execute(
+                """
+                SELECT tenant_id, graph_id, name, definition_json, owner,
+                       created_at, updated_at, store_generation
+                FROM workflow_graphs
+                WHERE tenant_id = ? AND graph_id = ?
+                """,
+                (tenant_id, graph_id),
+            ).fetchone()
+            if row is None:
+                return None
+            if str(row["store_generation"]) != self.store_generation:
+                return None
+            return WorkflowGraphRecord(
+                tenant_id=str(row["tenant_id"]),
+                graph_id=str(row["graph_id"]),
+                name=str(row["name"]),
+                definition_json=str(row["definition_json"]),
+                owner=str(row["owner"]),
+                created_at=str(row["created_at"]),
+                updated_at=str(row["updated_at"]),
+                store_generation=str(row["store_generation"]),
+            )
+
     def upsert_workflow_graph(
         self,
         tenant_id: str,

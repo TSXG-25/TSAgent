@@ -60,6 +60,8 @@ import {
   type WorkflowGraphSummary,
   type UpsertWorkflowGraphRequest,
   type ListWorkflowGraphsRequest,
+  type GraphRunStepSummary,
+  type RunWorkflowGraphRequest,
   type EvaluationSummary,
   type RecordEvaluationRequest,
   type ListEvaluationsRequest,
@@ -810,6 +812,20 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
       owner: request.owner ?? this.identity.userId,
     })) as Record<string, unknown>;
     return mapWorkflowGraph(raw);
+  }
+
+  async runGraph(request: RunWorkflowGraphRequest): Promise<GraphRunStepSummary[]> {
+    const result = (await this.call("run_graph", {
+      tenant_id: request.tenantId, user_id: this.identity.userId,
+      session_id: request.sessionId, request_id: request.requestId,
+      graph_id: request.graphId, parent_run_id: request.parentRunId ?? "",
+    })) as Array<Record<string, unknown>>;
+    return result.map((raw) => ({
+      nodeId: requiredString(raw.node_id, "node_id"),
+      taskId: requiredString(raw.task_id, "task_id"),
+      runId: requiredString(raw.run_id, "run_id"),
+      sessionId: requiredString(raw.session_id, "session_id"),
+    }));
   }
 
   async listWorkflowGraphs(request: ListWorkflowGraphsRequest): Promise<WorkflowGraphSummary[]> {

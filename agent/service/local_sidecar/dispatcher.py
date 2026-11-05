@@ -65,6 +65,7 @@ class SidecarDispatcher:
             LocalTransportMethod.LIST_WORKFLOWS: self._list_workflows,
             LocalTransportMethod.UPSERT_WORKFLOW_GRAPH: self._upsert_workflow_graph,
             LocalTransportMethod.LIST_WORKFLOW_GRAPHS: self._list_workflow_graphs,
+            LocalTransportMethod.RUN_GRAPH: self._run_graph,
             LocalTransportMethod.RECORD_EVALUATION: self._record_evaluation,
             LocalTransportMethod.LIST_EVALUATIONS: self._list_evaluations,
             LocalTransportMethod.LIST_WORKSPACE_FILES: self._list_workspace_files,
@@ -412,6 +413,12 @@ class SidecarDispatcher:
 
         request = self._from_dto(UpsertWorkflowGraphRequest.from_dict, params)
         return await self._service.upsert_workflow_graph(request)
+
+    async def _run_graph(self, params: Mapping[str, Any]) -> Any:
+        from ..contracts import RunWorkflowGraphRequest
+
+        request = self._from_dto(RunWorkflowGraphRequest.from_dict, params)
+        return await self._service.run_graph(request)
 
     async def _list_workflow_graphs(self, params: Mapping[str, Any]) -> Any:
         from ..contracts import ListWorkflowGraphsRequest

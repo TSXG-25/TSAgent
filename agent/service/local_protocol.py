@@ -60,6 +60,7 @@ class LocalTransportMethod(str, Enum):
     LIST_WORKFLOWS = "list_workflows"
     UPSERT_WORKFLOW_GRAPH = "upsert_workflow_graph"
     LIST_WORKFLOW_GRAPHS = "list_workflow_graphs"
+    RUN_GRAPH = "run_graph"
     RECORD_EVALUATION = "record_evaluation"
     LIST_EVALUATIONS = "list_evaluations"
     LIST_WORKSPACE_FILES = "list_workspace_files"

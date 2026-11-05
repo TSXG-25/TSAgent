@@ -752,6 +752,7 @@ class ScheduleSummary:
     session_id: str
     request_text: str
     user_id: str
+    auto_eval: bool
     target_planet: str
     interval_seconds: int
     status: str
@@ -767,6 +768,7 @@ class ScheduleSummary:
             "session_id": self.session_id,
             "request_text": self.request_text,
             "user_id": self.user_id,
+            "auto_eval": self.auto_eval,
             "target_planet": self.target_planet,
             "interval_seconds": self.interval_seconds,
             "status": self.status,
@@ -788,6 +790,7 @@ class CreateScheduleRequest:
     interval_seconds: int
     target_planet: str = ""
     schedule_id: str = ""
+    auto_eval: bool = False
 
     def __post_init__(self) -> None:
         _required_identifier(self.tenant_id, "tenant_id")
@@ -810,6 +813,7 @@ class CreateScheduleRequest:
             interval_seconds=int(value.get("interval_seconds", 0)),
             target_planet=str(value.get("target_planet", "")),
             schedule_id=str(value.get("schedule_id", "")),
+            auto_eval=bool(value.get("auto_eval", False)),
         )
 
 

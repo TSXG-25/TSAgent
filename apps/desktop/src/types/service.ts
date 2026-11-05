@@ -445,6 +445,7 @@ export interface ScheduleSummary {
   sessionId: string;
   requestText: string;
   userId: string;
+  autoEval: boolean;
   targetPlanet: string;
   intervalSeconds: number;
   status: string;
@@ -463,6 +464,7 @@ export interface CreateScheduleRequest {
   intervalSeconds: number;
   targetPlanet?: string;
   scheduleId?: string;
+  autoEval?: boolean;
 }
 
 export interface ListSchedulesRequest {

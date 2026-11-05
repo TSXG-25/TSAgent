@@ -1285,6 +1285,7 @@ class AgentService:
             request.request_text,
             request.interval_seconds,
             user_id=request.user_id,
+            auto_eval=getattr(request, "auto_eval", False),
             target_planet=request.target_planet,
         )
         self._ensure_scheduler()
@@ -1322,7 +1323,7 @@ class AgentService:
             schedule_id=record.schedule_id,
             session_id=record.session_id,
             request_text=record.request_text,
-            user_id=record.user_id,
+            user_id=record.user_id, auto_eval=record.auto_eval,
             target_planet=record.target_planet,
             interval_seconds=record.interval_seconds,
             status=record.status,
@@ -1377,10 +1378,43 @@ class AgentService:
                     self._store.update_schedule_run(
                         schedule.tenant_id, schedule.schedule_id, handle.run_id
                     )
+                    if schedule.auto_eval:
+                        asyncio.create_task(
+                            self._auto_eval(schedule, handle)
+                        )
                 except Exception:
                     import traceback
 
                     traceback.print_exc()
+
+    async def _auto_eval(self, schedule: Any, handle: Any) -> None:
+        """Watch a schedule-fired run to terminal state, then persist its
+        evaluation record — an experiment log entry per fire."""
+        import asyncio
+
+        managed = self._runs.get(handle.run_id)
+        if managed is None:
+            return
+        try:
+            await asyncio.wait_for(asyncio.shield(managed.task), timeout=86400)
+        except Exception:
+            pass
+        head = self._store.get_run_head(
+            schedule.tenant_id, handle.run_id,
+            session_id=managed.run_context.session_id
+            if managed.run_context else schedule.session_id,
+        )
+        status = getattr(head, "run_status", "FAILED_TERMINAL") or "FAILED_TERMINAL"
+        self._store.record_evaluation(
+            schedule.tenant_id,
+            schedule.session_id,
+            f"eval:{schedule.schedule_id}:{schedule.fire_count}",
+            name=f"schedule:{schedule.schedule_id}",
+            run_id=handle.run_id,
+            score=1.0 if status == "COMPLETED" else 0.0,
+            verdict="pass" if status == "COMPLETED" else "fail",
+            notes=f"{schedule.request_text} → {status}",
+        )
 
     async def request_approval(
         self,

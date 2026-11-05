@@ -329,6 +329,7 @@ function mapSchedule(value: unknown): ScheduleSummary {
     sessionId: requiredString(raw.session_id, "session_id"),
     requestText: optionalString(raw.request_text) ?? "",
     userId: optionalString(raw.user_id) ?? "",
+    autoEval: Boolean(raw.auto_eval),
     targetPlanet: optionalString(raw.target_planet) ?? "",
     intervalSeconds: Number(raw.interval_seconds ?? 0),
     status: optionalString(raw.status) ?? "ACTIVE",
@@ -675,6 +676,7 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
       request_text: request.requestText,
       interval_seconds: request.intervalSeconds,
       target_planet: request.targetPlanet ?? "",
+      auto_eval: request.autoEval ?? false,
       schedule_id: request.scheduleId ?? "",
     }));
   }

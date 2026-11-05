@@ -596,6 +596,7 @@ class SqliteRuntimeStore:
                     session_id TEXT NOT NULL,
                     request_text TEXT NOT NULL,
                     user_id TEXT NOT NULL DEFAULT '',
+                    auto_eval INTEGER NOT NULL DEFAULT 0,
                     target_planet TEXT NOT NULL DEFAULT '',
                     interval_seconds INTEGER NOT NULL CHECK (interval_seconds > 0),
                     status TEXT NOT NULL DEFAULT 'ACTIVE',
@@ -715,6 +716,10 @@ class SqliteRuntimeStore:
             if schedule_columns and "user_id" not in schedule_columns:
                 connection.execute(
                     "ALTER TABLE scheduled_tasks ADD COLUMN user_id TEXT NOT NULL DEFAULT ''"
+                )
+            if schedule_columns and "auto_eval" not in schedule_columns:
+                connection.execute(
+                    "ALTER TABLE scheduled_tasks ADD COLUMN auto_eval INTEGER NOT NULL DEFAULT 0"
                 )
             connection.execute("BEGIN IMMEDIATE")
             row = connection.execute(
@@ -1773,6 +1778,7 @@ class SqliteRuntimeStore:
         interval_seconds: int,
         *,
         user_id: str = "",
+        auto_eval: bool = False,
         target_planet: str = "",
         next_fire_at: str = "",
     ) -> "ScheduledTaskRecord":
@@ -1790,7 +1796,7 @@ class SqliteRuntimeStore:
             row = connection.execute(
                 """
                 SELECT tenant_id, schedule_id, session_id, request_text,
-                       user_id, target_planet, interval_seconds, status, next_fire_at,
+                       user_id, auto_eval, target_planet, interval_seconds, status, next_fire_at,
                        last_fired_at, last_run_id, fire_count, created_at,
                        store_generation
                 FROM scheduled_tasks
@@ -1804,14 +1810,14 @@ class SqliteRuntimeStore:
                 """
                 INSERT INTO scheduled_tasks
                     (tenant_id, schedule_id, session_id, request_text,
-                     user_id, target_planet, interval_seconds, status, next_fire_at,
+                     user_id, auto_eval, target_planet, interval_seconds, status, next_fire_at,
                      last_fired_at, last_run_id, fire_count, created_at,
                      store_generation)
-                VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?, '', '', 0, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?, '', '', 0, ?, ?)
                 """,
                 (
                     tenant_id, schedule_id, session_id, request_text,
-                    str(user_id), str(target_planet), interval_seconds,
+                    str(user_id), int(auto_eval), str(target_planet), interval_seconds,
                     str(next_fire_at or _now()), _now(), self.store_generation,
                 ),
             )
@@ -1819,6 +1825,7 @@ class SqliteRuntimeStore:
                 tenant_id=tenant_id, schedule_id=schedule_id,
                 session_id=session_id, request_text=request_text,
                 user_id=str(user_id),
+                auto_eval=bool(auto_eval),
                 target_planet=str(target_planet),
                 interval_seconds=interval_seconds, status="ACTIVE",
                 next_fire_at=str(next_fire_at or _now()),
@@ -1840,7 +1847,7 @@ class SqliteRuntimeStore:
             rows = self._connection.execute(
                 """
                 SELECT tenant_id, schedule_id, session_id, request_text,
-                       user_id, target_planet, interval_seconds, status, next_fire_at,
+                       user_id, auto_eval, target_planet, interval_seconds, status, next_fire_at,
                        last_fired_at, last_run_id, fire_count, created_at,
                        store_generation
                 FROM scheduled_tasks
@@ -1888,7 +1895,7 @@ class SqliteRuntimeStore:
             row = connection.execute(
                 """
                 SELECT tenant_id, schedule_id, session_id, request_text,
-                       user_id, target_planet, interval_seconds, status, next_fire_at,
+                       user_id, auto_eval, target_planet, interval_seconds, status, next_fire_at,
                        last_fired_at, last_run_id, fire_count, created_at,
                        store_generation
                 FROM scheduled_tasks
@@ -1917,7 +1924,7 @@ class SqliteRuntimeStore:
             rows = connection.execute(
                 """
                 SELECT tenant_id, schedule_id, session_id, request_text,
-                       user_id, target_planet, interval_seconds, status, next_fire_at,
+                       user_id, auto_eval, target_planet, interval_seconds, status, next_fire_at,
                        last_fired_at, last_run_id, fire_count, created_at,
                        store_generation
                 FROM scheduled_tasks
@@ -1949,6 +1956,7 @@ class SqliteRuntimeStore:
                         session_id=str(row["session_id"]),
                         request_text=str(row["request_text"]),
                         user_id=str(row["user_id"]),
+                        auto_eval=bool(row["auto_eval"]),
                         target_planet=str(row["target_planet"]),
                         interval_seconds=interval,
                         status=str(row["status"]),
@@ -2009,6 +2017,7 @@ class SqliteRuntimeStore:
             session_id=str(row["session_id"]),
             request_text=str(row["request_text"]),
             user_id=str(row["user_id"]),
+            auto_eval=bool(row["auto_eval"]),
             target_planet=str(row["target_planet"]),
             interval_seconds=int(row["interval_seconds"]),
             status=str(row["status"]),

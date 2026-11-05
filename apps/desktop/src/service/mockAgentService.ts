@@ -36,6 +36,7 @@ import {
   type WorkspaceFileRequest,
   type WorkspaceFileContent,
   type EvaluationSummary,
+  type RecordEvaluationRequest,
   type UpsertWorkspaceRequest,
   type DecideApprovalRequest,
   type ProfileSummary,
@@ -405,12 +406,26 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
     ["lib/util.py", "def clamp(v, lo, hi):\n    return max(lo, min(hi, v))\n"],
   ]);
 
-  async recordEvaluation(): Promise<EvaluationSummary> {
-    return {} as EvaluationSummary;
+  private evals: EvaluationSummary[] = [{
+    evalId: "eval-mock-1", name: "baseline A vs candidate B", runId: "run-2048",
+    baselineRef: "artifact-a", candidateRef: "artifact-b",
+    score: 0.62, verdict: "pass", notes: "mock seed", createdAt: new Date().toISOString(),
+  }];
+
+  async recordEvaluation(request: RecordEvaluationRequest): Promise<EvaluationSummary> {
+    const ev: EvaluationSummary = {
+      evalId: request.evalId || `eval-${Math.random().toString(16).slice(2, 10)}`,
+      name: request.name ?? "", runId: request.runId ?? "",
+      baselineRef: request.baselineRef ?? "", candidateRef: request.candidateRef ?? "",
+      score: request.score ?? 0, verdict: request.verdict ?? "neutral",
+      notes: request.notes ?? "", createdAt: new Date().toISOString(),
+    };
+    this.evals = [ev, ...this.evals];
+    return ev;
   }
 
   async listEvaluations(): Promise<EvaluationSummary[]> {
-    return [];
+    return this.evals;
   }
 
   async listWorkspaceFiles(): Promise<WorkspaceFileSummary[]> {
@@ -496,6 +511,7 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
       sessionId: this.identity.sessionId,
       userId: this.identity.userId,
       requestText: "同步知识索引并产出摘要 artifact",
+      autoEval: false,
       targetPlanet: "jupiter",
       intervalSeconds: 86400,
       status: "ACTIVE",
@@ -510,6 +526,7 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
       sessionId: this.identity.sessionId,
       userId: this.identity.userId,
       requestText: "起草本周进展汇报（Venus 草稿）",
+      autoEval: false,
       targetPlanet: "venus",
       intervalSeconds: 604800,
       status: "PAUSED",
@@ -528,6 +545,7 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
       sessionId: request.sessionId,
       userId: this.identity.userId,
       requestText: request.requestText,
+      autoEval: request.autoEval ?? false,
       targetPlanet: request.targetPlanet ?? "",
       intervalSeconds: request.intervalSeconds,
       status: "ACTIVE",

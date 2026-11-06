@@ -959,6 +959,8 @@ export interface TaskCatalogClient {
 export interface DesktopAgentServiceClient extends AgentServiceClient, RunCatalogClient, TaskCatalogClient, ApprovalClient, SessionCatalogClient, HandoffClient, HistoryClient, ScheduleClient, ProfileClient, SettingsClient, WorkspaceClient, CapabilityClient, WebSearchClient, SkillClient, DelegationClient, MemoryClient, ParticipantClient, JupiterClient, WorkspaceFilesClient, EvaluationClient, WorkflowCatalogClient, WorkflowGraphClient, MotifClient {
   readonly mode: DesktopAgentServiceMode;
   readonly identity: DesktopIdentity;
+  /** Switch the active session scope — subsequent sends target this session. */
+  setSession(sessionId: string): void;
   /** Resolve the backend health before the UI begins using the client. */
   ready(): Promise<void>;
 }

@@ -95,7 +95,11 @@ function unavailableError(code: "INVALID_REQUEST" | "PROVIDER_UNAVAILABLE", mess
  */
 class UnavailableDesktopAgentServiceClient implements DesktopAgentServiceClient {
   readonly mode: DesktopAgentServiceMode;
-  readonly identity: DesktopIdentity;
+  identity: DesktopIdentity;
+
+  setSession(sessionId: string): void {
+    this.identity = { ...this.identity, sessionId };
+  }
 
   constructor(mode: DesktopAgentServiceMode, identity: DesktopIdentity, private readonly error: AgentServiceClientError) {
     this.mode = mode;

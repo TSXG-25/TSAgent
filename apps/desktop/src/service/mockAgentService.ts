@@ -149,7 +149,11 @@ function event(
 
 export class MockAgentServiceClient implements DesktopAgentServiceClient {
   readonly mode = "mock" as const;
-  readonly identity: DesktopIdentity;
+  identity: DesktopIdentity;
+
+  setSession(sessionId: string): void {
+    this.identity = { ...this.identity, sessionId };
+  }
   private readonly snapshots = new Map<string, RunSnapshot>();
   private readonly artifacts = new Map<string, ArtifactSummary[]>();
   private readonly events = new Map<string, RunEvent[]>();
@@ -492,7 +496,24 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
   }
 
   async listFacts(): Promise<FactRecordSummary[]> {
-    return [];
+    const f = (category: string, key: string, value: string, rev = 1): FactRecordSummary => ({
+      category, key, value, scope: "user", evidenceId: "ev-mock", sourceKind: "manual",
+      sourceRef: "demo", revision: rev, createdAt: "demo",
+    });
+    return [
+      f("preference", "code_style", "简洁直接，少注释", 4),
+      f("preference", "ui_density", "紧凑高密度"),
+      f("preference", "review_tone", "客观直白，不要讨好"),
+      f("project", "tsagent_stack", "Tauri + React + Python sidecar", 6),
+      f("project", "theme", "黑蓝机甲 + 行星壁纸"),
+      f("project", "layout", "Omni v3 四段结构", 3),
+      f("motif", "motif-01", "桌面端任务工作台形态", 2),
+      f("user", "lang", "中文交流"),
+      f("user", "role", "产品/设计评审"),
+      f("sys", "sidecar_port", "4173 dev · 60192 preview"),
+      f("memory", "scope", "user 级持久记忆", 2),
+      f("workflow", "graph_demo", "model→profile→skills→@planet"),
+    ];
   }
 
   async forgetFact(): Promise<FactForgetResult> {

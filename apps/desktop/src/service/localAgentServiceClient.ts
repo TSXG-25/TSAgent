@@ -544,7 +544,11 @@ function clone<T>(value: T): T {
 
 export class LocalAgentServiceClient implements DesktopAgentServiceClient {
   readonly mode = "local" as const;
-  readonly identity: DesktopIdentity;
+  identity: DesktopIdentity;
+
+  setSession(sessionId: string): void {
+    this.identity = { ...this.identity, sessionId };
+  }
   private requestSequence = 0;
   private readonly knownSnapshots = new Map<string, RunSnapshot>();
 
@@ -1197,7 +1201,9 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
   }
 
   private assertIdentity(request: { tenantId: string; sessionId: string }): void {
-    if (request.tenantId !== this.identity.tenantId || request.sessionId !== this.identity.sessionId) {
+    // sessionId is a locator — sessions are first-class and the user can
+    // switch between them; only the tenant scope is an identity invariant.
+    if (request.tenantId !== this.identity.tenantId) {
       throw new AgentServiceClientError({
         code: "IDENTITY_MISMATCH",
         message: "request identity does not match the local desktop session",

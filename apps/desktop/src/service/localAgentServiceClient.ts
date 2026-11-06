@@ -1215,6 +1215,10 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
       return await this.transport.request<LocalRpcParams, unknown>(method, params);
     } catch (error) {
       if (error instanceof AgentServiceClientError) throw error;
+      // Aborted fetches (navigation, component unmount, cleanup) are not
+      // protocol failures — surface them as-is so callers can ignore or
+      // log the cancellation instead of a misleading protocol error.
+      if (error instanceof DOMException && error.name === "AbortError") throw error;
       if (error instanceof LocalTransportProtocolError) {
         throw new AgentServiceClientError({
           code: "INTERNAL_ERROR",

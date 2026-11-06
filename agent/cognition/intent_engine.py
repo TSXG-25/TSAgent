@@ -524,6 +524,11 @@ class IntentEngine:
         relation = str(obj.get("conversation_relation", "") or "")
         if relation not in {"new_request", "reference", "correction"}:
             relation = "new_request"
+        # A new_request answers the current input — history is context, not a
+        # goal to inherit.  Forcing resolved_request keeps a drifting model
+        # from silently re-answering a previous run's request.
+        if relation == "new_request":
+            resolved_request = user_input.strip()
         requires_exec = bool(
             artifact_required
             or any(value is not RequestedOutcome.USER_VISIBLE_OUTPUT for value in requested_outcomes)

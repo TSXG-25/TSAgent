@@ -96,6 +96,7 @@ export function toRunEventView(event: RunEvent): RunEventView {
     eventType: event.eventType,
     runRevision: event.runRevision,
     timestamp: event.timestamp,
+    payload: event.payload,
   };
 }
 
@@ -219,6 +220,35 @@ export function toServiceSnapshot(
           }
         : undefined,
   };
+}
+
+/** Fold streamed assistant_delta events into the conversation — the live
+ *  reply-in-progress renders as a single assistant message that updates as
+ *  deltas arrive.  Finalized messages come from the snapshot; this only adds
+ *  the still-streaming turn. */
+export function foldLiveDelta(
+  conversation: RunView["conversation"],
+  events: RunEventView[],
+): RunView["conversation"] {
+  const text = events
+    .filter((e) => e.eventType === "assistant_delta")
+    .map((e) => String((e.payload as Record<string, unknown> | undefined)?.delta ?? ""))
+    .join("");
+  if (!text) return conversation;
+  const live = conversation[conversation.length - 1];
+  if (live && (live as { streaming?: boolean }).streaming) {
+    return [...conversation.slice(0, -1), { ...live, content: text }];
+  }
+  return [
+    ...conversation,
+    {
+      messageId: "live-delta",
+      role: "assistant" as const,
+      content: text,
+      at: "",
+      streaming: true,
+    } as RunView["conversation"][number] & { streaming?: boolean },
+  ];
 }
 
 export function mergeRunEvents(current: RunEventView[], incoming: RunEvent[]): RunEventView[] {

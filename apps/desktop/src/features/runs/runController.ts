@@ -9,7 +9,7 @@ import {
   type StartRunRequest,
 } from "../../types/service";
 import type { RunView } from "../../types";
-import { mergeRunEvents, toRunView } from "../../service/viewMapper";
+import { foldLiveDelta, mergeRunEvents, toRunView } from "../../service/viewMapper";
 
 export interface RunControllerState {
   runs: RunView[];
@@ -65,6 +65,7 @@ export class RunController {
   private readonly cursors = new Map<string, CursorState>();
   private readonly listeners = new Set<Listener>();
   private readonly pollTimers = new Map<string, ReturnType<typeof globalThis.setInterval>>();
+  private pollingStopped = false;
   private readonly inFlight = new Set<string>();
   private readonly pollIntervalMs: number;
   private activeRunId = "";
@@ -209,6 +210,7 @@ export class RunController {
   }
 
   stopAllPolling(): void {
+    this.pollingStopped = true;
     for (const runId of this.pollTimers.keys()) this.stopPolling(runId);
   }
 
@@ -257,6 +259,7 @@ export class RunController {
 
     const next = toRunView(snapshot, artifacts, []);
     next.events = mergeRunEvents(current.events, unseenEvents);
+    next.conversation = foldLiveDelta(next.conversation, next.events);
     this.runs.set(snapshot.runId, next);
     this.currentError = null;
     this.emit();
@@ -286,17 +289,41 @@ export class RunController {
   }
 
   private startPollingIfLive(view: RunView): void {
-    if (!isLiveStatus(view.status) || this.pollTimers.has(view.runId)) return;
-    const timer = globalThis.setInterval(() => {
-      void this.refreshRun(view.runId).catch(() => undefined);
-    }, this.pollIntervalMs);
-    this.pollTimers.set(view.runId, timer);
+    if (!isLiveStatus(view.status) || this.pollTimers.has(view.runId) || this.pollingStopped) return;
+    // Chained long-poll: subscribeEvents holds up to ~8s until new durable
+    // events arrive, so live runs push instead of waiting on the interval.
+    // On transport failure the loop backs off by pollIntervalMs and retries.
+    let running = true;
+    const timer = { stop: () => { running = false; } };
+    this.pollTimers.set(view.runId, timer as unknown as ReturnType<typeof globalThis.setInterval>);
+    const runId = view.runId;
+    void (async () => {
+      while (running) {
+        try {
+          const cursor = this.cursors.get(runId);
+          const current = this.runs.get(runId) ?? view;
+          await this.client.subscribeEvents({
+            tenantId: current.tenantId ?? this.client.identity.tenantId,
+            sessionId: current.sessionId ?? this.client.identity.sessionId,
+            runId,
+            afterSequence: cursor?.lastSequence ?? -1,
+          } satisfies EventStreamRequest);
+          if (!running) break;
+          await this.refreshRun(runId);
+        } catch {
+          if (!running) break;
+          await new Promise((resolve) => globalThis.setTimeout(resolve, this.pollIntervalMs));
+          try { await this.refreshRun(runId); } catch { /* surfaced via setError */ }
+        }
+      }
+    })();
   }
 
   private stopPolling(runId: string): void {
     const timer = this.pollTimers.get(runId);
     if (!timer) return;
-    globalThis.clearInterval(timer);
+    if (typeof timer === "object" && "stop" in timer) (timer as unknown as { stop(): void }).stop();
+    else globalThis.clearInterval(timer);
     this.pollTimers.delete(runId);
   }
 

@@ -74,6 +74,7 @@ export interface RunEventView {
   eventType?: string;
   runRevision?: number;
   timestamp?: string;
+  payload?: Record<string, unknown>;
 }
 
 export interface ResumeView {

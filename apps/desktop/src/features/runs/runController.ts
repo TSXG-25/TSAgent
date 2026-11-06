@@ -186,13 +186,17 @@ export class RunController {
     }
   }
 
-  async refreshRun(runId: string): Promise<RunView | undefined> {
+  async refreshRun(runId: string, sessionId?: string): Promise<RunView | undefined> {
     const current = this.runs.get(runId);
-    if (!current || this.inFlight.has(runId)) return current;
+    if (this.inFlight.has(runId)) return current;
 
     this.inFlight.add(runId);
     try {
-      const request = locator({ tenantId: current.tenantId ?? this.client.identity.tenantId, sessionId: current.sessionId, runId });
+      const request = locator({
+        tenantId: current?.tenantId ?? this.client.identity.tenantId,
+        sessionId: sessionId ?? current?.sessionId ?? this.client.identity.sessionId,
+        runId,
+      });
       const snapshot = await this.client.getRun(request);
       return await this.applySnapshot(snapshot, current);
     } catch (error) {
@@ -243,7 +247,7 @@ export class RunController {
     }
   }
 
-  private async applySnapshot(snapshot: RunSnapshot, current: RunView): Promise<RunView> {
+  private async applySnapshot(snapshot: RunSnapshot, current: RunView | undefined): Promise<RunView> {
     const request = locator(snapshot);
     const afterSequence = this.cursors.get(snapshot.runId)?.lastSequence ?? -1;
     const [artifacts, incomingEvents] = await Promise.all([
@@ -258,7 +262,7 @@ export class RunController {
     this.cursors.set(snapshot.runId, cursor);
 
     const next = toRunView(snapshot, artifacts, []);
-    next.events = mergeRunEvents(current.events, unseenEvents);
+    next.events = mergeRunEvents(current?.events ?? [], unseenEvents);
     next.conversation = foldLiveDelta(next.conversation, next.events);
     this.runs.set(snapshot.runId, next);
     this.currentError = null;

@@ -1222,7 +1222,7 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
       if (error instanceof LocalTransportProtocolError) {
         throw new AgentServiceClientError({
           code: "INTERNAL_ERROR",
-          message: "local transport protocol error",
+          message: `local transport protocol error on ${method}: ${error.message}`,
           retryable: false,
         });
       }

@@ -527,6 +527,24 @@ class IntentEngine:
         # A new_request answers the current input — history is context, not a
         # goal to inherit.  Forcing resolved_request keeps a drifting model
         # from silently re-answering a previous run's request.
+        if relation != "new_request":
+            # reference/correction need a real continuation cue — a pronoun or
+            # topical overlap with prior context.  Bare input like "ccc" has
+            # neither; downgrading keeps a small model from silently
+            # re-answering the previous run's goal.
+            cues = ("它", "这个", "那个", "刚才", "继续", "再", "还", "上面", "同样", "类似")
+            last_user = ""
+            for msg in reversed(context.conversation or []):
+                if str(msg.get("role", "")) == "user":
+                    last_user = str(msg.get("content", ""))
+                    break
+            has_cue = any(c in user_input for c in cues)
+            has_overlap = bool(
+                last_user
+                and any(tok in last_user for tok in user_input.split() if len(tok) > 1)
+            )
+            if not has_cue and not has_overlap:
+                relation = "new_request"
         if relation == "new_request":
             resolved_request = user_input.strip()
         requires_exec = bool(

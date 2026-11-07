@@ -262,6 +262,7 @@ class StartRunRequest:
     request_text: str
     run_id: str | None = None
     task_id: str = ""
+    workspace_root: str = ""
     metadata: Mapping[str, JSONValue] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -305,6 +306,7 @@ class StartRunRequest:
             request_text=str(value.get("request_text", "")),
             run_id=(None if value.get("run_id") is None else str(value.get("run_id"))),
             task_id=str(value.get("task_id", "")),
+            workspace_root=str(value.get("workspace_root", "")),
             metadata=cast(Mapping[str, JSONValue], value.get("metadata", {}) or {}),
         )
 
@@ -639,6 +641,32 @@ class CreateSessionRequest:
 
     @classmethod
     def from_dict(cls, value: Mapping[str, Any]) -> "CreateSessionRequest":
+        return cls(
+            tenant_id=str(value.get("tenant_id", "")),
+            user_id=str(value.get("user_id", "")),
+            session_id=str(value.get("session_id", "")),
+            request_id=str(value.get("request_id", "")),
+        )
+
+
+@dataclass(frozen=True)
+class DeleteSessionRequest:
+    """Request to remove a session from the registry. Orphaned runs remain
+    addressable by session locator but the session no longer lists."""
+
+    tenant_id: str
+    user_id: str
+    session_id: str
+    request_id: str
+
+    def __post_init__(self) -> None:
+        _required_identifier(self.tenant_id, "tenant_id")
+        _required_identifier(self.user_id, "user_id")
+        _required_identifier(self.session_id, "session_id")
+        _required_identifier(self.request_id, "request_id")
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "DeleteSessionRequest":
         return cls(
             tenant_id=str(value.get("tenant_id", "")),
             user_id=str(value.get("user_id", "")),

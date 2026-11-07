@@ -87,14 +87,19 @@ class ServiceContextFactory:
         existing = session.get_run(run_id)
         if existing is not None and not existing.closed:
             return existing
+        explicit_root = str(getattr(request, "workspace_root", "") or "")
         workspace = (
-            self.workspace_for_run(
-                request.tenant_id,
-                request.session_id,
-                run_id,
+            Path(explicit_root)
+            if explicit_root
+            else (
+                self.workspace_for_run(
+                    request.tenant_id,
+                    request.session_id,
+                    run_id,
+                )
+                if self.workspace_for_run is not None
+                else self.workspace_root
             )
-            if self.workspace_for_run is not None
-            else self.workspace_root
         )
         if workspace is not None:
             workspace = workspace.resolve()

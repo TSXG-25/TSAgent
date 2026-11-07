@@ -38,6 +38,16 @@ def run_http_sidecar(
         def log_message(self, *_args) -> None:  # keep stdout for the app
             return
 
+        def _cors(self) -> None:
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type")
+
+        def do_OPTIONS(self) -> None:
+            self.send_response(204)
+            self._cors()
+            self.end_headers()
+
         def do_GET(self) -> None:
             if self.path.split("?", 1)[0] != "/events":
                 self.send_error(404)
@@ -55,6 +65,7 @@ def run_http_sidecar(
                 return
 
             self.send_response(200)
+            self._cors()
             self.send_header("Content-Type", "text/event-stream")
             self.send_header("Cache-Control", "no-cache")
             self.send_header("Connection", "keep-alive")
@@ -151,6 +162,7 @@ def run_http_sidecar(
         def _reply(self, status: int, payload: dict) -> None:
             data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
             self.send_response(status)
+            self._cors()
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()

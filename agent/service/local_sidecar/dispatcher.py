@@ -42,6 +42,7 @@ class SidecarDispatcher:
             LocalTransportMethod.LIST_APPROVALS: self._list_approvals,
             LocalTransportMethod.DECIDE_APPROVAL: self._decide_approval,
             LocalTransportMethod.CREATE_SESSION: self._create_session,
+            LocalTransportMethod.DELETE_SESSION: self._delete_session,
             LocalTransportMethod.LIST_SESSIONS: self._list_sessions,
             LocalTransportMethod.LIST_HANDOFFS: self._list_handoffs,
             LocalTransportMethod.LIST_HISTORY: self._list_history,
@@ -73,6 +74,8 @@ class SidecarDispatcher:
             LocalTransportMethod.RECORD_EVALUATION: self._record_evaluation,
             LocalTransportMethod.LIST_EVALUATIONS: self._list_evaluations,
             LocalTransportMethod.LIST_WORKSPACE_FILES: self._list_workspace_files,
+            LocalTransportMethod.LIST_DIRECTORY: self._list_directory,
+            LocalTransportMethod.PICK_FOLDER: self._pick_folder,
             LocalTransportMethod.READ_WORKSPACE_FILE: self._read_workspace_file,
             LocalTransportMethod.WRITE_WORKSPACE_FILE: self._write_workspace_file,
             LocalTransportMethod.READ_EVENTS: self._read_events,
@@ -223,6 +226,12 @@ class SidecarDispatcher:
         request = self._from_dto(CreateSessionRequest.from_dict, params)
         return await self._service.create_session(request)
 
+    async def _delete_session(self, params: Mapping[str, Any]) -> Any:
+        from ..contracts import DeleteSessionRequest
+
+        request = self._from_dto(DeleteSessionRequest.from_dict, params)
+        return await self._service.delete_session(request)
+
     async def _list_sessions(self, params: Mapping[str, Any]) -> Any:
         from ..contracts import ListSessionsRequest
 
@@ -365,6 +374,12 @@ class SidecarDispatcher:
 
         request = self._from_dto(SearchArtifactsRequest.from_dict, params)
         return await self._service.search_artifacts(request)
+
+    async def _pick_folder(self, params: Mapping[str, Any]) -> Any:
+        return await self._service.pick_folder(type("Req", (), {})())
+
+    async def _list_directory(self, params: Mapping[str, Any]) -> Any:
+        return await self._service.list_directory(type("Req", (), {"path": params.get("path", "")})())
 
     async def _list_workspace_files(self, params: Mapping[str, Any]) -> Any:
         from ..contracts import ListWorkspaceFilesRequest

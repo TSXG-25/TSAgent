@@ -488,6 +488,44 @@ class AgentService:
         )
         return self._session_summary(head)
 
+    async def delete_session(self, request: Any) -> Any:
+        self._ensure_open()
+        removed = self._store.delete_session(request.tenant_id, request.session_id)
+        if not removed:
+            raise AgentServiceError(
+                ServiceErrorCode.SESSION_NOT_FOUND,
+                f"session {request.session_id} was not found",
+            )
+        return {"removed": True, "session_id": request.session_id}
+
+    async def pick_folder(self, request: Any) -> Any:
+        """Open the macOS native 'choose folder' dialog — real Finder picker
+        for the desktop client, even when it runs in a dev browser."""
+        import asyncio
+        proc = await asyncio.create_subprocess_exec(
+            "osascript", "-e",
+            'POSIX path of (choose folder with prompt "选择工作区目录")',
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        )
+        out, _ = await proc.communicate()
+        path = out.decode().strip().rstrip("/")
+        return {"path": path or None}
+
+    async def list_directory(self, request: Any) -> Any:
+        """List subdirectories for the in-page folder picker. Params carry a
+        plain `path` — the desktop is a local user, no tenant scoping on fs."""
+        import os
+        from pathlib import Path
+        raw = str(getattr(request, "path", "") or "").strip()
+        base = Path(raw).expanduser() if raw else Path.home()
+        if not base.is_dir():
+            return {"path": str(base), "parent": str(base.parent), "dirs": [], "error": "not a directory"}
+        dirs = sorted(
+            (d.name + "/" for d in base.iterdir() if d.is_dir() and not d.name.startswith(".")),
+            key=str.lower,
+        )[:200]
+        return {"path": str(base), "parent": str(base.parent), "dirs": dirs, "home": os.path.expanduser("~")}
+
     async def list_sessions(self, request: Any) -> list[Any]:
         self._ensure_open()
         heads = self._store.list_sessions(request.tenant_id, limit=request.limit)
@@ -1458,11 +1496,17 @@ class AgentService:
         import uuid
 
         from .errors import AgentServiceError, ServiceErrorCode
+        from agent.runtime_store.errors import DurableStoreError
 
         tenant_id, session_id = request.tenant_id, request.session_id
-        parent_head = self._store.get_run_head(
-            tenant_id, request.parent_run_id, session_id=session_id
-        )
+        try:
+            parent_head = self._store.get_run_head(
+                tenant_id, request.parent_run_id, session_id=session_id
+            )
+        except DurableStoreError:
+            # run exists but belongs to another session — for this session's
+            # scope it is simply not found; surface a real error, not 500.
+            parent_head = None
         if parent_head is None:
             raise AgentServiceError(
                 ServiceErrorCode.RUN_NOT_FOUND,

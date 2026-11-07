@@ -2709,6 +2709,16 @@ class SqliteRuntimeStore:
                 created_at=_now(),
             )
 
+    def delete_session(self, tenant_id: str, session_id: str) -> bool:
+        """Remove a session from the registry. Runs/tasks keep their session
+        locator but the session head no longer exists."""
+        with self._write_transaction() as connection:
+            cursor = connection.execute(
+                "DELETE FROM session_heads WHERE tenant_id = ? AND session_id = ?",
+                (tenant_id, session_id),
+            )
+            return cursor.rowcount > 0
+
     def list_sessions(
         self,
         tenant_id: str,

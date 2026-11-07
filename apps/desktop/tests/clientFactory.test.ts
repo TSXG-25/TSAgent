@@ -11,6 +11,7 @@ import type {
   TauriSidecarBridge,
   TauriSidecarProcess,
 } from "../src/service/tauriSidecarTransport";
+import { LocalAgentServiceClient } from "../src/service/localAgentServiceClient";
 import { AgentServiceClientError } from "../src/types/service";
 
 class FakeSidecarProcess implements TauriSidecarProcess {
@@ -131,6 +132,7 @@ test("D4A05 local health and requests use one configured desktop identity", asyn
     { tenant_id: "tenant-1", user_id: "user-1", session_id: "session-1" },
   );
   assert.equal(handle.runId, "run-1");
+  assert.ok(client instanceof LocalAgentServiceClient);
   await client.close();
 });
 
@@ -152,5 +154,6 @@ test("D4A06 local scope mismatch is rejected before transport side effects", asy
     (error: unknown) => error instanceof AgentServiceClientError && error.code === "IDENTITY_MISMATCH",
   );
   assert.equal(process.requests.length, 0);
+  assert.ok(client instanceof LocalAgentServiceClient);
   await client.close();
 });

@@ -17,8 +17,7 @@ import {
   type ServiceErrorCode,
 } from "../types/service";
 import {
-  mergeRunEvents,
-  toRunView,
+  digestText,
   toServiceArtifact,
   toServiceEvent,
   toServiceSnapshot,
@@ -33,15 +32,6 @@ const DEFAULT_IDENTITY: DesktopIdentity = {
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
-}
-
-function digestText(value: string): string {
-  let hash = 2166136261;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return `fnv1a-${(hash >>> 0).toString(16).padStart(8, "0")}`;
 }
 
 function keyForRequest(tenantId: string, requestId: string): string {
@@ -130,19 +120,8 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
     // the same composition-root readiness contract as the local client.
   }
 
-  /** Composition-root helper for the first render; the UI still gets data from this adapter. */
-  listRunViewsSync(): RunView[] {
-    return [...this.snapshots.values()].map((snapshot) =>
-      toRunView(snapshot, this.artifacts.get(snapshot.runId) ?? [], this.events.get(snapshot.runId) ?? []),
-    );
-  }
-
-  listRunsSync(): RunSnapshot[] {
-    return [...this.snapshots.values()].map((snapshot) => clone(snapshot));
-  }
-
   async listRuns(): Promise<RunSnapshot[]> {
-    return this.listRunsSync();
+    return [...this.snapshots.values()].map((snapshot) => clone(snapshot));
   }
 
   async startRun(request: StartRunRequest): Promise<RunHandle> {

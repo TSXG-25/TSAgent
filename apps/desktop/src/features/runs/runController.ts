@@ -112,7 +112,7 @@ export class RunController {
     }
     this.operationState = "starting";
     this.emit();
-    this.clearError();
+    this.dismissError();
     try {
       const handle = await this.client.startRun(request);
       const requestLocator = locator(handle);
@@ -146,7 +146,7 @@ export class RunController {
       action: current.resume.action,
     };
     this.operationState = "resuming";
-    this.clearError();
+    this.dismissError();
     this.emit();
     try {
       await this.client.resumeRun(request);
@@ -165,7 +165,7 @@ export class RunController {
     if (!current || current.status !== "active" || this.operationState !== "idle") return current;
 
     this.operationState = "cancelling";
-    this.clearError();
+    this.dismissError();
     this.emit();
     try {
       const snapshot = await this.client.cancelRun({
@@ -205,6 +205,12 @@ export class RunController {
   selectRun(runId: string): void {
     if (!this.runs.has(runId)) return;
     this.activeRunId = runId;
+    this.emit();
+  }
+
+  dismissError(): void {
+    if (!this.currentError) return;
+    this.currentError = null;
     this.emit();
   }
 
@@ -298,12 +304,6 @@ export class RunController {
     if (!timer) return;
     globalThis.clearInterval(timer);
     this.pollTimers.delete(runId);
-  }
-
-  private clearError(): void {
-    if (!this.currentError) return;
-    this.currentError = null;
-    this.emit();
   }
 
   private setError(error: unknown): void {

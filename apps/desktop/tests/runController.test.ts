@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { RunController } from "../src/features/runs/runController";
+import { AgentServiceClientError } from "../src/types/service";
 import type {
   ArtifactSummary,
   CancelRunRequest,
@@ -174,4 +175,23 @@ test("4B03 startRun returns a hydrated active Run without waiting for terminal c
   assert.equal(controller.getState().activeRunId, "run-1");
   assert.equal(controller.getState().isLoading, false);
   controller.stopAllPolling();
+});
+
+test("4B04 dismissError clears the single controller-owned error", async () => {
+  class UnavailableClient extends FakeAgentServiceClient {
+    override async ready(): Promise<void> {
+      throw new AgentServiceClientError({ code: "PROVIDER_UNAVAILABLE", message: "sidecar down", retryable: true });
+    }
+  }
+  const controller = new RunController(new UnavailableClient(null, []), { pollIntervalMs: 1_000 });
+  const observed: Array<string | null> = [];
+  controller.subscribe((state) => observed.push(state.error?.code ?? null));
+
+  await controller.initialize();
+  assert.equal(controller.getState().error?.code, "PROVIDER_UNAVAILABLE");
+
+  controller.dismissError();
+  assert.equal(controller.getState().error, null);
+  assert.equal(observed.at(-1), null);
+  controller.dispose();
 });

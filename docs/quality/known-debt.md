@@ -38,6 +38,8 @@ TSAgent 和 SessionRuntime 仍可直接构造 UniversalAgent。它们不会自�
 
 Desktop clientFactory 默认 mock；local mode 需要注入 TauriSidecarBridge。仓库没有 Tauri/Rust host，真实桌面进程生命周期、身份注入和 sidecar 协作仍需外部验证。
 
+前端自身的剩余技术债（UI 自动化测试缺失、Mock 剧本视图格式、local Run 列表、样式叠加等）见 [apps/desktop/TECHNICAL_MANUAL.md](../../apps/desktop/TECHNICAL_MANUAL.md#9-已知技术债未处理)。
+
 ## 8. 历史文档状态滞后
 
 ADR-0023 的开头仍保留早期“Service cancel 未实现”的时间层次，当前代码已经有 AgentService.cancel_run、timeout watchdog 和 convergence。ADR-0018 对 resume integration 的表述也比当前主路径更强。应通过新 ADR 或明确 revision 记录校正，不在本次审计中直接重写历史决策。

@@ -52,3 +52,35 @@ jobs:
 
       - name: Trend Gate
         run: python evaluation/benchmark/trend_gate.py
+
+  desktop-frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/desktop
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python (LC16 spawns the real JSONL sidecar)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: apps/desktop/.nvmrc
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Typecheck and offline tests
+        run: npm test
+
+      - name: Production build
+        run: npm run build

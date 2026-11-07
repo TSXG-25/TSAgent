@@ -178,13 +178,14 @@ function terminalEventMatches(snapshot: RunSnapshot | undefined, events: RunEven
   if (!snapshot) return false;
   const terminal = events.filter((event) => TERMINAL_EVENTS.has(event.eventType));
   if (terminal.length !== 1) return false;
-  const expected = {
+  const terminalEventByStatus: Partial<Record<RunSnapshot["status"], string>> = {
     completed: "run_completed",
     blocked: "run_blocked",
     failed: "run_failed",
     cancelled: "run_cancelled",
     timed_out: "run_timed_out",
-  }[snapshot.status];
+  };
+  const expected = terminalEventByStatus[snapshot.status];
   return expected === terminal[0]?.eventType;
 }
 

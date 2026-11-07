@@ -17,7 +17,6 @@ import {
   type RunOutputSummary,
   type RunSnapshot,
   type RunStatus,
-  type ServiceErrorCode,
   type StartRunRequest,
   type VerifierSummary,
 } from "../types/service";
@@ -38,12 +37,6 @@ export interface LocalAgentServiceClientOptions {
   /** Identity is explicit configuration; there is no default user fallback. */
   identity: DesktopIdentity;
   requestIdFactory?: (operation: LocalClientOperation, sequence: number) => string;
-}
-
-export interface LocalHealthSnapshot {
-  status: "ok";
-  protocolVersion: string;
-  service: string;
 }
 
 const RUN_STATUS_MAP: Record<string, RunStatus> = {
@@ -315,7 +308,7 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
     this.identity = { ...options.identity };
   }
 
-  async health(): Promise<LocalHealthSnapshot> {
+  async health(): Promise<HealthSnapshot> {
     return mapHealth(await this.call("health", {}));
   }
 
@@ -497,5 +490,3 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
     }
   }
 }
-
-export default LocalAgentServiceClient;

@@ -18,9 +18,6 @@ export const LOCAL_TRANSPORT_METHODS = [
 
 export type LocalTransportMethod = (typeof LOCAL_TRANSPORT_METHODS)[number];
 
-/** Alias used by the Desktop-3 transport/client contract. */
-export type LocalMethod = LocalTransportMethod;
-
 export type LocalRpcParams = Record<string, unknown>;
 
 export interface LocalRpcRequest {

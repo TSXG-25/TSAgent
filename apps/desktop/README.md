@@ -1,5 +1,7 @@
 # TSAgent Studio
 
+> 接手开发请先读 [技术手册](./TECHNICAL_MANUAL.md)：分层、数据流、扩展方式、测试与已知技术债。
+
 TSAgent Studio 是 TSAgent v2.3D-4c 的 Contract-driven Desktop Console。Desktop-4a
 通过显式的 `mock | local` composition root 选择数据源；页面始终只依赖
 `AgentServiceClient` 公开 DTO，不直接依赖 Python Runtime 内部对象。
@@ -26,11 +28,14 @@ npm run dev
 `window.__TSAGENT_SIDECAR_BRIDGE__`。健康检查失败或配置缺失只显示 Backend unavailable，
 绝不会自动回退到 Mock。
 
-构建静态产物：
+构建静态产物与离线测试：
 
 ```bash
-npm run build
+npm run build   # tsc + vite build
+npm test        # src/tests 类型检查 + 全部离线测试（CI 同款）
 ```
+
+需要 Node `^20.19.0 || >=22.12.0`（见 `.nvmrc`）。
 
 ## 当前覆盖
 
@@ -136,4 +141,4 @@ The UI boundary is intentionally fact-driven:
 | UI07 | Repeated cancellation uses the same Run-scoped request ID. |
 | UI08 | Terminal Runs do not expose a cancel action. |
 
-`npm run build` is the current automated contract gate; this small MVP has no browser-test runner yet. The TypeScript build verifies that every future `AgentServiceClient` adapter implements `cancelRun()` and that the public DTOs remain free of Runtime/SQLite imports.
+`npm test` (typecheck of `src` and `tests` plus all offline suites) and `npm run build` are the automated contract gates and run in CI (`desktop-frontend` job). There is no browser/component test runner yet. The TypeScript build verifies that every `AgentServiceClient` adapter implements `cancelRun()` and that the public DTOs remain free of Runtime/SQLite imports.

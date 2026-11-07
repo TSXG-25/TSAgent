@@ -332,5 +332,3 @@ export class TauriSidecarTransport implements LocalTransport {
     }
   }
 }
-
-export default TauriSidecarTransport;

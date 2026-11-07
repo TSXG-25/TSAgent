@@ -90,16 +90,9 @@ def test_planner_direct_answer_keeps_repository_context_user_level(monkeypatch) 
 
     async def capture(messages, **_kwargs):
         captured.append(messages)
-        if len(captured) == 1:
-            return SimpleNamespace(content=json.dumps({
-                "domain": "闲聊", "action": "chat", "target": "", "entities": [],
-                "confidence": 0.99, "requires_execution": False, "summary": "greeting",
-                "resolved_request": "你好", "conversation_relation": "new_request",
-                "requested_outcomes": ["USER_VISIBLE_OUTPUT"], "artifact_required": False,
-                "delivery_requirements": [], "prohibited_effects": [],
-                "acceptance_criteria": [], "freshness_required": False,
-                "source_grounding_required": False,
-            }))
+        # Cheap-chat intent short-circuits without an LLM call — the only
+        # captured call is the direct-answer path, whose job is just to
+        # answer without treating repository context as user-level data.
         return SimpleNamespace(content="回答")
 
     orchestrator = SimpleNamespace(
@@ -112,6 +105,16 @@ def test_planner_direct_answer_keeps_repository_context_user_level(monkeypatch) 
     )
     orchestrator._context_builder = ContextBuilder(orchestrator)
     monkeypatch.setattr("agent.llm.llm.ainvoke", capture)
+    # IntentEngine owns a dedicated _FallbackLLM — the intent call bypasses
+    # agent.llm entirely, so route it through the same capture seam or the
+    # sequence collapses to a single call and the answer picks up the intent
+    # JSON fixture.
+    from agent.cognition.intent_engine import engine as _intent_engine
+
+    def _sync_capture(messages, **_kw):
+        return asyncio.run(capture(messages, **_kw))
+    _intent_shim = SimpleNamespace(ainvoke=capture, invoke=_sync_capture)
+    monkeypatch.setattr(_intent_engine, "_llm", _intent_shim)
 
     request = "你好"
     state, next_state, answer = asyncio.run(
@@ -126,8 +129,8 @@ def test_planner_direct_answer_keeps_repository_context_user_level(monkeypatch) 
     assert next_state == "FINISH"
     assert answer == "回答"
     assert state["messages"][-1].content == request
-    assert len(captured) == 2
-    answer_call = captured[1]
+    assert len(captured) == 1
+    answer_call = captured[0]
     assert isinstance(answer_call[0], SystemMessage)
     assert marker not in answer_call[0].content
     assert any(marker in m.content for m in answer_call[1:-1])

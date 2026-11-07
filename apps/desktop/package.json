@@ -6,22 +6,38 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "test:local-client": "node scripts/test-local-client.mjs",
-    "test:desktop4a": "node scripts/test-desktop4a.mjs",
-    "test:desktop4b1": "node scripts/test-desktop4b1.mjs",
-    "test:desktop4b2": "node scripts/test-desktop4b2.mjs",
-    "test:desktop4c": "node scripts/test-desktop4c.mjs",
-    "preview": "vite preview"
+    "test:local-client": "node scripts/run-ts-test.mjs tests/localAgentServiceClient.test.ts",
+    "test:desktop4a": "node scripts/run-ts-test.mjs tests/clientFactory.test.ts",
+    "test:desktop4b1": "node scripts/run-ts-test.mjs tests/runController.test.ts",
+    "test:desktop4b2": "node scripts/run-ts-test.mjs tests/runControllerOperations.test.ts",
+    "test:desktop4c": "node scripts/run-ts-test.mjs tests/desktop4cE2EHarness.ts",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "test:orbits": "node scripts/test-orbits.mjs",
+    "test:scenes": "node scripts/test-scenes.mjs",
+    "test:sidecar-e2e": "node scripts/test-sidecar-e2e.mjs",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tests/tsconfig.json",
+    "test": "npm run typecheck && node scripts/run-ts-test.mjs tests/localAgentServiceClient.test.ts tests/clientFactory.test.ts tests/runController.test.ts tests/runControllerOperations.test.ts"
   },
   "dependencies": {
+    "@tauri-apps/api": "^2.12.4",
+    "@tauri-apps/plugin-dialog": "^2.8.4",
     "react": "19.1.0",
-    "react-dom": "19.1.0"
+    "react-dom": "19.1.0",
+    "react-router-dom": "^7.9.6",
+    "three": "^0.186.1"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.12.4",
     "@types/react": "19.1.11",
     "@types/react-dom": "19.1.1",
+    "@types/three": "^0.186.0",
     "esbuild": "0.27.7",
     "typescript": "5.9.3",
-    "vite": "7.3.5"
+    "vite": "7.3.5",
+    "@types/node": "22.18.0"
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
   }
 }

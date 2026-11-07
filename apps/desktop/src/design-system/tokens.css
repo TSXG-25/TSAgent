@@ -1,0 +1,60 @@
+/* Mecha design tokens — Implementation Plan v1.0 §8.1/§8.2
+   Skin language: blockade-orange HUD (translucent plates, hairline seams,
+   single focus accent, corner brackets). */
+@font-face { font-family: "Borda"; src: url("/fonts/borda-400.woff2") format("woff2"); font-weight: 400; }
+@font-face { font-family: "Borda"; src: url("/fonts/borda-500.woff2") format("woff2"); font-weight: 500; }
+@font-face { font-family: "Borda"; src: url("/fonts/borda-600.woff2") format("woff2"); font-weight: 600; }
+@font-face { font-family: "Borda"; src: url("/fonts/borda-700.woff2") format("woff2"); font-weight: 700; }
+
+:root {
+  /* field + glass plates */
+  --bg-root-old: #0d0e11;
+  --bg-panel: rgba(16, 17, 20, .55);
+  --bg-panel-2: rgba(16, 17, 20, .78);
+  --glass-edge: rgba(255, 255, 255, .10);
+
+  /* hairline seams */
+  --border-base: rgba(255, 255, 255, .08);
+  --border-strong: rgba(255, 255, 255, .14);
+
+  /* type */
+  --text-main: #f2f4f6;
+  --text-muted: rgba(255, 255, 255, .55);
+  --text-faint: rgba(255, 255, 255, .32);
+
+  /* focus accent — amber chrome; planet-accent overrides in workspace */
+  --focus: #ff7f00;
+  --focus-deep: #d96600;
+  --focus-fill: rgba(255, 127, 0, .16);
+  --focus-edge: rgba(255, 127, 0, .45);
+
+  /* planet identity accent (marks, eyebrows, chips) */
+  --planet-accent: #f6b94a;
+  --pulse-period: 9s;
+
+  --font-display: "Borda", "Rajdhani", sans-serif;
+  --font-body: "Rajdhani", "Titillium Web", sans-serif;
+}
+[data-planet="sun"] { --planet-accent: #f6b94a; }
+
+:root { --mono: "JetBrains Mono", ui-monospace, monospace; --font-mono: "JetBrains Mono", ui-monospace, monospace; --font-serif: "Noto Serif SC", "Songti SC", serif; }
+
+:root {
+  /* transitions-and-style.md §3 motion tokens */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --dur-press: 100ms;
+  --dur-hover: 120ms;
+  --dur-pop: 180ms;
+  --dur-drawer: 240ms;
+  --dur-reveal: 360ms;
+  /* §S1 cold deep-space shift */
+  --bg-root: #0a0d12;
+  --surface-1: #10141b;
+  --surface-2: #161b24;
+  --surface-3: #1d2430;
+  --line: rgba(150, 180, 255, 0.09);
+  --line-strong: rgba(150, 180, 255, 0.18);
+  --accent-fill: color-mix(in srgb, var(--planet-accent, #ff7f00) 10%, transparent);
+}

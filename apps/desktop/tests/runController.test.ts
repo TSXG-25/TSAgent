@@ -1,3 +1,5 @@
+import { AgentServiceClientError } from "../src/types/service";
+import { UnavailableDesktopAgentServiceClient } from "../src/service/clientFactory";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { RunController } from "../src/features/runs/runController";
@@ -66,14 +68,13 @@ function snapshot(status: RunSnapshot["status"]): RunSnapshot {
   };
 }
 
-class FakeAgentServiceClient implements DesktopAgentServiceClient {
-  readonly mode = "local" as const;
-  readonly identity = identity;
+class FakeAgentServiceClient extends UnavailableDesktopAgentServiceClient {
   readonly snapshots = new Map<string, RunSnapshot>();
   readonly events = new Map<string, RunEvent[]>();
   readonly eventCursors: number[] = [];
 
   constructor(initial: RunSnapshot | null, initialEvents: RunEvent[]) {
+    super("local", identity, new AgentServiceClientError({ code: "PROVIDER_UNAVAILABLE", message: "unavailable in test", retryable: true }));
     if (initial) this.snapshots.set(initial.runId, initial);
     this.events.set("run-1", initialEvents);
   }
@@ -123,6 +124,12 @@ class FakeAgentServiceClient implements DesktopAgentServiceClient {
   async readEvents(request: EventStreamRequest): Promise<RunEvent[]> {
     this.eventCursors.push(request.afterSequence);
     return (this.events.get(request.runId) ?? []).filter((item) => item.sequenceNumber > request.afterSequence);
+  }
+
+  // Never resolves — the controller's chained subscription parks here, so
+  // eventCursors only records the explicit readEvents calls under test.
+  async subscribeEvents(): Promise<RunEvent[]> {
+    return new Promise<RunEvent[]>(() => {});
   }
 }
 
@@ -174,4 +181,21 @@ test("4B03 startRun returns a hydrated active Run without waiting for terminal c
   assert.equal(controller.getState().activeRunId, "run-1");
   assert.equal(controller.getState().isLoading, false);
   controller.stopAllPolling();
+});
+
+test("4B04 dismissError clears the single controller-owned error", async () => {
+  class UnavailableClient extends FakeAgentServiceClient {
+    override async ready(): Promise<void> {
+      throw new AgentServiceClientError({ code: "PROVIDER_UNAVAILABLE", message: "sidecar down", retryable: true });
+    }
+  }
+  const controller = new RunController(new UnavailableClient(null, []), { pollIntervalMs: 1_000 });
+  const observed: Array<string | null> = [];
+  controller.subscribe((state) => observed.push(state.error?.code ?? null));
+  await controller.initialize();
+  assert.equal(controller.getState().error?.code, "PROVIDER_UNAVAILABLE");
+  controller.dismissError();
+  assert.equal(controller.getState().error, null);
+  assert.equal(observed.at(-1), null);
+  controller.dispose();
 });

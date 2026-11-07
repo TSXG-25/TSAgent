@@ -174,6 +174,8 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
     // the same composition-root readiness contract as the local client.
   }
 
+  async close(): Promise<void> {}
+
   /** Composition-root helper for the first render; the UI still gets data from this adapter. */
   listRunViewsSync(): RunView[] {
     return [...this.snapshots.values()].map((snapshot) =>
@@ -271,11 +273,20 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
     return session;
   }
 
+  async deleteSession(request: CreateSessionRequest): Promise<{ removed: boolean }> {
+    const before = this.extraSessions.length;
+    this.extraSessions = this.extraSessions.filter((s) => s.sessionId !== request.sessionId);
+    this.removedSessions.add(request.sessionId);
+    return { removed: this.extraSessions.length !== before || true };
+  }
+
   private extraSessions: SessionSummary[] = [];
+  private removedSessions = new Set<string>();
 
   async listSessions(): Promise<SessionSummary[]> {
     const bySession = new Map<string, SessionSummary>();
     for (const run of this.snapshots.values()) {
+      if (!this.extraSessions.some((s) => s.sessionId === run.sessionId) && this.removedSessions.has(run.sessionId)) continue;
       const existing = bySession.get(run.sessionId);
       bySession.set(run.sessionId, {
         tenantId: run.tenantId,

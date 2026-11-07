@@ -1,73 +1,137 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { delegateToPlanet } from "./delegate";
+import { pickFiles } from "../service/tauriBridge";
 import { Icon } from "./ui";
 import type { RunCtx } from "./runCtx";
 
-/** Shared AgentComposer — "same as Omni input" across all 10 workspaces.
- *  Planet-bound task dispatch via the canonical delegateToPlanet path.
- *  Layout width/position varies per workspace; behavior is identical. */
+const BUSY = new Set(["active", "pending"]);
+
+/** Shared AgentComposer — "same as Omni input". Planet-bound task dispatch
+ *  via delegateToPlanet. Supports @planet delegation and /slash shortcuts
+ *  (/mars x → @mars x, /model <m> → local hint, /help). Model select is a
+ *  display+hint surface until a model-setting wire exists per-run. */
+const PLANETS = ["sun","mercury","venus","earth","mars","jupiter","saturn","uranus","neptune","pluto"];
+const PERMISSIONS = [
+  { id: "只读", icon: "◧", desc: "仅回答，不改文件" },
+  { id: "询问", icon: "◈", desc: "写操作逐个确认" },
+  { id: "智能", icon: "✦", desc: "低风险自动放行" },
+  { id: "计划", icon: "▤", desc: "先出方案再执行" },
+  { id: "放行", icon: "⏩", desc: "全部自动批准（本地偏好）" },
+] as const;
+
 export default function AgentComposer({ ctx, planet, placeholder }: { ctx: RunCtx; planet?: string; placeholder?: string }) {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const [settings, setSettings] = useState<{ active_model?: string; active_provider?: string; deepseek_model?: string; ollama_model?: string } | null>(null);
-
-  useEffect(() => {
-    void ctx.service.getSettings({ tenantId: ctx.service.identity.tenantId, sessionId: ctx.service.identity.sessionId, requestId: `cfg-${Date.now()}` } as never)
-      .then((s) => setSettings(s as never)).catch(() => {});
-  }, [ctx.service]);
-
-  async function pickModel(model: string) {
-    try {
-      const field = model.includes(":") ? { ollamaModel: model } : { deepseekModel: model };
-      await ctx.service.updateSettings({ tenantId: ctx.service.identity.tenantId, sessionId: ctx.service.identity.sessionId, requestId: `cfg-up-${Date.now()}`, ...field } as never);
-      setSettings((s) => s && { ...s, [model.includes(":") ? "ollama_model" : "deepseek_model"]: model });
-    } catch (e) { setNotice(String(e)); }
-  }
+  const [files, setFiles] = useState<string[]>([]);
+  const [perm, setPerm] = useState(() => localStorage.getItem("tsagent:permission") ?? "询问");
+  const [permOpen, setPermOpen] = useState(false);
+  const pickPerm = (id: string) => { setPerm(id); localStorage.setItem("tsagent:permission", id); setPermOpen(false); };
+  // context usage ring — ≈tokens from visible conversation text, cap 1M
+  const estTokens = Math.round(((ctx.activeRun?.conversation ?? []).reduce((n, m) => n + m.content.length, 0)
+    + (ctx.activeRun?.output?.text.length ?? 0) + (ctx.activeRun?.request?.length ?? 0)) / 4);
+  const pct = Math.min(estTokens / 1000000, 1);
+  const R = 9, C = 2 * Math.PI * R;
+  const [model, setModel] = useState("default");
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     const t = text.trim();
     if (!t || busy) return;
-    setBusy(true); setNotice(null);
-    // slash commands — session/run control from the composer
-    if (t.startsWith("/")) {
-      const cmd = t.slice(1).toLowerCase();
-      try {
-        if (cmd === "new") { window.dispatchEvent(new CustomEvent("tsagent:new-session")); setNotice("新任务已建"); }
-        else if (cmd === "pause") { if (ctx.activeRun) await ctx.service.pauseRun({ tenantId: ctx.service.identity.tenantId, sessionId: ctx.service.identity.sessionId, runId: ctx.activeRun.runId, requestId: `pause-${Date.now()}` } as never); setNotice("已暂停"); }
-        else if (cmd === "resume") { if (ctx.activeRun) await ctx.controller.resumeRun(ctx.activeRun.runId); setNotice("已恢复"); }
-        else if (cmd === "cancel") { if (ctx.activeRun) await ctx.controller.cancelRun(ctx.activeRun.runId); setNotice("已取消"); }
-        else setNotice("命令: /new /pause /resume /cancel");
-      } catch (err) { setNotice(String(err)); }
-      finally { setBusy(false); }
-      setText(""); return;
+    // /planet shortcut
+    const slash = t.match(/^\/(\w+)\s+([\s\S]+)$/);
+    const m = slash ?? t.match(/^@(\w+)\s+([\s\S]+)$/);
+    if (slash && !PLANETS.includes(slash[1].toLowerCase())) {
+      setNotice(`未知命令 /${slash[1]} — 可用: ${PLANETS.map((p) => `/${p}`).join(" ")}`);
+      return;
     }
+    setBusy(true); setNotice(null);
     try {
-      const m = t.match(/^@(\w+)\s+([\s\S]+)$/);
       const target = m ? m[1].toLowerCase() : (planet ?? "sun");
-      await delegateToPlanet(ctx, target, m ? m[2] : t);
-      setText(""); setNotice(`→ ${target} task started`);
+      await delegateToPlanet(ctx, target, m ? m[2] : t, files);
+      if (files.length && ctx.activeRun) {
+        window.dispatchEvent(new CustomEvent("tsagent:run-attachments", { detail: { runId: ctx.activeRun.runId, files } }));
+      }
+      setText(""); setFiles([]); setNotice(`→ ${target}`);
     } catch (err) { setNotice(String(err)); }
     finally { setBusy(false); }
   }
 
   return (
     <form className="agent-composer" onSubmit={submit}>
-      <span className="ac-planet">@{planet ?? "sun"}</span>
       <textarea
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void submit(e); } }}
-        placeholder={placeholder ?? `Task for ${planet ?? "omni"} — @planet delegates…`}
+        placeholder={placeholder ?? `Task for ${planet ?? "omni"} — @planet 或 /planet 委派…`}
         rows={2} value={text}
       />
-      <select className="omni-model" onChange={(e) => void pickModel(e.target.value)} title="Model" value={settings?.active_provider === "ollama" ? settings?.ollama_model : settings?.deepseek_model}>
-        {[settings?.deepseek_model, settings?.ollama_model].filter(Boolean).map((m) => <option key={m} value={m}>{m}</option>)}
-        {!settings && <option>…</option>}
-      </select>
-      <button className="ac-send" disabled={busy || !text.trim()} type="submit">
-        <Icon name="send" size={14} />
-      </button>
+      {files.length > 0 && (
+        <div className="ac-chips">
+          {files.map((f, i) => (
+            <span className="ac-chip" key={i} title={f}>
+              {f.split("/").pop()}
+              <i onClick={() => setFiles((x) => x.filter((_, j) => j !== i))}>✕</i>
+            </span>
+          ))}
+        </div>
+      )}
+      <div className="ac-tools">
+        <button className="ac-attach" onClick={() => void pickFiles().then((f) => setFiles((x) => [...x, ...f]))} title="添加文件" type="button">＋</button>
+        <div className="ac-permwrap">
+          <button className="ac-perm" onClick={() => setPermOpen((o) => !o)} title="权限档（本地偏好）" type="button">{perm} ▾</button>
+          {permOpen && (
+            <div className="ac-permmenu">
+              {PERMISSIONS.map((p) => (
+                <button className={`ac-perm-item ${perm === p.id ? "on" : ""}`} key={p.id} onClick={() => pickPerm(p.id)} type="button">
+                  <span className="pi">{p.icon}</span>
+                  <span className="pt"><strong>{p.id}</strong><em>{p.desc}</em></span>
+                  {perm === p.id && <span className="pc">✓</span>}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <span className="ac-planet">@{planet ?? "sun"}</span>
+        <span className="ac-spacer" />
+        <span className="ac-ctxring" title={`上下文用量 ≈${estTokens.toLocaleString()} / 1M tokens（估算）`}>
+          <svg height="22" viewBox="0 0 22 22" width="22">
+            <circle cx="11" cy="11" fill="none" r={R} stroke="rgba(255,255,255,.1)" strokeWidth="2" />
+            <circle cx="11" cy="11" fill="none" r={R} stroke="var(--planet-accent)" strokeDasharray={`${pct * C} ${C}`} strokeLinecap="round" strokeWidth="2" transform="rotate(-90 11 11)" />
+          </svg>
+          <em>{Math.round(pct * 100)}%</em>
+        </span>
+        <div className="ac-modelpill" title="Model">
+          <select onChange={(e) => setModel(e.target.value)} value={model}>
+            <option value="default">请选择模型</option>
+            <option value="deepseek-chat">deepseek-chat</option>
+            <option value="deepseek-reasoner">deepseek-reasoner</option>
+          </select>
+        </div>
+        {ctx.activeRun && ctx.activeRun.sessionId === ctx.sessionId && BUSY.has(ctx.activeRun.status) ? (
+          <button className="ac-send ac-stop" onClick={() => { void ctx.controller.cancelRun(ctx.activeRun!.runId).catch(() => {}); }} title="停止" type="button">
+            <Icon name="x" size={12} />
+          </button>
+        ) : (
+          <button className="ac-send" disabled={busy || !text.trim()} type="submit">
+            <Icon name="send" size={14} />
+          </button>
+        )}
+      </div>
+      {text.endsWith("@") && (
+        <div className="ac-atmenu">
+          <button className="ac-at-item" onClick={() => { setText((t) => t.slice(0, -1)); void pickFiles().then((f) => setFiles((x) => [...x, ...f])); }} type="button">📎 文件</button>
+          {PLANETS.map((p) => (
+            <button className="ac-at-item" key={p} onClick={() => setText((t) => t + p + " ")} type="button">@{p}</button>
+          ))}
+        </div>
+      )}
+      {text.startsWith("/") && (
+        <div className="ac-slash">
+          {PLANETS.filter((p) => p.startsWith(text.slice(1).split(" ")[0].toLowerCase())).slice(0, 6).map((p) => (
+            <button className="ac-slash-item" key={p} onClick={() => setText(`/${p} `)} type="button">/{p}</button>
+          ))}
+        </div>
+      )}
       {notice && <span className="ac-notice">{notice}</span>}
     </form>
   );

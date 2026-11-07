@@ -1,0 +1,655 @@
+<!doctype html>
+<html lang="zh-CN" data-fx="full">
+<head>
+<meta charset="utf-8">
+<title>TSAgent · 转场与在轨视觉原型</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+@font-face { font-family: Borda; src: url(../../apps/desktop/public/fonts/borda-600.woff2) format("woff2"); font-weight: 600; }
+@font-face { font-family: Rajdhani; src: url(../../apps/desktop/src/fonts/Rajdhani-500.woff2) format("woff2"); font-weight: 500; }
+@font-face { font-family: Rajdhani; src: url(../../apps/desktop/src/fonts/Rajdhani-600.woff2) format("woff2"); font-weight: 600; }
+@font-face { font-family: "JetBrains Mono"; src: url(../../apps/desktop/public/fonts/jetbrains-mono-400.woff2) format("woff2"); font-weight: 400; }
+@property --edge-a { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+
+:root {
+  --k: 1;
+  --bg-root: #0a0d12; --surface-1: #10141b; --surface-2: #161b24; --surface-3: #1d2430;
+  --line: rgba(150,180,255,.09); --line-strong: rgba(150,180,255,.18);
+  --text-main: #eaf0f7; --text-muted: rgba(225,235,255,.64); --text-faint: rgba(225,235,255,.42);
+  --st-live: #5ad1ff; --st-ok: #4cc38a; --st-warn: #f0b429; --st-danger: #ff5a4f;
+  --accent: #f6b94a;
+  --accent-line: color-mix(in srgb, var(--accent) 55%, transparent);
+  --accent-fill: color-mix(in srgb, var(--accent) 12%, transparent);
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --font-display: Borda, Rajdhani, sans-serif;
+  --font-label: Rajdhani, "PingFang SC", sans-serif;
+  --font-body: "HarmonyOS Sans SC", "PingFang SC", -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg-root); color: var(--text-main); font: 13px/20px var(--font-body); overflow: hidden; }
+button { font: inherit; color: inherit; }
+kbd { font: 500 11px var(--font-label); padding: 0 5px; border: 1px solid var(--line-strong); border-radius: 3px; color: var(--text-muted); }
+.mono { font-family: var(--font-mono); font-size: 12px; }
+
+/* ── top bar ── */
+.topbar { position: fixed; inset: 0 0 auto 0; height: 44px; z-index: 40; display: flex; align-items: center; gap: 14px; padding: 0 14px; background: rgba(10,13,18,.86); border-bottom: 1px solid var(--line); }
+.topbar::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 1px; background: var(--accent); opacity: .7; transition: background-color calc(200ms * var(--k)) ease; }
+.brand { font: 600 15px var(--font-display); letter-spacing: .06em; display: flex; align-items: center; gap: 8px; }
+.brand b { width: 18px; height: 18px; display: grid; place-items: center; background: var(--text-main); color: var(--bg-root); border-radius: 3px; font-size: 11px; }
+.demo-tag { font: 600 10px var(--font-label); letter-spacing: .08em; background: var(--st-warn); color: #111; padding: 1px 6px; border-radius: 2px; }
+.switcher { display: flex; align-items: center; gap: 8px; padding: 4px 10px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface-1); cursor: pointer; }
+.switcher .g { color: var(--accent); font-size: 15px; transition: color calc(200ms * var(--k)) ease; }
+.switcher strong { font: 600 14px var(--font-display); letter-spacing: .04em; }
+.switcher small { color: var(--text-faint); font-family: var(--font-label); }
+.spacer { flex: 1; }
+.telemetry { display: flex; gap: 14px; font: 500 12px var(--font-label); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.telemetry span b { display: inline-block; color: var(--text-main); font-weight: 600; min-width: 2ch; }
+.tb-btn { height: 28px; min-width: 28px; padding: 0 9px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: transparent; border-radius: 4px; cursor: pointer; transition: background-color calc(120ms * var(--k)) ease, border-color calc(120ms * var(--k)) ease; }
+.tb-btn:hover { background: var(--surface-2); border-color: var(--line-strong); }
+.tb-btn .count { font: 600 11px var(--font-label); background: var(--st-danger); color: #111; border-radius: 8px; padding: 0 5px; }
+.hidden { display: none !important; }
+
+/* ── star map ── */
+#map { position: fixed; inset: 44px 0 0 0; display: block; }
+.reticle { position: fixed; z-index: 5; pointer-events: none; width: 40px; height: 40px; translate: -50% -50%; }
+.reticle i { position: absolute; width: 9px; height: 9px; border: 1.5px solid var(--accent); }
+.reticle i:nth-child(1) { left: 0; top: 0; border-right: 0; border-bottom: 0; }
+.reticle i:nth-child(2) { right: 0; top: 0; border-left: 0; border-bottom: 0; }
+.reticle i:nth-child(3) { left: 0; bottom: 0; border-right: 0; border-top: 0; }
+.reticle i:nth-child(4) { right: 0; bottom: 0; border-left: 0; border-top: 0; }
+.intel { position: fixed; right: 24px; bottom: 28px; z-index: 6; width: 300px; padding: 16px 18px; background: rgba(16,20,27,.72); backdrop-filter: blur(14px); border: 1px solid var(--line-strong); border-radius: 4px; }
+.intel h3 { margin: 0; font: 600 22px var(--font-display); letter-spacing: .04em; }
+.intel .sub { color: var(--text-faint); font: 500 12px var(--font-label); letter-spacing: .04em; }
+.intel p { color: var(--text-muted); margin: 8px 0 14px; }
+.map-hint { position: fixed; left: 24px; bottom: 24px; z-index: 6; color: var(--text-faint); font: 500 12px var(--font-label); letter-spacing: .03em; }
+
+/* ── transition layers ── */
+.flash, .wave, .readout { position: fixed; pointer-events: none; z-index: 30; opacity: 0; }
+.wave, .readout { z-index: 15; } /* under #ws: the reveal circle swallows them */
+.flash { inset: 0; mix-blend-mode: screen; background: radial-gradient(circle at var(--fx) var(--fy), var(--accent) 0, color-mix(in srgb, var(--accent) 30%, transparent) 22%, transparent 60%); }
+.wave { width: 90px; height: 90px; margin: -45px 0 0 -45px; border: 1.5px solid var(--accent); border-radius: 50%; }
+.readout { translate: -50% -50%; text-align: center; }
+.readout .cs { font: 600 44px var(--font-display); letter-spacing: .14em; text-shadow: 0 0 24px var(--accent); }
+.readout .meta { font: 500 13px var(--font-label); letter-spacing: .12em; color: var(--text-muted); }
+
+/* ── workspace ── */
+#ws { position: fixed; inset: 44px 0 0 0; z-index: 20; background: var(--bg-root); overflow: hidden; }
+#ws.hidden { display: none; }
+.limb { position: absolute; left: 50%; top: calc(100% - 150px); width: 3200px; height: 3200px; margin-left: -1600px; border-radius: 50%; pointer-events: none; z-index: 0; filter: brightness(.6) saturate(.85); }
+.limb::before { content: ""; position: absolute; inset: 0; border-radius: 50%; box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 70%, transparent), 0 -4px 30px 4px color-mix(in srgb, var(--accent) 40%, transparent), 0 -30px 160px 40px color-mix(in srgb, var(--accent) 14%, transparent); animation: limb-breathe calc(9s * var(--k)) ease-in-out infinite; }
+.limb::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: linear-gradient(180deg, transparent 0, rgba(10,13,18,.35) 60px, rgba(10,13,18,.92) 150px); }
+@keyframes limb-breathe { 0%,100% { opacity: .65; } 50% { opacity: 1; } }
+.limb .spot { position: absolute; top: 46px; left: calc(50% + 260px); width: 190px; height: 64px; border-radius: 50%; background: radial-gradient(closest-side, #c35a3a, #9c4a33 60%, transparent); z-index: 1; }
+.ring { position: absolute; left: -15%; width: 130%; bottom: 40px; height: 220px; border-radius: 50%; border-top: 2px solid rgba(235,215,160,.32); box-shadow: inset 0 6px 0 -4px rgba(235,215,160,.14); transform: rotate(-3deg); pointer-events: none; z-index: 0; }
+.ws-body { position: relative; z-index: 1; height: 100%; padding: 12px; display: flex; flex-direction: column; gap: 12px; }
+.grid { display: grid; gap: 12px; align-items: start; min-height: 0; }
+
+.panel { position: relative; background: var(--surface-1); border: 1px solid var(--line); border-radius: 4px; clip-path: polygon(0 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%); }
+.panel > header { height: 34px; display: flex; align-items: center; gap: 10px; padding: 0 12px; border-bottom: 1px solid var(--line); position: relative; }
+.panel > header h2 { margin: 0; font: 600 12px var(--font-label); letter-spacing: .05em; color: var(--text-muted); }
+.panel > header .meta { margin-left: auto; font: 11px var(--font-mono); color: var(--text-faint); }
+.panel > .body { padding: 10px 12px; }
+.panel:focus-within > header h2 { color: var(--text-main); }
+.panel:focus-within > header::before { content: ""; position: absolute; left: 0; top: 9px; bottom: 9px; width: 2px; background: var(--accent); }
+.panel::after { content: ""; position: absolute; inset: 4px; pointer-events: none; opacity: 0; transform: scale(1.03);
+  --c: var(--accent);
+  background:
+    linear-gradient(var(--c),var(--c)) left top/9px 1.5px no-repeat, linear-gradient(var(--c),var(--c)) left top/1.5px 9px no-repeat,
+    linear-gradient(var(--c),var(--c)) right top/9px 1.5px no-repeat, linear-gradient(var(--c),var(--c)) right top/1.5px 9px no-repeat,
+    linear-gradient(var(--c),var(--c)) left bottom/9px 1.5px no-repeat, linear-gradient(var(--c),var(--c)) left bottom/1.5px 9px no-repeat;
+  transition: opacity calc(140ms * var(--k)) var(--ease-out), transform calc(140ms * var(--k)) var(--ease-out); }
+.panel:focus-within::after { opacity: 1; transform: none; }
+.scan { position: absolute; left: 0; right: 0; top: 0; height: 1px; background: var(--accent); box-shadow: 0 0 12px 2px var(--accent); pointer-events: none; z-index: 3; }
+
+.btn { height: 28px; padding: 0 12px; border-radius: 4px; border: 1px solid var(--line-strong); background: transparent; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: background-color calc(120ms * var(--k)) ease, transform calc(100ms * var(--k)) var(--ease-out); }
+.btn:hover { background: var(--surface-2); }
+.btn:active { transform: scale(.97); }
+.btn.primary { background: var(--accent); color: #0a0d12; border-color: transparent; font-weight: 600; }
+.btn.primary:hover { background: color-mix(in srgb, var(--accent) 85%, white); box-shadow: 0 0 18px -4px var(--accent); }
+.btn.danger { border-color: color-mix(in srgb, var(--st-danger) 60%, transparent); color: var(--st-danger); }
+.hold { position: relative; overflow: hidden; }
+.hold::after { content: ""; position: absolute; inset: 0; background: var(--st-warn); mix-blend-mode: screen; opacity: .55; clip-path: inset(0 100% 0 0); transition: clip-path calc(200ms * var(--k)) var(--ease-out); }
+.hold.holding::after { clip-path: inset(0 0 0 0); transition: clip-path calc(1200ms * var(--k)) linear; }
+
+.chip { position: relative; display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 7px; border-radius: 3px; font: 600 11px var(--font-label); letter-spacing: .06em; border: 1px solid; }
+.chip.live { color: var(--st-live); border-color: color-mix(in srgb, var(--st-live) 50%, transparent); background: color-mix(in srgb, var(--st-live) 10%, transparent); }
+.chip.ok { color: var(--st-ok); border-color: color-mix(in srgb, var(--st-ok) 50%, transparent); background: color-mix(in srgb, var(--st-ok) 10%, transparent); }
+.chip.warn { color: var(--st-warn); border-color: color-mix(in srgb, var(--st-warn) 50%, transparent); background: color-mix(in srgb, var(--st-warn) 10%, transparent); }
+.chip.muted { color: var(--text-muted); border-color: var(--line-strong); }
+.chip .ping { position: absolute; inset: -1px; border: 1px solid currentColor; border-radius: 3px; pointer-events: none; }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; box-shadow: 0 0 8px currentColor; animation: breathe calc(1.6s * var(--k)) ease-in-out infinite; }
+@keyframes breathe { 50% { opacity: .35; } }
+
+.live-edge { position: relative; }
+.live-edge::before { content: ""; position: absolute; inset: 0; border-radius: 4px; padding: 1px; pointer-events: none;
+  background: conic-gradient(from var(--edge-a), transparent 0 68%, var(--accent) 86%, transparent 100%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
+  animation: edge calc(2400ms * var(--k)) linear infinite; }
+@keyframes edge { to { --edge-a: 360deg; } }
+
+.tabs { position: relative; display: flex; gap: 2px; height: 100%; align-items: stretch; }
+.tabs button { background: none; border: 0; padding: 0 10px; color: var(--text-faint); cursor: pointer; font: 600 12px var(--font-label); letter-spacing: .04em; }
+.tabs button.on { color: var(--text-main); }
+.tabs .ind { position: absolute; left: 0; bottom: -1px; height: 2px; width: 1px; background: var(--accent); transform-origin: left; transition: transform calc(180ms * var(--k)) var(--ease-in-out); }
+
+.row { display: grid; align-items: center; gap: 10px; height: 28px; padding: 0 8px; border-radius: 3px; transition: background-color calc(120ms * var(--k)) ease; }
+.row:hover { background: var(--surface-2); }
+.row.on { background: var(--surface-3); box-shadow: inset 2px 0 0 var(--accent); }
+.events .row { grid-template-columns: 64px 92px 1fr; font-size: 12px; }
+.events time { font: 11px var(--font-mono); color: var(--text-faint); }
+.events code { font: 11px var(--font-mono); color: var(--accent); }
+
+/* mars */
+.mars { grid-template-columns: 220px minmax(0,1fr) 340px; grid-template-rows: auto auto; }
+.tree .row { grid-template-columns: 14px 1fr; font: 12px var(--font-mono); color: var(--text-muted); }
+.tree .row.on { color: var(--text-main); }
+.code { font: 12px/20px var(--font-mono); padding: 8px 0; height: 330px; overflow: hidden; }
+.code div { display: grid; grid-template-columns: 44px 1fr; white-space: pre; }
+.code div > span:first-child { color: var(--text-faint); text-align: right; padding-right: 14px; }
+.code .sel { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.k { color: #c79bff; } .s { color: #9ed27a; } .f { color: #6fd3ff; } .n { color: #f2b36b; }
+.events { height: 172px; overflow: hidden; }
+.statusbar { height: 24px; display: flex; gap: 16px; align-items: center; padding: 0 12px; font: 500 12px var(--font-label); color: var(--text-muted); background: var(--surface-1); border: 1px solid var(--line); border-radius: 4px; }
+.runcard { padding: 10px; border-radius: 4px; background: var(--surface-2); margin-bottom: 10px; }
+.runcard .top { display: flex; align-items: center; gap: 8px; }
+.runcard .bar { height: 3px; background: var(--surface-3); border-radius: 2px; margin-top: 8px; overflow: hidden; }
+.runcard .bar span { display: block; height: 100%; width: 100%; background: var(--accent); transform-origin: left; transition: transform calc(400ms * var(--k)) var(--ease-out); }
+.msg { margin: 10px 0; }
+.msg .who { font: 600 11px var(--font-label); letter-spacing: .06em; color: var(--text-faint); }
+.caret { display: inline-block; width: .55em; height: 1.05em; vertical-align: -2px; background: var(--accent); animation: blink calc(1s * var(--k)) steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+.approval { border: 1px solid color-mix(in srgb, var(--st-warn) 40%, transparent); border-radius: 4px; padding: 10px; background: color-mix(in srgb, var(--st-warn) 6%, transparent); }
+.approval .act { display: flex; gap: 8px; margin-top: 8px; }
+.composer { display: flex; gap: 8px; align-items: center; margin-top: 10px; padding: 8px; border: 1px solid var(--line-strong); border-radius: 4px; background: var(--surface-2); color: var(--text-faint); }
+.ctxchip { font: 11px var(--font-mono); color: var(--text-muted); border: 1px solid var(--line-strong); border-radius: 3px; padding: 0 6px; }
+
+/* saturn */
+.track { position: relative; height: 70px; margin: 6px 8px; }
+.track .line { position: absolute; left: 0; right: 0; top: 30px; height: 1px; background: linear-gradient(90deg, transparent, rgba(235,215,160,.5) 8%, rgba(235,215,160,.5) 92%, transparent); }
+.track .fire { position: absolute; top: 25px; width: 11px; height: 11px; margin-left: -5px; border-radius: 50%; border: 1.5px solid var(--accent); background: var(--bg-root); }
+.track .fire.next { background: var(--accent); box-shadow: 0 0 12px var(--accent); }
+.track .fire small { position: absolute; top: 16px; left: 50%; translate: -50% 0; white-space: nowrap; font: 500 11px var(--font-label); color: var(--text-muted); }
+.track .now { position: absolute; top: 4px; bottom: 6px; width: 1px; background: var(--text-main); }
+.track .now::before { content: "现在"; white-space: nowrap; position: absolute; top: -2px; left: 5px; font: 600 11px var(--font-label); color: var(--text-main); }
+.saturn { grid-template-columns: minmax(0,1fr) 340px; }
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; font: 600 11px var(--font-label); letter-spacing: .05em; color: var(--text-faint); padding: 6px 8px; border-bottom: 1px solid var(--line); }
+td { padding: 0 8px; height: 34px; border-bottom: 1px solid var(--line); }
+td.num { font: 600 13px var(--font-label); font-variant-numeric: tabular-nums; }
+tr.running td { background: var(--accent-fill); }
+tr.running td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
+label.f { display: block; margin-bottom: 10px; color: var(--text-muted); font-size: 12px; }
+label.f .in { margin-top: 4px; height: 30px; display: flex; align-items: center; padding: 0 10px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 4px; color: var(--text-main); }
+
+/* jupiter */
+.search { display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 14px; font-size: 15px; color: var(--text-faint); }
+.seg { display: flex; gap: 6px; padding: 0 12px 10px; }
+.seg span { font: 600 12px var(--font-label); padding: 3px 10px; border-radius: 3px; border: 1px solid var(--line); color: var(--text-muted); }
+.seg span.on { background: var(--surface-3); color: var(--text-main); border-color: var(--line-strong); }
+.jupiter { grid-template-columns: minmax(0,1fr) 360px; }
+.band { position: sticky; top: 0; font: 600 12px var(--font-label); letter-spacing: .08em; color: var(--text-muted); padding: 6px 8px; background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 10%, transparent), transparent 70%); border-top: 1px solid var(--accent-line); margin-top: 6px; }
+.res .row { grid-template-columns: 20px 1fr 90px 60px 20px; font-size: 12px; }
+.preview { position: relative; margin: 10px 0; padding: 12px; background: var(--surface-2); font: 12px/18px var(--font-mono); white-space: pre; color: var(--text-muted); }
+.moons { display: flex; flex-wrap: wrap; gap: 6px; }
+.moons span { font: 11px var(--font-mono); padding: 2px 8px; border-radius: 10px; border: 1px solid var(--line-strong); color: var(--text-muted); }
+
+/* generic */
+.backdrop-name { position: absolute; left: 32px; bottom: 150px; font: 600 160px/1 var(--font-display); letter-spacing: .08em; color: transparent; -webkit-text-stroke: 1px color-mix(in srgb, var(--accent) 22%, transparent); pointer-events: none; z-index: 0; user-select: none; }
+
+/* dock drawer */
+.dock { position: fixed; top: 44px; right: 0; bottom: 0; width: 380px; z-index: 25; background: rgba(16,20,27,.82); backdrop-filter: blur(16px); border-left: 1px solid var(--line-strong); padding: 14px; transform: translateX(100%); transition: transform calc(200ms * var(--k)) var(--ease-drawer); }
+.dock.open { transform: none; transition-duration: calc(240ms * var(--k)); }
+.dock.instant { transition: none; }
+
+/* tray */
+.tray { position: fixed; top: 50px; right: 90px; z-index: 45; width: 340px; padding: 12px; background: rgba(16,20,27,.9); backdrop-filter: blur(16px); border: 1px solid var(--line-strong); border-radius: 4px; transform-origin: top right; }
+
+/* proto controls */
+.proto { position: fixed; left: 12px; bottom: 12px; z-index: 50; display: flex; gap: 10px; align-items: center; padding: 6px 10px; background: rgba(16,20,27,.9); border: 1px dashed var(--line-strong); border-radius: 4px; font: 500 12px var(--font-label); color: var(--text-muted); }
+.proto .seg2 { display: flex; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
+.proto .seg2 button { background: none; border: 0; padding: 2px 8px; cursor: pointer; color: var(--text-muted); }
+.proto .seg2 button.on { background: var(--surface-3); color: var(--text-main); }
+body.in-ws .map-hint { display: none; }
+
+html[data-fx="minimal"] .limb::before, html[data-fx="minimal"] .dot { animation: none; }
+html[data-fx="minimal"] .live-edge::before { animation: none; background: var(--accent-line); }
+html[data-fx="standard"] .limb::before { animation: none; }
+@media (prefers-reduced-motion: reduce) { .limb::before, .dot, .live-edge::before, .caret { animation: none; } }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><b>✦</b>T.S.A <span class="demo-tag">DEMO</span></div>
+  <div class="switcher" id="switcher" title="Alt+0–9 切换（应用内为 ⌘0–9）"><span class="g" id="sw-g">☉</span><strong id="sw-name">System map</strong><small id="sw-sub"></small></div>
+  <div class="spacer"></div>
+  <div class="telemetry"><span>RTT <b id="t-rtt">38</b>ms</span><span>EVT #<b id="t-evt">0172</b></span><span>LIVE <b id="t-live">1</b></span></div>
+  <button class="tb-btn" id="dock-btn" title="Alt+L（应用内为 ⌘L）">@<span id="dock-tag">sun</span></button>
+  <button class="tb-btn" id="tray-btn">⛨ <span class="count">1</span></button>
+  <button class="tb-btn" id="map-btn">◎ 星图</button>
+</header>
+
+<canvas id="map"></canvas>
+<div class="reticle hidden" id="reticle"><i></i><i></i><i></i><i></i></div>
+<div class="intel hidden" id="intel"><h3 id="in-t"></h3><div class="sub" id="in-s"></div><p id="in-d"></p><button class="btn primary" id="enter">进入工作台 <kbd style="border-color:#0a0d1240;color:#0a0d12">⏎</kbd></button></div>
+<div class="map-hint" id="hint">点击行星锁定 · ⏎ 进入 · Esc 解锁</div>
+
+<div class="flash" id="flash"></div>
+<div class="readout" id="readout"><div class="cs" id="ro-cs"></div><div class="meta" id="ro-m"></div></div>
+
+<main id="ws" class="hidden"><div class="limb" id="limb"></div><div id="ws-deco"></div><div class="ws-body" id="ws-body"></div></main>
+
+<aside class="dock" id="dock"><div style="font:600 12px var(--font-label);letter-spacing:.05em;color:var(--text-muted)">AGENT DOCK</div><div class="msg"><div class="who">YOU</div>把本周失败的定时任务整理一下</div><div class="msg"><div class="who">T.S.A</div>正在读取 Jupiter 历史…<span class="caret"></span></div><div class="composer">@ 委派… <span class="ctxchip">sched-nightly ×</span></div></aside>
+
+<div class="tray hidden" id="tray">
+  <div class="approval"><div style="display:flex;gap:8px;align-items:center"><span class="chip warn">⛨ R2</span><strong>git push origin main</strong></div>
+  <div class="mono" style="color:var(--text-faint);margin-top:4px">@mars · run-2048 · 影响远端仓库</div>
+  <div class="act"><button class="btn hold" id="hold">按住 1.2 秒批准</button><button class="btn danger" id="deny">拒绝</button><button class="btn">查看</button></div></div>
+</div>
+
+<div class="proto">原型控制
+  <div class="seg2" id="fx"><button data-v="full" class="on">全效</button><button data-v="standard">标准</button><button data-v="minimal">极简</button></div>
+  <div class="seg2" id="slow"><button data-v="1" class="on">1×</button><button data-v="4">4× 慢放</button></div>
+  <button class="tb-btn" id="reboot">重放开机</button>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let K = 1;
+const SUN = { id: "sun", name: "Sun", ws: "Omni", glyph: "☉", accent: "#F6B94A", R: 0, size: 16, au: "0 AU", period: "—", desc: "跨星球协作与任务树。", color: ["#fff6d8", "#f6b94a"] };
+const PL = [
+  { id: "mercury", name: "Mercury", ws: "Navigator", glyph: "☿", accent: "#6FD3FF", R: 64, size: 3.2, au: "0.387 AU", period: "88 d", desc: "受控浏览器监督与人工接管。", color: ["#bdbdbd", "#5a5a5a"] },
+  { id: "venus", name: "Venus", ws: "Muse", glyph: "♀", accent: "#D778FF", R: 92, size: 4.6, au: "0.723 AU", period: "225 d", desc: "文档阅读、写作与版本回溯。", color: ["#f1e2b8", "#b8955a"] },
+  { id: "earth", name: "Earth", ws: "Organic Intelligence Lab", glyph: "⊕", accent: "#5FE0B1", R: 124, size: 4.8, au: "1.000 AU", period: "365 d", desc: "基线与候选的对照实验。", color: ["#6db3ff", "#163f7a"] },
+  { id: "mars", name: "Mars", ws: "Forge", glyph: "♂", accent: "#FF6A4D", R: 160, size: 3.8, au: "1.524 AU", period: "687 d", desc: "工程工作站：文件、编辑、输出、测试。", color: ["#e07a52", "#6a2a14"] },
+  { id: "jupiter", name: "Jupiter", ws: "Archive", glyph: "♃", accent: "#E6B96B", R: 230, size: 11, au: "5.203 AU", period: "11.9 y", desc: "检索消息、产物、记忆，追踪来源。", color: ["#ecd3a6", "#9a6c44"] },
+  { id: "saturn", name: "Saturn", ws: "Chronos", glyph: "♄", accent: "#F2D06B", R: 300, size: 9.5, au: "9.555 AU", period: "29.4 y", desc: "定时任务、触发与重试。", color: ["#f3e2b0", "#a88a52"], ring: true },
+  { id: "uranus", name: "Uranus", ws: "Laboratory", glyph: "⛢", accent: "#57F0E3", R: 366, size: 6.5, au: "19.22 AU", period: "84 y", desc: "Agent Profile 与技能绑定。", color: ["#c9f4f2", "#5fb7bf"] },
+  { id: "neptune", name: "Neptune", ws: "Media Studio", glyph: "♆", accent: "#4DA3FF", R: 424, size: 6.3, au: "30.11 AU", period: "165 y", desc: "媒体预览、版本与生成。", color: ["#6f9cff", "#15307a"] },
+  { id: "pluto", name: "Pluto", ws: "Genesis", glyph: "♇", accent: "#9B7BFF", R: 478, size: 2.6, au: "39.48 AU", period: "248 y", desc: "未知母题、证据与人工判断。", color: ["#d8c8b6", "#7a6a5c"] },
+];
+const ALL = [SUN, ...PL];
+PL.forEach((p, i) => { p.th = i * 1.37 + 0.6; p.w = 0.9 / Math.sqrt(p.R / 60); });
+
+/* ---- easing / tween (same curves as CSS tokens) ---- */
+function bezier(x1, y1, x2, y2) {
+  const cx = 3 * x1, bx = 3 * (x2 - x1) - cx, ax = 1 - cx - bx, cy = 3 * y1, by = 3 * (y2 - y1) - cy, ay = 1 - cy - by;
+  const sx = (t) => ((ax * t + bx) * t + cx) * t, sy = (t) => ((ay * t + by) * t + cy) * t, dx = (t) => (3 * ax * t + 2 * bx) * t + cx;
+  return (x) => { let t = x; for (let i = 0; i < 8; i++) { const e = sx(t) - x, d = dx(t); if (Math.abs(e) < 1e-5 || Math.abs(d) < 1e-6) break; t -= e / d; } return sy(Math.min(1, Math.max(0, t))); };
+}
+const EASE = { out: bezier(.23, 1, .32, 1), inOut: bezier(.77, 0, .175, 1) };
+const CSS_E = { out: "cubic-bezier(0.23, 1, 0.32, 1)", inOut: "cubic-bezier(0.77, 0, 0.175, 1)" };
+let SKIP = false;
+const tween = (ms, ease, fn) => new Promise((res) => {
+  const d = ms * K, t0 = performance.now();
+  const step = (now) => { const p = SKIP ? 1 : Math.min(1, (now - t0) / d); fn(ease(p)); p < 1 ? requestAnimationFrame(step) : res(); };
+  requestAnimationFrame(step);
+});
+const wait = (ms) => new Promise((r) => { if (SKIP) return r(); const t = setTimeout(r, ms * K); skipWaits.push(() => { clearTimeout(t); r(); }); });
+let skipWaits = [];
+const anim = (el, frames, opt) => { const a = el.animate(frames, { ...opt, duration: opt.duration * K, delay: (opt.delay ?? 0) * K }); if (SKIP) a.finish(); return a; };
+const lerp = (a, b, t) => a + (b - a) * t;
+const fx = () => document.documentElement.dataset.fx;
+
+/* ---- star map ---- */
+const cv = $("map"), ctx = cv.getContext("2d");
+let W = 0, H = 0, DPR = Math.min(devicePixelRatio, 2);
+const cam = { x: 0, y: 0, s: 1 };
+const stars = Array.from({ length: 700 }, () => ({ x: Math.random(), y: Math.random(), a: Math.random() ** 3, r: Math.random() < .06 ? 1.4 : .8 }));
+let hovered = null, locked = null, frozen = false, boot = 1, mapRunning = true, last = performance.now();
+function resize() { W = innerWidth; H = innerHeight - 44; cv.width = W * DPR; cv.height = H * DPR; cv.style.width = W + "px"; cv.style.height = H + "px"; }
+addEventListener("resize", resize); resize();
+const world = (p) => ({ x: p.R * Math.cos(p.th), y: p.R * Math.sin(p.th) * 0.34 });
+const scr = (wx, wy) => ({ x: W / 2 + (wx - cam.x) * cam.s, y: H / 2 + 30 + (wy - cam.y) * cam.s });
+const posOf = (p) => { const w = world(p); return scr(w.x, w.y); };
+
+function draw(now) {
+  const dt = Math.min(.05, (now - last) / 1000); last = now;
+  if (!frozen) PL.forEach((p) => (p.th += p.w * dt * 0.12));
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  const b = boot, par = 1 + (cam.s - 1) * 0.12;
+  for (const s of stars) {
+    const x = W / 2 + (s.x * W - W / 2) * par, y = H / 2 + (s.y * H - H / 2) * par;
+    ctx.globalAlpha = s.a * Math.min(1, b * 2.2) * 0.9; ctx.fillStyle = "#cfe0ff"; ctx.fillRect(x, y, s.r, s.r);
+  }
+  ctx.globalAlpha = 1;
+  const c0 = scr(0, 0);
+  PL.forEach((p, i) => {
+    const prog = Math.max(0, Math.min(1, b * 1.7 - i * 0.07));
+    if (prog <= 0) return;
+    ctx.beginPath(); ctx.ellipse(c0.x, c0.y, p.R * cam.s, p.R * 0.34 * cam.s, 0, p.th - Math.PI * 2 * prog, p.th);
+    ctx.strokeStyle = p === hovered || p === locked ? p.accent + "99" : "rgba(120,170,255,.22)"; ctx.lineWidth = 1; ctx.stroke();
+  });
+  const sg = ctx.createRadialGradient(c0.x, c0.y, 0, c0.x, c0.y, 70 * cam.s);
+  sg.addColorStop(0, "rgba(255,236,190,.95)"); sg.addColorStop(.12, "rgba(246,185,74,.55)"); sg.addColorStop(1, "rgba(246,185,74,0)");
+  ctx.globalAlpha = Math.min(1, b * 1.5); ctx.fillStyle = sg; ctx.beginPath(); ctx.arc(c0.x, c0.y, 70 * cam.s, 0, 7); ctx.fill();
+  ctx.fillStyle = "#fff3d6"; ctx.beginPath(); ctx.arc(c0.x, c0.y, 9 * cam.s, 0, 7); ctx.fill();
+  PL.forEach((p, i) => {
+    const a = Math.max(0, Math.min(1, (b * 1.7 - i * 0.07 - 0.9) * 4));
+    if (a <= 0) return;
+    const q = posOf(p), r = p.size * cam.s;
+    ctx.globalAlpha = a;
+    if (p === hovered || p === locked) { const g = ctx.createRadialGradient(q.x, q.y, r, q.x, q.y, r * 3.2 + 8); g.addColorStop(0, p.accent + "55"); g.addColorStop(1, p.accent + "00"); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(q.x, q.y, r * 3.2 + 8, 0, 7); ctx.fill(); }
+    const pg = ctx.createRadialGradient(q.x - r * .4, q.y - r * .4, r * .1, q.x, q.y, r);
+    pg.addColorStop(0, p.color[0]); pg.addColorStop(1, p.color[1]);
+    ctx.fillStyle = pg; ctx.beginPath(); ctx.arc(q.x, q.y, r, 0, 7); ctx.fill();
+    if (p.ring) { ctx.beginPath(); ctx.ellipse(q.x, q.y, r * 2.1, r * .55, -.25, 0, 7); ctx.strokeStyle = "rgba(235,215,160,.7)"; ctx.lineWidth = 1.4 * cam.s; ctx.stroke(); }
+    ctx.font = "600 12px Rajdhani, sans-serif"; ctx.fillStyle = p === hovered || p === locked ? "#fff" : "rgba(234,240,247,.82)";
+    ctx.fillText(p.ws, q.x + r + 8, q.y + 4);
+    ctx.fillStyle = "rgba(225,235,255,.42)"; ctx.fillText(p.name, q.x + r + 12 + ctx.measureText(p.ws).width, q.y + 4);
+  });
+  ctx.globalAlpha = 1;
+  if (locked) { const q = locked === SUN ? c0 : posOf(locked); const s = (locked.size * cam.s) * 2 + 22; Object.assign($("reticle").style, { left: q.x + "px", top: q.y + 44 + "px", width: s + "px", height: s + "px" }); }
+  if (mapRunning) requestAnimationFrame(draw);
+}
+requestAnimationFrame(draw);
+
+function hit(mx, my) {
+  for (const p of PL) { const q = posOf(p); if (Math.hypot(q.x - mx, q.y - my) < Math.max(12, p.size * cam.s + 6)) return p; }
+  const c = scr(0, 0); return Math.hypot(c.x - mx, c.y - my) < 18 * cam.s ? SUN : null;
+}
+cv.addEventListener("mousemove", (e) => { hovered = hit(e.clientX, e.clientY - 44); cv.style.cursor = hovered ? "pointer" : "default"; });
+cv.addEventListener("click", (e) => { const p = hit(e.clientX, e.clientY - 44); p ? lock(p) : unlock(); });
+
+function setAccent(p) { document.documentElement.style.setProperty("--accent", p.accent); }
+function lock(p) {
+  locked = p; frozen = true; setAccent(p);
+  const r = $("reticle"); r.classList.remove("hidden");
+  if (fx() !== "minimal") anim(r, [{ opacity: 0, transform: "scale(1.35) rotate(-45deg)" }, { opacity: 1, transform: "none" }], { duration: 200, easing: CSS_E.out });
+  $("in-t").textContent = p.ws; $("in-s").textContent = `${p.glyph} ${p.name} · ${p.au} · ${p.period}`; $("in-d").textContent = p.desc;
+  const card = $("intel"); card.classList.remove("hidden");
+  anim(card, [{ opacity: 0, transform: "translateY(6px)" }, { opacity: 1, transform: "none" }], { duration: 180, easing: CSS_E.out });
+}
+function unlock() { locked = null; frozen = false; $("reticle").classList.add("hidden"); $("intel").classList.add("hidden"); setAccent(SUN); }
+$("enter").onclick = () => locked && insertion(locked);
+
+/* ---- workspaces ---- */
+const visited = new Set();
+let current = null, busy = false;
+const T = (h) => { const d = document.createElement("template"); d.innerHTML = h.trim(); return d.content; };
+const code = [
+  ['<span class="k">from</span> pathlib <span class="k">import</span> Path', ""], ["", ""],
+  ['<span class="k">def</span> <span class="f">square</span>(value: <span class="f">int</span>) -> <span class="f">int</span>:', "sel"],
+  ['    <span class="k">return</span> value * value', "sel"], ["", ""],
+  ['<span class="k">if</span> __name__ == <span class="s">"__main__"</span>:', ""],
+  ['    result = square(<span class="n">7</span>)', ""],
+  ['    Path(<span class="s">"output/result.txt"</span>).write_text(<span class="f">str</span>(result))', ""],
+  ['    <span class="f">print</span>(result)', ""],
+].map(([c, k], i) => `<div class="${k}"><span>${i + 1}</span><span>${c}</span></div>`).join("");
+
+const VIEWS = {
+  mars: () => `
+  <div class="grid mars">
+    <section class="panel" tabindex="-1" style="grid-row:1/3"><header><h2>资源管理器</h2><span class="meta">/workspace</span></header>
+      <div class="body tree"><div class="row"><span>▾</span>lib</div><div class="row" style="padding-left:24px"><span></span>util.py</div><div class="row on"><span></span>main.py</div><div class="row"><span></span>spec.md</div><div class="row"><span>▾</span>tests</div><div class="row" style="padding-left:24px"><span></span>test_square.py</div></div></section>
+    <section class="panel" tabindex="-1"><header><div class="tabs"><button class="on">main.py ●</button><button>spec.md</button><i class="ind"></i></div><span class="meta">Python · UTF-8</span></header><div class="code">${code}</div></section>
+    <section class="panel" tabindex="-1" style="grid-column:3;grid-row:1/3"><header><h2>Agent</h2><span class="meta">@forge</span></header>
+      <div class="body"><div class="runcard live-edge" id="runcard"><div class="top"><span class="mono">run-2048</span><span class="chip live" id="runchip"><span class="dot"></span>ACTIVE</span><span class="mono" style="margin-left:auto" id="runpct">62%</span></div><div class="bar"><span id="runbar" style="transform:scaleX(.62)"></span></div></div>
+      <div class="msg"><div class="who">YOU</div>给 square 加一个负数的测试</div>
+      <div class="msg"><div class="who">T.S.A</div><span id="stream"></span><span class="caret"></span></div>
+      <div class="composer">@ 委派… <span class="ctxchip">main.py L3–4 ×</span></div></div></section>
+    <section class="panel" tabindex="-1"><header><div class="tabs" id="tooltabs"><button class="on">输出</button><button>终端</button><button>Diff</button><button>测试</button><i class="ind"></i></div><span class="meta">事件流</span></header><div class="body events" id="events"></div></section>
+  </div>
+  <footer class="statusbar"><span style="color:var(--accent)">●</span> 未保存 <span>UTF-8</span><span>Ln 3, Col 12</span><span>run-2048 ACTIVE</span><span style="margin-left:auto">授权根 /workspace</span></footer>`,
+  saturn: () => `
+  <section class="panel" tabindex="-1"><header><h2>接下来 24 小时</h2><span class="meta" id="clock"></span></header>
+    <div class="track"><div class="line"></div>
+      <div class="fire next" style="left:14%"><small>02:00 同步知识索引</small></div><div class="fire" style="left:39%"><small>08:00 拉取 API 变更</small></div>
+      <div class="fire" style="left:63%"><small>14:00 夜间回归</small></div><div class="fire" style="left:88%"><small>21:00 起草日报</small></div>
+      <div class="now" id="now" style="left:6%"></div></div></section>
+  <div class="grid saturn">
+    <section class="panel" tabindex="-1"><header><h2>计划</h2><span class="meta">4</span></header><div class="body" style="padding-top:2px">
+      <table><tr><th>状态</th><th>请求</th><th>周期</th><th>下次</th><th>目标</th></tr>
+      <tr class="running"><td><span class="chip live live-edge"><span class="dot"></span>RUNNING</span></td><td>同步知识索引并产出摘要</td><td>每天</td><td class="num" id="cd">—</td><td>♃</td></tr>
+      <tr><td><span class="chip ok">● ACTIVE</span></td><td>拉取上游 API 变更</td><td>每 6 小时</td><td class="num">6h 12m</td><td>☿</td></tr>
+      <tr><td><span class="chip ok">● ACTIVE</span></td><td>夜间回归测试</td><td>每天</td><td class="num">12h 04m</td><td>♂</td></tr>
+      <tr><td><span class="chip muted">‖ PAUSED</span></td><td>起草本周进展汇报</td><td>每周</td><td class="num" style="color:var(--text-faint)">—</td><td>♀</td></tr></table></div></section>
+    <section class="panel" tabindex="-1"><header><h2>新建计划</h2></header><div class="body">
+      <label class="f">请求<span class="in" style="height:64px;align-items:flex-start;padding-top:6px;color:var(--text-faint)">每次触发都会启动一个独立 Run…</span></label>
+      <label class="f">周期<span class="in">每小时 ▾</span></label><label class="f">目标<span class="in">任意 Agent ▾</span></label>
+      <button class="btn primary">创建计划</button></div></section>
+  </div>`,
+  jupiter: () => `
+  <section class="panel" tabindex="-1"><div class="search">⌕ <span>检索消息、产物、记忆…</span><span style="margin-left:auto" class="ctxchip">全部会话 ✓</span></div>
+    <div class="seg"><span class="on">产物 128</span><span>历史 42</span><span>记忆 9</span><span style="opacity:.5">知识 · 未安装</span></div></section>
+  <div class="grid jupiter">
+    <section class="panel res" tabindex="-1"><header><h2>结果</h2><span class="meta">按时间</span></header><div class="body">
+      <div class="band">今天</div>
+      <div class="row on"><span>⟨⟩</span><span>output/solution.py</span><span class="mono">run-2048</span><span class="mono">248 B</span><span style="color:var(--st-ok)">✓</span></div>
+      <div class="row"><span>▤</span><span>output/verification.json</span><span class="mono">run-2048</span><span class="mono">172 B</span><span style="color:var(--text-faint)">○</span></div>
+      <div class="band">昨天</div>
+      <div class="row"><span>▤</span><span>output/architecture-summary.md</span><span class="mono">run-2047</span><span class="mono">4.8 KB</span><span style="color:var(--st-ok)">✓</span></div>
+      <div class="row"><span>⟨⟩</span><span>tests/test_context_isolation.py</span><span class="mono">run-2044</span><span class="mono">1.2 KB</span><span style="color:var(--st-ok)">✓</span></div>
+      <div class="band">本周</div>
+      <div class="row"><span>▤</span><span>logs/stdout.txt</span><span class="mono">run-2039</span><span class="mono">24 B</span><span style="color:var(--text-faint)">○</span></div></div></section>
+    <section class="panel" tabindex="-1"><header><h2>output/solution.py</h2><span class="meta">rev 1</span></header><div class="body">
+      <div class="mono" style="color:var(--text-muted)">run-2048 · code-generation-v2<br>digest fnv1a-5e57980b…</div>
+      <div class="preview">def square(value: int) -> int:\n    return value * value</div>
+      <div style="font:600 11px var(--font-label);letter-spacing:.06em;color:var(--text-faint);margin-bottom:6px">关联</div>
+      <div class="moons"><span>run-2048</span><span>task-2048</span><span>⇄ mercury handoff</span><span>session-11af</span></div>
+      <div style="display:flex;gap:8px;margin-top:14px"><button class="btn primary">在 Mars 打开</button><button class="btn">在 Sun 查看</button></div></div></section>
+  </div>`,
+  generic: (p) => `
+  <div class="grid" style="grid-template-columns:minmax(0,1fr) 340px">
+    <section class="panel" tabindex="-1"><header><h2>${p.ws}</h2><span class="meta">${p.name}</span></header><div class="body" style="color:var(--text-muted)">完整版式见 planet-workspace-ui.md §5。这个页面用来展示 ${p.name} 的轨道地平线、主题色和转场。</div></section>
+    <section class="panel" tabindex="-1"><header><h2>空态示例</h2></header><div class="body" style="text-align:center;padding:28px 12px"><div style="color:var(--text-muted);margin-bottom:12px">还没有内容。</div><button class="btn primary">在 Dock 中让 @${p.id} 开始</button></div></section>
+  </div>`,
+};
+
+const SURF = {
+  sun: "radial-gradient(circle at 50% 0, #fff3cf, #f6b94a 4%, #b8621c 10%, #3a1a06 22%)",
+  mercury: "radial-gradient(circle at 40% 2%, #a9a9a9, #5b5b5b 8%, #222 20%)",
+  venus: "repeating-linear-gradient(176deg, #e9d7a8 0 26px, #d1b57c 26px 50px, #e2c995 50px 80px)",
+  earth: "repeating-linear-gradient(172deg, transparent 0 34px, rgba(255,255,255,.07) 34px 40px), radial-gradient(circle at 50% 0, #4a9ae8, #1a4f9a 8%, #0b2347 20%)",
+  mars: "radial-gradient(circle at 42% 60px, #8a3a22 0 40px, transparent 80px), radial-gradient(circle at 50% 0, #d07048, #9c4224 8%, #3a160a 20%)",
+  jupiter: "repeating-linear-gradient(180deg, #e7cfa2 0 22px, #b88a5c 22px 40px, #f0dcb8 40px 66px, #a8774c 66px 80px)",
+  saturn: "repeating-linear-gradient(180deg, #efdcaa 0 30px, #cdb27a 30px 52px, #e6d29e 52px 90px)",
+  uranus: "radial-gradient(circle at 50% 0, #d4f6f4, #8fd4d8 10%, #2f6f78 24%)",
+  neptune: "radial-gradient(circle at 50% 0, #7aa6ff, #2a56c8 9%, #0d2160 22%)",
+  pluto: "radial-gradient(circle at 55% 70px, #f0e4d4 0 50px, transparent 90px), radial-gradient(circle at 50% 0, #cdbba6, #8a7764 9%, #2e261f 22%)",
+};
+
+function renderWs(p) {
+  current = p; setAccent(p);
+  document.body.classList.add("in-ws");
+  $("sw-g").textContent = p.glyph; $("sw-name").textContent = p.ws; $("sw-sub").textContent = p.name; $("dock-tag").textContent = p.id;
+  $("limb").style.background = SURF[p.id];
+  $("limb").innerHTML = p.id === "jupiter" ? '<i class="spot"></i>' : "";
+  $("ws-deco").innerHTML = (p.id === "saturn" ? '<div class="ring"></div>' : "") + (VIEWS[p.id] ? "" : `<div class="backdrop-name">${p.name.toUpperCase()}</div>`);
+  const body = $("ws-body"); body.replaceChildren(T((VIEWS[p.id] ?? VIEWS.generic)(p)));
+  body.querySelectorAll(".tabs").forEach(initTabs);
+  startLive(p);
+}
+function initTabs(t) {
+  const ind = t.querySelector(".ind");
+  const place = (b) => { ind.style.transform = `translateX(${b.offsetLeft}px) scaleX(${b.offsetWidth})`; };
+  t.querySelectorAll("button").forEach((b) => (b.onclick = () => { t.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b)); place(b); }));
+  ind.style.transition = "none"; place(t.querySelector("button.on")); ind.offsetWidth; ind.style.transition = "";
+}
+
+/* first entry per session only; starts while the reveal circle is still expanding */
+function bootPanels(start) {
+  const panels = [...$("ws-body").querySelectorAll(".panel, .statusbar")];
+  panels.forEach((el, i) => {
+    const delay = start + i * 50;
+    anim(el, [{ opacity: 0, transform: "translateY(8px)" }, { opacity: 1, transform: "none" }], { duration: 260, delay, easing: CSS_E.out, fill: "backwards" });
+    if (fx() !== "full" || el.classList.contains("statusbar")) return;
+    const sc = document.createElement("i"); sc.className = "scan"; el.appendChild(sc);
+    anim(sc, [{ transform: "translateY(0)", opacity: 1 }, { transform: `translateY(${el.offsetHeight}px)`, opacity: 0 }], { duration: 340, delay: delay + 40, easing: CSS_E.out, fill: "both" }).onfinish = () => sc.remove();
+  });
+  anim($("limb"), [{ transform: "translateY(40px)", opacity: 0 }, { transform: "none", opacity: 1 }], { duration: 520, delay: start, easing: CSS_E.out, fill: "backwards" });
+}
+
+/* T1 orbital insertion */
+async function insertion(p) {
+  if (busy) return; busy = true; SKIP = false; skipWaits = [];
+  const ws = $("ws"), tier = fx();
+  $("intel").classList.add("hidden"); $("reticle").classList.add("hidden");
+  renderWs(p);
+  ws.classList.remove("hidden");
+  const first = !visited.has(p.id); visited.add(p.id);
+  if (tier === "minimal") {
+    ws.style.clipPath = "";
+    await anim(ws, [{ opacity: 0 }, { opacity: 1 }], { duration: 150, easing: "ease" }).finished;
+  } else {
+    ws.style.clipPath = "circle(0px at 50% 50%)";
+    const start = { ...cam }, w = p === SUN ? { x: 0, y: 0 } : world(p);
+    if (tier === "full") {
+      tween(320, EASE.inOut, (e) => { cam.x = lerp(start.x, w.x, e); cam.y = lerp(start.y, w.y, e); cam.s = lerp(start.s, 4.2, e); });
+      await wait(120);
+      const q = posOf(p);
+      for (const [d, o] of [[0, .9], [70, .45]]) {
+        const wv = document.createElement("div"); wv.className = "wave"; wv.style.left = q.x + "px"; wv.style.top = q.y + 44 + "px"; document.body.appendChild(wv);
+        anim(wv, [{ opacity: o, transform: "scale(.2)" }, { opacity: 0, transform: "scale(9)" }], { duration: 480, delay: d, easing: CSS_E.out }).onfinish = () => wv.remove();
+      }
+      await wait(100);
+      const c = posOf(p);
+      const f = $("flash"); f.style.setProperty("--fx", c.x + "px"); f.style.setProperty("--fy", c.y + 44 + "px");
+      anim(f, [{ opacity: 0 }, { opacity: .6, offset: .25 }, { opacity: 0 }], { duration: 300, easing: "ease-out" });
+      const ro = $("readout"); $("ro-cs").textContent = p.ws.toUpperCase(); $("ro-m").textContent = `${p.glyph} ${p.name.toUpperCase()} · ${p.au} · ${p.period}`;
+      ro.style.left = c.x + "px"; ro.style.top = c.y + 44 + "px";
+      anim(ro, [{ opacity: 0, transform: "scale(.96)" }, { opacity: 1, transform: "none", offset: .3 }, { opacity: 1, offset: .65 }, { opacity: 0, transform: "scale(1.02)" }], { duration: 560, easing: "ease-out" });
+      await wait(20);
+    }
+    const c = p === SUN ? scr(0, 0) : posOf(p);
+    const r = Math.hypot(Math.max(c.x, W - c.x), Math.max(c.y, H - c.y));
+    if (first) bootPanels(tier === "full" ? 160 : 60);
+    await anim(ws, [{ clipPath: `circle(0px at ${c.x}px ${c.y}px)` }, { clipPath: `circle(${r}px at ${c.x}px ${c.y}px)` }], { duration: tier === "full" ? 360 : 280, easing: CSS_E.out }).finished;
+    ws.style.clipPath = "";
+  }
+  mapRunning = false;
+  busy = false;
+}
+
+/* T2 departure */
+async function departure() {
+  if (busy || !current) return; busy = true; SKIP = false; skipWaits = [];
+  const p = current, ws = $("ws"), tier = fx();
+  stopLive(); closeDock(true);
+  mapRunning = true; last = performance.now(); requestAnimationFrame(draw);
+  document.body.classList.remove("in-ws");
+  $("sw-g").textContent = "☉"; $("sw-name").textContent = "System map"; $("sw-sub").textContent = ""; $("dock-tag").textContent = "sun";
+  if (tier === "minimal") {
+    await anim(ws, [{ opacity: 1 }, { opacity: 0 }], { duration: 150, easing: "ease" }).finished;
+    ws.classList.add("hidden"); cam.x = 0; cam.y = 0; cam.s = 1;
+  } else {
+    const w = p === SUN ? { x: 0, y: 0 } : world(p);
+    if (tier === "full") { cam.x = w.x; cam.y = w.y; cam.s = 4.2; }
+    const c = p === SUN ? scr(0, 0) : posOf(p), r = Math.hypot(Math.max(c.x, W - c.x), Math.max(c.y, H - c.y));
+    await anim(ws, [{ clipPath: `circle(${r}px at ${c.x}px ${c.y}px)` }, { clipPath: `circle(0px at ${c.x}px ${c.y}px)` }], { duration: 300, easing: CSS_E.out }).finished;
+    ws.classList.add("hidden"); ws.style.clipPath = "";
+    if (tier === "full") { const s = { ...cam }; await tween(420, EASE.inOut, (e) => { cam.x = lerp(s.x, 0, e); cam.y = lerp(s.y, 0, e); cam.s = lerp(s.s, 1, e); }); }
+    else { cam.x = 0; cam.y = 0; cam.s = 1; }
+  }
+  current = null; lock(p); busy = false;
+}
+
+/* T3 workspace switch: keyboard = instant, pointer = 120ms crossfade */
+function switchTo(p, viaKeyboard) {
+  if (busy) return;
+  if (!current) { lock(p); insertion(p); return; }
+  if (p === current) return;
+  closeDock(true); stopLive();
+  if (viaKeyboard || fx() === "minimal") { renderWs(p); visited.add(p.id); return; }
+  renderWs(p); visited.add(p.id);
+  anim($("ws-body"), [{ opacity: 0 }, { opacity: 1 }], { duration: 120, easing: "ease" });
+  anim($("limb"), [{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: "ease" });
+}
+
+/* ---- live behaviour (state indication) ---- */
+let liveTimers = [];
+function stopLive() { liveTimers.forEach(clearInterval); liveTimers = []; }
+const EVENTS = [["tool", "read_file main.py"], ["plan", "补充负数测试用例"], ["tool", "write_file tests/test_square.py"], ["exec", "pytest -q tests/"], ["verify", "4 passed in 0.12s"], ["artifact", "tests/test_square.py rev 2"]];
+function addEvent(i) {
+  const list = $("events"); if (!list) return;
+  const [t, d] = EVENTS[i % EVENTS.length];
+  const row = T(`<div class="row"><time>${new Date().toLocaleTimeString("zh-CN", { hour12: false })}</time><code>${t}.v1</code><span>${d}</span></div>`).firstChild;
+  list.prepend(row);
+  if (list.children.length > 6) list.lastChild.remove();
+  if (fx() === "minimal") return;
+  anim(row, [{ opacity: 0, transform: "translateY(-4px)" }, { opacity: 1, transform: "none" }], { duration: 180, easing: CSS_E.out });
+  anim(row, [{ backgroundColor: getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() + "33" }, { backgroundColor: "transparent" }], { duration: 900, easing: "ease-out" });
+}
+function ping(chip) { const r = document.createElement("i"); r.className = "ping"; chip.appendChild(r); anim(r, [{ opacity: .7, transform: "scale(1)" }, { opacity: 0, transform: "scale(1.6)" }], { duration: 400, easing: CSS_E.out }).onfinish = () => r.remove(); }
+function startLive(p) {
+  stopLive();
+  if (p.id === "mars") {
+    let pct = 62, n = 0;
+    for (let i = 0; i < 3; i++) addEvent(i);
+    const txt = "已读取 main.py。计划：在 tests/test_square.py 中加入 square(-3) == 9 的断言，然后运行 pytest。";
+    let k = 0; liveTimers.push(setInterval(() => { const s = $("stream"); if (s && k < txt.length) s.textContent = txt.slice(0, ++k); }, 45));
+    liveTimers.push(setInterval(() => {
+      addEvent(3 + n++);
+      pct = Math.min(100, pct + 13);
+      $("runbar").style.transform = `scaleX(${pct / 100})`; $("runpct").textContent = pct + "%";
+      if (pct === 100) {
+        const chip = $("runchip"); chip.className = "chip ok"; chip.textContent = "✓ DONE"; if (fx() !== "minimal") ping(chip);
+        $("runcard").classList.remove("live-edge"); $("t-live").textContent = "0";
+      }
+    }, 2600 * K));
+  }
+  if (p.id === "saturn") {
+    let pos = 6, secs = 3 * 3600 + 12 * 60;
+    const tick = () => { const cd = $("cd"); if (!cd) return; secs--; cd.textContent = `${Math.floor(secs / 3600)}h ${String(Math.floor(secs / 60) % 60).padStart(2, "0")}m ${String(secs % 60).padStart(2, "0")}s`; pos = Math.min(13.5, pos + 0.02); $("now").style.left = pos + "%"; $("clock").textContent = new Date().toLocaleTimeString("zh-CN", { hour12: false }); };
+    tick(); liveTimers.push(setInterval(tick, 1000));
+  }
+}
+
+/* telemetry roll — only real numbers in the product */
+function roll(id, v) {
+  const el = $(id); if (el.textContent === v) return;
+  el.textContent = v;
+  if (fx() !== "minimal") anim(el, [{ transform: "translateY(-45%)", opacity: 0 }, { transform: "none", opacity: 1 }], { duration: 160, easing: CSS_E.out });
+}
+let evt = 172;
+setInterval(() => { roll("t-rtt", String(30 + Math.round(Math.random() * 18))); roll("t-evt", String(evt += 1 + Math.round(Math.random() * 2)).padStart(4, "0")); }, 2000);
+
+/* ---- dock / tray / approvals ---- */
+function openDock(instant) { const d = $("dock"); d.classList.toggle("instant", !!instant); d.offsetWidth; d.classList.add("open"); }
+function closeDock(instant) { const d = $("dock"); d.classList.toggle("instant", !!instant); d.offsetWidth; d.classList.remove("open"); }
+const toggleDock = (instant) => ($("dock").classList.contains("open") ? closeDock(instant) : openDock(instant));
+$("dock-btn").onclick = () => toggleDock(false);
+$("tray-btn").onclick = () => {
+  const t = $("tray"), open = t.classList.contains("hidden");
+  t.classList.toggle("hidden", !open);
+  if (open && fx() !== "minimal") anim(t, [{ opacity: 0, transform: "scale(.97)" }, { opacity: 1, transform: "none" }], { duration: 180, easing: CSS_E.out });
+};
+const hold = $("hold");
+hold.addEventListener("pointerdown", () => hold.classList.add("holding"));
+["pointerup", "pointerleave"].forEach((e) => hold.addEventListener(e, () => hold.classList.remove("holding")));
+hold.addEventListener("transitionend", (e) => { if (e.pseudoElement !== "::after" || !hold.classList.contains("holding")) return; hold.classList.remove("holding"); hold.textContent = "✓ 已批准一次"; hold.disabled = true; document.querySelector("#tray-btn .count").textContent = "0"; });
+$("deny").onclick = () => { $("tray").classList.add("hidden"); };
+$("map-btn").onclick = () => departure();
+
+/* ---- keyboard ---- */
+addEventListener("keydown", (e) => {
+  if (busy) { SKIP = true; document.getAnimations().forEach((a) => { if (a.effect.getTiming().iterations !== Infinity) a.finish(); }); skipWaits.forEach((f) => f()); return; }
+  if (e.altKey && e.code.startsWith("Digit")) { e.preventDefault(); const p = ALL[Number(e.code.slice(5))]; if (p) switchTo(p, true); return; }
+  if (e.altKey && e.code === "KeyL") { e.preventDefault(); toggleDock(true); return; }
+  if (current) { if (e.key === "Escape") { if ($("dock").classList.contains("open")) closeDock(true); else departure(); } return; }
+  if (e.key === "Escape") unlock();
+  if (e.key === "Enter" && locked) insertion(locked);
+  if (e.key === "ArrowRight" || e.key === "ArrowLeft") { const i = locked ? PL.indexOf(locked) : -1; lock(PL[(i + (e.key === "ArrowRight" ? 1 : -1) + PL.length) % PL.length]); }
+});
+addEventListener("pointerdown", () => { if (busy) { SKIP = true; skipWaits.forEach((f) => f()); } }, true);
+$("switcher").onclick = () => { const i = current ? ALL.indexOf(current) : 0; switchTo(ALL[(i + 1) % ALL.length], false); };
+
+/* ---- boot (rare: once per launch) ---- */
+function runBoot() {
+  if (fx() === "minimal") { boot = 1; return; }
+  boot = 0; tween(1300, EASE.out, (e) => (boot = e));
+}
+
+/* ---- prototype controls ---- */
+const seg = (id, fn) => $(id).querySelectorAll("button").forEach((b) => (b.onclick = () => { $(id).querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b)); fn(b.dataset.v); }));
+seg("fx", (v) => (document.documentElement.dataset.fx = v));
+seg("slow", (v) => { K = Number(v); document.documentElement.style.setProperty("--k", v); });
+$("reboot").onclick = () => { if (current) return; unlock(); runBoot(); };
+if (matchMedia("(prefers-reduced-motion: reduce)").matches) { document.documentElement.dataset.fx = "minimal"; $("fx").querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.v === "minimal")); }
+runBoot();
+</script>
+</body>
+</html>

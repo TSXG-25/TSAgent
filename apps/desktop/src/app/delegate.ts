@@ -9,19 +9,22 @@ export async function delegateToPlanet(
   ctx: RunCtx,
   targetPlanet: string,
   requestText: string,
+  attachments: string[] = [],
 ): Promise<string> {
   const { service, activeRun } = ctx;
-  // One live run per session — sending while one is active would hit
-  // RUN_ALREADY_ACTIVE; fail fast with the real reason.
-  if (activeRun && (activeRun.status === "active" || activeRun.status === "blocked")) {
-    throw new Error(`已有进行中的任务（${activeRun.runId}）——等待完成或先暂停再发送`);
+  // One live run *per session* — the guard is scoped to the session the
+  // composer targets; a live run in another session must not block or
+  // mis-anchor this send (service-wire.md §runs/§delegation).
+  const sessionId = ctx.sessionId ?? service.identity.sessionId;
+  const liveRun = activeRun && activeRun.sessionId === sessionId ? activeRun : null;
+  if (liveRun && (liveRun.status === "active" || liveRun.status === "blocked")) {
+    throw new Error(`已有进行中的任务（${liveRun.runId}）——等待完成或先暂停再发送`);
   }
-  // No active run means no delegation anchor — a standalone run serves the
-  // request directly rather than sending an invalid empty parent_run_id.
-  if (!activeRun) {
+  if (!liveRun) {
     await ctx.controller.startRun({
       tenantId: service.identity.tenantId,
-      sessionId: service.identity.sessionId,
+      sessionId,
+      workspaceRoot: ctx.workspacePath,
       requestId: requestIdForRun(0),
       requestText,
     } as never);
@@ -29,9 +32,12 @@ export async function delegateToPlanet(
   }
   const result = await service.delegateRun({
     tenantId: service.identity.tenantId,
-    sessionId: service.identity.sessionId,
+    // the run owns the delegation scope — session switching must not
+    // mis-anchor the child task/handoff onto a different session
+    sessionId: liveRun.sessionId,
     requestId: requestIdForRun(0),
-    parentRunId: activeRun.runId,
+    parentRunId: liveRun.runId,
+    contextRefs: attachments,
     requestText,
     targetPlanet,
   } as never);

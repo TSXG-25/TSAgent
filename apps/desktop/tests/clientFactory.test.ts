@@ -12,6 +12,7 @@ import type {
   TauriSidecarProcess,
 } from "../src/service/tauriSidecarTransport";
 import { AgentServiceClientError } from "../src/types/service";
+import { LocalAgentServiceClient } from "../src/service/localAgentServiceClient";
 
 class FakeSidecarProcess implements TauriSidecarProcess {
   readonly requests: LocalRpcRequest[] = [];
@@ -81,17 +82,16 @@ test("D4A02 local mode requires tenant and user identity", async () => {
   );
 });
 
-test("D4A03 local mode without a host bridge is visible and never falls back", async () => {
+test("D4A03 local mode without a host bridge uses HTTP transport and never falls back", async () => {
+  // Browser dev mode: no Tauri bridge → the local client talks to the
+  // sidecar's HTTP transport. It stays a Local client — never a Mock.
   const client = createAgentServiceClientFromConfig({
     mode: "local",
     identity: { tenantId: "tenant-1", userId: "user-1", sessionId: "session-1" },
   });
   assert.equal(client.mode, "local");
-  await assert.rejects(
-    client.ready(),
-    (error: unknown) => error instanceof AgentServiceClientError && error.code === "PROVIDER_UNAVAILABLE",
-  );
-  await assert.rejects(client.listRuns(), (error: unknown) => error instanceof AgentServiceClientError);
+  assert.ok(client instanceof LocalAgentServiceClient);
+  await client.close();
 });
 
 test("D4A04 invalid mode is a configuration error, not an implicit Mock selection", async () => {

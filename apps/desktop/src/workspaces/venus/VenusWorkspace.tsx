@@ -1,146 +1,83 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState } from "react";
 import { SCENES } from "../../app/scenes";
 import { WorkspaceFrame } from "../../design-system/WorkspaceFrame";
-import { requestIdForRun } from "../../app/ui";
+import AgentComposer from "../../app/AgentComposer";
 import type { RunCtx } from "../../app/runCtx";
 
-/** §5.3 Venus / Muse — documents | ≤68ch reading pane + retrograde version
- *  slider | revision rail. Only document artifacts (.md/.txt). ⌘\ focus. */
+/** Muse per hand-drawn spec §4 — File rail + style.md prefs | work preview +
+ *  composer | style preset gallery + recommendation. */
+const PRESETS = [
+  { id: "brutalist", name: "Brutalist", swatch: "#4a4f57" },
+  { id: "editorial", name: "Editorial", swatch: "#d1b57c" },
+  { id: "tech-doc", name: "Tech Doc", swatch: "#3a6ae0" },
+  { id: "minimal", name: "Minimal", swatch: "#8a8f98" },
+];
+
 export default function VenusWorkspace({ ctx }: { ctx: RunCtx }) {
-  const { runs, service } = ctx;
+  const { runs } = ctx;
   const scene = SCENES[2];
-  const [focus, setFocus] = useState(false);
   const [sel, setSel] = useState<string | null>(null);
-  const [compose, setCompose] = useState("");
-  const [composing, setComposing] = useState(false);
-  const [composeError, setComposeError] = useState<string | null>(null);
+  const [style, setStyle] = useState("# style.md — 文稿风格偏好\n\n- 语气：冷静、克制\n- 结构：先结论后论证\n- 格式：Markdown");
+  const [applied, setApplied] = useState<string | null>(null);
 
-  /* Venus compose — delegate a document-generation request to the venus
-     workspace; the child run's document artifact lands in the docs list. */
-  async function onCompose(event: FormEvent) {
-    event.preventDefault();
-    const text = compose.trim();
-    if (!text || !ctx.activeRun) { setComposeError("先在 Sun 起个 run 作委派宿主。"); return; }
-    setComposing(true); setComposeError(null);
-    try {
-      const d = await service.delegateRun({
-        tenantId: service.identity.tenantId, sessionId: service.identity.sessionId,
-        requestId: requestIdForRun(runs.length + 1), parentRunId: ctx.activeRun.runId,
-        requestText: text, targetPlanet: "venus",
-      } as never);
-      await service.startRun({
-        tenantId: service.identity.tenantId,
-        sessionId: `${service.identity.sessionId}:subtask:${d.taskId}`,
-        requestId: requestIdForRun(runs.length + 2), requestText: text, taskId: d.taskId,
-      } as never);
-      setCompose("");
-    } catch (e) { setComposeError(e instanceof Error ? e.message : String(e)); }
-    finally { setComposing(false); }
-  }
-
-  const docs = useMemo(
-    () => runs.flatMap((r) => r.artifacts
-      .filter((a) => a.path.endsWith(".md") || a.path.endsWith(".txt"))
-      .map((a) => ({ run: r, artifact: a }))),
-    [runs],
-  );
+  const docs = useMemo(() => runs.flatMap((r) => r.artifacts
+    .filter((a) => /\.(md|txt|svg)$/i.test(a.path)).map((a) => ({ run: r, artifact: a }))), [runs]);
   const cur = docs.find((d) => d.artifact.artifactId === sel) ?? docs[0];
-
-  // retrograde version rail — same path across runs, by createdRevision
-  const versions = useMemo(
-    () => cur ? docs.filter((d) => d.artifact.path === cur.artifact.path).sort((a, b) => (a.artifact.createdRevision ?? 0) - (b.artifact.createdRevision ?? 0)) : [],
-    [docs, cur],
-  );
-  const curRev = versions.findIndex((d) => d.artifact.artifactId === cur?.artifact.artifactId);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "\\" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); setFocus((f) => !f); } };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
-  const groups = useMemo(() => ({
-    drafts: docs.filter((d) => d.artifact.status !== "verified"),
-    refs: docs.filter((d) => d.artifact.status === "verified"),
-  }), [docs]);
-
-  // minimal markdown → reading typography
-  const renderDoc = (text: string) => text.split("\n").map((l, i) => {
-    if (l.startsWith("# ")) return <h1 className="doc-h1" key={i}>{l.slice(2)}</h1>;
-    if (l.startsWith("## ")) return <h2 className="doc-h2" key={i}>{l.slice(3)}</h2>;
-    if (l.startsWith("### ")) return <h3 className="doc-h3" key={i}>{l.slice(4)}</h3>;
-    if (l.startsWith("- ") || l.startsWith("* ")) return <li className="doc-li" key={i}>{l.slice(2)}</li>;
-    if (/^\s*```/.test(l)) return <code className="doc-fence" key={i}>{l}</code>;
-    if (!l.trim()) return <br key={i} />;
-    return <p className="doc-p" key={i}>{l}</p>;
-  });
 
   return (
     <WorkspaceFrame scene={scene} ctx={ctx}>
-      <div className={`ven-page ${focus ? "focus" : ""}`}>
-        {!focus && (
-          <aside className="ven-docs">
-            <form className="ven-compose" onSubmit={onCompose}>
-              <textarea className="ven-compose-input" onChange={(e) => setCompose(e.target.value)}
-                placeholder="写一篇…（委派给 Muse 生成文稿）" rows={3} value={compose} />
-              <button className="btn primary ven-compose-send" disabled={composing || !compose.trim()} type="submit">
-                {composing ? "撰写中…" : "◈ 撰写"}
-              </button>
-              {composeError && <p className="omni-empty" style={{ color: "var(--st-danger, #ff5a4f)" }}>{composeError}</p>}
-            </form>
-            <h4>文稿</h4>
-            {groups.drafts.map(({ run: r, artifact: a }) => (
-              <button className={`ura-lib-row ${cur?.artifact.artifactId === a.artifactId ? "on" : ""}`} key={a.artifactId} onClick={() => setSel(a.artifactId)} type="button">
-                <strong>{a.path.split("/").pop()}</strong><small>{r.runId} · rev {a.createdRevision ?? "—"}</small>
+      <div className="muse">
+        {/* Files + stylistic preferences */}
+        <aside className="muse-left">
+          <section className="muse-block">
+            <h4 className="ws-mod">Files</h4>
+            {docs.map(({ artifact: a }) => (
+              <button className={`muse-file ${cur?.artifact.artifactId === a.artifactId ? "on" : ""}`} key={a.artifactId} onClick={() => setSel(a.artifactId)} type="button">
+                📄 {a.path.split("/").pop()}
               </button>
             ))}
-            {groups.refs.length > 0 && <h4>参考</h4>}
-            {groups.refs.map(({ run: r, artifact: a }) => (
-              <button className={`ura-lib-row ${cur?.artifact.artifactId === a.artifactId ? "on" : ""}`} key={a.artifactId} onClick={() => setSel(a.artifactId)} type="button">
-                <strong>{a.path.split("/").pop()}</strong><small>{r.runId} · verified</small>
-              </button>
-            ))}
-            {docs.length === 0 && <p className="omni-empty">No document artifacts yet.</p>}
-          </aside>
-        )}
+            {docs.length === 0 && <p className="omni-empty">No files yet.</p>}
+          </section>
+          <section className="muse-block muse-style">
+            <h4 className="ws-mod">Stylistic <em>style.md</em></h4>
+            <textarea value={style} onChange={(e) => setStyle(e.target.value)} rows={6} />
+          </section>
+        </aside>
 
-        <section className="ven-reader">
+        {/* Work preview + composer */}
+        <main className="muse-main">
+          {ctx.activeRun && (
+            <div className="ws-hud"><span className="hud-mark">◈</span>
+              <div className="ws-hud-info"><strong>{cur?.artifact.path.split("/").pop() ?? "Muse"}</strong>
+                <small><code>{ctx.activeRun.runId}</code> · {ctx.activeRun.status}</small></div>
+            </div>
+          )}
           {cur ? (
             <>
-              <h2 className="ven-title">{cur.artifact.path.split("/").pop()}</h2>
-              <div className="ven-body">{renderDoc(cur.artifact.content ?? "")}</div>
-              {versions.length > 1 && (
-                <div className="ven-rail">
-                  <span className="ven-rail-hint">◀</span>
-                  {versions.map((v, i) => (
-                    <button className={`ven-rev ${i === curRev ? "on" : ""}`} key={v.artifact.artifactId} onClick={() => setSel(v.artifact.artifactId)} type="button">
-                      r{v.artifact.createdRevision ?? i + 1} {i === curRev ? "◉" : "●"}
-                    </button>
-                  ))}
-                  <span className="ven-rail-hint">▶</span>
-                </div>
-              )}
+              <header className="muse-title"><strong>{cur.artifact.path.split("/").pop()}</strong><code>{cur.run.runId}</code>{applied && <span className="muse-applied">{applied} applied</span>}</header>
+              <div className="muse-body"><pre>{cur.artifact.content}</pre></div>
             </>
-          ) : (
-            <div className="empty-state"><p>Select a document</p></div>
-          )}
-        </section>
+          ) : <div className="empty-state"><p>Select a work</p></div>}
+          <AgentComposer ctx={ctx} planet="venus" placeholder="创作指令 — @venus 生成版本…" />
+        </main>
 
-        {!focus && (
-          <aside className="ven-side">
-            <h4>来源</h4>
-            {cur && (
-              <>
-                <div className="ven-meta"><span>run</span><code>{cur.run.runId}</code></div>
-                <div className="ven-meta"><span>digest</span><code>{cur.artifact.digest?.slice(0, 12) ?? "—"}…</code></div>
-                <div className="ven-meta"><span>producer</span><code>{cur.artifact.producer ?? "—"}</code></div>
-                <div className="ven-meta"><span>status</span><code>{cur.artifact.status}</code></div>
-                <button className="btn secondary ven-export" type="button">导出</button>
-              </>
-            )}
-            <p className="sat-hint">⌘\ 专注模式</p>
-          </aside>
-        )}
+        {/* Style gallery + recommendation */}
+        <aside className="muse-right">
+          <h4 className="ws-mod">Presets</h4>
+          <div className="muse-presets">
+            {PRESETS.map((p) => (
+              <button className={`muse-preset ${applied === p.id ? "on" : ""}`} key={p.id} onClick={() => setApplied(applied === p.id ? null : p.id)} type="button">
+                <span className="muse-swatch" style={{ background: p.swatch }} />
+                <strong>{p.name}</strong>
+              </button>
+            ))}
+          </div>
+          <div className="muse-reco">
+            <h4 className="ws-mod">recommendation</h4>
+            <p>Editorial — matches the current document's structure and the style.md tone.</p>
+          </div>
+          <div className="ws-statusbar"><span className="sys-ok">● ONLINE</span><span>{docs.length} FILES</span><span>{applied ? `STYLE: ${applied.toUpperCase()}` : "NO STYLE"}</span><span className="right">venus</span></div>
+        </aside>
       </div>
     </WorkspaceFrame>
   );

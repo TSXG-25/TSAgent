@@ -1,3 +1,5 @@
+import { UnavailableDesktopAgentServiceClient } from "../src/service/clientFactory";
+import { AgentServiceClientError } from "../src/types/service";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { RunController } from "../src/features/runs/runController";
@@ -66,8 +68,8 @@ function snapshot(
     revision: 2,
     createdAt: "2026-08-11T00:00:00Z",
     updatedAt: "2026-08-11T00:00:02Z",
-    completedWorkflowIds: [],
-    pendingWorkflowIds: ["workflow-a", "workflow-b"],
+    completedWorkflows: [],
+    pendingWorkflows: ["workflow-a", "workflow-b"],
     workflows: [],
     conversation: [],
     verifierSummary: { status: "waiting", checks: "—", stdout: "—", detail: "waiting" },
@@ -75,7 +77,7 @@ function snapshot(
   };
 }
 
-class OperationsClient implements DesktopAgentServiceClient {
+class OperationsClient extends UnavailableDesktopAgentServiceClient {
   readonly mode = "local" as const;
   readonly identity = identity;
   snapshot: RunSnapshot;
@@ -87,6 +89,7 @@ class OperationsClient implements DesktopAgentServiceClient {
   readonly eventCursors: number[] = [];
 
   constructor(initial: RunSnapshot) {
+    super("local", identity, new AgentServiceClientError({ code: "PROVIDER_UNAVAILABLE", message: "unavailable in test", retryable: true }));
     this.snapshot = initial;
   }
 
@@ -123,8 +126,8 @@ class OperationsClient implements DesktopAgentServiceClient {
       ...this.snapshot,
       status: "completed",
       revision: this.snapshot.revision + 1,
-      completedWorkflowIds: ["workflow-a", "workflow-b"],
-      pendingWorkflowIds: [],
+      completedWorkflows: ["workflow-a", "workflow-b"],
+      pendingWorkflows: [],
       updatedAt: "2026-08-11T00:00:04Z",
       output: {
         runId: "run-1",

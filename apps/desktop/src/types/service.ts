@@ -21,6 +21,8 @@ export interface StartRunRequest {
   sessionId: string;
   requestId: string;
   requestText: string;
+  /** Session-bound workspace root — scopes the run's file ops to this dir. */
+  workspaceRoot?: string;
   requestDigest?: string;
 }
 
@@ -946,6 +948,7 @@ export interface HandoffClient {
 /** Session catalog — first-class identity scopes for runs/tasks. */
 export interface SessionCatalogClient {
   createSession(request: CreateSessionRequest): Promise<SessionSummary>;
+  deleteSession(request: CreateSessionRequest): Promise<{ removed: boolean }>;
   listSessions(request: ListSessionsRequest): Promise<SessionSummary[]>;
 }
 
@@ -963,4 +966,6 @@ export interface DesktopAgentServiceClient extends AgentServiceClient, RunCatalo
   setSession(sessionId: string): void;
   /** Resolve the backend health before the UI begins using the client. */
   ready(): Promise<void>;
+  /** Release transport/sidecar resources. */
+  close(): Promise<void>;
 }

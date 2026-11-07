@@ -93,7 +93,7 @@ function unavailableError(code: "INVALID_REQUEST" | "PROVIDER_UNAVAILABLE", mess
  * mode with incomplete host configuration renders Backend unavailable. It
  * never substitutes the Mock client.
  */
-class UnavailableDesktopAgentServiceClient implements DesktopAgentServiceClient {
+export class UnavailableDesktopAgentServiceClient implements DesktopAgentServiceClient {
   readonly mode: DesktopAgentServiceMode;
   identity: DesktopIdentity;
 
@@ -109,6 +109,8 @@ class UnavailableDesktopAgentServiceClient implements DesktopAgentServiceClient 
   async ready(): Promise<void> {
     throw this.error;
   }
+
+  async close(): Promise<void> {}
 
   async listRuns(): Promise<RunSnapshot[]> {
     throw this.error;
@@ -131,6 +133,10 @@ class UnavailableDesktopAgentServiceClient implements DesktopAgentServiceClient 
   }
 
   async decideApproval(): Promise<ApprovalSummary> {
+    throw this.error;
+  }
+
+  async deleteSession(): Promise<{ removed: boolean }> {
     throw this.error;
   }
 

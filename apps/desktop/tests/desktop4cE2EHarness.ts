@@ -179,6 +179,9 @@ function terminalEventMatches(snapshot: RunSnapshot | undefined, events: RunEven
   const terminal = events.filter((event) => TERMINAL_EVENTS.has(event.eventType));
   if (terminal.length !== 1) return false;
   const expected = {
+    active: "run_started",
+    cancelling: "run_cancel_requested",
+    pending: "run_created",
     completed: "run_completed",
     blocked: "run_blocked",
     failed: "run_failed",

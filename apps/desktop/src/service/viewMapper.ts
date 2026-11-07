@@ -77,6 +77,7 @@ export function toServiceEvent(
     runRevision: event.runRevision ?? runRevision,
     timestamp: event.timestamp ?? event.at,
     payload: {
+      ...(event.payload ?? {}),
       title: event.title,
       description: event.description,
       tone: event.tone,

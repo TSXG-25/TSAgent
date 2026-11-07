@@ -579,8 +579,9 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
       limit: 100,
     };
     return this.project(async () => {
-      const result = (await this.call("list_runs", params)) as { runs?: unknown[] };
-      const snapshots = (result.runs ?? []).map((value) => mapSnapshot(value));
+      const result = (await this.call("list_runs", params)) as unknown;
+      const items = Array.isArray(result) ? result : ((result as { runs?: unknown[] }).runs ?? []);
+      const snapshots = items.map((value) => mapSnapshot(value));
       for (const snapshot of snapshots) {
         this.rememberSnapshot(snapshot);
       }
@@ -1041,6 +1042,24 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
     return mapSession(await this.call("create_session", params));
   }
 
+  async deleteSession(request: CreateSessionRequest): Promise<{ removed: boolean }> {
+    const params: LocalRpcParams = {
+      tenant_id: request.tenantId,
+      user_id: request.userId,
+      session_id: request.sessionId,
+      request_id: request.requestId,
+    };
+    return (await this.call("delete_session", params)) as { removed: boolean };
+  }
+
+  async pickFolder(): Promise<{ path: string | null }> {
+    return (await this.call("pick_folder", {} as LocalRpcParams)) as { path: string | null };
+  }
+
+  async listDirectory(path: string): Promise<{ path: string; parent: string; dirs: string[]; home?: string }> {
+    return (await this.call("list_directory", { path } as LocalRpcParams)) as { path: string; parent: string; dirs: string[]; home?: string };
+  }
+
   async listSessions(request: ListSessionsRequest): Promise<SessionSummary[]> {
     const params: LocalRpcParams = {
       tenant_id: request.tenantId,
@@ -1060,6 +1079,7 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
       session_id: request.sessionId,
       request_id: request.requestId,
       request_text: request.requestText,
+      workspace_root: request.workspaceRoot ?? "",
       metadata: request.requestDigest ? { desktop_request_digest: request.requestDigest } : {},
     };
     return this.project(async () => mapRunHandle(await this.call("start_run", params)));

@@ -532,7 +532,7 @@ class IntentEngine:
             # topical overlap with prior context.  Bare input like "ccc" has
             # neither; downgrading keeps a small model from silently
             # re-answering the previous run's goal.
-            cues = ("它", "这个", "那个", "刚才", "继续", "再", "还", "上面", "同样", "类似")
+            cues = ("它", "这", "那", "刚才", "继续", "再", "还", "上面", "同样", "类似")
             last_user = ""
             for msg in reversed(context.conversation or []):
                 if str(msg.get("role", "")) == "user":
@@ -545,7 +545,9 @@ class IntentEngine:
             )
             if not has_cue and not has_overlap:
                 relation = "new_request"
-        if relation == "new_request":
+        if relation == "new_request" and resolved_request and not any(
+            c in resolved_request for c in user_input if not c.isspace()
+        ):
             resolved_request = user_input.strip()
         requires_exec = bool(
             artifact_required

@@ -10,6 +10,7 @@ from types import SimpleNamespace
 import pytest
 from mcp.types import TextContent
 
+from agent.mcp import client as mcp_client
 from agent.mcp import duckduckgo
 
 
@@ -59,13 +60,13 @@ def test_duckduckgo_mcp_discovers_and_calls_tool(monkeypatch: pytest.MonkeyPatch
     captured: dict[str, object] = {}
 
     @asynccontextmanager
-    async def fake_stdio(server: object):
+    async def fake_stdio(server: object, *_a, **_kw):
         captured["server"] = server
         yield object(), object()
 
-    monkeypatch.setattr(duckduckgo.shutil, "which", lambda _command: "/fake/ddg-mcp")
-    monkeypatch.setattr(duckduckgo, "stdio_client", fake_stdio)
-    monkeypatch.setattr(duckduckgo, "ClientSession", lambda *_args, **_kwargs: session)
+    monkeypatch.setattr(mcp_client.shutil, "which", lambda _command: "/fake/ddg-mcp")
+    monkeypatch.setattr("mcp.client.stdio.stdio_client", fake_stdio)
+    monkeypatch.setattr(mcp_client, "ClientSession", lambda *_args, **_kwargs: session)
 
     result = asyncio.run(duckduckgo.call_duckduckgo_tool("search", {"query": "MCP"}))
 
@@ -89,20 +90,21 @@ def test_duckduckgo_mcp_runs_stdio_process_and_closes_it(
 
     def local_server_parameters(
         command: str,
-        env: dict[str, str],
+        args: list[str] | None = None,
+        env: dict[str, str] | None = None,
     ) -> StdioServerParameters:
         return StdioServerParameters(
             command=command,
             args=[str(server_script)],
             env={
-                **env,
+                **(env or {}),
                 "TEST_MCP_PID_FILE": str(pid_file),
                 "TEST_MCP_STOP_FILE": str(stopped_file),
             },
         )
 
-    monkeypatch.setattr(duckduckgo.shutil, "which", lambda _command: sys.executable)
-    monkeypatch.setattr(duckduckgo, "StdioServerParameters", local_server_parameters)
+    monkeypatch.setattr(mcp_client.shutil, "which", lambda _command: sys.executable)
+    monkeypatch.setattr(mcp_client, "StdioServerParameters", local_server_parameters)
 
     result = asyncio.run(
         duckduckgo.call_duckduckgo_tool(
@@ -130,13 +132,14 @@ def test_duckduckgo_mcp_cancellation_terminates_stdio_process(
 
     def local_server_parameters(
         command: str,
-        env: dict[str, str],
+        args: list[str] | None = None,
+        env: dict[str, str] | None = None,
     ) -> StdioServerParameters:
         return StdioServerParameters(
             command=command,
             args=[str(server_script)],
             env={
-                **env,
+                **(env or {}),
                 "TEST_MCP_PID_FILE": str(pid_file),
                 "TEST_MCP_STOP_FILE": str(tmp_path / "server-stopped"),
                 "TEST_MCP_CALL_FILE": str(call_file),
@@ -144,11 +147,11 @@ def test_duckduckgo_mcp_cancellation_terminates_stdio_process(
         )
 
     monkeypatch.setattr(
-        duckduckgo,
+        mcp_client,
         "shutil",
         SimpleNamespace(which=lambda _command: sys.executable),
     )
-    monkeypatch.setattr(duckduckgo, "StdioServerParameters", local_server_parameters)
+    monkeypatch.setattr(mcp_client, "StdioServerParameters", local_server_parameters)
 
     async def cancel_call() -> int:
         task = asyncio.create_task(
@@ -174,7 +177,7 @@ def test_duckduckgo_mcp_cancellation_terminates_stdio_process(
 
 
 def test_duckduckgo_mcp_reports_missing_server(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(duckduckgo.shutil, "which", lambda _command: None)
+    monkeypatch.setattr(mcp_client.shutil, "which", lambda _command: None)
 
     with pytest.raises(RuntimeError, match="RESEARCH_TOOL_UNAVAILABLE.*not installed"):
         asyncio.run(duckduckgo.call_duckduckgo_tool("search", {"query": "MCP"}))
@@ -191,12 +194,12 @@ def test_duckduckgo_mcp_reports_missing_tool(monkeypatch: pytest.MonkeyPatch) ->
     session = _Session(SimpleNamespace(isError=False, content=[], structuredContent=None), tools=())
 
     @asynccontextmanager
-    async def fake_stdio(_server: object):
+    async def fake_stdio(_server: object, *_a, **_kw):
         yield object(), object()
 
-    monkeypatch.setattr(duckduckgo.shutil, "which", lambda _command: "/fake/ddg-mcp")
-    monkeypatch.setattr(duckduckgo, "stdio_client", fake_stdio)
-    monkeypatch.setattr(duckduckgo, "ClientSession", lambda *_args, **_kwargs: session)
+    monkeypatch.setattr(mcp_client.shutil, "which", lambda _command: "/fake/ddg-mcp")
+    monkeypatch.setattr("mcp.client.stdio.stdio_client", fake_stdio)
+    monkeypatch.setattr(mcp_client, "ClientSession", lambda *_args, **_kwargs: session)
 
     with pytest.raises(RuntimeError, match="MCP tool is missing: search"):
         asyncio.run(duckduckgo.call_duckduckgo_tool("search", {"query": "MCP"}))
@@ -210,12 +213,12 @@ def test_duckduckgo_mcp_surfaces_server_tool_error(monkeypatch: pytest.MonkeyPat
     ))
 
     @asynccontextmanager
-    async def fake_stdio(_server: object):
+    async def fake_stdio(_server: object, *_a, **_kw):
         yield object(), object()
 
-    monkeypatch.setattr(duckduckgo.shutil, "which", lambda _command: "/fake/ddg-mcp")
-    monkeypatch.setattr(duckduckgo, "stdio_client", fake_stdio)
-    monkeypatch.setattr(duckduckgo, "ClientSession", lambda *_args, **_kwargs: session)
+    monkeypatch.setattr(mcp_client.shutil, "which", lambda _command: "/fake/ddg-mcp")
+    monkeypatch.setattr("mcp.client.stdio.stdio_client", fake_stdio)
+    monkeypatch.setattr(mcp_client, "ClientSession", lambda *_args, **_kwargs: session)
 
     with pytest.raises(RuntimeError, match="MCP tool failed: blocked"):
         asyncio.run(duckduckgo.call_duckduckgo_tool("search", {"query": "MCP"}))
@@ -224,28 +227,32 @@ def test_duckduckgo_mcp_surfaces_server_tool_error(monkeypatch: pytest.MonkeyPat
 def test_web_search_returns_structured_results(monkeypatch: pytest.MonkeyPatch) -> None:
     import tools.web as web
 
-    calls: list[tuple[str, dict[str, object]]] = []
+    from agent.search.providers import SearchOutcome
 
-    async def fake_call(name: str, arguments: dict[str, object]) -> str:
-        calls.append((name, arguments))
-        return (
-            "Found 2 search results:\n\n"
-            "1. TSAgent docs\n"
-            "   URL: https://example.com/docs\n"
-            "   Summary: project documentation\n\n"
-            "2. TSAgent release\n"
-            "   URL: https://example.com/release\n"
-            "   Summary: release notes\n"
+    calls: list[str] = []
+
+    async def fake_search(query: str, *, max_results: int) -> SearchOutcome:
+        calls.append(query)
+        return SearchOutcome(
+            provider="duckduckgo",
+            content=(
+                "Found 2 search results:\n\n"
+                "1. TSAgent docs\n"
+                "   URL: https://example.com/docs\n"
+                "   Summary: project documentation\n\n"
+                "2. TSAgent release\n"
+                "   URL: https://example.com/release\n"
+                "   Summary: release notes\n"
+            ),
         )
 
-    monkeypatch.setattr(web, "_call_duckduckgo_tool", fake_call)
+    monkeypatch.setattr("agent.search.providers.run_search", fake_search)
     results = asyncio.run(
         web.web_search(query="TSAgent", max_results=5, timeliness="week")
     )
 
-    assert calls[0][0] == "search"
-    assert "TSAgent" in calls[0][1]["query"]
-    assert calls[0][1]["max_results"] == 5
+    assert calls
+    assert "TSAgent" in calls[0]
     assert results == [
         web.SearchResult(
             title="TSAgent docs",

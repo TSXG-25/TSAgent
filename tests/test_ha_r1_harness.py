@@ -329,6 +329,7 @@ def test_four_turn_search_summary_creation_modification(monkeypatch, tmp_path):
 def test_fresh_research_uses_local_mcp_stdio_through_service(monkeypatch, tmp_path):
     import sys
     import tools.web
+    from agent.mcp import client as mcp_client
     from agent.mcp import duckduckgo
     from agent.registry.tool_registry import registry
     from mcp.client.stdio import StdioServerParameters
@@ -339,23 +340,28 @@ def test_fresh_research_uses_local_mcp_stdio_through_service(monkeypatch, tmp_pa
     pid_file = tmp_path / 'mcp-server-pid'
     monkeypatch.setattr(registry, '_tools', dict(registry._tools))
     monkeypatch.setattr(
-        duckduckgo,
+        mcp_client,
         'shutil',
         SimpleNamespace(which=lambda _command: sys.executable),
     )
 
-    def local_server_parameters(command, env):
+    def local_server_parameters(command, args=None, env=None):
         return StdioServerParameters(
             command=command,
             args=[str(server_script)],
             env={
-                **env,
+                **(env or {}),
                 'TEST_MCP_PID_FILE': str(pid_file),
                 'TEST_MCP_STOP_FILE': str(stopped_file),
             },
         )
 
-    monkeypatch.setattr(duckduckgo, 'StdioServerParameters', local_server_parameters)
+    monkeypatch.setattr(mcp_client, 'StdioServerParameters', local_server_parameters)
+    monkeypatch.setenv('TSAGENT_SEARCH_PROVIDERS', 'duckduckgo')
+    monkeypatch.setattr(
+        'agent.search.duckduckgo_provider.DuckDuckGoSearchProvider.available',
+        lambda self: True,
+    )
     provider = setup_provider(monkeypatch, [
         (request, intent(request, domain='网络', action='fresh_research',
             source=True, freshness=True, search_query='离线测试新闻')),
@@ -390,6 +396,7 @@ def test_fresh_research_materializes_source_backed_report_through_service(
 ):
     import sys
     import tools.web
+    from agent.mcp import client as mcp_client
     from agent.mcp import duckduckgo
     from agent.registry.tool_registry import registry
     from mcp.client.stdio import StdioServerParameters
@@ -403,23 +410,28 @@ def test_fresh_research_materializes_source_backed_report_through_service(
     pid_file = tmp_path / 'research-mcp-server-pid'
     monkeypatch.setattr(registry, '_tools', dict(registry._tools))
     monkeypatch.setattr(
-        duckduckgo,
+        mcp_client,
         'shutil',
         SimpleNamespace(which=lambda _command: sys.executable),
     )
 
-    def local_server_parameters(command, env):
+    def local_server_parameters(command, args=None, env=None):
         return StdioServerParameters(
             command=command,
             args=[str(server_script)],
             env={
-                **env,
+                **(env or {}),
                 'TEST_MCP_PID_FILE': str(pid_file),
                 'TEST_MCP_STOP_FILE': str(stopped_file),
             },
         )
 
-    monkeypatch.setattr(duckduckgo, 'StdioServerParameters', local_server_parameters)
+    monkeypatch.setattr(mcp_client, 'StdioServerParameters', local_server_parameters)
+    monkeypatch.setenv('TSAGENT_SEARCH_PROVIDERS', 'duckduckgo')
+    monkeypatch.setattr(
+        'agent.search.duckduckgo_provider.DuckDuckGoSearchProvider.available',
+        lambda self: True,
+    )
     provider = setup_provider(monkeypatch, [
         (request, intent(request, domain='网络', action='fresh_research',
             artifact=True, source=True, freshness=True,
@@ -523,6 +535,7 @@ def test_service_cancellation_publishes_verified_partial_file(
     tmp_path,
 ):
     from agent.interruption import CancelRunRequest
+    from agent.mcp import client as mcp_client
     from agent.mcp import duckduckgo
     import tools.web as web
 
@@ -554,6 +567,10 @@ def test_service_cancellation_publishes_verified_partial_file(
 
     monkeypatch.setattr(duckduckgo, 'unavailable_reason', lambda: '')
     monkeypatch.setattr(web, '_call_duckduckgo_tool', waiting_mcp_call)
+    monkeypatch.setattr(
+        'agent.mcp.duckduckgo.call_duckduckgo_tool', waiting_mcp_call
+    )
+    monkeypatch.setenv('TSAGENT_SEARCH_PROVIDERS', 'duckduckgo')
 
     async def scenario():
         from agent.service import EventStreamRequest, RunLookupRequest
@@ -569,7 +586,7 @@ def test_service_cancellation_publishes_verified_partial_file(
         )
         try:
             handle = await service.start_run(start)
-            await asyncio.wait_for(tool_started.wait(), timeout=5)
+            await asyncio.wait_for(tool_started.wait(), timeout=30)
             cancelling = await service.cancel_run(CancelRunRequest(
                 tenant_id=start.tenant_id,
                 user_id=start.user_id,

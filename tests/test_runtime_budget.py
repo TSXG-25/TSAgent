@@ -21,3 +21,21 @@ def test_run_budget_reports_wall_time_exhaustion() -> None:
 
     assert budget.consume_transition(now=12.0) is False
     assert budget.exhausted_code(now=12.0) == "RUNTIME_TIME_BUDGET_EXHAUSTED"
+
+
+def test_unlimited_budget_env(monkeypatch):
+    """TSAGENT_UNLIMITED_BUDGET=1 时所有维度不触发 exhaustion。"""
+    from agent.runtime_budget import RunBudget
+
+    monkeypatch.setenv("TSAGENT_UNLIMITED_BUDGET", "1")
+    budget = RunBudget.from_env()
+    budget.start()
+    for _ in range(100):
+        assert budget.consume_transition()
+    for _ in range(10):
+        assert budget.consume_recovery()
+    assert budget.exhausted_code() == ""
+
+    monkeypatch.setenv("TSAGENT_UNLIMITED_BUDGET", "0")
+    budget = RunBudget.from_env()
+    assert budget.max_seconds == 300.0

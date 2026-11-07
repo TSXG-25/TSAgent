@@ -5,6 +5,7 @@ import agent.sandbox as sandbox
 
 def test_local_execution_is_fail_closed_without_docker(monkeypatch):
     monkeypatch.setattr(sandbox, "_check_docker", lambda: False)
+    monkeypatch.setattr(sandbox, "_check_seatbelt", lambda: False)
     monkeypatch.delenv("TSAGENT_ALLOW_LOCAL_EXECUTION", raising=False)
 
     result = sandbox.run_in_sandbox("echo should-not-run")
@@ -29,8 +30,11 @@ def test_python_tool_rejects_file_and_process_escape(monkeypatch):
 
     from tools.python import run_python
 
-    assert "禁止导入" in run_python("import os")
-    assert "禁止调用" in run_python("open('outside.txt', 'w')")
+    # AST import/call 黑名单已移除：os/open 等调用经沙箱执行层放行，
+    # 真实边界由 Docker/Seatbelt/local-execution gate 承担。
+    out = run_python("import os; print('ok')")
+    assert "禁止导入" not in out and "禁止调用" not in out
+    assert run_python("print(1+1)").strip() == "2"
 
 
 def test_filesystem_tools_reject_paths_outside_workspace():

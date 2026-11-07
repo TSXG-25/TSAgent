@@ -8,7 +8,7 @@ import json
 import os
 import logging
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from types import SimpleNamespace
 from typing import Any, Awaitable, Callable, Final, Mapping, Protocol, Sequence
 from datetime import datetime
@@ -49,6 +49,7 @@ class ChatTurn:
 
     content: str = ""
     tool_calls: tuple[ToolCall, ...] = ()
+    usage: dict = field(default_factory=dict)
 
 
 def function_tool_spec(
@@ -131,7 +132,7 @@ def _openai_turn(data: Mapping[str, Any]) -> ChatTurn:
         )
         for index, call in enumerate(message.get("tool_calls") or ())
     )
-    return ChatTurn(content=content if isinstance(content, str) else "", tool_calls=tool_calls)
+    return ChatTurn(content=content if isinstance(content, str) else "", tool_calls=tool_calls, usage=dict(data.get("usage") or {}))
 
 # --- Configuration ---
 DEEPSEEK_API_KEY = os.getenv("OPENAI_API_KEY", "")
@@ -327,7 +328,11 @@ class _OllamaHTTPProvider:
                                 for index, call in enumerate(calls)
                             )
                     return ChatTurn(
-                        content="".join(content_parts), tool_calls=tool_calls
+                        content="".join(content_parts),
+                        tool_calls=tool_calls,
+                        usage=dict(
+                            getattr(response, "usage_metadata", None) or {}
+                        ),
                     )
         if response.is_error:
             raise RuntimeError(
@@ -350,7 +355,7 @@ class _OllamaHTTPProvider:
         )
         if not isinstance(content, str) and not tool_calls:
             raise RuntimeError("Ollama returned an empty chat completion")
-        return ChatTurn(content=content if isinstance(content, str) else "", tool_calls=tool_calls)
+        return ChatTurn(content=content if isinstance(content, str) else "", tool_calls=tool_calls, usage=dict(data.get("usage") or {}))
 
     def _payload(
         self,

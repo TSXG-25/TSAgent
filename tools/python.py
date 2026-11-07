@@ -14,32 +14,14 @@ from agent.security import is_sensitive_command, is_sensitive_path
 ROOT = Path(__file__).parent.parent.resolve()
 
 
-_FORBIDDEN_IMPORTS = {
-    "asyncio", "ctypes", "importlib", "multiprocessing", "os", "pathlib",
-    "resource", "signal", "shutil", "socket", "subprocess", "sys",
-}
-_FORBIDDEN_CALLS = {
-    "__import__", "breakpoint", "compile", "eval", "exec", "input", "open",
-}
-
-
 def _validate_python_source(code: str) -> str | None:
+    # 沙箱（Docker/Seatbelt）是真正的执行边界；这里只做敏感词闸与语法
+    # 预检。历史上曾有 AST import/call 黑名单，但静态名单可被 getattr/
+    # __import__ 轻易绕过，不是真实防线，且会把合理脚本挡在门外。
     if is_sensitive_command(code):
         return "错误：代码被安全策略阻止（敏感信息访问）"
     try:
-        tree = ast.parse(code)
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                for alias in node.names:
-                    if alias.name.split(".")[0] in _FORBIDDEN_IMPORTS:
-                        return f"错误：禁止导入模块 '{alias.name}'（安全限制）"
-            elif isinstance(node, ast.ImportFrom):
-                if node.module and node.module.split(".")[0] in _FORBIDDEN_IMPORTS:
-                    return f"错误：禁止从模块 '{node.module}' 导入（安全限制）"
-            elif isinstance(node, ast.Call):
-                fn = node.func
-                if isinstance(fn, ast.Name) and fn.id in _FORBIDDEN_CALLS:
-                    return f"错误：禁止调用 {fn.id}（安全限制）"
+        ast.parse(code)
     except SyntaxError as e:
         return f"语法错误: {e}"
     return None
@@ -70,6 +52,8 @@ def run_python(code: str, timeout: int = 10) -> str:
 
     在隔离环境中安全执行 Python 代码。支持打印语句和标准输出捕获。
     代码中定义的变量会在同一次调用中共存，但不同调用之间不共享状态。
+    需要 shell 命令、管道、文件系统遍历或环境探查时用 shell 工具，
+    本工具适合无需转义的 Python 直跑片段。
 
     Args:
         code: 要执行的 Python 代码字符串

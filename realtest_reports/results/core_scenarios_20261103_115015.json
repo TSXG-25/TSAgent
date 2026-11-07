@@ -1,0 +1,2253 @@
+{
+  "manifest": "core-scenarios-v1",
+  "run_id": "core_scenarios_20261103_115015",
+  "provider": "auto+cassette-replay",
+  "cassette": {
+    "mode": "replay",
+    "path": "realtest_reports/cassettes/core_v1.json",
+    "summary": {
+      "mode": "replay",
+      "cassette": "realtest_reports/cassettes/core_v1.json",
+      "recorded": 0,
+      "replayed": 24,
+      "misses": [
+        {
+          "digest": "88c09230ad1f8152d12451622b35afac0952eac6dad5c19b89e1f934791e59c4",
+          "kind": "structured"
+        },
+        {
+          "digest": "cc8bf85c79a440976d6966640af083fb26c389a4afe3a7b26e0eabc9d854f02e",
+          "kind": "invoke"
+        },
+        {
+          "digest": "2766f35d5133ef1f8c13e59e26e101159cfa9a4399c0fd49248d39ab4a4752bb",
+          "kind": "structured"
+        },
+        {
+          "digest": "9c6e4790a0e641645e5c3f841fdf746882012299804a6358439ac00fb9df3e29",
+          "kind": "invoke"
+        },
+        {
+          "digest": "8e12b892bcffd470486acab4fe8f76278abbfcef38e4b3d9bf44852f868c79c3",
+          "kind": "structured"
+        },
+        {
+          "digest": "b9bc3ac3341d85e4495f75c0305ba2006b1a5c2e4258c262b9cb8fe93098cfc2",
+          "kind": "invoke"
+        },
+        {
+          "digest": "e3390d8ba84e161a0eb434ac0906a8efe494cc44a4659b902e5c0cf6a7f7f4c4",
+          "kind": "structured"
+        },
+        {
+          "digest": "2cb123b33bdc4f3f948272e52172915a6fbcc1e875723d1bdb97f6e636e33ccc",
+          "kind": "invoke"
+        },
+        {
+          "digest": "82bab06c8791a1c066d14e7a4d8f7196b21b63d462eedc3e2da5503389441140",
+          "kind": "invoke"
+        },
+        {
+          "digest": "82bab06c8791a1c066d14e7a4d8f7196b21b63d462eedc3e2da5503389441140",
+          "kind": "invoke"
+        }
+      ],
+      "unconsumed": 97
+    }
+  },
+  "model": "deepseek-flash",
+  "started_at": "2026-11-03T11:50:15.989314+00:00",
+  "cases_file": "core_scenarios_cases.json",
+  "workspace_root": "/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_115015_workspace",
+  "cases": [
+    {
+      "id": "CS01",
+      "title": "greeting stays a cheap chat turn (latency sanity)",
+      "result": "PASS",
+      "skip_reason": "",
+      "workspace": "/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_115015_workspace/cs01",
+      "duration_ms": 1343.5,
+      "error": "",
+      "turns": [
+        {
+          "turn": 1,
+          "request": "你好",
+          "status": "COMPLETED",
+          "output": "你好！很高兴见到你。有什么我可以帮忙的吗？",
+          "artifacts": [],
+          "provider_calls": 2,
+          "plan_calls": 1,
+          "replan_calls": 0,
+          "tool_calls": [],
+          "intent": {
+            "domain": "chat",
+            "action": "greet",
+            "target": "",
+            "confidence": 0.98,
+            "summary": "用户只是打招呼，需要一句友好的回复",
+            "requires_execution": false,
+            "artifact_required": false,
+            "requested_outcomes": [
+              "USER_VISIBLE_OUTPUT"
+            ],
+            "delivery_requirements": [],
+            "acceptance_criteria": [],
+            "write_targets": [],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "new_request",
+            "resolved_request": "回复用户的问候“你好”",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": ""
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "run_completed"
+          ],
+          "failure_summary": null,
+          "error": "",
+          "duration_ms": 1322.4
+        }
+      ],
+      "checks": [
+        {
+          "check": "status",
+          "passed": true,
+          "detail": "expected COMPLETED got COMPLETED",
+          "turn": 1
+        },
+        {
+          "check": "provider_calls_max",
+          "passed": true,
+          "detail": "2 calls > 3",
+          "turn": 1
+        },
+        {
+          "check": "no_tool_calls",
+          "passed": true,
+          "detail": "tools used: []",
+          "turn": 1
+        },
+        {
+          "check": "intent.domain",
+          "passed": true,
+          "detail": "expected 'chat' got 'chat'",
+          "turn": 1
+        }
+      ],
+      "files": {}
+    },
+    {
+      "id": "CS02",
+      "title": "artifact without explicit path lands under output/",
+      "result": "PASS",
+      "skip_reason": "",
+      "workspace": "/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_115015_workspace/cs02",
+      "duration_ms": 63.5,
+      "error": "",
+      "turns": [
+        {
+          "turn": 1,
+          "request": "帮我写一个 Python 待办事项管理脚本，能添加和列出任务",
+          "status": "COMPLETED",
+          "output": "已完成，脚本文件已交付：**`output/todo.py`**（单文件，仅用标准库，无需安装依赖）。\n\n## 用法\n\n```bash\npython output/todo.py add \"买牛奶\"\npython output/todo.py add \"写周报\" -p high\npython output/todo.py list\n```\n\n输出示例：\n\n```\n共 2 条任务：\n  [ ]   1. 买牛奶  (优先级: normal, 创建于 2026-11-03 19:40:12)\n  [ ]   2. 写周报  (优先级: high, 创建于 2026-11-03 19:40:15)\n\n未完成 2 条，已完成 0 条。\n```\n\n## 实现要点\n\n- **命令**：`add`（添加）、`list`（列出），另外附带了同一套存储逻辑上的 `done`（标记完成）和 `remove`（删除），方便清单长期使用。\n- **持久化**：任务存到脚本同目录的 `todos.json`，UTF-8 编码、`ensure_ascii=False`，中文不会变成 `\\uXXXX`；写入采用「临时文件 + 原子替换」，中途中断不会写坏原数据。\n- **容错**：数据文件不存在返回空列表；JSON 损坏或结构异常时给出警告并按空列表处理，不抛栈退出。\n- **列表展示**：默认只显示未完成项，`--all` 显示全部；每行带序号、完成标记、优先级和创建时间，末尾汇总未完成/已完成数量。\n- **可配置**：`--file` 可指定其它数据文件，方便多份清单（如 `--file work.json list`）。\n- **退出码**：参数错误、序号越界等返回 1，便于脚本化调用。\n\n说明：运行环境不允许我执行命令，所以脚本**未经实际运行验证**，逻辑仅经过代码审阅（例如 `list` 中按序号索引筛选，避免重复标题被误判）。你在本地执行上面的命令即可验证；如需支持截止日期、标签或按优先级排序，我可以再扩展。\n\n已生成/更新本地文件：\n/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_115015_workspace/cs02/output/todo.py\n\n📁 ./ (3 项)\nruntime.sqlite\nruntime.sqlite-shm\nruntime.sqlite-wal\n\n#!/usr/bin/env python3\n# -*- coding: utf-8 -*-\n\"\"\"待办事项管理脚本（命令行）。\n\n支持：\n  add    添加一条任务\n  list   列出所有任务\n\n任务保存在脚本同目录下的 todos.json 中，退出后不会丢失。\n\n用法示例：\n  python todo.py add \"买牛奶\"\n  python todo.py add \"写周报\" --priority high\n  python todo.py list\n  python todo.py list --all          # 包含已完成任务\n  python todo.py done 1              # 把第 1 条标记为已完成\n  python todo.py remove 1            # 删除第 1 条\n  python todo.py --file my_todo.json list   # 指定数据文件\n\"\"\"\n\nfrom __future__ import annotations\n\nimport argparse\nimport json\nimport sys\nfrom datetime import datetime\nfrom pathlib import Path\nfrom typing import Any, Dict, List\n\nDEFAULT_DB = Path(__file__).resolve().parent / \"todos.json\"\n\nSTATUS_TODO = \"todo\"\nSTATUS_DONE = \"done\"\n\nPRIORITIES = (\"low\", \"normal\", \"high\")\n\n\n# ---------------------------------------------------------------- 存储读写 --\ndef load_tasks(db_path: Path) -> List[Dict[str, Any]]:\n    \"\"\"读取任务列表；文件不存在或损坏时返回空列表。\"\"\"\n    if not db_path.exists():\n        return []\n    try:\n        with db_path.open(\"r\", encoding=\"utf-8\") as fh:\n            data = json.load(fh)\n    except (json.JSONDecodeError, OSError) as exc:\n        print(f\"[警告] 无法读取 {db_path}（{exc}），将使用空列表。\", file=sys.stderr)\n        return []\n\n    if isinstance(data, dict):          # 兼容 {\"tasks\": [...]} 结构\n        data = data.get(\"tasks\", [])\n    if not isinstance(data, list):\n        print(f\"[警告] {db_path} 内容格式异常，将使用空列表。\", file=sys.stderr)\n        return []\n\n    tasks: List[Dict[str, Any]] = []\n    for item in data:\n        if isinstance(item, dict) and item.get(\"title\"):\n            tasks.append(\n                {\n                    \"title\": str(item[\"title\"]),\n                    \"priority\": item.get(\"priority\", \"normal\"),\n                    \"status\": item.get(\"status\", STATUS_TODO),\n                    \"created_at\": item.get(\"created_at\", \"\"),\n                }\n            )\n    return tasks\n\n\ndef save_tasks(db_path: Path, tasks: List[Dict[str, Any]]) -> None:\n    \"\"",
+          "artifacts": [
+            {
+              "artifact_id": "artifact-03372a0a0a3124c1f2e6ed14",
+              "artifact_type": "file",
+              "digest": "50089f709a6b9114b4dd610c69668d08712df09c1d53fdb289d4cd8b65af053b",
+              "reference": "artifact://core-scenarios/run-ed8f5d68802c4279a516cc9278d011cf/artifact-03372a0a0a3124c1f2e6ed14",
+              "exists": true,
+              "verified": true,
+              "run_id": "run-ed8f5d68802c4279a516cc9278d011cf",
+              "display_name": "artifact-03372a0a0a3124c1f2e6ed14",
+              "size": null,
+              "producer_workflow_id": "runtime-execution",
+              "producer_stage_id": "task:loop-4",
+              "created_revision": 1,
+              "created_at": ""
+            }
+          ],
+          "provider_calls": 1,
+          "plan_calls": 1,
+          "replan_calls": 1,
+          "tool_calls": [
+            {
+              "tool": "filesystem.list",
+              "args": {
+                "path": "."
+              }
+            },
+            {
+              "tool": "filesystem.write",
+              "args": {
+                "path": "output/todo.py",
+                "content": "#!/usr/bin/env python3\n# -*- coding: utf-8 -*-\n\"\"\"待办事项管理脚本（命令行）。\n\n支持：\n  add    添加一条任务\n  list   列出所有任务\n\n任务保存在脚本同目录下的 todos.json 中，退出后不会丢失。\n\n用法示例：\n  python todo.p"
+              }
+            },
+            {
+              "tool": "filesystem.edit",
+              "args": {
+                "path": "output/todo.py",
+                "old_string": "    # 默认只显示未完成的任务\n    visible = tasks if args.all else [t for t in tasks if t.get(\"status\") != STATUS_DONE]\n    if not visible:\n        print(\"没有未完成的任务（共 %d 条已全",
+                "new_string": "    # 默认只显示未完成的任务\n    shown = list(range(1, len(tasks) + 1))\n    if not args.all:\n        shown = [i for i in shown if tasks[i - 1].get(\"status\") != STATUS_DONE"
+              }
+            },
+            {
+              "tool": "filesystem.read",
+              "args": {
+                "path": "output/todo.py"
+              }
+            }
+          ],
+          "intent": {
+            "domain": "development",
+            "action": "create",
+            "target": "",
+            "confidence": 0.98,
+            "summary": "用户要一个可添加和列出任务的 Python 待办事项管理脚本成品。",
+            "requires_execution": true,
+            "artifact_required": true,
+            "requested_outcomes": [
+              "FILE_MUTATION"
+            ],
+            "delivery_requirements": [
+              {
+                "id": "python_todo_script",
+                "kind": "file",
+                "quantity": 1,
+                "target": "",
+                "acceptance_criteria": []
+              }
+            ],
+            "acceptance_criteria": [],
+            "write_targets": [],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "new_request",
+            "resolved_request": "编写一个 Python 待办事项管理脚本，支持添加任务和列出任务，并作为本地脚本文件交付。",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": ""
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "stage_started",
+            "task_started",
+            "task_completed",
+            "task_started",
+            "task_completed",
+            "task_started",
+            "task_completed",
+            "task_started",
+            "task_completed",
+            "assistant_delta",
+            "stage_completed",
+            "run_completed"
+          ],
+          "failure_summary": null,
+          "error": "",
+          "duration_ms": 53.5
+        }
+      ],
+      "checks": [
+        {
+          "check": "status",
+          "passed": true,
+          "detail": "expected COMPLETED got COMPLETED",
+          "turn": 1
+        },
+        {
+          "check": "artifact_exists",
+          "passed": true,
+          "detail": "'output/**/*.py' matched ['/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_115015_workspace/cs02/output/todo.py']",
+          "turn": 1
+        },
+        {
+          "check": "artifact_absent",
+          "passed": true,
+          "detail": "'src/**/*.py' unexpectedly matched []",
+          "turn": 1
+        },
+        {
+          "check": "artifact_absent",
+          "passed": true,
+          "detail": "'*.py' unexpectedly matched []",
+          "turn": 1
+        },
+        {
+          "check": "intent.artifact_required",
+          "passed": true,
+          "detail": "expected True got True",
+          "turn": 1
+        }
+      ],
+      "files": {
+        "output/todo.py": "#!/usr/bin/env python3\n# -*- coding: utf-8 -*-\n\"\"\"待办事项管理脚本（命令行）。\n\n支持：\n  add    添加一条任务\n  list   列出所有任务\n\n任务保存在脚本同目录下的 todos.json 中，退出后不会丢失。\n\n用法示例：\n  python todo.py add \"买牛奶\"\n  python todo.py add \"写周报\" --priority high\n  python todo.py list\n  python todo.py list --all          # 包含已完成任务\n  python todo.py done 1              # 把第 1 条标记为已完成\n  python todo.py remove 1            # 删除第 1 条\n  python todo.py --file my_todo.json list   # 指定数据文件\n\"\"\"\n\nfrom __future__ import annotations\n\nimport argparse\nimport json\nimport sys\nfrom datetime import datetime\nfrom pathlib import Path\nfrom typing import Any, Dict, List\n\nDEFAULT_DB = Path(__file__).resolve().parent / \"todos.json\"\n\nSTATUS_TODO = \"todo\"\nSTATUS_DONE = \"done\"\n\nPRIORITIES = (\"low\", \"normal\", \"high\")\n\n\n# ---------------------------------------------------------------- 存储读写 --\ndef load_tasks(db_path: Path) -> List[Dict[str, Any]]:\n    \"\"\"读取任务列表；文件不存在或损坏时返回空列表。\"\"\"\n    if not db_path.exists():\n        return []\n    try:\n        with db_path.open(\"r\", encoding=\"utf-8\") as fh:\n            data = json.load(fh)\n    except (json.JSONDecodeError, OSError) as exc:\n        print(f\"[警告] 无法读取 {db_path}（{exc}），将使用空列表。\", file=sys.stderr)\n        return []\n\n    if isinstance(data, dict):          # 兼容 {\"tasks\": [...]} 结构\n        data = data.get(\"tasks\", [])\n    if not isinstance(data, list):\n        print(f\"[警告] {db_path} 内容格式异常，将使用空列表。\", file=sys.stderr)\n        return []\n\n    tasks: List[Dict[str, Any]] = []\n    for item in data:\n        if isinstance(item, dict) and item.get(\"title\"):\n            tasks.append(\n                {\n                    \"title\": str(item[\"title\"]),\n                    \"priority\": item.get(\"priority\", \"normal\"),\n                    \"status\": item.get(\"status\", STATUS_TODO),\n                    \"created_at\": item.get(\"created_at\", \"\"),\n                }\n            )\n    return tasks\n\n\ndef save_tasks(db_path: Path, tasks: List[Dict[str, Any]]) -> None:\n    \"\"\"把任务列表写回磁盘（先写临时文件再替换，避免写坏）。\"\"\"\n    db_path.parent.mkdir(parents=True, exist_ok=True)\n    tmp_path = db_path.with_suffix(db_path.suffix + \".tmp\")\n    with tmp_path.open(\"w\", encoding=\"utf-8\") as fh:\n        json.dump(tasks, fh, ensure_ascii=False, indent=2)\n    tmp_path.replace(db_path)\n\n\n# ------------------------------------------------------------------- 命令 --\ndef cmd_add(args: argparse.Namespace, db_path: Path) -> int:\n    title = args.title.strip()\n    if not title:\n        print(\"[错误] 任务内容不能为空。\", file=sys.stderr)\n        return 1\n\n    tasks = load_tasks(db_path)\n    tasks.append(\n        {\n            \"title\": title,\n            \"priority\": args.priority,\n            \"status\": STATUS_TODO,\n            \"created_at\": datetime.now().strftime(\"%Y-%m-%d %H:%M:%S\"),\n        }\n    )\n    save_tasks(db_path, tasks)\n    print(f\"已添加任务 #{len(tasks)}：{title}（优先级：{args.priority}）\")\n    return 0\n\n\ndef cmd_list(args: argparse.Namespace, db_path: Path) -> int:\n    tasks = load_tasks(db_path)\n    if not tasks:\n        print(\"暂无待办事项。用 `add` 命令添加一条吧，例如：python todo.py add \\\"买牛奶\\\"\")\n        return 0\n\n    # 默认只显示未完成的任务\n    shown = list(range(1, len(tasks) + 1))\n    if not args.all:\n        shown = [i for i in shown if tasks[i - 1].get(\"status\") != STATUS_DONE]\n    if not shown:\n        print(\"没有未完成的任务（共 %d 条已全部完成）。\" % len(tasks))\n        print(\"提示：加 --all 可查看全部任务。\")\n        return 0\n\n    print(f\"共 {len(shown)} 条任务：\")\n    for idx in shown:\n        task = tasks[idx - 1]\n        mark = \"x\" if task.get(\"status\") == STATUS_DONE else \" \"\n        prio = task.get(\"priority\", \"normal\")\n        created = task.get(\"created_at\", \"\")\n        line = f\"  [{mark}] {idx:>3}. {task['title']}  (优先级: {prio}\"\n        line += f\", 创建于 {created})\" if created else \")\"\n        print(line)\n\n    pending = sum(1 for t in tasks if t.get(\"status\") != STATUS_DONE)\n    done = len(tasks) - pending\n    print(f\"\\n未完成 {pending} 条，已完成 {done} 条。\")\n    return 0\n\n\ndef cmd_done(args: argparse.Namespace, db_path: Path) -> int:\n    return _set_status(db_path, args.index, STATUS_DON"
+      }
+    },
+    {
+      "id": "CS03",
+      "title": "explicit src/ path is honored over the output/ default",
+      "result": "PASS",
+      "skip_reason": "",
+      "workspace": "/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_115015_workspace/cs03",
+      "duration_ms": 62.1,
+      "error": "",
+      "turns": [
+        {
+          "turn": 1,
+          "request": "写一个函数 render_greeting(name) 返回问候字符串，保存到 src/greeting.py",
+          "status": "COMPLETED",
+          "output": "已完成。\n\n**说明**：`src/greeting.py` 原本不存在（工作区只有运行时数据库文件），因此我新建了该文件，而非修改已有代码。\n\n**实现内容**：\n- `render_greeting(name)` 返回 `f\"Hello, {name}!\"`，例如 `render_greeting(\"Alice\")` → `\"Hello, Alice!\"`。\n- 额外做了轻量输入处理：`None` 抛 `TypeError`，空字符串/纯空白抛 `ValueError`（先 `strip()` 再判断）。\n- 文件末尾有 `if __name__ == \"__main__\"` 示例，直接运行会打印 `Hello, World!`。\n\n**需要你确认的一点**：题目没有规定问候语的具体格式，我用了最常见的 `\"Hello, {name}!\"`。如果你期望的是中文问候（如 `\"你好，{name}！\"`）、带前缀/后缀参数（如 `greeting=\"Hi\"`），或要兼容特定测试用例的断言，请告诉我预期字符串，我按你的要求调整。另外我未执行任何命令（当前授权不允许），所以没有实际运行验证输出。\n\n已生成/更新本地文件：\n/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_115015_workspace/cs03/src/greeting.py\n\n📁 ./ (3 项)\nruntime.sqlite\nruntime.sqlite-shm\nruntime.sqlite-wal\n\n\"\"\"问候语渲染模块。\"\"\"\n\n\ndef render_greeting(name):\n    \"\"\"返回面向 name 的问候字符串。\n\n    参数:\n        name: 收信人名字（字符串）。\n\n    返回:\n        str: 形如 \"Hello, Alice!\" 的问候语。\n    \"\"\"\n    if name is None:\n        raise TypeError(\"name 不能为 None\")\n    name = str(name).strip()\n    if not name:\n        raise ValueError(\"name 不能为空\")\n    return f\"Hello, {name}!\"\n\n\nif __name__ == \"__main__\":\n    print(render_greeting(\"World\"))\n\n未自动验证：src/greeting.py 中定义 render_greeting(name) 并返回问候字符串\n未自动验证：文件中包含 render_greeting(name) 函数，且该函数返回问候字符串",
+          "artifacts": [
+            {
+              "artifact_id": "artifact-dc86b76915592bae5d1aeeef",
+              "artifact_type": "file",
+              "digest": "32bb37bd81e3c742a5e4b9dac680a92c60c16c2fe4c36d37858cd2821f7c6ad2",
+              "reference": "artifact://core-scenarios/run-b2fb15bca9214183b1ba8a2439e25f15/artifact-dc86b76915592bae5d1aeeef",
+              "exists": true,
+              "verified": true,
+              "run_id": "run-b2fb15bca9214183b1ba8a2439e25f15",
+              "display_name": "artifact-dc86b76915592bae5d1aeeef",
+              "size": null,
+              "producer_workflow_id": "runtime-execution",
+              "producer_stage_id": "task:loop-3",
+              "created_revision": 1,
+              "created_at": ""
+            }
+          ],
+          "provider_calls": 1,
+          "plan_calls": 1,
+          "replan_calls": 1,
+          "tool_calls": [
+            {
+              "tool": "filesystem.read",
+              "args": {
+                "path": "src/greeting.py"
+              }
+            },
+            {
+              "tool": "filesystem.list",
+              "args": {
+                "path": "."
+              }
+            },
+            {
+              "tool": "filesystem.write",
+              "args": {
+                "path": "src/greeting.py",
+                "content": "\"\"\"问候语渲染模块。\"\"\"\n\n\ndef render_greeting(name):\n    \"\"\"返回面向 name 的问候字符串。\n\n    参数:\n        name: 收信人名字（字符串）。\n\n    返回:\n        str: 形如 \"Hello, Alice!\" 的问候语。\n    \"\"\"\n "
+              }
+            },
+            {
+              "tool": "filesystem.read",
+              "args": {
+                "path": "src/greeting.py"
+              }
+            }
+          ],
+          "intent": {
+            "domain": "development",
+            "action": "create",
+            "target": "src/greeting.py",
+            "confidence": 0.95,
+            "summary": "用户要求新建 src/greeting.py，其中实现 render_greeting(name) 函数并返回问候字符串。",
+            "requires_execution": true,
+            "artifact_required": true,
+            "requested_outcomes": [
+              "FILE_MUTATION"
+            ],
+            "delivery_requirements": [
+              {
+                "id": "greeting_module",
+                "kind": "file",
+                "quantity": 1,
+                "target": "src/greeting.py",
+                "acceptance_criteria": [
+                  {
+                    "kind": "unverifiable",
+                    "description": "文件中包含 render_greeting(name) 函数，且该函数返回问候字符串"
+                  }
+                ]
+              }
+            ],
+            "acceptance_criteria": [
+              {
+                "kind": "unverifiable",
+                "description": "src/greeting.py 中定义 render_greeting(name) 并返回问候字符串"
+              }
+            ],
+            "write_targets": [
+              "src/greeting.py"
+            ],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "new_request",
+            "resolved_request": "在 src/greeting.py 中实现函数 render_greeting(name)，使其返回一个问候字符串，并保存该文件。",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": ""
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "stage_started",
+            "task_started",
+            "task_started",
+            "task_completed",
+            "task_completed",
+            "task_started",
+            "task_completed",
+            "task_started",
+            "task_completed",
+            "assistant_delta",
+            "stage_completed",
+            "run_completed"
+          ],
+          "failure_summary": null,
+          "error": "",
+          "duration_ms": 54.0
+        }
+      ],
+      "checks": [
+        {
+          "check": "status",
+          "passed": true,
+          "detail": "expected COMPLETED got COMPLETED",
+          "turn": 1
+        },
+        {
+          "check": "artifact_exists",
+          "passed": true,
+          "detail": "'src/greeting.py' matched ['/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_115015_workspace/cs03/src/greeting.py']",
+          "turn": 1
+        },
+        {
+          "check": "artifact_absent",
+          "passed": true,
+          "detail": "'output/**/greeting.py' unexpectedly matched []",
+          "turn": 1
+        },
+        {
+          "check": "file_contains:src/greeting.py",
+          "passed": true,
+          "detail": "tokens ['def render_greeting'] in 'src/greeting.py': found in /Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_115015_workspace/cs03/src/greeting.py",
+          "turn": 1
+        },
+        {
+          "check": "intent.write_targets_contains",
+          "passed": true,
+          "detail": "'src/greeting.py' in write_targets=['src/greeting.py']",
+          "turn": 1
+        }
+      ],
+      "files": {
+        "src/greeting.py": "\"\"\"问候语渲染模块。\"\"\"\n\n\ndef render_greeting(name):\n    \"\"\"返回面向 name 的问候字符串。\n\n    参数:\n        name: 收信人名字（字符串）。\n\n    返回:\n        str: 形如 \"Hello, Alice!\" 的问候语。\n    \"\"\"\n    if name is None:\n        raise TypeError(\"name 不能为 None\")\n    name = str(name).strip()\n    if not name:\n        raise ValueError(\"name 不能为空\")\n    return f\"Hello, {name}!\"\n\n\nif __name__ == \"__main__\":\n    print(render_greeting(\"World\"))\n"
+      }
+    },
+    {
+      "id": "CS04",
+      "title": "calculator creation discloses where the artifact was saved",
+      "result": "PASS",
+      "skip_reason": "",
+      "workspace": "/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_115015_workspace/cs04",
+      "duration_ms": 62.1,
+      "error": "",
+      "turns": [
+        {
+          "turn": 1,
+          "request": "帮我写个汇率转换计算器，写完告诉我放在哪了",
+          "status": "COMPLETED",
+          "output": "做好了，两个版本都已保存到工作区的 `output/` 目录：\n\n## 1. 主产物：网页版（推荐）\n**`output/currency_converter.html`** — 单文件、零依赖，双击就能在浏览器里打开使用。\n\n功能：\n- 金额输入 + 源/目标币种下拉（40 个常见币种），输入即时换算；\n- `⇅` 一键交换源币种与目标币种，实时显示 `1 A = x B` 和反向汇率；\n- 内置离线汇率表（默认可用、不需要联网），也可点“更新在线汇率”从 frankfurter.app（欧洲央行 ECB 参考汇率）拉取；联网失败会自动回退并提示；\n- 可手动改写任意货币对的汇率（保存在浏览器 localStorage，会记住），点“恢复汇率表”撤销；\n- “全部币种一览”表格：把当前金额一次换算成所有币种，按金额从大到小排序；\n- 最近换算记录（点条目可回填）、复制结果、深色模式自适应、移动端自适应。\n\n## 2. 附带：命令行版\n**`output/currency_converter.py`** — 纯标准库，无需安装任何依赖：\n\n```bash\npython output/currency_converter.py                        # 1 USD -> CNY\npython output/currency_converter.py 100 USD CNY\npython output/currency_converter.py -a 100 -f USD -t CNY,JPY,EUR\npython output/currency_converter.py --live -a 500 -f CNY -t USD   # 联网取最新汇率\npython output/currency_converter.py --list                 # 列出全部币种与汇率\npython output/currency_converter.py -a 100 -f USD -t CNY --rate 7.25 --json\n```\n\n一点说明：当前环境不允许我执行命令，所以代码没有实际运行验证过（都是单文件、纯前端/纯标准库实现，逻辑自包含）。另外内置汇率是近似值、在线数据也只覆盖 ECB 的币种，涉及真实交易请以银行或支付渠道报价为准——需要我把它改成“绑定某个实时汇率 API + 可指定基准币种”的版本，告诉我即可。\n\n已生成/更新本地文件：\n/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_115015_workspace/cs04/output/currency_converter.html\n/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_115015_workspace/cs04/output/currency_converter.py\n\n📁 ./ (3 项)\nruntime.sqlite\nruntime.sqlite-shm\nruntime.sqlite-wal\n\n<!DOCTYPE html>\n<html lang=\"zh-CN\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>汇率转换计算器</title>\n<style>\n  :root{\n    --bg:#f3f6fc;\n    --card:#ffffff;\n    --ink:#18202f;\n    --muted:#6b7688;\n    --line:#e4e9f2;\n    --accent:#2b6cf6;\n    --accent-ink:#ffffff;\n    --accent-soft:#e8f0ff;\n    --shadow:0 10px 30px rgba(24,32,47,.08);\n    --radius:18px;\n  }\n  @media (prefers-color-scheme: dark){\n    :root{\n      --bg:#0e131c;\n      --card:#161d29;\n      --ink:#e9eef7;\n      --muted:#98a3b5;\n      --line:#26303f;\n      --accent:#5b8cff;\n      --accent-ink:#0b1220;\n      --accent-soft:#1d2a44;\n      --shadow:0 10px 30px rgba(0,0,0,.35);\n    }\n  }\n  *,*::before,*::after{box-sizing:border-box}\n  html,body{margin:0}\n  body{\n    font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",\"PingFang SC\",\"Hiragino Sans GB\",\"Microsoft YaHei\",sans-serif;\n    color:var(--ink);\n    background:\n      radial-gradient(1100px 520px at 8% -10%, rgba(43,108,246,.16), transparent 60%),\n      radial-gradient(900px 480px at 92% 0%, rgba(20,180,150,.14), transparent 55%),\n      var(--bg);\n    background-attachment:fixed;\n    min-height:100vh;\n    padding:32px 16px 72px;\n    -webkit-font-smoothing:antialiased;\n  }\n  .wrap{max-width:800px;margin:0 auto;display:flex;flex-direction:column;gap:18px}\n  header.hero{text-align:center;padding:8px 0 2px}\n  header.hero h1{margin:0;font-size:clamp(22px,4.4vw,30px);letter-spacing:.5px}\n  header.hero p{margin:8px 0 0;color:var(--muted);font-size:13px;line-height:1.6}\n  .card{\n    background:var(--card);\n    border:1px solid ",
+          "artifacts": [
+            {
+              "artifact_id": "artifact-708d7f5cb6800af63c042e06",
+              "artifact_type": "file",
+              "digest": "671a05400eebff075deb1986c61c6d26c80e47fb3b84efca5916f243b40c52c9",
+              "reference": "artifact://core-scenarios/run-0e39bc7ab63b4a25ba76f52de1be1f80/artifact-708d7f5cb6800af63c042e06",
+              "exists": true,
+              "verified": true,
+              "run_id": "run-0e39bc7ab63b4a25ba76f52de1be1f80",
+              "display_name": "artifact-708d7f5cb6800af63c042e06",
+              "size": null,
+              "producer_workflow_id": "runtime-execution",
+              "producer_stage_id": "task:loop-5",
+              "created_revision": 1,
+              "created_at": ""
+            },
+            {
+              "artifact_id": "artifact-b1917c9ab91e7619960b193d",
+              "artifact_type": "file",
+              "digest": "5f4a3373b96c27965784f17b8b95c5c7cfecff7d475d2593247c334a1c7e9886",
+              "reference": "artifact://core-scenarios/run-0e39bc7ab63b4a25ba76f52de1be1f80/artifact-b1917c9ab91e7619960b193d",
+              "exists": true,
+              "verified": true,
+              "run_id": "run-0e39bc7ab63b4a25ba76f52de1be1f80",
+              "display_name": "artifact-b1917c9ab91e7619960b193d",
+              "size": null,
+              "producer_workflow_id": "runtime-execution",
+              "producer_stage_id": "task:loop-4",
+              "created_revision": 1,
+              "created_at": ""
+            }
+          ],
+          "provider_calls": 1,
+          "plan_calls": 1,
+          "replan_calls": 1,
+          "tool_calls": [
+            {
+              "tool": "filesystem.list",
+              "args": {
+                "path": "."
+              }
+            },
+            {
+              "tool": "filesystem.write",
+              "args": {
+                "path": "output/currency_converter.html",
+                "content": "<!DOCTYPE html>\n<html lang=\"zh-CN\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>汇率转换计算器</title>\n<s"
+              }
+            },
+            {
+              "tool": "filesystem.write",
+              "args": {
+                "path": "output/currency_converter.py",
+                "content": "#!/usr/bin/env python3\n# -*- coding: utf-8 -*-\n\"\"\"汇率转换计算器（命令行版）\n\n用法示例：\n    python currency_converter.py                       # 1 USD -> CNY\n    python currency"
+              }
+            },
+            {
+              "tool": "filesystem.edit",
+              "args": {
+                "path": "output/currency_converter.html",
+                "old_string": "    var tbl = tableRate(f, t);\n    if (overrides[pairKey(f, t)] && isFinite(tbl)) {\n      line += '　·　汇率表值：1 ' + f + ' = ' + fmtRate(tbl) + ' ' + t;\n    } else ",
+                "new_string": "    var tbl = tableRate(f, t);\n    if (overrides[pairKey(f, t)] && isFinite(tbl)) {\n      line += '　·　汇率表值：1 ' + f + ' = ' + fmtRate(tbl) + ' ' + t;\n    } else "
+              }
+            },
+            {
+              "tool": "filesystem.read",
+              "args": {
+                "path": "output/currency_converter.html"
+              }
+            }
+          ],
+          "intent": {
+            "domain": "development",
+            "action": "create exchange rate converter calculator and report its location",
+            "target": "",
+            "confidence": 0.98,
+            "summary": "用户要求制作一个汇率转换计算器，并在完成后告知产物位置。",
+            "requires_execution": true,
+            "artifact_required": true,
+            "requested_outcomes": [
+              "FILE_MUTATION",
+              "USER_VISIBLE_OUTPUT"
+            ],
+            "delivery_requirements": [
+              {
+                "id": "deliverable-1",
+                "kind": "file",
+                "quantity": 1,
+                "target": "",
+                "acceptance_criteria": [
+                  {
+                    "kind": "reply_mentions_artifact_path"
+                  }
+                ]
+              }
+            ],
+            "acceptance_criteria": [
+              {
+                "kind": "reply_mentions_artifact_path"
+              }
+            ],
+            "write_targets": [],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "new_request",
+            "resolved_request": "帮我写一个汇率转换计算器，完成并保存产物后，在回复中告诉我它放在哪里。",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": ""
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "stage_started",
+            "task_started",
+            "task_completed",
+            "task_started",
+            "task_completed",
+            "task_started",
+            "task_completed",
+            "task_started",
+            "task_completed",
+            "task_started",
+            "task_completed",
+            "assistant_delta",
+            "stage_completed",
+            "run_completed"
+          ],
+          "failure_summary": null,
+          "error": "",
+          "duration_ms": 53.9
+        }
+      ],
+      "checks": [
+        {
+          "check": "status",
+          "passed": true,
+          "detail": "expected COMPLETED got COMPLETED",
+          "turn": 1
+        },
+        {
+          "check": "output_contains",
+          "passed": true,
+          "detail": "'output/' missing from output",
+          "turn": 1
+        },
+        {
+          "check": "artifact_exists_any",
+          "passed": true,
+          "detail": "no match for any of ['output/**/*.py', 'output/**/*.html']",
+          "turn": 1
+        },
+        {
+          "check": "intent.artifact_required",
+          "passed": true,
+          "detail": "expected True got True",
+          "turn": 1
+        }
+      ],
+      "files": {
+        "output/currency_converter.html": "<!DOCTYPE html>\n<html lang=\"zh-CN\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>汇率转换计算器</title>\n<style>\n  :root{\n    --bg:#f3f6fc;\n    --card:#ffffff;\n    --ink:#18202f;\n    --muted:#6b7688;\n    --line:#e4e9f2;\n    --accent:#2b6cf6;\n    --accent-ink:#ffffff;\n    --accent-soft:#e8f0ff;\n    --shadow:0 10px 30px rgba(24,32,47,.08);\n    --radius:18px;\n  }\n  @media (prefers-color-scheme: dark){\n    :root{\n      --bg:#0e131c;\n      --card:#161d29;\n      --ink:#e9eef7;\n      --muted:#98a3b5;\n      --line:#26303f;\n      --accent:#5b8cff;\n      --accent-ink:#0b1220;\n      --accent-soft:#1d2a44;\n      --shadow:0 10px 30px rgba(0,0,0,.35);\n    }\n  }\n  *,*::before,*::after{box-sizing:border-box}\n  html,body{margin:0}\n  body{\n    font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",\"PingFang SC\",\"Hiragino Sans GB\",\"Microsoft YaHei\",sans-serif;\n    color:var(--ink);\n    background:\n      radial-gradient(1100px 520px at 8% -10%, rgba(43,108,246,.16), transparent 60%),\n      radial-gradient(900px 480px at 92% 0%, rgba(20,180,150,.14), transparent 55%),\n      var(--bg);\n    background-attachment:fixed;\n    min-height:100vh;\n    padding:32px 16px 72px;\n    -webkit-font-smoothing:antialiased;\n  }\n  .wrap{max-width:800px;margin:0 auto;display:flex;flex-direction:column;gap:18px}\n  header.hero{text-align:center;padding:8px 0 2px}\n  header.hero h1{margin:0;font-size:clamp(22px,4.4vw,30px);letter-spacing:.5px}\n  header.hero p{margin:8px 0 0;color:var(--muted);font-size:13px;line-height:1.6}\n  .card{\n    background:var(--card);\n    border:1px solid var(--line);\n    border-radius:var(--radius);\n    box-shadow:var(--shadow);\n    padding:22px;\n  }\n  .card h2{\n    margin:0 0 14px;font-size:15px;letter-spacing:.4px;\n    display:flex;align-items:center;justify-content:space-between;gap:12px;\n  }\n  label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;letter-spacing:.4px}\n  input,select,button{font:inherit;color:inherit}\n  input[type=\"number\"],select{\n    width:100%;\n    padding:12px 14px;\n    background:transparent;\n    border:1px solid var(--line);\n    border-radius:12px;\n    outline:none;\n    transition:border-color .15s, box-shadow .15s, background .15s;\n  }\n  input[type=\"number\"]{font-size:20px;font-variant-numeric:tabular-nums;font-weight:600}\n  select{font-size:15px;cursor:pointer;appearance:none;background-image:none}\n  input[type=\"number\"]:focus,select:focus{\n    border-color:var(--accent);\n    box-shadow:0 0 0 4px var(--accent-soft);\n  }\n  .field{margin-bottom:14px}\n  .pickers{display:grid;grid-template-columns:1fr auto 1fr;gap:12px;align-items:end}\n  .swap{\n    width:44px;height:44px;margin-bottom:1px;\n    display:grid;place-items:center;\n    border:1px solid var(--line);background:var(--card);\n    border-radius:50%;cursor:pointer;font-size:18px;color:var(--muted);\n    transition:transform .18s, color .15s, border-color .15s;\n  }\n  .swap:hover{color:var(--accent);border-color:var(--accent);transform:rotate(180deg)}\n  .result{\n    margin-top:18px;padding:18px;border-radius:14px;\n    background:linear-gradient(135deg,var(--accent-soft),transparent 85%);\n    border:1px solid var(--line);\n  }\n  .result-main{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}\n  .result-value{\n    font-size:clamp(26px,6vw,38px);font-weight:700;letter-spacing:-.5px;\n    font-variant-numeric:tabular-nums;line-height:1.15;word-break:break-all;\n  }\n  .result-code{font-size:16px;font-weight:600;color:var(--muted)}\n  .rate-line{margin-top:8px;font-size:13px;color:var(--muted);line-height:1.7;font-variant-numeric:tabular-nums}\n  .row-inline{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:14px}\n  button.primary{\n    padding:11px 18px;border-radius:12px;border:1px solid transparent;\n    background:var(--accent);color:var(--accent-ink);font-weight:600;cursor:pointer;\n    transition:filter .15s, transform .1s;\n  }\n  button.primary:hover{filter:brightness(1.06)}\n  button.pri",
+        "output/currency_converter.py": "#!/usr/bin/env python3\n# -*- coding: utf-8 -*-\n\"\"\"汇率转换计算器（命令行版）\n\n用法示例：\n    python currency_converter.py                       # 1 USD -> CNY\n    python currency_converter.py 100 USD CNY\n    python currency_converter.py -a 100 -f USD -t CNY,JPY,EUR\n    python currency_converter.py --live -a 500 -f CNY -t USD\n    python currency_converter.py --list\n    python currency_converter.py -a 100 -f USD -t CNY --rate 7.25\n    python currency_converter.py -a 100 -f USD -t CNY --json\n\n说明：\n    * 默认使用内置离线汇率表（近似值，1 USD = rate 个该币种）。\n    * 加 --live 时联网获取欧洲央行（ECB）参考汇率，仅覆盖部分币种，失败会自动回退到离线表。\n\"\"\"\nfrom __future__ import annotations\n\nimport argparse\nimport json\nimport sys\nimport urllib.error\nimport urllib.request\n\nBASE = \"USD\"\nLIVE_URL = \"https://api.frankfurter.app/latest?from=USD\"\nTIMEOUT = 8.0\n\n# 币种代码 -> (中文名, 1 USD 可兑换的数量)\nCURRENCIES: dict[str, tuple[str, float]] = {\n    \"USD\": (\"美元\", 1.0),\n    \"CNY\": (\"人民币\", 7.10),\n    \"EUR\": (\"欧元\", 0.92),\n    \"JPY\": (\"日元\", 151.00),\n    \"GBP\": (\"英镑\", 0.79),\n    \"HKD\": (\"港币\", 7.81),\n    \"TWD\": (\"新台币\", 32.30),\n    \"KRW\": (\"韩元\", 1340.0),\n    \"AUD\": (\"澳元\", 1.52),\n    \"CAD\": (\"加元\", 1.37),\n    \"SGD\": (\"新加坡元\", 1.34),\n    \"CHF\": (\"瑞士法郎\", 0.88),\n    \"NZD\": (\"新西兰元\", 1.65),\n    \"THB\": (\"泰铢\", 34.50),\n    \"MYR\": (\"马来西亚林吉特\", 4.72),\n    \"IDR\": (\"印尼盾\", 15800.0),\n    \"PHP\": (\"菲律宾比索\", 56.50),\n    \"VND\": (\"越南盾\", 24800.0),\n    \"INR\": (\"印度卢比\", 83.50),\n    \"RUB\": (\"俄罗斯卢布\", 92.00),\n    \"BRL\": (\"巴西雷亚尔\", 5.05),\n    \"MXN\": (\"墨西哥比索\", 17.50),\n    \"ZAR\": (\"南非兰特\", 18.60),\n    \"TRY\": (\"土耳其里拉\", 32.50),\n    \"AED\": (\"阿联酋迪拉姆\", 3.67),\n    \"SAR\": (\"沙特里亚尔\", 3.75),\n    \"SEK\": (\"瑞典克朗\", 10.50),\n    \"NOK\": (\"挪威克朗\", 10.70),\n    \"DKK\": (\"丹麦克朗\", 6.87),\n    \"PLN\": (\"波兰兹罗提\", 3.95),\n    \"CZK\": (\"捷克克朗\", 23.20),\n    \"HUF\": (\"匈牙利福林\", 360.0),\n    \"ILS\": (\"以色列谢克尔\", 3.70),\n    \"EGP\": (\"埃及镑\", 48.00),\n    \"PKR\": (\"巴基斯坦卢比\", 278.0),\n    \"BDT\": (\"孟加拉塔卡\", 117.0),\n    \"BGN\": (\"保加利亚列弗\", 1.80),\n    \"RON\": (\"罗马尼亚列伊\", 4.58),\n    \"ISK\": (\"冰岛克朗\", 138.0),\n    \"NGN\": (\"尼日利亚奈拉\", 1500.0),\n}\n\n\ndef build_rates() -> dict[str, float]:\n    \"\"\"返回 {币种代码: 1 USD 可兑换数量} 的可修改副本。\"\"\"\n    return {code: rate for code, (_, rate) in CURRENCIES.items()}\n\n\ndef fmt_amount(value: float, precision: int | None = None) -> str:\n    if precision is not None:\n        return f\"{value:,.{precision}f}\"\n    a = abs(value)\n    if a == 0:\n        return \"0\"\n    if a < 0.01:\n        return f\"{value:,.8f}\".rstrip(\"0\").rstrip(\".\")\n    if a < 1:\n        return f\"{value:,.4f}\".rstrip(\"0\").rstrip(\".\")\n    if a < 1000:\n        return f\"{value:,.2f}\"\n    return f\"{value:,.0f}\"\n\n\ndef fmt_rate(value: float) -> str:\n    if value >= 1000:\n        return f\"{value:,.2f}\"\n    if value >= 1:\n        return f\"{value:,.4f}\"\n    return f\"{value:,.6f}\"\n\n\ndef fetch_live_rates() -> tuple[dict[str, float], str]:\n    \"\"\"从 frankfurter.app 获取以 USD 为基准的最新汇率，返回 (rates, 基准日期)。\"\"\"\n    req = urllib.request.Request(LIVE_URL, headers={\"User-Agent\": \"currency-converter/1.0\"})\n    with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:\n        payload = json.loads(resp.read().decode(\"utf-8\"))\n    rates = payload.get(\"rates\") or {}\n    return {k: float(v) for k, v in rates.items()}, str(payload.get(\"date\", \"未知\"))\n\n\ndef parse_targets(raw: list[str]) -> list[str]:\n    out: list[str] = []\n    for item in raw:\n        for part in str(item).replace(\";\", \",\").split(\",\"):\n            part = part.strip().upper()\n            if part and part not in out:\n                out.append(part)\n    return out\n\n\ndef print_currency_list(rates: dict[str, float]) -> None:\n    print(f\"{'代码':<6}{'名称':<12}{'1 USD =':>16}{'1 单位 = USD':>18}\")\n    print(\"-\" * 54)\n    for code in sorted(CURRENCIES):\n        name = CURRENCIES[code][0]\n        rate = rates[code]\n        per_usd = fmt_rate(rate)\n        inverse = fmt_rate(1 / rate) if rate else \"—\"\n        print(f\"{code:<6}{name:<12}{per_usd:>16}{inverse:>18}\")\n    print(\"-\" * 54)\n    print(f\"共 {len(CURRENCIES)} 个币种。离线汇率为近似值，仅供估算。\")\n\n\ndef main(argv: list[str] | None = None) -> int:\n    parser = argparse.ArgumentParser(\n        "
+      }
+    },
+    {
+      "id": "CS05",
+      "title": "follow-up '把它改成…' modifies the artifact created in turn 1",
+      "result": "FAIL",
+      "skip_reason": "",
+      "workspace": "/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_115015_workspace/cs05",
+      "duration_ms": 114.4,
+      "error": "",
+      "turns": [
+        {
+          "turn": 1,
+          "request": "写一个汇率换算函数 convert(amount, rate)，保存到 output/calculator.py",
+          "status": "COMPLETED",
+          "output": "已创建 `output/calculator.py`。\n\n**实现内容**\n\n```python\ndef convert(amount, rate):\n    ...\n    return float(amount_dec * rate_dec)\n```\n\n- 计算逻辑：`amount * rate`，即 1 单位源货币兑换 `rate` 个目标货币单位。\n- 精度处理：内部先用 `Decimal` 计算再转 `float`，避免 `0.1 * 3` 这类二进制浮点误差（`convert(\"99.9\", 0.14)` → `13.986`）。\n- 输入校验：\n  - `amount` / `rate` 支持 `int`、`float`、`Decimal`、数值字符串（两侧空白会被忽略）；其他类型或无法解析的字符串抛 `TypeError`（布尔值也被拒绝，防止 `True` 被当成 1 静默通过）。\n  - `rate` 必须大于 0，`amount` 允许为负（表示退款/欠款方向）；`NaN`、`inf` 一律抛 `ValueError`。\n- 附带 `_to_decimal()` 辅助函数做统一解析，文件末尾有 `if __name__ == \"__main__\":` 的两行自测示例。\n\n需要说明的两点，若与你的预期不符可以再调整：\n\n1. **返回值是 `float` 而不是 `Decimal`**。如果是做账务类场景、要求全程不丢精度，我可以改成返回 `Decimal`。\n2. **`rate` 不允许 ≤ 0**。如果你希望允许汇率为 0（比如占位/停牌）或允许负汇率，把那条校验放宽即可。\n\n另外，按当前授权我没有执行该文件，所以以上运行结果是根据代码逻辑推导的，不是实测输出。\n\n已生成/更新本地文件：\n/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_115015_workspace/cs05/output/calculator.py\n\n📁 ./ (3 项)\nruntime.sqlite\nruntime.sqlite-shm\nruntime.sqlite-wal",
+          "artifacts": [
+            {
+              "artifact_id": "artifact-d16e8af3fad5f7863648d568",
+              "artifact_type": "file",
+              "digest": "a81831944ad747ed42a577f99e72a6e0ebd2ab8ab83ad3ad8f843af29cbc016f",
+              "reference": "artifact://core-scenarios/run-ad7aedb5434e474daeb7911ecfd35242/artifact-d16e8af3fad5f7863648d568",
+              "exists": true,
+              "verified": true,
+              "run_id": "run-ad7aedb5434e474daeb7911ecfd35242",
+              "display_name": "artifact-d16e8af3fad5f7863648d568",
+              "size": null,
+              "producer_workflow_id": "runtime-execution",
+              "producer_stage_id": "task:loop-4",
+              "created_revision": 1,
+              "created_at": ""
+            }
+          ],
+          "provider_calls": 1,
+          "plan_calls": 1,
+          "replan_calls": 1,
+          "tool_calls": [
+            {
+              "tool": "filesystem.list",
+              "args": {
+                "path": "output"
+              }
+            },
+            {
+              "tool": "filesystem.list",
+              "args": {
+                "path": "."
+              }
+            },
+            {
+              "tool": "filesystem.write",
+              "args": {
+                "path": "output/calculator.py",
+                "content": "\"\"\"汇率换算工具。\n\n提供 convert(amount, rate) 函数，用于按给定汇率把金额从一种货币换算成另一种货币。\n\"\"\"\n\nfrom decimal import Decimal, InvalidOperation\n\n__all__ = [\"convert\"]\n\n\ndef convert(amount,"
+              }
+            }
+          ],
+          "intent": {
+            "domain": "development",
+            "action": "create Python script with convert function",
+            "target": "output/calculator.py",
+            "confidence": 0.95,
+            "summary": "在 output/calculator.py 中实现汇率换算函数 convert(amount, rate) 并交付该文件",
+            "requires_execution": true,
+            "artifact_required": true,
+            "requested_outcomes": [
+              "FILE_MUTATION",
+              "USER_VISIBLE_OUTPUT"
+            ],
+            "delivery_requirements": [
+              {
+                "id": "calculator_py",
+                "kind": "file",
+                "quantity": 1,
+                "target": "output/calculator.py",
+                "acceptance_criteria": []
+              }
+            ],
+            "acceptance_criteria": [],
+            "write_targets": [
+              "output/calculator.py"
+            ],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "new_request",
+            "resolved_request": "写一个汇率换算函数 convert(amount, rate)，并保存到 output/calculator.py 文件中。",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": ""
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "stage_started",
+            "task_started",
+            "task_completed",
+            "task_started",
+            "task_completed",
+            "task_started",
+            "task_completed",
+            "assistant_delta",
+            "stage_completed",
+            "run_completed"
+          ],
+          "failure_summary": null,
+          "error": "",
+          "duration_ms": 53.4
+        },
+        {
+          "turn": 2,
+          "request": "把它改成再加一个 HKD 到 JPY 的换算示例",
+          "status": "FAILED_TERMINAL",
+          "output": "LLM 服务调用失败（PROVIDER_UNAVAILABLE），本次目标尚未完成。",
+          "artifacts": [],
+          "provider_calls": 1,
+          "plan_calls": 1,
+          "replan_calls": 0,
+          "tool_calls": [],
+          "intent": {
+            "domain": "unknown",
+            "action": "",
+            "target": "",
+            "confidence": 0.0,
+            "summary": "意图理解所需的 LLM 服务不可用",
+            "requires_execution": true,
+            "artifact_required": false,
+            "requested_outcomes": [],
+            "delivery_requirements": [],
+            "acceptance_criteria": [],
+            "write_targets": [],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "new_request",
+            "resolved_request": "",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": "PROVIDER_UNAVAILABLE"
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "run_failed"
+          ],
+          "failure_summary": {
+            "code": "PROVIDER_UNAVAILABLE",
+            "message": "A required provider was unavailable",
+            "retryable": true,
+            "details": {
+              "failure_class": "provider",
+              "failed_component": "runtime"
+            }
+          },
+          "error": "",
+          "duration_ms": 52.8
+        }
+      ],
+      "checks": [
+        {
+          "check": "status",
+          "passed": true,
+          "detail": "expected COMPLETED got COMPLETED",
+          "turn": 1
+        },
+        {
+          "check": "artifact_exists",
+          "passed": true,
+          "detail": "'output/calculator.py' matched ['/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_115015_workspace/cs05/output/calculator.py']",
+          "turn": 1
+        },
+        {
+          "check": "status",
+          "passed": false,
+          "detail": "expected COMPLETED got FAILED_TERMINAL",
+          "turn": 2
+        },
+        {
+          "check": "file_contains:output/calculator.py",
+          "passed": false,
+          "detail": "tokens ['convert', 'HKD', 'JPY'] in 'output/calculator.py': no file contains all tokens (1 matched)",
+          "turn": 2
+        },
+        {
+          "check": "intent.conversation_relation_in",
+          "passed": false,
+          "detail": "expected one of ['reference', 'correction'] got 'new_request'",
+          "turn": 2
+        },
+        {
+          "check": "intent.resolved_request_contains",
+          "passed": false,
+          "detail": "'calculator' in resolved_request=''",
+          "turn": 2
+        }
+      ],
+      "files": {
+        "output/calculator.py": "\"\"\"汇率换算工具。\n\n提供 convert(amount, rate) 函数，用于按给定汇率把金额从一种货币换算成另一种货币。\n\"\"\"\n\nfrom decimal import Decimal, InvalidOperation\n\n__all__ = [\"convert\"]\n\n\ndef convert(amount, rate):\n    \"\"\"按汇率换算金额。\n\n    参数:\n        amount: 待换算的金额（数值或可转为数值的字符串），可以为负数。\n        rate: 汇率，即 1 单位源货币可兑换的目标货币数量，必须大于 0。\n\n    返回:\n        换算后的金额，类型为 float。\n\n    异常:\n        TypeError: amount 或 rate 不是数值/数值字符串。\n        ValueError: rate 小于等于 0，或传入的是 NaN / 无穷大。\n\n    示例:\n        >>> convert(100, 7.2)\n        720.0\n        >>> convert(\"99.9\", 0.14)\n        13.986\n    \"\"\"\n    amount_dec = _to_decimal(amount, \"amount\")\n    rate_dec = _to_decimal(rate, \"rate\")\n\n    if not rate_dec.is_finite() or rate_dec <= 0:\n        raise ValueError(f\"rate 必须是大于 0 的有限数值，当前为 {rate!r}\")\n\n    return float(amount_dec * rate_dec)\n\n\ndef _to_decimal(value, name):\n    \"\"\"把输入安全地转换成 Decimal，转换失败时抛出带字段名的异常。\"\"\"\n    if isinstance(value, bool):\n        raise TypeError(f\"{name} 必须是数值，不能是布尔值\")\n    if isinstance(value, Decimal):\n        result = value\n    elif isinstance(value, (int, float)):\n        result = Decimal(str(value))\n    elif isinstance(value, str):\n        try:\n            result = Decimal(value.strip())\n        except InvalidOperation:\n            raise TypeError(f\"{name} 无法解析为数值: {value!r}\") from None\n    else:\n        raise TypeError(f\"{name} 必须是数值或数值字符串，当前类型为 {type(value).__name__}\")\n\n    if not result.is_finite():\n        raise ValueError(f\"{name} 必须是有限数值，当前为 {value!r}\")\n    return result\n\n\nif __name__ == \"__main__\":\n    print(convert(100, 7.2))\n    print(convert(\"99.9\", 0.14))\n"
+      }
+    },
+    {
+      "id": "CS06",
+      "title": "'总结一下上面' resolves against the previous answer",
+      "result": "FAIL",
+      "skip_reason": "",
+      "workspace": "/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_115015_workspace/cs06",
+      "duration_ms": 113.9,
+      "error": "",
+      "turns": [
+        {
+          "turn": 1,
+          "request": "解释一下 Python 的上下文管理器是什么",
+          "status": "FAILED_TERMINAL",
+          "output": "目标尚未完成，缺少可验证证据：INTENT_CONTRACT_INVALID。本次不会报告为成功。",
+          "artifacts": [],
+          "provider_calls": 2,
+          "plan_calls": 1,
+          "replan_calls": 0,
+          "tool_calls": [],
+          "intent": {
+            "domain": "unknown",
+            "action": "",
+            "target": "",
+            "confidence": 0.0,
+            "summary": "",
+            "requires_execution": true,
+            "artifact_required": false,
+            "requested_outcomes": [],
+            "delivery_requirements": [],
+            "acceptance_criteria": [],
+            "write_targets": [],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "new_request",
+            "resolved_request": "",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": "INTENT_CONTRACT_INVALID"
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "run_failed"
+          ],
+          "failure_summary": {
+            "code": "INTENT_CONTRACT_INVALID",
+            "message": "The Run did not complete successfully",
+            "retryable": false,
+            "details": {
+              "failure_class": "cognition",
+              "failed_component": "runtime"
+            }
+          },
+          "error": "",
+          "duration_ms": 53.6
+        },
+        {
+          "turn": 2,
+          "request": "总结一下上面说的，用一句话",
+          "status": "FAILED_TERMINAL",
+          "output": "目标尚未完成，缺少可验证证据：INTENT_CONTRACT_INVALID。本次不会报告为成功。",
+          "artifacts": [],
+          "provider_calls": 2,
+          "plan_calls": 1,
+          "replan_calls": 0,
+          "tool_calls": [],
+          "intent": {
+            "domain": "unknown",
+            "action": "",
+            "target": "",
+            "confidence": 0.0,
+            "summary": "",
+            "requires_execution": true,
+            "artifact_required": false,
+            "requested_outcomes": [],
+            "delivery_requirements": [],
+            "acceptance_criteria": [],
+            "write_targets": [],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "new_request",
+            "resolved_request": "",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": "INTENT_CONTRACT_INVALID"
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "run_failed"
+          ],
+          "failure_summary": {
+            "code": "INTENT_CONTRACT_INVALID",
+            "message": "The Run did not complete successfully",
+            "retryable": false,
+            "details": {
+              "failure_class": "cognition",
+              "failed_component": "runtime"
+            }
+          },
+          "error": "",
+          "duration_ms": 52.9
+        }
+      ],
+      "checks": [
+        {
+          "check": "status",
+          "passed": false,
+          "detail": "expected COMPLETED got FAILED_TERMINAL",
+          "turn": 1
+        },
+        {
+          "check": "status",
+          "passed": false,
+          "detail": "expected COMPLETED got FAILED_TERMINAL",
+          "turn": 2
+        },
+        {
+          "check": "intent.conversation_relation",
+          "passed": false,
+          "detail": "expected 'reference' got 'new_request'",
+          "turn": 2
+        }
+      ],
+      "files": {}
+    },
+    {
+      "id": "CS07",
+      "title": "'再加一个' continues the previous generation in-session",
+      "result": "FAIL",
+      "skip_reason": "",
+      "workspace": "/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_115015_workspace/cs07",
+      "duration_ms": 114.4,
+      "error": "",
+      "turns": [
+        {
+          "turn": 1,
+          "request": "给我讲三个关于程序员的冷笑话",
+          "status": "FAILED_TERMINAL",
+          "output": "目标尚未完成，缺少可验证证据：INTENT_CONTRACT_INVALID。本次不会报告为成功。",
+          "artifacts": [],
+          "provider_calls": 2,
+          "plan_calls": 1,
+          "replan_calls": 0,
+          "tool_calls": [],
+          "intent": {
+            "domain": "unknown",
+            "action": "",
+            "target": "",
+            "confidence": 0.0,
+            "summary": "",
+            "requires_execution": true,
+            "artifact_required": false,
+            "requested_outcomes": [],
+            "delivery_requirements": [],
+            "acceptance_criteria": [],
+            "write_targets": [],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "new_request",
+            "resolved_request": "",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": "INTENT_CONTRACT_INVALID"
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "run_failed"
+          ],
+          "failure_summary": {
+            "code": "INTENT_CONTRACT_INVALID",
+            "message": "The Run did not complete successfully",
+            "retryable": false,
+            "details": {
+              "failure_class": "cognition",
+              "failed_component": "runtime"
+            }
+          },
+          "error": "",
+          "duration_ms": 53.8
+        },
+        {
+          "turn": 2,
+          "request": "再加一个",
+          "status": "FAILED_TERMINAL",
+          "output": "目标尚未完成，缺少可验证证据：INTENT_CONTRACT_INVALID。本次不会报告为成功。",
+          "artifacts": [],
+          "provider_calls": 2,
+          "plan_calls": 1,
+          "replan_calls": 0,
+          "tool_calls": [],
+          "intent": {
+            "domain": "unknown",
+            "action": "",
+            "target": "",
+            "confidence": 0.0,
+            "summary": "",
+            "requires_execution": true,
+            "artifact_required": false,
+            "requested_outcomes": [],
+            "delivery_requirements": [],
+            "acceptance_criteria": [],
+            "write_targets": [],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "new_request",
+            "resolved_request": "",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": "INTENT_CONTRACT_INVALID"
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "run_failed"
+          ],
+          "failure_summary": {
+            "code": "INTENT_CONTRACT_INVALID",
+            "message": "The Run did not complete successfully",
+            "retryable": false,
+            "details": {
+              "failure_class": "cognition",
+              "failed_component": "runtime"
+            }
+          },
+          "error": "",
+          "duration_ms": 53.0
+        }
+      ],
+      "checks": [
+        {
+          "check": "status",
+          "passed": false,
+          "detail": "expected COMPLETED got FAILED_TERMINAL",
+          "turn": 1
+        },
+        {
+          "check": "status",
+          "passed": false,
+          "detail": "expected COMPLETED got FAILED_TERMINAL",
+          "turn": 2
+        },
+        {
+          "check": "intent.conversation_relation",
+          "passed": false,
+          "detail": "expected 'reference' got 'new_request'",
+          "turn": 2
+        }
+      ],
+      "files": {}
+    },
+    {
+      "id": "CS08",
+      "title": "memory remember then recall across turns",
+      "result": "FAIL",
+      "skip_reason": "",
+      "workspace": "/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_115015_workspace/cs08",
+      "duration_ms": 115.7,
+      "error": "",
+      "turns": [
+        {
+          "turn": 1,
+          "request": "记住：我的项目代号是 NEBULA-7",
+          "status": "FAILED_TERMINAL",
+          "output": "目标尚未完成，缺少可验证证据：INTENT_CONTRACT_INVALID。本次不会报告为成功。",
+          "artifacts": [],
+          "provider_calls": 2,
+          "plan_calls": 1,
+          "replan_calls": 0,
+          "tool_calls": [],
+          "intent": {
+            "domain": "unknown",
+            "action": "",
+            "target": "",
+            "confidence": 0.0,
+            "summary": "",
+            "requires_execution": true,
+            "artifact_required": false,
+            "requested_outcomes": [],
+            "delivery_requirements": [],
+            "acceptance_criteria": [],
+            "write_targets": [],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "new_request",
+            "resolved_request": "",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": "INTENT_CONTRACT_INVALID"
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "run_failed"
+          ],
+          "failure_summary": {
+            "code": "INTENT_CONTRACT_INVALID",
+            "message": "The Run did not complete successfully",
+            "retryable": false,
+            "details": {
+              "failure_class": "cognition",
+              "failed_component": "runtime"
+            }
+          },
+          "error": "",
+          "duration_ms": 52.7
+        },
+        {
+          "turn": 2,
+          "request": "我的项目代号是什么？",
+          "status": "FAILED_TERMINAL",
+          "output": "目标尚未完成，缺少可验证证据：INTENT_CONTRACT_INVALID。本次不会报告为成功。",
+          "artifacts": [],
+          "provider_calls": 2,
+          "plan_calls": 1,
+          "replan_calls": 0,
+          "tool_calls": [],
+          "intent": {
+            "domain": "unknown",
+            "action": "",
+            "target": "",
+            "confidence": 0.0,
+            "summary": "",
+            "requires_execution": true,
+            "artifact_required": false,
+            "requested_outcomes": [],
+            "delivery_requirements": [],
+            "acceptance_criteria": [],
+            "write_targets": [],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "new_request",
+            "resolved_request": "",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": "INTENT_CONTRACT_INVALID"
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "run_failed"
+          ],
+          "failure_summary": {
+            "code": "INTENT_CONTRACT_INVALID",
+            "message": "The Run did not complete successfully",
+            "retryable": false,
+            "details": {
+              "failure_class": "cognition",
+              "failed_component": "runtime"
+            }
+          },
+          "error": "",
+          "duration_ms": 53.7
+        }
+      ],
+      "checks": [
+        {
+          "check": "status",
+          "passed": false,
+          "detail": "expected COMPLETED got FAILED_TERMINAL",
+          "turn": 1
+        },
+        {
+          "check": "intent.memory_action",
+          "passed": false,
+          "detail": "expected 'remember' got 'none'",
+          "turn": 1
+        },
+        {
+          "check": "status",
+          "passed": false,
+          "detail": "expected COMPLETED got FAILED_TERMINAL",
+          "turn": 2
+        },
+        {
+          "check": "output_contains",
+          "passed": false,
+          "detail": "'NEBULA-7' missing from output",
+          "turn": 2
+        }
+      ],
+      "files": {}
+    },
+    {
+      "id": "CS09",
+      "title": "genuinely vague request clarifies instead of guessing",
+      "result": "FAIL",
+      "skip_reason": "",
+      "workspace": "/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_115015_workspace/cs09",
+      "duration_ms": 65.5,
+      "error": "",
+      "turns": [
+        {
+          "turn": 1,
+          "request": "帮我弄一下那个东西",
+          "status": "FAILED_TERMINAL",
+          "output": "目标尚未完成，缺少可验证证据：INTENT_CONTRACT_INVALID。本次不会报告为成功。",
+          "artifacts": [],
+          "provider_calls": 2,
+          "plan_calls": 1,
+          "replan_calls": 0,
+          "tool_calls": [],
+          "intent": {
+            "domain": "unknown",
+            "action": "",
+            "target": "",
+            "confidence": 0.0,
+            "summary": "",
+            "requires_execution": true,
+            "artifact_required": false,
+            "requested_outcomes": [],
+            "delivery_requirements": [],
+            "acceptance_criteria": [],
+            "write_targets": [],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "new_request",
+            "resolved_request": "",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": "INTENT_CONTRACT_INVALID"
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "run_failed"
+          ],
+          "failure_summary": {
+            "code": "INTENT_CONTRACT_INVALID",
+            "message": "The Run did not complete successfully",
+            "retryable": false,
+            "details": {
+              "failure_class": "cognition",
+              "failed_component": "runtime"
+            }
+          },
+          "error": "",
+          "duration_ms": 54.0
+        }
+      ],
+      "checks": [
+        {
+          "check": "status_in",
+          "passed": false,
+          "detail": "expected one of ['COMPLETED', 'BLOCKED', 'WAITING_USER'] got FAILED_TERMINAL",
+          "turn": 1
+        },
+        {
+          "check": "artifact_absent",
+          "passed": true,
+          "detail": "'output/**' unexpectedly matched []",
+          "turn": 1
+        },
+        {
+          "check": "artifact_absent",
+          "passed": true,
+          "detail": "'src/**' unexpectedly matched []",
+          "turn": 1
+        },
+        {
+          "check": "artifact_absent",
+          "passed": true,
+          "detail": "'*.py' unexpectedly matched []",
+          "turn": 1
+        },
+        {
+          "check": "artifact_absent",
+          "passed": true,
+          "detail": "'*.txt' unexpectedly matched []",
+          "turn": 1
+        },
+        {
+          "check": "artifact_absent",
+          "passed": true,
+          "detail": "'*.md' unexpectedly matched []",
+          "turn": 1
+        },
+        {
+          "check": "no_tool_calls",
+          "passed": true,
+          "detail": "tools used: []",
+          "turn": 1
+        }
+      ],
+      "files": {}
+    },
+    {
+      "id": "CS10",
+      "title": "search then write a source-backed report file",
+      "result": "FAIL",
+      "skip_reason": "",
+      "workspace": "/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_115015_workspace/cs10",
+      "duration_ms": 63.0,
+      "error": "",
+      "turns": [
+        {
+          "turn": 1,
+          "request": "搜索一下 FastAPI 近期的版本更新，把带来源链接的总结保存到 output/fastapi_notes.md",
+          "status": "FAILED_TERMINAL",
+          "output": "目标尚未完成，缺少可验证证据：INTENT_CONTRACT_INVALID。本次不会报告为成功。",
+          "artifacts": [],
+          "provider_calls": 2,
+          "plan_calls": 1,
+          "replan_calls": 0,
+          "tool_calls": [],
+          "intent": {
+            "domain": "unknown",
+            "action": "",
+            "target": "",
+            "confidence": 0.0,
+            "summary": "",
+            "requires_execution": true,
+            "artifact_required": false,
+            "requested_outcomes": [],
+            "delivery_requirements": [],
+            "acceptance_criteria": [],
+            "write_targets": [],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "new_request",
+            "resolved_request": "",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": "INTENT_CONTRACT_INVALID"
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "run_failed"
+          ],
+          "failure_summary": {
+            "code": "INTENT_CONTRACT_INVALID",
+            "message": "The Run did not complete successfully",
+            "retryable": false,
+            "details": {
+              "failure_class": "cognition",
+              "failed_component": "runtime"
+            }
+          },
+          "error": "",
+          "duration_ms": 52.8
+        }
+      ],
+      "checks": [
+        {
+          "check": "status",
+          "passed": false,
+          "detail": "expected COMPLETED got FAILED_TERMINAL",
+          "turn": 1
+        },
+        {
+          "check": "artifact_exists",
+          "passed": false,
+          "detail": "'output/fastapi_notes.md' matched nothing",
+          "turn": 1
+        },
+        {
+          "check": "file_contains:output/fastapi_notes.md",
+          "passed": false,
+          "detail": "tokens ['http'] in 'output/fastapi_notes.md': no file contains all tokens (0 matched)",
+          "turn": 1
+        },
+        {
+          "check": "tools_any",
+          "passed": false,
+          "detail": "none of ['web_search', 'web_news_search', 'web_deep_search'] used (tools: [])",
+          "turn": 1
+        }
+      ],
+      "files": {}
+    },
+    {
+      "id": "CS11",
+      "title": "explicit command request executes for real",
+      "result": "SKIP",
+      "skip_reason": "no_execution_environment: Docker is unavailable and TSAGENT_ALLOW_LOCAL_EXECUTION is not set",
+      "workspace": "",
+      "duration_ms": 0.0,
+      "error": "",
+      "turns": [],
+      "checks": [],
+      "files": {}
+    },
+    {
+      "id": "CS12",
+      "title": "'不要运行' prohibition blocks execution tools",
+      "result": "FAIL",
+      "skip_reason": "",
+      "workspace": "/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_115015_workspace/cs12",
+      "duration_ms": 88.6,
+      "error": "",
+      "turns": [
+        {
+          "turn": 1,
+          "request": "写一个打印前 10 个斐波那契数的脚本，保存到 output/fib.py，但不要运行它",
+          "status": "FAILED_TERMINAL",
+          "output": "目标尚未完成，缺少可验证证据：INTENT_CONTRACT_INVALID。本次不会报告为成功。",
+          "artifacts": [],
+          "provider_calls": 2,
+          "plan_calls": 1,
+          "replan_calls": 0,
+          "tool_calls": [],
+          "intent": {
+            "domain": "unknown",
+            "action": "",
+            "target": "",
+            "confidence": 0.0,
+            "summary": "",
+            "requires_execution": true,
+            "artifact_required": false,
+            "requested_outcomes": [],
+            "delivery_requirements": [],
+            "acceptance_criteria": [],
+            "write_targets": [],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "new_request",
+            "resolved_request": "",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": "INTENT_CONTRACT_INVALID"
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "run_failed"
+          ],
+          "failure_summary": {
+            "code": "INTENT_CONTRACT_INVALID",
+            "message": "The Run did not complete successfully",
+            "retryable": false,
+            "details": {
+              "failure_class": "cognition",
+              "failed_component": "runtime"
+            }
+          },
+          "error": "",
+          "duration_ms": 60.2
+        }
+      ],
+      "checks": [
+        {
+          "check": "status",
+          "passed": false,
+          "detail": "expected COMPLETED got FAILED_TERMINAL",
+          "turn": 1
+        },
+        {
+          "check": "artifact_exists",
+          "passed": false,
+          "detail": "'output/fib.py' matched nothing",
+          "turn": 1
+        },
+        {
+          "check": "no_tools",
+          "passed": true,
+          "detail": "'shell' was invoked (tools: [])",
+          "turn": 1
+        },
+        {
+          "check": "no_tools",
+          "passed": true,
+          "detail": "'run_python' was invoked (tools: [])",
+          "turn": 1
+        },
+        {
+          "check": "no_tools",
+          "passed": true,
+          "detail": "'run_python_file' was invoked (tools: [])",
+          "turn": 1
+        },
+        {
+          "check": "intent.prohibited_effects_contains",
+          "passed": false,
+          "detail": "'CODE_EXECUTION' in []",
+          "turn": 1
+        },
+        {
+          "check": "intent.prohibited_effects_contains",
+          "passed": false,
+          "detail": "'COMMAND_EXECUTION' in []",
+          "turn": 1
+        }
+      ],
+      "files": {}
+    },
+    {
+      "id": "CS13",
+      "title": "session continuity survives a service restart on the same sqlite",
+      "result": "FAIL",
+      "skip_reason": "",
+      "workspace": "/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_115015_workspace/cs13",
+      "duration_ms": 120.0,
+      "error": "",
+      "turns": [
+        {
+          "turn": 1,
+          "request": "写一个记账脚本保存到 output/ledger.py，支持添加记录",
+          "status": "FAILED_TERMINAL",
+          "output": "目标尚未完成，缺少可验证证据：INTENT_CONTRACT_INVALID。本次不会报告为成功。",
+          "artifacts": [],
+          "provider_calls": 2,
+          "plan_calls": 1,
+          "replan_calls": 0,
+          "tool_calls": [],
+          "intent": {
+            "domain": "unknown",
+            "action": "",
+            "target": "",
+            "confidence": 0.0,
+            "summary": "",
+            "requires_execution": true,
+            "artifact_required": false,
+            "requested_outcomes": [],
+            "delivery_requirements": [],
+            "acceptance_criteria": [],
+            "write_targets": [],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "new_request",
+            "resolved_request": "",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": "INTENT_CONTRACT_INVALID"
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "run_failed"
+          ],
+          "failure_summary": {
+            "code": "INTENT_CONTRACT_INVALID",
+            "message": "The Run did not complete successfully",
+            "retryable": false,
+            "details": {
+              "failure_class": "cognition",
+              "failed_component": "runtime"
+            }
+          },
+          "error": "",
+          "duration_ms": 54.5
+        },
+        {
+          "turn": 2,
+          "request": "在它里面再加一个删除记录的函数",
+          "status": "FAILED_TERMINAL",
+          "output": "目标尚未完成，缺少可验证证据：INTENT_CONTRACT_INVALID。本次不会报告为成功。",
+          "artifacts": [],
+          "provider_calls": 2,
+          "plan_calls": 1,
+          "replan_calls": 0,
+          "tool_calls": [],
+          "intent": {
+            "domain": "unknown",
+            "action": "",
+            "target": "",
+            "confidence": 0.0,
+            "summary": "",
+            "requires_execution": true,
+            "artifact_required": false,
+            "requested_outcomes": [],
+            "delivery_requirements": [],
+            "acceptance_criteria": [],
+            "write_targets": [],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "new_request",
+            "resolved_request": "",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": "INTENT_CONTRACT_INVALID"
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "run_failed"
+          ],
+          "failure_summary": {
+            "code": "INTENT_CONTRACT_INVALID",
+            "message": "The Run did not complete successfully",
+            "retryable": false,
+            "details": {
+              "failure_class": "cognition",
+              "failed_component": "runtime"
+            }
+          },
+          "error": "",
+          "duration_ms": 52.5
+        }
+      ],
+      "checks": [
+        {
+          "check": "status",
+          "passed": false,
+          "detail": "expected COMPLETED got FAILED_TERMINAL",
+          "turn": 1
+        },
+        {
+          "check": "artifact_exists",
+          "passed": false,
+          "detail": "'output/ledger.py' matched nothing",
+          "turn": 1
+        },
+        {
+          "check": "status",
+          "passed": false,
+          "detail": "expected COMPLETED got FAILED_TERMINAL",
+          "turn": 2
+        },
+        {
+          "check": "file_contains:output/ledger.py",
+          "passed": false,
+          "detail": "tokens ['def'] in 'output/ledger.py': no file contains all tokens (0 matched)",
+          "turn": 2
+        },
+        {
+          "check": "intent.conversation_relation_in",
+          "passed": false,
+          "detail": "expected one of ['reference', 'correction'] got 'new_request'",
+          "turn": 2
+        },
+        {
+          "check": "intent.resolved_request_contains",
+          "passed": false,
+          "detail": "'ledger' in resolved_request=''",
+          "turn": 2
+        }
+      ],
+      "files": {}
+    },
+    {
+      "id": "CS14",
+      "title": "correction '不对，我要的是本地文件' still delivers a real artifact",
+      "result": "FAIL",
+      "skip_reason": "",
+      "workspace": "/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_115015_workspace/cs14",
+      "duration_ms": 114.7,
+      "error": "",
+      "turns": [
+        {
+          "turn": 1,
+          "request": "帮我写个计算器",
+          "status": "FAILED_TERMINAL",
+          "output": "目标尚未完成，缺少可验证证据：INTENT_CONTRACT_INVALID。本次不会报告为成功。",
+          "artifacts": [],
+          "provider_calls": 2,
+          "plan_calls": 1,
+          "replan_calls": 0,
+          "tool_calls": [],
+          "intent": {
+            "domain": "unknown",
+            "action": "",
+            "target": "",
+            "confidence": 0.0,
+            "summary": "",
+            "requires_execution": true,
+            "artifact_required": false,
+            "requested_outcomes": [],
+            "delivery_requirements": [],
+            "acceptance_criteria": [],
+            "write_targets": [],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "new_request",
+            "resolved_request": "",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": "INTENT_CONTRACT_INVALID"
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "run_failed"
+          ],
+          "failure_summary": {
+            "code": "INTENT_CONTRACT_INVALID",
+            "message": "The Run did not complete successfully",
+            "retryable": false,
+            "details": {
+              "failure_class": "cognition",
+              "failed_component": "runtime"
+            }
+          },
+          "error": "",
+          "duration_ms": 54.0
+        },
+        {
+          "turn": 2,
+          "request": "不对，我要的是你在本地生成一个计算器脚本文件",
+          "status": "FAILED_TERMINAL",
+          "output": "目标尚未完成，缺少可验证证据：INTENT_CONTRACT_INVALID。本次不会报告为成功。",
+          "artifacts": [],
+          "provider_calls": 2,
+          "plan_calls": 1,
+          "replan_calls": 0,
+          "tool_calls": [],
+          "intent": {
+            "domain": "unknown",
+            "action": "",
+            "target": "",
+            "confidence": 0.0,
+            "summary": "",
+            "requires_execution": true,
+            "artifact_required": false,
+            "requested_outcomes": [],
+            "delivery_requirements": [],
+            "acceptance_criteria": [],
+            "write_targets": [],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "new_request",
+            "resolved_request": "",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": "INTENT_CONTRACT_INVALID"
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "run_failed"
+          ],
+          "failure_summary": {
+            "code": "INTENT_CONTRACT_INVALID",
+            "message": "The Run did not complete successfully",
+            "retryable": false,
+            "details": {
+              "failure_class": "cognition",
+              "failed_component": "runtime"
+            }
+          },
+          "error": "",
+          "duration_ms": 52.9
+        }
+      ],
+      "checks": [
+        {
+          "check": "status",
+          "passed": false,
+          "detail": "expected COMPLETED got FAILED_TERMINAL",
+          "turn": 1
+        },
+        {
+          "check": "artifact_exists_any",
+          "passed": false,
+          "detail": "no match for any of ['output/**/*.py', 'output/**/*.html']",
+          "turn": 1
+        },
+        {
+          "check": "status",
+          "passed": false,
+          "detail": "expected COMPLETED got FAILED_TERMINAL",
+          "turn": 2
+        },
+        {
+          "check": "artifact_exists_any",
+          "passed": false,
+          "detail": "no match for any of ['output/**/*.py', 'output/**/*.html']",
+          "turn": 2
+        },
+        {
+          "check": "intent.conversation_relation_in",
+          "passed": false,
+          "detail": "expected one of ['correction', 'reference'] got 'new_request'",
+          "turn": 2
+        }
+      ],
+      "files": {}
+    },
+    {
+      "id": "CS15",
+      "title": "three-turn reference chain in one session",
+      "result": "FAIL",
+      "skip_reason": "",
+      "workspace": "/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_115015_workspace/cs15",
+      "duration_ms": 169.0,
+      "error": "",
+      "turns": [
+        {
+          "turn": 1,
+          "request": "1+1 等于几",
+          "status": "FAILED_TERMINAL",
+          "output": "目标尚未完成，缺少可验证证据：INTENT_CONTRACT_INVALID。本次不会报告为成功。",
+          "artifacts": [],
+          "provider_calls": 2,
+          "plan_calls": 1,
+          "replan_calls": 0,
+          "tool_calls": [],
+          "intent": {
+            "domain": "unknown",
+            "action": "",
+            "target": "",
+            "confidence": 0.0,
+            "summary": "",
+            "requires_execution": true,
+            "artifact_required": false,
+            "requested_outcomes": [],
+            "delivery_requirements": [],
+            "acceptance_criteria": [],
+            "write_targets": [],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "new_request",
+            "resolved_request": "",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": "INTENT_CONTRACT_INVALID"
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "run_failed"
+          ],
+          "failure_summary": {
+            "code": "INTENT_CONTRACT_INVALID",
+            "message": "The Run did not complete successfully",
+            "retryable": false,
+            "details": {
+              "failure_class": "cognition",
+              "failed_component": "runtime"
+            }
+          },
+          "error": "",
+          "duration_ms": 52.9
+        },
+        {
+          "turn": 2,
+          "request": "把它乘以 10 是多少",
+          "status": "FAILED_TERMINAL",
+          "output": "目标尚未完成，缺少可验证证据：INTENT_CONTRACT_INVALID。本次不会报告为成功。",
+          "artifacts": [],
+          "provider_calls": 2,
+          "plan_calls": 1,
+          "replan_calls": 0,
+          "tool_calls": [],
+          "intent": {
+            "domain": "unknown",
+            "action": "",
+            "target": "",
+            "confidence": 0.0,
+            "summary": "",
+            "requires_execution": true,
+            "artifact_required": false,
+            "requested_outcomes": [],
+            "delivery_requirements": [],
+            "acceptance_criteria": [],
+            "write_targets": [],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "new_request",
+            "resolved_request": "",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": "INTENT_CONTRACT_INVALID"
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "run_failed"
+          ],
+          "failure_summary": {
+            "code": "INTENT_CONTRACT_INVALID",
+            "message": "The Run did not complete successfully",
+            "retryable": false,
+            "details": {
+              "failure_class": "cognition",
+              "failed_component": "runtime"
+            }
+          },
+          "error": "",
+          "duration_ms": 53.2
+        },
+        {
+          "turn": 3,
+          "request": "总结一下上面的对话",
+          "status": "FAILED_TERMINAL",
+          "output": "目标尚未完成，缺少可验证证据：INTENT_CONTRACT_INVALID。本次不会报告为成功。",
+          "artifacts": [],
+          "provider_calls": 2,
+          "plan_calls": 1,
+          "replan_calls": 0,
+          "tool_calls": [],
+          "intent": {
+            "domain": "unknown",
+            "action": "",
+            "target": "",
+            "confidence": 0.0,
+            "summary": "",
+            "requires_execution": true,
+            "artifact_required": false,
+            "requested_outcomes": [],
+            "delivery_requirements": [],
+            "acceptance_criteria": [],
+            "write_targets": [],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "new_request",
+            "resolved_request": "",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": "INTENT_CONTRACT_INVALID"
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "run_failed"
+          ],
+          "failure_summary": {
+            "code": "INTENT_CONTRACT_INVALID",
+            "message": "The Run did not complete successfully",
+            "retryable": false,
+            "details": {
+              "failure_class": "cognition",
+              "failed_component": "runtime"
+            }
+          },
+          "error": "",
+          "duration_ms": 53.6
+        }
+      ],
+      "checks": [
+        {
+          "check": "status",
+          "passed": false,
+          "detail": "expected COMPLETED got FAILED_TERMINAL",
+          "turn": 1
+        },
+        {
+          "check": "output_contains",
+          "passed": false,
+          "detail": "'2' missing from output",
+          "turn": 1
+        },
+        {
+          "check": "status",
+          "passed": false,
+          "detail": "expected COMPLETED got FAILED_TERMINAL",
+          "turn": 2
+        },
+        {
+          "check": "output_contains",
+          "passed": false,
+          "detail": "'20' missing from output",
+          "turn": 2
+        },
+        {
+          "check": "intent.conversation_relation",
+          "passed": false,
+          "detail": "expected 'reference' got 'new_request'",
+          "turn": 2
+        },
+        {
+          "check": "status",
+          "passed": false,
+          "detail": "expected COMPLETED got FAILED_TERMINAL",
+          "turn": 3
+        }
+      ],
+      "files": {}
+    },
+    {
+      "id": "CS16",
+      "title": "modifying a file preserves the untouched content",
+      "result": "FAIL",
+      "skip_reason": "",
+      "workspace": "/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_115015_workspace/cs16",
+      "duration_ms": 120.3,
+      "error": "",
+      "turns": [
+        {
+          "turn": 1,
+          "request": "创建 output/config.txt，写入三行：a=1、b=2、c=3",
+          "status": "FAILED_TERMINAL",
+          "output": "目标尚未完成，缺少可验证证据：INTENT_CONTRACT_INVALID。本次不会报告为成功。",
+          "artifacts": [],
+          "provider_calls": 2,
+          "plan_calls": 1,
+          "replan_calls": 0,
+          "tool_calls": [],
+          "intent": {
+            "domain": "unknown",
+            "action": "",
+            "target": "",
+            "confidence": 0.0,
+            "summary": "",
+            "requires_execution": true,
+            "artifact_required": false,
+            "requested_outcomes": [],
+            "delivery_requirements": [],
+            "acceptance_criteria": [],
+            "write_targets": [],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "new_request",
+            "resolved_request": "",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": "INTENT_CONTRACT_INVALID"
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "run_failed"
+          ],
+          "failure_summary": {
+            "code": "INTENT_CONTRACT_INVALID",
+            "message": "The Run did not complete successfully",
+            "retryable": false,
+            "details": {
+              "failure_class": "cognition",
+              "failed_component": "runtime"
+            }
+          },
+          "error": "",
+          "duration_ms": 54.4
+        },
+        {
+          "turn": 2,
+          "request": "把 b=2 改成 b=42",
+          "status": "FAILED_TERMINAL",
+          "output": "目标尚未完成，缺少可验证证据：INTENT_CONTRACT_INVALID。本次不会报告为成功。",
+          "artifacts": [],
+          "provider_calls": 2,
+          "plan_calls": 1,
+          "replan_calls": 0,
+          "tool_calls": [],
+          "intent": {
+            "domain": "unknown",
+            "action": "",
+            "target": "",
+            "confidence": 0.0,
+            "summary": "",
+            "requires_execution": true,
+            "artifact_required": false,
+            "requested_outcomes": [],
+            "delivery_requirements": [],
+            "acceptance_criteria": [],
+            "write_targets": [],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "new_request",
+            "resolved_request": "",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": "INTENT_CONTRACT_INVALID"
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "run_failed"
+          ],
+          "failure_summary": {
+            "code": "INTENT_CONTRACT_INVALID",
+            "message": "The Run did not complete successfully",
+            "retryable": false,
+            "details": {
+              "failure_class": "cognition",
+              "failed_component": "runtime"
+            }
+          },
+          "error": "",
+          "duration_ms": 55.3
+        }
+      ],
+      "checks": [
+        {
+          "check": "status",
+          "passed": false,
+          "detail": "expected COMPLETED got FAILED_TERMINAL",
+          "turn": 1
+        },
+        {
+          "check": "artifact_exists",
+          "passed": false,
+          "detail": "'output/config.txt' matched nothing",
+          "turn": 1
+        },
+        {
+          "check": "status",
+          "passed": false,
+          "detail": "expected COMPLETED got FAILED_TERMINAL",
+          "turn": 2
+        },
+        {
+          "check": "file_contains:output/config.txt",
+          "passed": false,
+          "detail": "tokens ['a=1', 'b=42', 'c=3'] in 'output/config.txt': no file contains all tokens (0 matched)",
+          "turn": 2
+        },
+        {
+          "check": "intent.conversation_relation_in",
+          "passed": false,
+          "detail": "expected one of ['reference', 'correction'] got 'new_request'",
+          "turn": 2
+        }
+      ],
+      "files": {}
+    }
+  ],
+  "summary": {
+    "total": 16,
+    "passed": 4,
+    "failed": 11,
+    "errors": 0,
+    "skipped": 1,
+    "provider_calls": 43
+  }
+}

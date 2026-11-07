@@ -175,11 +175,23 @@ async def web_search(
     if not query:
         raise ValueError("web_search 缺少 query 参数")
 
-    result = await _call_duckduckgo_tool(
-        "search",
-        {"query": _time_aware_query(query, timeliness), "max_results": max_results},
+    from agent.search.providers import run_search
+
+    outcome = await run_search(
+        _time_aware_query(query, timeliness), max_results=max_results
     )
-    return parse_search_results(result)
+    if outcome.sources:
+        return [
+            SearchResult(
+                title=item.get("title", ""),
+                url=item.get("url", ""),
+                snippet=item.get("snippet", ""),
+                source=outcome.provider,
+                published=item.get("publishedAt", "") or item.get("published", ""),
+            )
+            for item in outcome.sources
+        ]
+    return parse_search_results(outcome.content)
 
 
 async def web_news_search(

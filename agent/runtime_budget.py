@@ -21,6 +21,17 @@ class RunBudget:
 
     @classmethod
     def from_env(cls) -> "RunBudget":
+        # TSAGENT_UNLIMITED_BUDGET=1 时全部预算维度不设限（计数器仍记录
+        # transitions/recoveries 作证据，只是不再触发 exhaustion）。
+        if os.getenv("TSAGENT_UNLIMITED_BUDGET", "").strip().lower() in {
+            "1", "true", "yes", "on",
+        }:
+            return cls(
+                max_seconds=float("inf"),
+                max_transitions=2**63 - 1,
+                max_goal_rounds=2**63 - 1,
+                max_recoveries=2**63 - 1,
+            )
         return cls(
             max_seconds=float(os.getenv("TSAGENT_MAX_RUNTIME_SECONDS", "300")),
             max_transitions=int(os.getenv("TSAGENT_MAX_STATE_TRANSITIONS", "48")),

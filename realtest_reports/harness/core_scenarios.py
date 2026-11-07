@@ -717,6 +717,26 @@ def _summarize(records: list[dict]) -> dict:
 
 
 def _render_markdown(payload: dict) -> str:
+    cassette = payload.get("cassette")
+    if cassette and cassette["mode"] == "replay":
+        evidence_line = (
+            f"Cassette replay evidence (`{cassette['path']}`); not fresh "
+            "provider calls. Provider responses were replayed verbatim from "
+            "a recorded run — this proves the request sequence and Runtime "
+            "behaviour, not live provider capability."
+        )
+    elif cassette:
+        evidence_line = (
+            f"Real-provider evidence recorded to cassette `{cassette['path']}`. "
+            "Every turn ran through the configured provider against a fresh "
+            "SQLite store and a per-case workspace."
+        )
+    else:
+        evidence_line = (
+            "Real-provider scenario evidence; not offline proof. Every turn "
+            "ran through the configured provider against a fresh SQLite "
+            "store and a per-case workspace."
+        )
     lines = [
         f"# Core Scenarios — {payload['run_id']}",
         "",
@@ -724,9 +744,7 @@ def _render_markdown(payload: dict) -> str:
         f"- Started: {payload['started_at']}",
         f"- Manifest: `{payload['manifest']}`  Cases file: `{payload['cases_file']}`",
         "",
-        "Real-provider scenario evidence; not offline proof. Every turn ran "
-        "through the configured provider against a fresh SQLite store and a "
-        "per-case workspace.",
+        evidence_line,
         "",
         "| Case | Result | Turns | Statuses | Provider calls | Failed checks |",
         "| --- | --- | --- | --- | --- | --- |",
@@ -785,7 +803,8 @@ async def _run_all(
     *,
     workspace_root: Path,
     timeout: float,
-) -> list[dict]:
+    cassette: tuple[str, Path] | None = None,
+) -> tuple[list[dict], dict | None]:
     from agent.bootstrap import load_all
 
     # Mirror the production CLI bootstrap (tools + skills + capabilities).
@@ -796,6 +815,11 @@ async def _run_all(
     )
     recorder = _Recorder()
     recorder.install()
+    replay_session = None
+    if cassette is not None:
+        from realtest_reports.harness.llm_replay import install
+
+        replay_session = install(cassette[0], cassette[1])
     try:
         records = []
         skip_cache: dict = {}
@@ -832,9 +856,13 @@ async def _run_all(
                 f"{record['duration_ms'] / 1000:.1f}s)",
                 flush=True,
             )
-        return records
+        return records, (
+            replay_session.close() if replay_session is not None else None
+        )
     finally:
         recorder.close()
+        if replay_session is not None:
+            replay_session.close()
 
 
 def main() -> int:
@@ -876,7 +904,31 @@ def main() -> int:
         default=str(RESULTS_DIR),
         help="directory for reports and per-case workspaces",
     )
+    parser.add_argument(
+        "--cassette",
+        default="",
+        metavar="PATH",
+        help="LLM cassette file for --cassette-mode record|replay",
+    )
+    parser.add_argument(
+        "--cassette-mode",
+        choices=("record", "replay"),
+        default=None,
+        help=(
+            "record: call the real provider and persist every exchange to "
+            "the cassette; replay: answer from the cassette offline and "
+            "fail fast on request divergence"
+        ),
+    )
     args = parser.parse_args()
+
+    cassette: tuple[str, Path] | None = None
+    if args.cassette_mode or args.cassette:
+        if not (args.cassette_mode and args.cassette):
+            raise SystemExit(
+                "--cassette and --cassette-mode must be given together"
+            )
+        cassette = (args.cassette_mode, Path(args.cassette))
 
     cases = _load_cases(CASES_FILE)
     selected_ids = {
@@ -916,7 +968,11 @@ def main() -> int:
         # provider; give runs room so time budgets measure behaviour, not
         # machine speed. An explicit env var still wins.
         os.environ.setdefault("TSAGENT_MAX_RUNTIME_SECONDS", "600")
-    abort_message = ensure_provider(mode)
+    replaying = cassette is not None and cassette[0] == "replay"
+    if replaying and not cassette[1].exists():
+        print(f"ABORT: cassette not found: {cassette[1]}", file=sys.stderr)
+        return 2
+    abort_message = None if replaying else ensure_provider(mode)
     if abort_message:
         print(f"ABORT: {abort_message}", file=sys.stderr)
         return 2
@@ -927,13 +983,30 @@ def main() -> int:
     results_dir.mkdir(parents=True, exist_ok=True)
     workspace_root = results_dir / f"{run_id}_workspace"
 
-    records = asyncio.run(
-        _run_all(cases, workspace_root=workspace_root, timeout=args.turn_timeout)
+    records, replay_summary = asyncio.run(
+        _run_all(
+            cases,
+            workspace_root=workspace_root,
+            timeout=args.turn_timeout,
+            cassette=cassette,
+        )
+    )
+    cassette_evidence = (
+        {
+            "mode": cassette[0],
+            "path": str(cassette[1]),
+            "summary": (
+                replay_summary.to_dict() if replay_summary is not None else None
+            ),
+        }
+        if cassette is not None
+        else None
     )
     payload = {
         "manifest": MANIFEST,
         "run_id": run_id,
-        "provider": mode,
+        "provider": f"{mode}+cassette-replay" if replaying else mode,
+        "cassette": cassette_evidence,
         "model": os.getenv("MODEL_NAME", "deepseek-v4-flash")
         if mode != "ollama"
         else os.getenv("OLLAMA_MODEL", "qwen3:8b"),

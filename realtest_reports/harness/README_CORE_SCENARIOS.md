@@ -27,12 +27,38 @@ python -m realtest_reports.harness.core_scenarios --case CS05,CS13
 
 # force a provider (same values as TSAGENT_LLM_PROVIDER)
 python -m realtest_reports.harness.core_scenarios --provider ollama
+
+# record a real run's provider exchanges into a cassette
+python -m realtest_reports.harness.core_scenarios \
+  --cassette realtest_reports/cassettes/core_v1.json --cassette-mode record
+
+# replay the same cases offline from that cassette (no provider needed;
+# a request that diverges from the recording fails fast as a case ERROR)
+python -m realtest_reports.harness.core_scenarios \
+  --cassette realtest_reports/cassettes/core_v1.json --cassette-mode replay
 ```
 
 Provider gate: the harness reads `.env` (same `load_dotenv` convention as
 `agent.llm`) and **aborts with exit code 2 before any provider call** when
 no usable provider exists — `auto`/`deepseek` require `OPENAI_API_KEY`,
 `ollama` requires a reachable `OLLAMA_BASE_URL`. It never fakes a provider.
+
+Cassette mode (`realtest_reports/harness/llm_replay.py`):
+
+- `record` still calls the real provider; every exchange at the Provider
+  boundary (`invoke`/`ainvoke`/`achat`, `with_structured_output` runnables,
+  and provider errors) is persisted to the cassette.
+- `replay` never contacts a provider and skips the provider gate. The
+  router's own select/retry/fallback path stays live on top of a
+  cassette-backed Provider, so a recorded `error → retry → fallback →
+  success` sequence replays exactly as it happened. A request not in the
+  cassette raises `ReplayMissError` inside the provider boundary and lands
+  as a case `FAIL`/`ERROR` — replay proves the request sequence and
+  Runtime behaviour, **not** live provider capability, and reports are
+  marked `provider: <mode>+cassette-replay`.
+- `provider_calls` keeps the same meaning under replay: router-level LLM
+  requests. Since replay asserts the recorded sequence, `provider_calls_min`
+  / `provider_calls_max` checks remain valid.
 
 Outputs per run:
 

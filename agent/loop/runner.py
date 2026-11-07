@@ -138,6 +138,34 @@ def _compact_transcript(
             "content": f"[已压缩] {message.get('name', '')}: {content[:200]}…{pointer}",
         }
         pruned += 1
+    if _chars() > TRANSCRIPT_CHAR_BUDGET:
+        # 第二阶段：折叠最旧的非 tool 中间段（保留 system 与尾部近窗），
+        # 原文先落盘到 spill，prompt 里只留指针。
+        boundary = max(1, len(messages) - COMPACT_KEEP_TAIL)
+        middle = [
+            index for index in range(1, boundary)
+            if messages[index].get("role") != "tool"
+        ]
+        if middle:
+            dropped = [messages[index] for index in middle]
+            pointer = _spill_tool_result(
+                workspace, f"segment-{id(messages) & 0xffff:x}",
+                "\n\n".join(
+                    f"[{m.get('role')}] {m.get('content', '')}"
+                    for m in dropped
+                ),
+            )
+            messages[1:boundary] = [
+                {
+                    "role": "user",
+                    "content": (
+                        f"[已省略 {len(middle)} 段旧对话消息"
+                        + (f"，原文见 {pointer}" if pointer else "")
+                        + "]"
+                    ),
+                }
+            ]
+            pruned += len(middle)
     if pruned and event_bus is not None:
         event_bus.emit(
             "transcript_compacted", {"pruned": pruned, "spilled": spilled}
@@ -273,6 +301,21 @@ class AgentLoop:
         from agent.mcp.tools import discover_exposed_tools
 
         mcp_tools = await discover_exposed_tools()
+        # Intent 裁剪：office 文件不在本任务诉求内时，不把 excel/markitdown
+        # 这组重型 schema 塞进每次 LLM 调用（fail-open：命中 office 线索
+        # 或无法判定时全量保留）。
+        _intent_text = " ".join(filter(None, [
+            str(state.get("resolved_request") or ""),
+            str(state.get("intent_target") or ""),
+            str(state.get("original_request") or ""),
+        ])).lower()
+        _office_cues = ("xlsx", "excel", "pptx", "ppt", "docx", "word",
+                        "csv", "表格", "报表", "演示", "幻灯", "文档", "markitdown")
+        if not any(cue in _intent_text for cue in _office_cues):
+            mcp_tools = [
+                t for t in mcp_tools
+                if t.spec.name not in {"excel", "markitdown"}
+            ]
         tools = build_toolset(
             authorization,
             workflows=workflows,
@@ -348,6 +391,13 @@ class AgentLoop:
                 model=str(_profile.get("model_ref") or "") or None,
             )
             _flush_delta()
+            if getattr(turn, "usage", None):
+                totals = state.setdefault("token_usage", {})
+                for key, value in turn.usage.items():
+                    try:
+                        totals[key] = int(totals.get(key, 0)) + int(value)
+                    except (TypeError, ValueError):
+                        pass
             self._orch._timings["loop_llm"] = round(
                 float(self._orch._timings.get("loop_llm", 0.0))
                 + (time.perf_counter() - t_llm),
@@ -387,6 +437,8 @@ class AgentLoop:
                         ),
                     })
                     continue
+                if event_bus is not None and state.get("token_usage"):
+                    event_bus.emit("token_usage", dict(state["token_usage"]))
                 return answer or None
 
             transcript.append({

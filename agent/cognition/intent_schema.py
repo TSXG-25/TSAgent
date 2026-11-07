@@ -119,5 +119,5 @@ class IntentResult:
             f"target={self.target!r}, "
             f"entities={self.entities}, "
             f"current_file={self.current_file!r}, "
-            f"conf={self.confidence:.2f}, exec={self.requires_execution})"
+            f"exec={self.requires_execution})"
         )

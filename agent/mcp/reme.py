@@ -7,75 +7,18 @@ short-lived session.  The service is the memory owner: it is started
 lazily on first use (detached, so it keeps running between runs) and
 failures surface as plain tool errors / logged background-task failures
 — never blocking the core response path.
+
+Transport, lazy start and error mapping live in ``agent.mcp.client``; the
+server row is ``agent.mcp.servers.REME``.
 """
 from __future__ import annotations
 
-import asyncio
-import json
-import os
-import shutil
-import socket
-import subprocess
-from datetime import timedelta
-from urllib.parse import urlparse
+from .client import call_mcp_tool
+from .servers import REME
 
-from mcp import ClientSession
-from mcp.types import TextContent
-
-REME_MCP_URL = os.environ.get("TSAGENT_REME_URL", "http://127.0.0.1:2333/mcp")
+REME_MCP_URL = REME.url
 _SEARCH_TIMEOUT = 30
 _AUTO_MEMORY_TIMEOUT = 180
-_SPAWN_READY_TIMEOUT = 45.0
-
-_service_lock = asyncio.Lock()
-_spawn_failed = False
-
-
-def _endpoint_unreachable() -> bool:
-    parsed = urlparse(REME_MCP_URL)
-    host = parsed.hostname or "127.0.0.1"
-    port = parsed.port or (443 if parsed.scheme == "https" else 80)
-    try:
-        with socket.create_connection((host, port), timeout=1):
-            return False
-    except OSError:
-        return True
-
-
-async def _ensure_service() -> None:
-    """Lazily start `reme start` once; the detached service outlives us."""
-    global _spawn_failed
-    if _spawn_failed:
-        raise RuntimeError("REME_UNAVAILABLE: service spawn previously failed")
-    if not _endpoint_unreachable():
-        return
-    async with _service_lock:
-        if not _endpoint_unreachable():
-            return
-        command = shutil.which("reme")
-        if command is None:
-            _spawn_failed = True
-            raise RuntimeError(
-                "REME_UNAVAILABLE: `reme` not on PATH "
-                "(install with: pip install 'reme-ai[core]')"
-            )
-        subprocess.Popen(
-            [command, "start"],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True,
-        )
-        waited = 0.0
-        while _endpoint_unreachable() and waited < _SPAWN_READY_TIMEOUT:
-            await asyncio.sleep(0.5)
-            waited += 0.5
-        if _endpoint_unreachable():
-            _spawn_failed = True
-            raise RuntimeError(
-                "REME_UNAVAILABLE: `reme start` did not become ready "
-                f"within {_SPAWN_READY_TIMEOUT:.0f}s"
-            )
 
 
 async def call_reme_tool(
@@ -85,38 +28,7 @@ async def call_reme_tool(
     timeout: int = _SEARCH_TIMEOUT,
 ) -> str:
     """Open one MCP session against the ReMe service and call one tool."""
-    await _ensure_service()
-    from mcp.client.streamable_http import streamable_http_client
-
-    async with streamable_http_client(
-        REME_MCP_URL,
-        timeout=timedelta(seconds=timeout),
-    ) as (read_stream, write_stream, _):
-        async with ClientSession(
-            read_stream,
-            write_stream,
-            read_timeout_seconds=timedelta(seconds=timeout),
-        ) as session:
-            await session.initialize()
-            result = await session.call_tool(name, arguments)
-            if result.isError:
-                detail = "\n".join(
-                    block.text for block in result.content
-                    if isinstance(block, TextContent)
-                )
-                raise RuntimeError(
-                    "REME_TOOL_FAILED"
-                    + (f": {detail}" if detail else "")
-                )
-            text = "\n".join(
-                block.text for block in result.content
-                if isinstance(block, TextContent)
-            )
-            if text:
-                return text
-            if result.structuredContent is not None:
-                return json.dumps(result.structuredContent, ensure_ascii=False)
-            return ""
+    return await call_mcp_tool(REME, name, arguments, timeout=timeout)
 
 
 async def reme_search(query: str, *, limit: int = 8) -> str:

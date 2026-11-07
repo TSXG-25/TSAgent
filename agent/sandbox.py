@@ -17,6 +17,17 @@ from agent.security import is_sensitive_command, redact_sensitive_text
 SANDBOX_IMAGE = "agent-sandbox"
 DEFAULT_TIMEOUT = 30
 LOCAL_EXECUTION_ENV = "TSAGENT_ALLOW_LOCAL_EXECUTION"
+# Docker 网络模式：默认 none（最强隔离）；TSAGENT_SANDBOX_NETWORK=bridge
+# 时沙箱内命令可以联网（pip/curl/API），文件与资源限额不变。
+SANDBOX_NETWORK_ENV = "TSAGENT_SANDBOX_NETWORK"
+# 沙箱层级偏好：docker（默认，强隔离优先）| seatbelt（宿主可见性优先——
+# Seatbelt 读全机文件、跑宿主二进制，写限 workspace；需要整机资源/网络
+# 硬隔离时改回 docker）。
+SANDBOX_PREFER_ENV = "TSAGENT_SANDBOX_PREFER"
+# 隐藏文件读取开关：deny（默认）时 Seatbelt 拒读 $HOME 顶层 .*
+# 隐藏文件/目录及任意路径的 .env——secrets 聚集地默认保护；
+# TSAGENT_SANDBOX_DOTFILES=allow 放开全部读面。
+SANDBOX_DOTFILES_ENV = "TSAGENT_SANDBOX_DOTFILES"
 
 # Cache Docker availability check
 _DOCKER_AVAILABLE = None
@@ -37,6 +48,16 @@ def _check_docker() -> bool:
     except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
         _DOCKER_AVAILABLE = False
     return _DOCKER_AVAILABLE
+
+
+def _sandbox_prefer() -> str:
+    return os.getenv(SANDBOX_PREFER_ENV, "docker").strip().lower()
+
+
+def _sandbox_network() -> str:
+    """Docker 网络模式，默认 none；bridge 放开联网。"""
+    mode = os.getenv(SANDBOX_NETWORK_ENV, "none").strip().lower()
+    return mode if mode in {"none", "bridge", "host"} else "none"
 
 
 def _env_flag(name: str, default: bool = False) -> bool:
@@ -62,6 +83,114 @@ def _within_project(path: str | Path) -> bool:
         return False
 
 
+def _blocked_command_error(cmd: str) -> str | None:
+    """危险命令黑名单；未命中返回 None。"""
+    blocked_patterns = [
+        "rm -rf /", "rm -rf /*", "mkfs", "dd if=", ":(){", "> /dev/sda",
+        "chmod 777 /", "sudo ", "su ",
+    ]
+    normalized = cmd.strip().lower()
+    for pattern in blocked_patterns:
+        if pattern in normalized:
+            return f"错误：命令被安全策略阻止（危险操作）: {cmd[:50]}..."
+    return None
+
+
+# macOS Seatbelt：workspace-write 语义（dsh 同款），文件读放开、
+# 写限定在 ROOT + 系统临时区 + 标准 sink；网络不在该词汇内。
+_SEATBELT_PROFILE = """(version 1)
+(allow default)
+{dotfile_rules}
+(deny file-write*)
+(allow file-write*
+    (subpath (param "ROOT"))
+    (subpath "/private/tmp")
+    (subpath "/private/var/folders")
+    (literal "/dev/null")
+    (literal "/dev/stdout")
+    (literal "/dev/stderr"))
+"""
+
+
+def _seatbelt_profile() -> str:
+    """构建 Seatbelt profile；deny 规则必须在 (allow default) 之后出现。"""
+    if os.getenv(SANDBOX_DOTFILES_ENV, "deny").strip().lower() == "allow":
+        rules = ""
+    else:
+        import re as _re
+        home = _re.escape(str(Path.home()))
+        rules = (
+            f'(deny file-read* (regex #"^{home}/\\.[^/]+(/.*)?$"))\n'
+            '    (deny file-read* (regex #"/\\.env$"))'
+        )
+    return _SEATBELT_PROFILE.format(dotfile_rules=rules)
+
+_SEATBELT_AVAILABLE = None
+
+
+def _check_seatbelt() -> bool:
+    global _SEATBELT_AVAILABLE
+    if _SEATBELT_AVAILABLE is not None:
+        return _SEATBELT_AVAILABLE
+    if platform.system() != "Darwin" or not shutil.which("sandbox-exec"):
+        _SEATBELT_AVAILABLE = False
+        return False
+    try:
+        result = subprocess.run(
+            ["sandbox-exec", "-p", _seatbelt_profile(),
+             "-D", f"ROOT={Path(__file__).resolve().parent.parent}",
+             "bash", "-c", "true"],
+            capture_output=True, timeout=10,
+        )
+        _SEATBELT_AVAILABLE = result.returncode == 0
+    except Exception:
+        _SEATBELT_AVAILABLE = False
+    return _SEATBELT_AVAILABLE
+
+
+def _run_seatbelt(
+    cmd: str,
+    timeout: int,
+    cwd: str,
+    *,
+    writable_root: str | Path,
+) -> str:
+    """Execute command under macOS Seatbelt workspace-write confinement."""
+    blocked = _blocked_command_error(cmd)
+    if blocked:
+        return blocked
+    root = Path(writable_root).resolve()
+    process = None
+    try:
+        process = subprocess.Popen(
+            ["sandbox-exec", "-p", _seatbelt_profile(),
+             "-D", f"ROOT={root}", "bash", "-c", cmd],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            cwd=cwd,
+            start_new_session=True,
+        )
+        stdout, stderr = process.communicate(timeout=timeout)
+        if process.returncode != 0:
+            detail = "\n".join(p for p in (stdout.strip(), stderr.strip()) if p)
+            return redact_sensitive_text(
+                f"错误：COMMAND_NONZERO_EXIT: 命令执行失败 "
+                f"(code {process.returncode}):\n{detail}"
+            )
+        return redact_sensitive_text(stdout)
+    except subprocess.TimeoutExpired:
+        if process is not None:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except (ProcessLookupError, OSError):
+                process.kill()
+            process.communicate()
+        return f"命令执行超时（{timeout} 秒）"
+    except OSError as e:
+        return f"错误：命令执行失败: {e}"
+
+
 def _run_local(
     cmd: str,
     timeout: int,
@@ -76,7 +205,7 @@ def _run_local(
         return (
             f"错误：{FailureCode.EXECUTION_ENVIRONMENT_UNAVAILABLE.value}: "
             "没有可用的隔离执行环境；本地执行默认关闭。"
-            f"请启动 Docker，或仅在受信任的开发环境显式设置 {LOCAL_EXECUTION_ENV}=1。"
+            f"请启动 Docker 或确保系统支持 sandbox-exec；仅在受信任的开发环境显式设置 {LOCAL_EXECUTION_ENV}=1。"
         )
 
     if is_sensitive_command(cmd):
@@ -88,15 +217,9 @@ def _run_local(
     elif not _within_project(cwd or project_root):
         return "错误：执行工作目录超出项目 workspace 范围。"
 
-    # Safety: block dangerous shell builtins
-    blocked_patterns = [
-        "rm -rf /", "rm -rf /*", "mkfs", "dd if=", ":(){", "> /dev/sda",
-        "chmod 777 /", "sudo ", "su ",
-    ]
-    normalized = cmd.strip().lower()
-    for pattern in blocked_patterns:
-        if pattern in normalized:
-            return f"错误：命令被安全策略阻止（危险操作）: {cmd[:50]}..."
+    blocked = _blocked_command_error(cmd)
+    if blocked:
+        return blocked
 
     process = None
     try:
@@ -152,7 +275,7 @@ def _run_docker(
     docker_cmd = [
         "docker", "run",
         "--rm",
-        "--network", "none",
+        "--network", _sandbox_network(),
         "--cpus", "1.0",
         "--memory", "512m",
         "-v", f"{workspace_root}:/workspace",
@@ -200,6 +323,10 @@ def run_in_sandbox(cmd: str, timeout: int = DEFAULT_TIMEOUT) -> str:
     if is_sensitive_command(cmd):
         return "错误：命令被安全策略阻止（敏感信息访问）"
 
+    prefer_seatbelt = _sandbox_prefer() == "seatbelt"
+    if prefer_seatbelt and _check_seatbelt():
+        return _run_seatbelt(cmd, timeout, cwd, writable_root=project_root)
+
     docker_result = (
         _run_docker(cmd, timeout, cwd, mount_root=project_root)
         if _check_docker()
@@ -207,6 +334,9 @@ def run_in_sandbox(cmd: str, timeout: int = DEFAULT_TIMEOUT) -> str:
     )
     if docker_result is not None:
         return docker_result
+
+    if _check_seatbelt():
+        return _run_seatbelt(cmd, timeout, cwd, writable_root=project_root)
 
     return _run_local(cmd, timeout, cwd)
 
@@ -229,6 +359,10 @@ def run_in_workspace(
     if is_sensitive_command(cmd):
         return "错误：命令被安全策略阻止（敏感信息访问）"
 
+    prefer_seatbelt = _sandbox_prefer() == "seatbelt"
+    if prefer_seatbelt and _check_seatbelt():
+        return _run_seatbelt(cmd, timeout, str(root), writable_root=root)
+
     docker_result = (
         _run_docker(cmd, timeout, str(root), mount_root=root)
         if _check_docker()
@@ -236,6 +370,9 @@ def run_in_workspace(
     )
     if docker_result is not None:
         return docker_result
+
+    if _check_seatbelt():
+        return _run_seatbelt(cmd, timeout, str(root), writable_root=root)
     return _run_local(
         cmd,
         timeout,

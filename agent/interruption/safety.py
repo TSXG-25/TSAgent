@@ -20,6 +20,9 @@ def tool_cancellation_safety(tool_name: str) -> CancellationSafetyClass:
     name = str(tool_name).strip().lower()
     if name in _INTERRUPTIBLE_TOOLS or name.startswith("provider."):
         return CancellationSafetyClass.INTERRUPTIBLE
+    # MCP server 调用可能挂起（server 僵死/网络），允许协作式取消
+    if name.startswith("mcp_"):
+        return CancellationSafetyClass.INTERRUPTIBLE
     return CancellationSafetyClass.BOUNDARY_ONLY
 
 

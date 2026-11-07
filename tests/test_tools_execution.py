@@ -73,13 +73,13 @@ for i in range(3):
 
 
 def test_run_python_security_block():
-    """Test that dangerous imports are blocked."""
+    """AST import/call 黑名单已移除：os/subprocess 经沙箱执行层放行，
+    真实边界由 Docker/Seatbelt/local-execution gate 承担。"""
     from tools.python import run_python
 
-    # Should be blocked
-    result = run_python("import os; os.system('ls')")
-    assert "禁止" in result or "安全" in result, f"Should have been blocked, got: {result}"
-    print(f"[PASS] test_run_python_security_block: {result}")
+    result = run_python("import os; os.system('echo via-os')")
+    assert "via-os" in result, f"expected sandboxed execution, got: {result}"
+    print(f"[PASS] test_run_python_sandbox_exec: {result}")
 
 
 def test_run_python_syntax_error():

@@ -1,0 +1,270 @@
+{
+  "manifest": "core-scenarios-v1",
+  "run_id": "core_scenarios_20261103_111205",
+  "provider": "auto+cassette-replay",
+  "cassette": {
+    "mode": "replay",
+    "path": "/tmp/cs_smoke.json",
+    "summary": {
+      "mode": "replay",
+      "cassette": "/tmp/cs_smoke.json",
+      "recorded": 0,
+      "replayed": 5,
+      "misses": [
+        {
+          "digest": "4c2b5efdc53377409b8ef6106d825f2c4646759278200f9ac9ff22a04fe876dd",
+          "kind": "invoke"
+        }
+      ],
+      "unconsumed": 5
+    }
+  },
+  "model": "deepseek-flash",
+  "started_at": "2026-11-03T11:12:05.649699+00:00",
+  "cases_file": "core_scenarios_cases.json",
+  "workspace_root": "/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_111205_workspace",
+  "cases": [
+    {
+      "id": "CS01",
+      "title": "greeting stays a cheap chat turn (latency sanity)",
+      "result": "FAIL",
+      "skip_reason": "",
+      "workspace": "/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_111205_workspace/cs01",
+      "duration_ms": 475.6,
+      "error": "",
+      "turns": [
+        {
+          "turn": 1,
+          "request": "你好",
+          "status": "FAILED_TERMINAL",
+          "output": "目标尚未完成，缺少可验证证据：INTENT_CONTRACT_INVALID。本次不会报告为成功。",
+          "artifacts": [],
+          "provider_calls": 0,
+          "plan_calls": 1,
+          "replan_calls": 0,
+          "tool_calls": [],
+          "intent": {
+            "domain": "unknown",
+            "action": "",
+            "target": "",
+            "confidence": 0.0,
+            "summary": "",
+            "requires_execution": true,
+            "artifact_required": false,
+            "requested_outcomes": [],
+            "delivery_requirements": [],
+            "acceptance_criteria": [],
+            "write_targets": [],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "new_request",
+            "resolved_request": "",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": "INTENT_CONTRACT_INVALID"
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "run_failed"
+          ],
+          "failure_summary": {
+            "code": "INTENT_CONTRACT_INVALID",
+            "message": "The Run did not complete successfully",
+            "retryable": false,
+            "details": {
+              "failure_class": "cognition",
+              "failed_component": "runtime"
+            }
+          },
+          "error": "",
+          "duration_ms": 455.4
+        }
+      ],
+      "checks": [
+        {
+          "check": "status",
+          "passed": false,
+          "detail": "expected COMPLETED got FAILED_TERMINAL",
+          "turn": 1
+        },
+        {
+          "check": "provider_calls_max",
+          "passed": true,
+          "detail": "0 calls > 3",
+          "turn": 1
+        },
+        {
+          "check": "no_tool_calls",
+          "passed": true,
+          "detail": "tools used: []",
+          "turn": 1
+        },
+        {
+          "check": "intent.domain",
+          "passed": false,
+          "detail": "expected 'chat' got 'unknown'",
+          "turn": 1
+        }
+      ],
+      "files": {}
+    },
+    {
+      "id": "CS02",
+      "title": "artifact without explicit path lands under output/",
+      "result": "PASS",
+      "skip_reason": "",
+      "workspace": "/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_111205_workspace/cs02",
+      "duration_ms": 73.9,
+      "error": "",
+      "turns": [
+        {
+          "turn": 1,
+          "request": "帮我写一个 Python 待办事项管理脚本，能添加和列出任务",
+          "status": "COMPLETED",
+          "output": "已写好脚本：`output/todos.py`\n\n**功能**\n| 命令 | 说明 |\n|---|---|\n| `python todos.py add \"买牛奶\"` | 添加任务，可用 `--priority high/normal/low` 指定优先级 |\n| `python todos.py list` | 列出未完成任务（序号、状态、优先级、创建时间） |\n| `python todos.py list --all` | 连同已完成任务一起列出，末尾给出统计 |\n| `python todos.py done 2` | 把第 2 条标记为已完成 |\n| `python todos.py remove 2` | 删除第 2 条 |\n\n**关键实现点**\n- 数据持久化到脚本同目录的 `todos.json`（UTF-8、缩进格式，中文可直接阅读）。\n- 读取时对文件缺失、JSON 损坏、格式不对都做了容错，不会直接崩溃，只打印警告。\n- 序号解析做了校验：非整数或越界时给出明确提示并返回非零退出码。\n- 使用 `argparse` 子命令结构，`--help` 和 `add --help` 都有中文说明。\n- 每条任务记录 `text / done / priority / created_at`，完成时补充 `finished_at`。\n\n**注意**：`list` 显示的序号是\"在全部任务中的原始位置\"，所以标记完成后再次 `list --all` 看到的序号是稳定的，可以放心用 `done` / `remove`。\n\n我没有运行脚本（授权范围内不允许执行命令）。你本地直接 `python output/todos.py add \"测试任务\"` 就能验证。需要我再加上编辑内容、按优先级排序或搜索功能的话告诉我。\n\n已生成/更新本地文件：\n/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_111205_workspace/cs02/output/todos.py\n\n📁 ./ (3 项)\nruntime.sqlite\nruntime.sqlite-shm\nruntime.sqlite-wal\n\n未自动验证：用户未明确要求文件包含特定文字内容",
+          "artifacts": [
+            {
+              "artifact_id": "artifact-0370966b359928993f4880fd",
+              "artifact_type": "file",
+              "digest": "5230d322931aa395b4704381d6886de5eda13453431e53b6dc3336ca2cbb9c80",
+              "reference": "artifact://core-scenarios/run-d33d95c5f0034d418998a5a1fd601bf1/artifact-0370966b359928993f4880fd",
+              "exists": true,
+              "verified": true,
+              "run_id": "run-d33d95c5f0034d418998a5a1fd601bf1",
+              "display_name": "artifact-0370966b359928993f4880fd",
+              "size": null,
+              "producer_workflow_id": "runtime-execution",
+              "producer_stage_id": "task:loop-3",
+              "created_revision": 1,
+              "created_at": ""
+            }
+          ],
+          "provider_calls": 0,
+          "plan_calls": 1,
+          "replan_calls": 1,
+          "tool_calls": [
+            {
+              "tool": "filesystem.list",
+              "args": {
+                "path": "."
+              }
+            },
+            {
+              "tool": "filesystem.write",
+              "args": {
+                "path": "output/todos.py",
+                "content": "#!/usr/bin/env python3\n\"\"\"简单的命令行待办事项管理脚本。\n\n用法示例：\n    python todos.py add \"买牛奶\"\n    python todos.py add \"写周报\" --priority high\n    python todos.py list\n    python"
+              }
+            }
+          ],
+          "intent": {
+            "domain": "development",
+            "action": "code",
+            "target": "待办事项管理脚本",
+            "confidence": 0.95,
+            "summary": "用户需要一个 Python 脚本，用于管理待办事项，支持添加和列出任务",
+            "requires_execution": true,
+            "artifact_required": true,
+            "requested_outcomes": [
+              "FILE_MUTATION"
+            ],
+            "delivery_requirements": [
+              {
+                "id": "1",
+                "kind": "file",
+                "quantity": 1,
+                "target": "",
+                "acceptance_criteria": [
+                  {
+                    "kind": "unverifiable",
+                    "description": "用户未明确要求文件包含特定文字内容"
+                  }
+                ]
+              }
+            ],
+            "acceptance_criteria": [],
+            "write_targets": [
+              "output/todos.py"
+            ],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "new_request",
+            "resolved_request": "帮我写一个 Python 待办事项管理脚本，能添加和列出任务",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": ""
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "stage_started",
+            "task_started",
+            "task_completed",
+            "task_started",
+            "task_completed",
+            "assistant_delta",
+            "stage_completed",
+            "run_completed"
+          ],
+          "failure_summary": null,
+          "error": "",
+          "duration_ms": 65.1
+        }
+      ],
+      "checks": [
+        {
+          "check": "status",
+          "passed": true,
+          "detail": "expected COMPLETED got COMPLETED",
+          "turn": 1
+        },
+        {
+          "check": "artifact_exists",
+          "passed": true,
+          "detail": "'output/**/*.py' matched ['/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_111205_workspace/cs02/output/todos.py']",
+          "turn": 1
+        },
+        {
+          "check": "artifact_absent",
+          "passed": true,
+          "detail": "'src/**/*.py' unexpectedly matched []",
+          "turn": 1
+        },
+        {
+          "check": "artifact_absent",
+          "passed": true,
+          "detail": "'*.py' unexpectedly matched []",
+          "turn": 1
+        },
+        {
+          "check": "intent.artifact_required",
+          "passed": true,
+          "detail": "expected True got True",
+          "turn": 1
+        }
+      ],
+      "files": {
+        "output/todos.py": "#!/usr/bin/env python3\n\"\"\"简单的命令行待办事项管理脚本。\n\n用法示例：\n    python todos.py add \"买牛奶\"\n    python todos.py add \"写周报\" --priority high\n    python todos.py list\n    python todos.py list --all          # 包含已完成的任务\n    python todos.py done 2              # 把第 2 条标记为完成\n    python todos.py remove 2            # 删除第 2 条\n\n任务保存在脚本同目录的 todos.json 中。\n\"\"\"\n\nfrom __future__ import annotations\n\nimport argparse\nimport json\nimport os\nimport sys\nfrom datetime import datetime\nfrom typing import Any, Dict, List\n\nDATA_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), \"todos.json\")\n\nPRIORITY_LABELS = {\"high\": \"高\", \"normal\": \"中\", \"low\": \"低\"}\n\n\ndef load_tasks() -> List[Dict[str, Any]]:\n    \"\"\"从 JSON 文件读取任务列表；文件不存在或损坏时返回空列表。\"\"\"\n    if not os.path.exists(DATA_FILE):\n        return []\n    try:\n        with open(DATA_FILE, \"r\", encoding=\"utf-8\") as f:\n            data = json.load(f)\n    except (json.JSONDecodeError, OSError) as exc:\n        print(f\"警告：读取任务文件失败（{exc}），将以空列表继续。\", file=sys.stderr)\n        return []\n    if not isinstance(data, list):\n        print(\"警告：任务文件格式不正确，忽略原有内容。\", file=sys.stderr)\n        return []\n    return data\n\n\ndef save_tasks(tasks: List[Dict[str, Any]]) -> None:\n    \"\"\"把任务列表写回 JSON 文件。\"\"\"\n    try:\n        with open(DATA_FILE, \"w\", encoding=\"utf-8\") as f:\n            json.dump(tasks, f, ensure_ascii=False, indent=2)\n    except OSError as exc:\n        print(f\"错误：保存任务失败（{exc}）\", file=sys.stderr)\n        sys.exit(1)\n\n\ndef cmd_add(args: argparse.Namespace) -> int:\n    text = args.text.strip()\n    if not text:\n        print(\"错误：任务内容不能为空。\", file=sys.stderr)\n        return 1\n\n    tasks = load_tasks()\n    task = {\n        \"text\": text,\n        \"done\": False,\n        \"priority\": args.priority,\n        \"created_at\": datetime.now().strftime(\"%Y-%m-%d %H:%M:%S\"),\n    }\n    tasks.append(task)\n    save_tasks(tasks)\n    print(f\"已添加任务 #{len(tasks)}：{text}\")\n    return 0\n\n\ndef cmd_list(args: argparse.Namespace) -> int:\n    tasks = load_tasks()\n    indexed = [(i + 1, t) for i, t in enumerate(tasks)]\n    if not args.all:\n        indexed = [(i, t) for i, t in indexed if not t.get(\"done\")]\n\n    if not indexed:\n        print(\"暂无待办任务。\" if not args.all else \"任务列表为空。\")\n        return 0\n\n    print(f\"{'#':>3}  {'状态':<4} {'优先级':<6} {'创建时间':<20} 内容\")\n    print(\"-\" * 70)\n    for idx, task in indexed:\n        status = \"✔\" if task.get(\"done\") else \"·\"\n        priority = PRIORITY_LABELS.get(task.get(\"priority\", \"normal\"), \"中\")\n        created = task.get(\"created_at\", \"-\")\n        print(f\"{idx:>3}  {status:<4} {priority:<6} {created:<20} {task.get('text', '')}\")\n\n    total = len(tasks)\n    finished = sum(1 for t in tasks if t.get(\"done\"))\n    print(\"-\" * 70)\n    print(f\"共 {total} 条，已完成 {finished} 条，未完成 {total - finished} 条。\")\n    return 0\n\n\ndef _parse_index(raw: str, tasks: List[Dict[str, Any]], action: str) -> int | None:\n    \"\"\"把用户输入的序号转换成列表下标，非法时打印提示并返回 None。\"\"\"\n    try:\n        number = int(raw)\n    except ValueError:\n        print(f\"错误：序号必须是整数，收到的是 {raw!r}。\", file=sys.stderr)\n        return None\n    if not 1 <= number <= len(tasks):\n        print(f\"错误：序号 {number} 超出范围（当前共 {len(tasks)} 条任务）。\", file=sys.stderr)\n        return None\n    return number - 1\n\n\ndef cmd_done(args: argparse.Namespace) -> int:\n    tasks = load_tasks()\n    index = _parse_index(args.index, tasks, \"完成\")\n    if index is None:\n        return 1\n    tasks[index][\"done\"] = True\n    tasks[index][\"finished_at\"] = datetime.now().strftime(\"%Y-%m-%d %H:%M:%S\")\n    save_tasks(tasks)\n    print(f\"已完成任务 #{index + 1}：{tasks[index]['text']}\")\n    return 0\n\n\ndef cmd_remove(args: argparse.Namespace) -> int:\n    tasks = load_tasks()\n    index = _parse_index(args.index, tasks, \"删除\")\n    if index is None:\n        return 1\n    removed = tasks.pop(index)\n    save_tasks(tasks)\n    print(f\"已删除任务：{removed['text']}\")\n    return 0\n\n\ndef build_parser() -> argparse.ArgumentParser:\n    parser = argparse.ArgumentParser(description=\"简单的命令行待办事项管理工具\")\n    sub = parser.add_subparsers(dest=\"command\", required=True)\n\n    p"
+      }
+    }
+  ],
+  "summary": {
+    "total": 2,
+    "passed": 1,
+    "failed": 1,
+    "errors": 0,
+    "skipped": 0,
+    "provider_calls": 0
+  }
+}

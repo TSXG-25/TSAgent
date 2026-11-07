@@ -1,0 +1,130 @@
+{
+  "manifest": "core-scenarios-v1",
+  "run_id": "core_scenarios_20261103_092227",
+  "provider": "auto+cassette-replay",
+  "cassette": {
+    "mode": "replay",
+    "path": "/tmp/empty_cassette.json",
+    "summary": {
+      "mode": "replay",
+      "cassette": "/tmp/empty_cassette.json",
+      "recorded": 0,
+      "replayed": 0,
+      "misses": [
+        {
+          "digest": "0d7d5a67ae0dfdb13c364c5c9f793172b0279d3a39ef0a2735cebd3173127db2",
+          "kind": "invoke"
+        },
+        {
+          "digest": "2d31731161b7ed95756ebb419dd540b16e13bfbfcf26a50724a87d676de20d2f",
+          "kind": "invoke"
+        }
+      ],
+      "unconsumed": 0
+    }
+  },
+  "model": "deepseek-flash",
+  "started_at": "2026-11-03T09:22:27.364033+00:00",
+  "cases_file": "core_scenarios_cases.json",
+  "workspace_root": "/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_092227_workspace",
+  "cases": [
+    {
+      "id": "CS01",
+      "title": "greeting stays a cheap chat turn (latency sanity)",
+      "result": "FAIL",
+      "skip_reason": "",
+      "workspace": "/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_092227_workspace/cs01",
+      "duration_ms": 1232.7,
+      "error": "",
+      "turns": [
+        {
+          "turn": 1,
+          "request": "你好",
+          "status": "FAILED_TERMINAL",
+          "output": "目标尚未完成，缺少可验证证据：INTENT_CONTRACT_INVALID。本次不会报告为成功。",
+          "artifacts": [],
+          "provider_calls": 0,
+          "plan_calls": 1,
+          "replan_calls": 0,
+          "tool_calls": [],
+          "intent": {
+            "domain": "unknown",
+            "action": "",
+            "target": "",
+            "confidence": 0.0,
+            "summary": "",
+            "requires_execution": true,
+            "artifact_required": false,
+            "requested_outcomes": [],
+            "delivery_requirements": [],
+            "acceptance_criteria": [],
+            "write_targets": [],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "new_request",
+            "resolved_request": "",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "",
+            "search_timeliness": "any",
+            "failure_code": "INTENT_CONTRACT_INVALID"
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "run_failed"
+          ],
+          "failure_summary": {
+            "code": "INTENT_CONTRACT_INVALID",
+            "message": "The Run did not complete successfully",
+            "retryable": false,
+            "details": {
+              "failure_class": "cognition",
+              "failed_component": "runtime"
+            }
+          },
+          "error": "",
+          "duration_ms": 1209.4
+        }
+      ],
+      "checks": [
+        {
+          "check": "status",
+          "passed": false,
+          "detail": "expected COMPLETED got FAILED_TERMINAL",
+          "turn": 1
+        },
+        {
+          "check": "provider_calls_max",
+          "passed": true,
+          "detail": "0 calls > 3",
+          "turn": 1
+        },
+        {
+          "check": "no_tool_calls",
+          "passed": true,
+          "detail": "tools used: []",
+          "turn": 1
+        },
+        {
+          "check": "intent.domain",
+          "passed": false,
+          "detail": "expected 'chat' got 'unknown'",
+          "turn": 1
+        }
+      ],
+      "files": {}
+    }
+  ],
+  "summary": {
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "errors": 0,
+    "skipped": 0,
+    "provider_calls": 0
+  }
+}

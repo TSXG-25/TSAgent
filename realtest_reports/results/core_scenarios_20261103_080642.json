@@ -1,0 +1,616 @@
+{
+  "manifest": "core-scenarios-v1",
+  "run_id": "core_scenarios_20261103_080642",
+  "provider": "auto",
+  "model": "deepseek-flash",
+  "started_at": "2026-11-03T08:06:42.238857+00:00",
+  "cases_file": "core_scenarios_cases.json",
+  "workspace_root": "/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_080642_workspace",
+  "cases": [
+    {
+      "id": "CS10",
+      "title": "search then write a source-backed report file",
+      "result": "PASS",
+      "skip_reason": "",
+      "workspace": "/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_080642_workspace/cs10",
+      "duration_ms": 235544.4,
+      "error": "",
+      "turns": [
+        {
+          "turn": 1,
+          "request": "搜索一下 FastAPI 近期的版本更新，把带来源链接的总结保存到 output/fastapi_notes.md",
+          "status": "COMPLETED",
+          "output": "已完成，总结已写入 `output/fastapi_notes.md`。\n\n## 核心发现\n\n最新版本是 **0.162.0（2026-10-23）**。2026 年 10 月是密集迭代期，从 0.150.0 到 0.162.0 有十余个版本，主题高度集中在**请求参数模型与表单语义统一到 Pydantic 行为**上。\n\n**三个新特性**\n- 0.157.0：一个端点可组合多个 query、header、cookie 参数模型（如「分页模型 + 过滤模型」）\n- 0.158.0：支持组合多个 form 模型\n- 0.159.0：参数模型整体可选\n\n**三个破坏性变更（升级必查）**\n- 0.155.0：移除已废弃的 `**extra` 关键字传参旧写法（PR #16545）\n- 0.160.0：参数模型的 `extra` 配置现在作用于**同一参数位置的全部字段**，包括其他模型、单个参数和依赖中声明的字段（PR #16594）\n- 0.162.0：被省略的 `bool` 和 `bool | None` form 字段**不再推断为 `False`**，改用声明默认值或报缺失字段错误；如果没写 `= False`，升级后会触发校验失败（PR #16605）\n\n文件里还有 10 月的完整版本时间线表格、升级检查清单（按 0.155 → 0.160 → 0.162 顺序排查）、7–9 月背景（0.141.0 的 `app.frontend`、0.142.2 修复 OpenTelemetry 启动失败），以及 16 条分类来源链接。\n\n**两点需要你知晓的局限**：\n1. 运行环境禁止直接抓取网页（`fastapi.tiangolo.com`、`github.com` 都被拦截），内容来自搜索摘要与二手汇总站点（ReleaseBytes、What's New、Changes.Watch 等），**没有逐条打开官方原文核对**。\n2. **0.161.0 的具体条目内容没有取到**：只能确认它存在、2026-10-22 发布、同日跟进 0.161.1；我在正文中明确标注了这一点，没有做推断填充。如果你需要确认它和 0.161.1 到底改了什么，最稳妥的是直接看官方 Release Notes。\n\n已生成/更新本地文件：\n/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_080642_workspace/cs10/output/fastapi_notes.md\n\n未自动验证：总结需基于 FastAPI 近期版本更新，并包含来源链接\n未自动验证：总结需基于 FastAPI 近期版本更新，并包含来源链接",
+          "artifacts": [
+            {
+              "artifact_id": "artifact-a974a3afce318d0770a64ed1",
+              "artifact_type": "file",
+              "digest": "1017ea0bce9f475345df5f43f41992ad01723fdb0b688980b3f9935f1ef55162",
+              "reference": "artifact://core-scenarios/run-43240baa048b4878be73338ca2724497/artifact-a974a3afce318d0770a64ed1",
+              "exists": true,
+              "verified": true,
+              "run_id": "run-43240baa048b4878be73338ca2724497",
+              "display_name": "artifact-a974a3afce318d0770a64ed1",
+              "size": null,
+              "producer_workflow_id": "runtime-execution",
+              "producer_stage_id": "task:loop-51",
+              "created_revision": 1,
+              "created_at": ""
+            }
+          ],
+          "provider_calls": 1,
+          "plan_calls": 1,
+          "replan_calls": 1,
+          "tool_calls": [
+            {
+              "tool": "web_search",
+              "args": {
+                "q": "FastAPI latest release notes 2026",
+                "max_results": "8"
+              }
+            },
+            {
+              "tool": "web_search",
+              "args": {
+                "q": "FastAPI changelog release notes recent versions",
+                "max_results": "8"
+              }
+            },
+            {
+              "tool": "web_fetch",
+              "args": {
+                "url": "https://fastapi.tiangolo.com/release-notes/"
+              }
+            },
+            {
+              "tool": "web_fetch",
+              "args": {
+                "url": "https://github.com/fastapi/fastapi/releases"
+              }
+            },
+            {
+              "tool": "web_search",
+              "args": {
+                "max_results": "8",
+                "q": "FastAPI 0.161.0 0.160.0 release notes changes"
+              }
+            },
+            {
+              "tool": "web_search",
+              "args": {
+                "max_results": "8",
+                "q": "\"FastAPI\" 0.162.0 breaking change form bool fields"
+              }
+            },
+            {
+              "tool": "web_fetch",
+              "args": {
+                "url": "https://newreleases.io/project/github/fastapi/fastapi/release/0.162.0"
+              }
+            },
+            {
+              "tool": "web_search",
+              "args": {
+                "max_results": "10",
+                "q": "newreleases.io fastapi/fastapi release 0.161.0"
+              }
+            },
+            {
+              "tool": "web_search",
+              "args": {
+                "max_results": "6",
+                "q": "\"0.161.0 (2026\" FastAPI release notes"
+              }
+            },
+            {
+              "tool": "web_search",
+              "args": {
+                "max_results": "6",
+                "q": "\"0.160.0 (2026\" FastAPI release notes"
+              }
+            },
+            {
+              "tool": "web_search",
+              "args": {
+                "max_results": "6",
+                "q": "\"0.159.0 (2026\" FastAPI release notes"
+              }
+            },
+            {
+              "tool": "web_search",
+              "args": {
+                "max_results": "6",
+                "q": "changes.watch FastAPI 0.160.0 0.161.0 changelog summary"
+              }
+            },
+            {
+              "tool": "web_search",
+              "args": {
+                "max_results": "8",
+                "q": "FastAPI release notes 0.156.0 0.157.0 0.158.0 features fixes"
+              }
+            },
+            {
+              "tool": "web_search",
+              "args": {
+                "max_results": "8",
+                "q": "FastAPI 0.155.0 0.154.0 release notes upgrade Starlette Pydantic"
+              }
+            },
+            {
+              "tool": "web_search",
+              "args": {
+                "max_results": "8",
+                "q": "\"FastAPI\" \"0.16\" release October 2026 changelog summary AI agent MCP"
+              }
+            },
+            {
+              "tool": "web_deep_search",
+              "args": {
+                "query": "FastAPI release notes 0.162.0 0.161.0 0.160.0 details",
+                "fetch_top_n": "2"
+              }
+            },
+            {
+              "tool": "web_search",
+              "args": {
+                "max_results": "10",
+                "q": "changes.watch FastAPI changelog 0.162.0 0.160.0 0.159.0 upgrade verdict"
+              }
+            },
+            {
+              "tool": "web_search",
+              "args": {
+                "max_results": "8",
+                "q": "FastAPI 0.161.0 release"
+              }
+            },
+            {
+              "tool": "web_search",
+              "args": {
+                "max_results": "8",
+                "q": "FastAPI 0.160.0 release notes"
+              }
+            },
+            {
+              "tool": "web_search",
+              "args": {
+                "q": "fastapi 0.160",
+                "timeliness": "any"
+              }
+            },
+            {
+              "tool": "web_news_search",
+              "args": {
+                "query": "FastAPI release 0.162",
+                "max_results": "8",
+                "days": "60"
+              }
+            },
+            {
+              "tool": "web_search",
+              "args": {
+                "max_results": "10",
+                "q": "FastAPI release notes newest versions October 2026"
+              }
+            },
+            {
+              "tool": "web_search",
+              "args": {
+                "keyword": "fastapi release notes",
+                "max_results": "10"
+              }
+            },
+            {
+              "tool": "web_search",
+              "args": {
+                "search": "fastapi 0.162.0 changelog",
+                "max_results": "10"
+              }
+            },
+            {
+              "tool": "web_search",
+              "args": {
+                "max_results": "10",
+                "q": "whatsnew.fyi FastAPI releases 0.16 release notes October 2026"
+              }
+            },
+            {
+              "tool": "web_search",
+              "args": {
+                "max_results": "10",
+                "q": "\"FastAPI 0.16\" \"Released Oct\" 2026 release notes whatsnew"
+              }
+            },
+            {
+              "tool": "web_search",
+              "args": {
+                "max_results": "6",
+                "q": "FastAPI 0.161.0 release notes What's New whatsnew.fyi"
+              }
+            },
+            {
+              "tool": "web_search",
+              "args": {
+                "max_results": "6",
+                "q": "FastAPI 0.160.0 release notes What's New whatsnew.fyi"
+              }
+            },
+            {
+              "tool": "web_search",
+              "args": {
+                "max_results": "6",
+                "q": "FastAPI 0.159.0 release notes What's New whatsnew.fyi"
+              }
+            },
+            {
+              "tool": "web_search",
+              "args": {
+                "max_results": "6",
+                "q": "FastAPI 0.158.0 release notes What's New whatsnew.fyi"
+              }
+            },
+            {
+              "tool": "web_search",
+              "args": {
+                "max_results": "6",
+                "q": "FastAPI release notes 0.155.0 changes form models query parameters"
+              }
+            },
+            {
+              "tool": "web_search",
+              "args": {
+                "max_results": "6",
+                "q": "FastAPI release notes 0.157.0 changes form models"
+              }
+            },
+            {
+              "tool": "web_search",
+              "args": {
+                "max_results": "6",
+                "q": "FastAPI release notes 0.154.0 changes"
+              }
+            },
+            {
+              "tool": "web_search",
+              "args": {
+                "max_results": "6",
+                "q": "FastAPI release notes 0.152.0 changes 0.151.0"
+              }
+            },
+            {
+              "tool": "web_search",
+              "args": {
+                "max_results": "6",
+                "q": "releasebytes FastAPI 0.159.0"
+              }
+            },
+            {
+              "tool": "web_search",
+              "args": {
+                "max_results": "6",
+                "q": "releasebytes FastAPI 0.161.0"
+              }
+            },
+            {
+              "tool": "web_search",
+              "args": {
+                "max_results": "6",
+                "q": "releasebytes FastAPI 0.158.0"
+              }
+            },
+            {
+              "tool": "web_search",
+              "args": {
+                "max_results": "6",
+                "q": "releasebytes FastAPI 0.160.0"
+              }
+            },
+            {
+              "tool": "web_search",
+              "args": {
+                "max_results": "6",
+                "q": "newreleases.io fastapi 0.161.0 Breaking Changes PR"
+              }
+            },
+            {
+              "tool": "web_search",
+              "args": {
+                "max_results": "6",
+                "q": "FastAPI 0.161.0 changes watch upgrading verdict"
+              }
+            },
+            {
+              "tool": "web_search",
+              "args": {
+                "max_results": "6",
+                "q": "fastapi latest version pypi 0.162.0 released November 2026"
+              }
+            },
+            {
+              "tool": "web_search",
+              "args": {
+                "max_results": "8",
+                "q": "\"0.161.0\" FastAPI release \"PR #16\" fixes docs"
+              }
+            },
+            {
+              "tool": "web_search",
+              "args": {
+                "max_results": "8",
+                "q": "FastAPI 0.161.0 release notes \"Fixes\" python 3.14"
+              }
+            },
+            {
+              "tool": "web_search",
+              "args": {
+                "max_results": "8",
+                "q": "FastAPI 0.161.0 Oct 22 2026 whatsnew release summary"
+              }
+            },
+            {
+              "tool": "web_search",
+              "args": {
+                "max_results": "8",
+                "q": "FastAPI 0.163 OR 0.162.1 release November 2026"
+              }
+            },
+            {
+              "tool": "web_search",
+              "args": {
+                "max_results": "8",
+                "q": "\"Release version 0.161.0\" fastapi commit"
+              }
+            },
+            {
+              "tool": "web_search",
+              "args": {
+                "max_results": "8",
+                "q": "fastapi 0.161 release notes what changed"
+              }
+            },
+            {
+              "tool": "web_search",
+              "args": {
+                "max_results": "8",
+                "q": "FastAPI 0.142.2 release notes September 2026"
+              }
+            },
+            {
+              "tool": "web_search",
+              "args": {
+                "max_results": "8",
+                "q": "releasebot.io fastapi 0.161.0 0.161.1 summary"
+              }
+            },
+            {
+              "tool": "web_search",
+              "args": {
+                "max_results": "8",
+                "q": "FastAPI 0.157.0 release notes body parameter model combine query header cookie"
+              }
+            },
+            {
+              "tool": "filesystem.write",
+              "args": {
+                "path": "output/fastapi_notes.md",
+                "content": "# FastAPI 近期版本更新总结\n\n> 整理时间：2026-11-03　|　当前最新版本：**0.162.0**（2026-10-23 发布）\n> 说明：FastAPI 仍处于 `0.x`，按官方说法每个 release 都可能包含破坏性变更（见文末「版本策略」），升级前请务必读对应版本的 Release Note"
+              }
+            }
+          ],
+          "intent": {
+            "domain": "development",
+            "action": "search_and_write",
+            "target": "output/fastapi_notes.md",
+            "confidence": 0.98,
+            "summary": "用户要搜索 FastAPI 近期版本更新，并将带来源链接的总结保存到 output/fastapi_notes.md。",
+            "requires_execution": true,
+            "artifact_required": true,
+            "requested_outcomes": [
+              "FILE_MUTATION"
+            ],
+            "delivery_requirements": [
+              {
+                "id": "fastapi_notes",
+                "kind": "file",
+                "quantity": 1,
+                "target": "output/fastapi_notes.md",
+                "acceptance_criteria": [
+                  {
+                    "kind": "unverifiable",
+                    "description": "总结需基于 FastAPI 近期版本更新，并包含来源链接"
+                  }
+                ]
+              }
+            ],
+            "acceptance_criteria": [
+              {
+                "kind": "unverifiable",
+                "description": "总结需基于 FastAPI 近期版本更新，并包含来源链接"
+              }
+            ],
+            "write_targets": [
+              "output/fastapi_notes.md"
+            ],
+            "prohibited_effects": [],
+            "external_effects": [],
+            "conversation_relation": "new_request",
+            "resolved_request": "搜索 FastAPI 近期的版本更新，整理一份带来源链接的总结，并保存到 output/fastapi_notes.md。",
+            "memory_action": "none",
+            "memory_facts": [],
+            "search_query": "FastAPI 近期版本更新",
+            "search_timeliness": "month",
+            "failure_code": ""
+          },
+          "intent_count": 1,
+          "event_types": [
+            "run_created",
+            "run_started",
+            "stage_started",
+            "stage_completed",
+            "stage_started",
+            "assistant_delta",
+            "task_started",
+            "task_started",
+            "task_completed",
+            "task_completed",
+            "assistant_delta",
+            "task_started",
+            "task_started",
+            "task_completed",
+            "task_completed",
+            "assistant_delta",
+            "task_started",
+            "task_started",
+            "task_completed",
+            "task_completed",
+            "task_started",
+            "task_started",
+            "task_completed",
+            "task_completed",
+            "task_started",
+            "task_started",
+            "task_started",
+            "task_started",
+            "task_completed",
+            "task_completed",
+            "task_completed",
+            "task_completed",
+            "task_started",
+            "task_started",
+            "task_started",
+            "task_completed",
+            "task_completed",
+            "task_completed",
+            "task_started",
+            "task_started",
+            "task_completed",
+            "task_completed",
+            "task_started",
+            "task_started",
+            "task_completed",
+            "task_completed",
+            "task_started",
+            "task_completed",
+            "task_started",
+            "task_completed",
+            "task_started",
+            "task_completed",
+            "task_started",
+            "task_started",
+            "task_completed",
+            "task_completed",
+            "task_started",
+            "task_started",
+            "task_completed",
+            "task_completed",
+            "task_started",
+            "task_started",
+            "task_started",
+            "task_started",
+            "task_completed",
+            "task_completed",
+            "task_completed",
+            "task_completed",
+            "task_started",
+            "task_started",
+            "task_started",
+            "task_started",
+            "task_completed",
+            "task_completed",
+            "task_completed",
+            "task_completed",
+            "task_started",
+            "task_started",
+            "task_started",
+            "task_started",
+            "task_completed",
+            "task_completed",
+            "task_completed",
+            "task_completed",
+            "task_started",
+            "task_started",
+            "task_started",
+            "task_completed",
+            "task_completed",
+            "task_completed",
+            "task_started",
+            "task_started",
+            "task_completed",
+            "task_completed",
+            "task_started",
+            "task_completed",
+            "task_started",
+            "task_started",
+            "task_completed",
+            "task_completed",
+            "task_started",
+            "task_started",
+            "task_completed",
+            "task_completed",
+            "task_started",
+            "task_started",
+            "task_completed",
+            "task_completed",
+            "task_started",
+            "task_completed",
+            "assistant_delta",
+            "assistant_delta",
+            "assistant_delta",
+            "assistant_delta",
+            "assistant_delta",
+            "assistant_delta",
+            "assistant_delta",
+            "assistant_delta",
+            "assistant_delta",
+            "assistant_delta",
+            "assistant_delta",
+            "assistant_delta",
+            "stage_completed",
+            "run_completed"
+          ],
+          "failure_summary": null,
+          "error": "",
+          "duration_ms": 235475.0
+        }
+      ],
+      "checks": [
+        {
+          "check": "status",
+          "passed": true,
+          "detail": "expected COMPLETED got COMPLETED",
+          "turn": 1
+        },
+        {
+          "check": "artifact_exists",
+          "passed": true,
+          "detail": "'output/fastapi_notes.md' matched ['/Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_080642_workspace/cs10/output/fastapi_notes.md']",
+          "turn": 1
+        },
+        {
+          "check": "file_contains:output/fastapi_notes.md",
+          "passed": true,
+          "detail": "tokens ['http'] in 'output/fastapi_notes.md': found in /Users/tsxg/Desktop/TSAgent/realtest_reports/results/core_scenarios_20261103_080642_workspace/cs10/output/fastapi_notes.md",
+          "turn": 1
+        },
+        {
+          "check": "tools_any",
+          "passed": true,
+          "detail": "none of ['web_search', 'web_news_search', 'web_deep_search'] used (tools: ['filesystem.write', 'web_deep_search', 'web_fetch', 'web_news_search', 'web_search'])",
+          "turn": 1
+        }
+      ],
+      "files": {
+        "output/fastapi_notes.md": "# FastAPI 近期版本更新总结\n\n> 整理时间：2026-11-03　|　当前最新版本：**0.162.0**（2026-10-23 发布）\n> 说明：FastAPI 仍处于 `0.x`，按官方说法每个 release 都可能包含破坏性变更（见文末「版本策略」），升级前请务必读对应版本的 Release Notes。\n\n---\n\n## 1. 一句话概览\n\n2026 年 10 月是 FastAPI 的密集迭代期：从 **0.150.0 → 0.162.0** 共十余个版本，几乎全部集中在同一块领域 —— **请求参数模型（query / header / cookie / form）与表单的处理语义**。核心方向是把「参数模型」的行为统一到 Pydantic 的语义上，代价是出现了几次**破坏性变更**（0.155.0 与 0.160.0、0.162.0）。\n\n---\n\n## 2. 版本时间线（2026 年 10 月，按版本号递增）\n\n| 版本 | 日期 | 类型 | 主要内容 |\n|---|---|---|---|\n| 0.150.0 | 2026-10-20 | 行为修正 | 文件上传的空文件输入语义：浏览器在未选择文件时会提交一个 `filename` 为空、内容为空的 file part。FastAPI 现在把它视为「缺失」—— 必填文件字段报校验错误；有默认值/默认工厂的字段使用默认值；未选择的输入在文件列表中被忽略；**有名字的 0 字节文件仍被接受**。 |\n| 0.153.0 | 2026-10-20 | 行为统一 | **form 模型的联合类型（Union）**现在与单个 form 模型采用相同的「浏览器表单处理」逻辑。 |\n| 0.155.0 | 2026-10-21 | **破坏性** | 移除了已废弃的通过 `**extra` 关键字参数传参的旧写法（PR #16545）。 |\n| 0.156.3 | 2026-10-21 | Bugfix | 模型 alias 相关修复。 |\n| 0.156.6 | 2026-10-21 | Bugfix | 让 **query / header / cookie 参数尊重模型的 alias 设置**。 |\n| 0.156.7 | 2026-10-21 | Bugfix | 文件/表单字段位置（position）相关修正。 |\n| 0.156.8 | 2026-10-21 | Bugfix | 文件/表单字段位置相关修正（同上方向）。 |\n| 0.157.0 | 2026-10-21 | **新特性** | 支持**组合多个参数模型**：一个端点里可以同时用「分页模型 + 过滤模型」，并与单个参数、依赖混用；query 之外也支持 header 和 cookie。 |\n| 0.158.0 | 2026-10-21 | **新特性** | 支持**组合（合并）form 模型**，同一 endpoint 可接收由多个 form 模型拼成的表单。 |\n| 0.159.0 | 2026-10-22 | **新特性** | 支持 **Optional 参数模型**（query / header / cookie 参数模型可以是可选的整体）。 |\n| 0.160.0 | 2026-10-22 | **破坏性** | 参数模型的 `extra` 配置现在**作用于同一位置的全部提交字段**，与 Pydantic 行为一致 —— 包括此前被排除的、在其他模型 / 单个参数 / 依赖中声明的字段（PR #16594）。`extra=\"allow\"` 时这些字段会进入模型 extras；默认 `extra=\"ignore\"` 时被忽略。 |\n| 0.161.0 | 2026-10-22 | 发布 | 已确认存在（Release version 0.161.0），随后同日发布 0.161.1（PR #16599）。**注：该版本条目内容未能取到可核验摘要，不做推断。** |\n| 0.161.1 | 2026-10-22 | 补丁 | 紧随 0.161.0 的补丁发布。 |\n| **0.162.0** | **2026-10-23** | **破坏性** | 被省略的 `bool` 与 `bool \\| None` **form 字段**改用「声明默认值」或「报缺失字段错误」，与其他字段和 Pydantic 语义一致。FastAPI **不再**为被省略的布尔字段推断 `False`。适用于单个 form 参数、form 模型以及 form 模型的联合类型（PR #16605）。 |\n\n---\n\n## 3. 三条主线（值得重点关注的语义变化）\n\n### 3.1 参数模型的组合能力大增（0.157 / 0.158 / 0.159）\n以前一个 endpoint 只能在「一个参数模型」和「一堆零散参数 + 依赖」之间二选一；现在可以：\n- 多个 query 模型 + 单个参数 + 依赖同时使用（0.157.0），header、cookie 同理；\n- 多个 **form** 模型组合成一个表单（0.158.0）；\n- 整体可选的参数模型（0.159.0）。\n\n实践价值：把「分页」「排序」「过滤」拆成独立模型复用，端点签名不再是巨型函数。\n\n### 3.2 `extra` 与 alias 语义对齐 Pydantic（0.156.6 / 0.160.0）\n- alias：query/header/cookie 参数现在遵守模型的 `alias` 配置（0.156.6 修复）。\n- `extra`：作用于**同一参数位置的所有字段**（含其它模型、单参数、依赖中声明的字段），而不是只管本模型内声明的字段（0.160.0）。默认 `ignore`，`allow` 时进 extras。\n- **风险点**：如果你的代码依赖「别的字段不会被抓进我的模型」，或依赖 `extra=\"forbid\"` 的旧边界，升级后行为会变。\n\n### 3.3 布尔表单字段不再「默认 False」（0.162.0）\nHTML 表单里未勾选的 checkbox 根本不会被提交。旧行为是 FastAPI 直接推断为 `False`；新行为是「用声明默认值，否则报缺失」，从而与 `str`、`int` 等类型一致。\n- 若字段是 `bool`（必填、无默认），旧代码能跑、新代码会**校验失败**。\n- 修复方式：把该字段声明为 `bool = False`（或 `bool | None = None`），显式表达「未提交即为 False」。\n- 影响范围包括 form 模型和 form 模型 Union。\n\n---\n\n## 4. 升级建议（从 0.14x/0.15x 升级到 0.162.0）\n\n1. **先查 0.155.0**：搜索代码里是否还在用 `**extra` 形式的旧参数写法，改成 `Annotated[..., Query()/Form()]`。\n2. **再查 0.160.0**：检查所有依赖 `extra` 边界行为的参数模型，尤其是 `extra=\"forbid\"` / `extra=\"allow\"` 的模型，确认同位置的其他参数不会破坏校验。\n3. **最后查 0.162.0**：把「表单布尔字段」的隐式 `False` 显式化（`bool = False`）。\n4. **regression 重点**：文件上传（0.150.0 的空文件语义）、form Union（0.153.0）、多模型组合端点（0.157–0.159）。\n5. 补丁发得很勤（0.156.3 → 0.156.8，0.161.0 → 0.161.1 同日），**建议锁定小版本**并定期跟进补丁。\n\n---\n\n## 5. 更早的背景（2026 年 7–9 月）\n\n- **0.141.0**（2026-07-29）：新增 `app.frontend`（`check_dir=\"auto\"`），配合 `fastapi dev` 让本地前后端联调更顺手（PR #16102）。\n- **0.142.0 / 0.142.1 / 0.142.2**：2026 年 9 月一个月内连发三个点版本；其中 **0.142.2** 修复了「自动 OpenTelemetry 配置失败导致应用无法启动」的问题（PR #16418）—— 属于会影响启动的关键修复。\n\n---\n\n## 6. 版本策略备注\n\n- FastAPI 官方对停留在 `0.x` 的解释是：仍可能有破坏性变更，与 SemVer 预 1.0 阶段的规则一致。因此 **minor 版本号提升不等于兼容**（0.155.0 / 0.160.0 / 0.162.0 均是 minor 号上升但带 breaking change）。\n- 底座 Starlette 已于 2026 年 3 月发布 1.0.0。\n\n---\n\n## 7. 来源链接\n\n官方 / 一手：\n- 官方 Release Notes：https://fastapi.tiangolo.com/release-notes/\n- GitHub Releases（fastapi/fastapi）：https://github.com/fastapi/fastapi/releases\n- GitHub Commits（可见 `Release version 0.161.0 / 0.161.1`）：https://github.com/fastapi/fastapi/commits"
+      }
+    }
+  ],
+  "summary": {
+    "total": 1,
+    "passed": 1,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 0,
+    "provider_calls": 1
+  }
+}

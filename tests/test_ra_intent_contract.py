@@ -191,9 +191,9 @@ def test_f_context_needs_memory_controls_retrieval(monkeypatch, tmp_path):
 
 
 def test_g_greeting_makes_one_intent_and_one_answer_call(monkeypatch, tmp_path):
+    # cheap-chat 分流后，寒暄不再需要 intent LLM 调用，全程只有 1 次回答调用
     request = '你好'
     provider = setup_provider(monkeypatch, [
-        (request, intent(request, domain='闲聊', action='answer')),
         (request, '你好！很高兴见到你。'),
     ])
 
@@ -206,5 +206,5 @@ def test_g_greeting_makes_one_intent_and_one_answer_call(monkeypatch, tmp_path):
         finally:
             await service.close()
     asyncio.run(scenario())
-    assert len(provider.calls) == 2
+    assert len(provider.calls) == 1
     assert not provider.replies

@@ -526,3 +526,162 @@ def create_docx(title: str, sections: list, output_path: str = "") -> str:
 
 registry.register(create_pptx, category="office", tags=["office", "ppt", "presentation"])
 registry.register(create_docx, category="office", tags=["office", "docx", "word"])
+
+# ──────────────────────────────────────────────
+# XLSX generation
+# ──────────────────────────────────────────────
+
+
+def create_xlsx(title: str, sheets: list, output_path: str = "") -> str:
+    """创建 Excel 工作簿（多 sheet、表头样式、公式）。
+
+    Args:
+        title: 工作簿标题（写入第一个 sheet 的 A1）
+        sheets: sheet 列表。每项为 dict：
+            {"name": "sheet 名", "headers": ["列1","列2"], "rows": [[...],...],
+             "column_widths": {"A": 20}（可选）}
+            rows 单元格值以 "=" 开头视为公式原样写入。
+        output_path: 输出路径（相对于项目根目录，留空自动生成）
+
+    Returns:
+        操作结果描述（含文件路径）
+    """
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        from openpyxl.utils import get_column_letter
+    except ImportError:
+        return "错误：openpyxl 未安装。请运行: pip install openpyxl"
+
+    try:
+        wb = Workbook()
+        wb.remove(wb.active)
+        header_font = Font(bold=True, color="FFFFFF", size=11)
+        header_fill = PatternFill("solid", start_color="1F4E79")
+        thin = Side(style="thin", color="D0D0D0")
+        border = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+        for i, spec in enumerate(sheets):
+            ws = wb.create_sheet(spec.get("name") or f"Sheet{i+1}")
+            row_off = 1
+            if i == 0 and title:
+                ws["A1"] = title
+                ws["A1"].font = Font(bold=True, size=14)
+                row_off = 2
+            headers = spec.get("headers") or []
+            for c, h in enumerate(headers, 1):
+                cell = ws.cell(row=row_off, column=c, value=h)
+                cell.font = header_font
+                cell.fill = header_fill
+                cell.border = border
+                cell.alignment = Alignment(horizontal="center")
+            for r, row in enumerate(spec.get("rows") or [], row_off + 1):
+                for c, val in enumerate(row, 1):
+                    cell = ws.cell(row=r, column=c, value=val)
+                    cell.border = border
+            for col, w in (spec.get("column_widths") or {}).items():
+                ws.column_dimensions[col].width = w
+            else:
+                for c in range(1, len(headers) + 1):
+                    ws.column_dimensions[get_column_letter(c)].width = 16
+
+        if not wb.sheetnames:
+            wb.create_sheet("Sheet1")
+        if not output_path:
+            safe = "".join(c if c.isalnum() or c in "_-" else "_" for c in title)[:40] or "report"
+            output_path = f"output/{safe}.xlsx"
+        out = ROOT / output_path if not Path(output_path).is_absolute() else Path(output_path)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        wb.save(str(out))
+        return f"Excel 工作簿已生成: {out}（{len(wb.sheetnames)} 个 sheet）"
+    except Exception as e:
+        return f"错误：生成 Excel 失败: {e}"
+
+
+# ──────────────────────────────────────────────
+# Editing existing office documents
+# ──────────────────────────────────────────────
+
+
+def edit_pptx(path: str, slides: list, output_path: str = "") -> str:
+    """向已存在的 PPTX 追加幻灯片（沿用 create_pptx 的 slides 格式）。"""
+    try:
+        from pptx import Presentation
+    except ImportError:
+        return "错误：python-pptx 未安装。请运行: pip install python-pptx"
+
+    src = ROOT / path if not Path(path).is_absolute() else Path(path)
+    if not src.exists():
+        return f"错误：文件不存在: {src}"
+    try:
+        prs = Presentation(str(src))
+        layout = prs.slide_layouts[5] if len(prs.slide_layouts) > 5 else prs.slide_layouts[-1]
+        for s in slides:
+            slide = prs.slides.add_slide(layout)
+            heading = s.get("heading") or s.get("title") or ""
+            if slide.shapes.title:
+                slide.shapes.title.text = heading
+            body_items = s.get("body") or []
+            if body_items:
+                for ph in slide.placeholders:
+                    if ph.placeholder_format.idx > 0 and ph.has_text_frame:
+                        tf = ph.text_frame
+                        tf.text = str(body_items[0])
+                        for item in body_items[1:]:
+                            tf.add_paragraph().text = str(item)
+                        break
+            for note in ([s["note"]] if s.get("note") else []):
+                slide.notes_slide.notes_text_frame.text = note
+        out = ROOT / output_path if output_path and not Path(output_path).is_absolute() else (
+            Path(output_path) if output_path else src)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        prs.save(str(out))
+        return f"PPTX 已更新: {out}（追加 {len(slides)} 页，共 {len(prs.slides.__iter__.__self__._sldIdLst)} 页）"
+    except Exception as e:
+        return f"错误：编辑 PPTX 失败: {e}"
+
+
+def edit_docx(path: str, sections: list, output_path: str = "") -> str:
+    """向已存在的 DOCX 追加内容块（沿用 create_docx 的 sections 格式）。"""
+    try:
+        from docx import Document
+    except ImportError:
+        return "错误：python-docx 未安装。请运行: pip install python-docx"
+
+    src = ROOT / path if not Path(path).is_absolute() else Path(path)
+    if not src.exists():
+        return f"错误：文件不存在: {src}"
+    try:
+        doc = Document(str(src))
+        for s in sections:
+            t = s.get("type", "paragraph")
+            if t == "heading":
+                doc.add_heading(s.get("text", ""), level=s.get("level", 1))
+            elif t == "bullet":
+                for item in s.get("items") or []:
+                    doc.add_paragraph(str(item), style="List Bullet")
+            elif t == "table":
+                headers, rows = s.get("headers") or [], s.get("rows") or []
+                tbl = doc.add_table(rows=1 + len(rows), cols=max(len(headers), 1))
+                tbl.style = "Table Grid"
+                for c, h in enumerate(headers):
+                    tbl.cell(0, c).text = str(h)
+                for r, row in enumerate(rows, 1):
+                    for c, v in enumerate(row):
+                        tbl.cell(r, c).text = str(v)
+            elif t == "quote":
+                doc.add_paragraph(s.get("text", ""), style="Intense Quote")
+            else:
+                doc.add_paragraph(s.get("text", ""))
+        out = ROOT / output_path if output_path and not Path(output_path).is_absolute() else (
+            Path(output_path) if output_path else src)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        doc.save(str(out))
+        return f"DOCX 已更新: {out}"
+    except Exception as e:
+        return f"错误：编辑 DOCX 失败: {e}"
+
+
+registry.register(create_xlsx, category="office", tags=["office", "excel", "xlsx"])
+registry.register(edit_pptx, category="office", tags=["office", "ppt", "edit"])
+registry.register(edit_docx, category="office", tags=["office", "docx", "edit"])

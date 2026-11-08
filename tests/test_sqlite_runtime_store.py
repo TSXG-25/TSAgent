@@ -904,3 +904,45 @@ def test_workspace_source_folders_round_trip(tmp_path: Path) -> None:
         assert listed["ws-multi"].paths_json == '["/b"]'
     finally:
         store.close()
+
+
+def test_create_run_resolves_bound_session_workspace(tmp_path: Path) -> None:
+    """A bound session's runs must scope to the workspace folder even when
+    the request carries no explicit workspace_root — the binding lives in
+    the store, not in the caller."""
+    from types import SimpleNamespace
+    from agent.service.context_factory import ServiceContextFactory
+    from agent.services.workspace_service import WorkspaceService
+
+    store = _store(tmp_path / "runtime.sqlite")
+    try:
+        target = tmp_path / "project"
+        target.mkdir()
+        store.ensure_session("tenant-a", "s-bound", "u1")
+        store.ensure_session("tenant-a", "s-bound2", "u1")
+        store.upsert_workspace("tenant-a", "ws-dir", display_name="w", path=str(target))
+        store.assign_session_workspace("tenant-a", "s-bound", "ws-dir")
+        store.assign_session_workspace("tenant-a", "s-bound2", "ws-dir")
+        store.ensure_session("tenant-a", "s-free", "u1")
+
+        factory = ServiceContextFactory(store)
+        request = lambda sid, root="": SimpleNamespace(
+            tenant_id="tenant-a", session_id=sid, user_id="u1",
+            request_id="req-x", workspace_root=root,
+        )
+
+        ctx = factory.create_run(request("s-bound"), run_id="run-bound")
+        assert isinstance(ctx.workspace, WorkspaceService)
+        assert Path(ctx.workspace.root) == target
+        factory.release_run(ctx)
+
+        ctx = factory.create_run(request("s-bound2", root=str(tmp_path)), run_id="run-explicit")
+        assert Path(ctx.workspace.root) == tmp_path
+        factory.release_run(ctx)
+
+        ctx = factory.create_run(request("s-free"), run_id="run-free")
+        assert ctx.workspace is None
+        factory.release_run(ctx)
+        factory.close()
+    finally:
+        store.close()

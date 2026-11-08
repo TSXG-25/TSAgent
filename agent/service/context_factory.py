@@ -26,7 +26,15 @@ class ServiceContextFactory:
         writer_id: str | None = None,
     ) -> None:
         self.workspace_root = workspace_root.resolve() if workspace_root else None
-        self.workspace_for_run = workspace_for_run
+        # Session→workspace binding lives in the store; make the lookup the
+        # default so every construction path (sidecar, CLI, in-process)
+        # resolves a bound session's workspace instead of silently falling
+        # back to the process-level root.
+        self.workspace_for_run = workspace_for_run or (
+            lambda tenant, session, _run: (
+                (p := store.session_workspace_path(tenant, session)) and Path(p)
+            ) or None
+        )
         self._store = store
         self._writer_id = str(writer_id or f"writer-{uuid.uuid4().hex}")
         self._application: Any | None = None
@@ -88,19 +96,16 @@ class ServiceContextFactory:
         if existing is not None and not existing.closed:
             return existing
         explicit_root = str(getattr(request, "workspace_root", "") or "")
-        workspace = (
-            Path(explicit_root)
-            if explicit_root
-            else (
-                self.workspace_for_run(
-                    request.tenant_id,
-                    request.session_id,
-                    run_id,
-                )
-                if self.workspace_for_run is not None
-                else self.workspace_root
+        bound = (
+            self.workspace_for_run(
+                request.tenant_id,
+                request.session_id,
+                run_id,
             )
+            if not explicit_root
+            else None
         )
+        workspace = Path(explicit_root) if explicit_root else (bound or self.workspace_root)
         if workspace is not None:
             workspace = workspace.resolve()
         from agent.runtime_context import RunContext

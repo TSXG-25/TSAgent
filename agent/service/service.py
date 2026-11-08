@@ -83,12 +83,7 @@ class AgentService:
         self._store = runtime_store
         self._launcher = launcher
         if context_factory is None:
-            context_factory = ServiceContextFactory(
-                runtime_store,
-                workspace_for_run=lambda tenant, session, _run: (
-                    (p := runtime_store.session_workspace_path(tenant, session)) and __import__("pathlib").Path(p)
-                ) or None,
-            )
+            context_factory = ServiceContextFactory(runtime_store)
         self._contexts = context_factory
         # Durable SQLite events are the default Source of Truth in C-3.  A
         # caller may still inject an explicit repository for deterministic

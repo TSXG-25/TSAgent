@@ -3954,8 +3954,8 @@ html[data-fx="standard"] .ws-root::after { animation: none; }
 @keyframes thinkpulse { 50% { opacity: .4; } }
 .msg3.thinking summary .think-glyph { color: var(--planet-accent); }
 
-.think-reply { margin-top: 6px; padding-top: 8px; border-top: 1px dashed rgba(160,190,255,.1); }
-.think-reply p { margin: 4px 0 0; font-size: 11px; line-height: 1.6; color: rgba(200,208,225,.55); white-space: pre-wrap; word-break: break-word; }
+.think-msg { margin-top: 6px; padding-top: 8px; border-top: 1px dashed rgba(160,190,255,.1); }
+.think-msg p { margin: 4px 0 0; font-size: 11px; line-height: 1.6; color: rgba(200,208,225,.55); white-space: pre-wrap; word-break: break-word; }
 
 /* richer markdown */
 .md-h { font-weight: 700; color: var(--text-base); margin: 10px 0 4px; }
@@ -4124,7 +4124,7 @@ ol.md-list li::marker { color: var(--planet-accent); font-family: var(--font-mon
 /* thinking chain — secondary text tier like dsh ReasoningRow */
 .msg3.thinking summary { font-size: 13px; line-height: 20px; padding: 9px 14px; }
 .think-step { font-size: 12px; line-height: 18px; padding: 5px 0; }
-.think-reply p { font-size: 12px; line-height: 18px; }
+.think-msg p { font-size: 12px; line-height: 18px; }
 /* approval — hairline, secondary detail */
 .appr-detail .omni-warn { font-size: 13px; }
 .appr-params { border: 0.5px solid rgba(255,255,255,.08); }

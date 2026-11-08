@@ -1,7 +1,9 @@
-import type { RunEventView } from "../../types";
+import type { ConversationMessageView, RunEventView } from "../../types";
 
 /** Thinking chain — folds durable run events (stage/task/approval lifecycle)
- *  into an ordered step timeline. Real data only: no invented reasoning. */
+ *  and intermediate assistant narration into an ordered step timeline inside
+ *  one collapsible box. The reply stream and final output are NOT here — they
+ *  render as regular message bubbles. Real data only: no invented reasoning. */
 interface Step { key: string; label: string; detail: string; done: boolean; seq: number }
 
 export function thinkingSteps(events: RunEventView[] | undefined): Step[] {
@@ -54,21 +56,22 @@ export function thinkingSteps(events: RunEventView[] | undefined): Step[] {
   return steps;
 }
 
-export function ThinkingChain({ events }: { events: RunEventView[] | undefined }) {
+export function ThinkingChain({
+  events,
+  messages = [],
+}: {
+  events: RunEventView[] | undefined;
+  messages?: ConversationMessageView[];
+}) {
   const steps = thinkingSteps(events);
-  // model reply stream — assistant_delta carries the LLM's visible output
-  // tokens; fold them into a preview inside the chain.
-  const reply = (events ?? [])
-    .filter((e) => (e.eventType ?? e.type) === "assistant_delta")
-    .map((e) => String((e.payload as Record<string, unknown>)?.delta ?? ""))
-    .join("");
-  if (steps.length === 0 && !reply) return null;
+  if (steps.length === 0 && messages.length === 0) return null;
   const doneCount = steps.filter((s) => s.done).length;
+  const live = steps.some((s) => !s.done);
   return (
-    <details className="msg3 thinking" open={steps.some((s) => !s.done)}>
+    <details className="msg3 thinking" open={live}>
       <summary>
         <span className="think-glyph">◈</span> 思考过程
-        <em>{steps.length ? `${doneCount}/${steps.length}` : ""}{reply ? " · 回复流" : ""}</em>
+        <em>{steps.length ? `${doneCount}/${steps.length}` : ""}{messages.length ? ` · ${messages.length} 条记录` : ""}</em>
       </summary>
       <div className="think-list">
         {steps.map((s) => (
@@ -78,12 +81,12 @@ export function ThinkingChain({ events }: { events: RunEventView[] | undefined }
             {s.detail && <span className="think-detail">{s.detail}</span>}
           </div>
         ))}
-        {reply && (
-          <div className="think-reply">
-            <span className="think-detail">assistant_delta</span>
-            <p>{reply.slice(-600)}</p>
+        {messages.map((m) => (
+          <div className="think-msg" key={m.messageId}>
+            <span className="think-detail">{m.role === "system" ? "system" : "assistant"}</span>
+            <p>{m.content}</p>
           </div>
-        )}
+        ))}
       </div>
     </details>
   );

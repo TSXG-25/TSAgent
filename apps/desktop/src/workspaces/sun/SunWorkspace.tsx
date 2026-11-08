@@ -419,10 +419,15 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
                 chronological (hydrated runs arrive unordered) */}
             {runs.filter((r) => r.sessionId === sessionId)
               .sort((a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? ""))
-              .map((r) => (
+              .map((r) => {
+              const conv = r.conversation ?? [];
+              const isStream = (m: (typeof conv)[number]) => (m as { streaming?: boolean }).streaming === true;
+              const thinkingMsgs = conv.filter((m) => m.role !== "user" && !isStream(m));
+              const liveReply = conv.filter(isStream).slice(-1)[0];
+              const showLive = liveReply !== undefined && !(r.output && r.output.text);
+              return (
               <div className="sess-run" key={r.runId}>
                 {r !== viewRun && <div className="sess-run-sep"><code>{r.runId.replace("run-", "#")}</code><em>{r.status}</em></div>}
-                <ThinkingChain events={r.events} />
                 {r.request && (
                   <article className="msg3 user">
                     <div className="msg3-head"><span>You</span><time>{rel(r.createdAt)}</time></div>
@@ -436,13 +441,14 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
                     )}
                   </article>
                 )}
-                {(r.conversation ?? []).map((m) => (
-                  <article className={`msg3 ${m.role}`} key={m.messageId}>
-                    <div className="msg3-head"><span>{m.role === "user" ? "You" : "⬡ T.S.A"}</span><time>{rel(m.at)}</time></div>
-                    <div className="msg3-body"><MarkdownText text={m.content} />{r.status === "active" && m.role !== "user" && <span className="msg-caret" />}</div>
-                    {m.role !== "user" && <button className="msg-copy" onClick={() => void navigator.clipboard.writeText(m.content)} title="复制">复制</button>}
+                <ThinkingChain events={r.events} messages={thinkingMsgs} />
+                {showLive && (
+                  <article className="msg3 assistant">
+                    <div className="msg3-head"><span>⬡ T.S.A</span><time></time></div>
+                    <div className="msg3-body"><MarkdownText text={liveReply.content} /><span className="msg-caret" /></div>
+                    <button className="msg-copy" onClick={() => void navigator.clipboard.writeText(liveReply.content)} title="复制">复制</button>
                   </article>
-                ))}
+                )}
                 {r.output && (
                   <article className="msg3 assistant durable-output">
                     <div className="msg3-head"><span>⬡ T.S.A</span><time>{rel(r.output.createdAt)}</time></div>
@@ -450,9 +456,11 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
                   </article>
                 )}
               </div>
-            ))}
-            {/* CURRENT EXECUTION — real workflow stages from runtime */}
-            {wfSteps.length > 0 && (
+              );
+            })}
+            {/* CURRENT EXECUTION — live workflow stages; terminal runs keep
+                their step record inside the collapsed thinking box instead */}
+            {wfSteps.length > 0 && viewRun && !["completed", "failed", "cancelled", "timed_out"].includes(viewRun.status) && (
               <article className="msg3 exec mech">
                 <div className="msg3-head"><span className="mod-title">⬡ CURRENT EXECUTION</span><em>{viewRun!.status.toUpperCase()}</em></div>
                 <div className="exec-steps plan">

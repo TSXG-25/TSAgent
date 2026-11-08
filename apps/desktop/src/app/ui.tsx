@@ -145,7 +145,7 @@ export function MarkdownText({ text }: { text: string }) {
   return <>{blocks}</>;
 }
 
-/** Block-level: headings, hr, blockquote, ul/ol lists, else paragraph. */
+/** Block-level: headings, tables, hr, blockquote, ul/ol lists, else paragraph. */
 function renderProse(prose: string): ReactNode[] {
   const out: ReactNode[] = [];
   const lines = prose.split("\n");
@@ -159,8 +159,31 @@ function renderProse(prose: string): ReactNode[] {
       list = null;
     }
   };
-  for (const raw of lines) {
-    const line = raw;
+  const tableSep = (line: string) => /^\s*\|?[\s:|-]+\|?\s*$/.test(line) && line.includes("-");
+  const tableCells = (line: string) => line.trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
+  for (let li = 0; li < lines.length; li++) {
+    const line = lines[li];
+    // GFM table: header row, |---| separator, body rows
+    if (line.includes("|") && li + 1 < lines.length && tableSep(lines[li + 1])) {
+      flushPara(); flushList();
+      const head = tableCells(line);
+      const rows: string[][] = [];
+      li += 2;
+      while (li < lines.length && lines[li].includes("|") && lines[li].trim()) {
+        const cells = tableCells(lines[li]);
+        while (cells.length < head.length) cells.push("");
+        rows.push(cells.slice(0, head.length));
+        li++;
+      }
+      li--;
+      out.push(
+        <table className="md-table" key={k++}>
+          <thead><tr>{head.map((c, j) => <th key={j}>{renderInline(c)}</th>)}</tr></thead>
+          <tbody>{rows.map((r, j) => <tr key={j}>{r.map((c, i) => <td key={i}>{renderInline(c)}</td>)}</tr>)}</tbody>
+        </table>
+      );
+      continue;
+    }
     const ul = line.match(/^\s*[-*•]\s+(.+)/);
     const ol = line.match(/^\s*\d+[.)]\s+(.+)/);
     const h = line.match(/^(#{1,4})\s+(.+)/);

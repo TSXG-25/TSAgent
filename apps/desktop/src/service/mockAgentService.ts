@@ -42,6 +42,9 @@ import {
   type EvaluationSummary,
   type RecordEvaluationRequest,
   type UpsertWorkspaceRequest,
+  type AssignSessionWorkspaceRequest,
+  type DeleteWorkspaceRequest,
+  type DirectoryListing,
   type DecideApprovalRequest,
   type ProfileSummary,
   type SettingsSummary,
@@ -297,9 +300,13 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
         latestRunId: run.runId,
         latestStatus: run.status,
         latestUpdatedAt: run.updatedAt,
+        workspaceId: this.sessionWorkspaces.get(run.sessionId),
       });
     }
-    return [...this.extraSessions, ...bySession.values()];
+    return [
+      ...this.extraSessions.map((s) => ({ ...s, workspaceId: this.sessionWorkspaces.get(s.sessionId) })),
+      ...bySession.values(),
+    ];
   }
 
   private handoffs: HandoffSummary[] = [
@@ -324,6 +331,7 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
     const next: WorkspaceSummary = {
       workspaceId: request.workspaceId,
       displayName: request.displayName ?? "",
+      path: request.path ?? "",
       capabilities: request.capabilities ?? [],
       defaultProfileId: request.defaultProfileId ?? "",
       description: request.description ?? "",
@@ -331,6 +339,35 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
     };
     this.workspaces = [next, ...this.workspaces.filter((w) => w.workspaceId !== next.workspaceId)];
     return next;
+  }
+
+  private sessionWorkspaces = new Map<string, string>();
+
+  async assignSessionWorkspace(
+    request: AssignSessionWorkspaceRequest,
+  ): Promise<{ sessionId: string; workspaceId: string }> {
+    if (request.workspaceId) this.sessionWorkspaces.set(request.sessionId, request.workspaceId);
+    else this.sessionWorkspaces.delete(request.sessionId);
+    return { sessionId: request.sessionId, workspaceId: request.workspaceId };
+  }
+
+  async deleteWorkspace(request: DeleteWorkspaceRequest): Promise<{ removed: boolean }> {
+    const before = this.workspaces.length;
+    this.workspaces = this.workspaces.filter((w) => w.workspaceId !== request.workspaceId);
+    for (const [sid, wsId] of this.sessionWorkspaces) {
+      if (wsId === request.workspaceId) this.sessionWorkspaces.delete(sid);
+    }
+    return { removed: this.workspaces.length !== before };
+  }
+
+  async pickFolder(): Promise<{ path: string | null }> {
+    // Deterministic fake so the workspace-file flow is exercisable in mock mode.
+    return { path: "/mock/picked-workspace" };
+  }
+
+  async listDirectory(path: string): Promise<DirectoryListing> {
+    const current = path || "/mock";
+    return { path: current, parent: "/", dirs: ["docs/", "src/", "output/"], home: "/mock" };
   }
 
   private workspaces: WorkspaceSummary[] = [
@@ -345,7 +382,10 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
   ];
 
   async listWorkspaces(): Promise<WorkspaceSummary[]> {
-    return [...this.workspaces];
+    return this.workspaces.map((w) => ({
+      ...w,
+      memberCount: [...this.sessionWorkspaces.values()].filter((id) => id === w.workspaceId).length,
+    }));
   }
 
   private settings: SettingsSummary = {

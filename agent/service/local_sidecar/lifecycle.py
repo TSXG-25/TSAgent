@@ -16,12 +16,15 @@ class SidecarConfig:
     writer_id: str | None = None
 
 
+DEFAULT_DATABASE_PATH = Path.home() / ".tsagent" / "runtime.db"
+
+
 def parse_args(argv: Sequence[str] | None = None) -> SidecarConfig:
     parser = argparse.ArgumentParser(description="TSAgent local AgentService JSONL sidecar")
     parser.add_argument(
         "--database",
         type=Path,
-        default=os.getenv("TSAGENT_RUNTIME_DB"),
+        default=os.getenv("TSAGENT_RUNTIME_DB") or DEFAULT_DATABASE_PATH,
         help="file-backed SQLite Runtime Store path",
     )
     parser.add_argument(
@@ -34,10 +37,8 @@ def parse_args(argv: Sequence[str] | None = None) -> SidecarConfig:
         default=os.getenv("TSAGENT_WRITER_ID"),
     )
     args = parser.parse_args(argv)
-    if args.database is None:
-        parser.error("--database or TSAGENT_RUNTIME_DB is required")
     return SidecarConfig(
-        database_path=Path(args.database),
+        database_path=Path(args.database).expanduser(),
         workspace_root=(None if args.workspace_root is None else Path(args.workspace_root)),
         writer_id=args.writer_id,
     )

@@ -7,7 +7,7 @@ import AgentComposer from "../../app/AgentComposer";
 import { requestIdForRun, StatusBadge, Icon, MarkdownText } from "../../app/ui";
 import { useOrchestration } from "./SunOrchestration";
 import type { RunCtx } from "../../app/runCtx";
-import type { ApprovalSummary, ParticipantSummary, SessionSummary } from "../../types/service";
+import type { ApprovalSummary, DirectoryListing, ParticipantSummary, SessionSummary, WorkspaceSummary } from "../../types/service";
 
 /** Omni v3 — task-workbench layout per review:
  *  SessionSidebar (task titles+status+search) | TaskControl bar +
@@ -33,10 +33,9 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
   const [query, setQuery] = useState("");
   const [approvals, setApprovals] = useState<ApprovalSummary[]>([]);
   const [participants, setParticipants] = useState<ParticipantSummary[]>([]);
-  const [wsList, setWsList] = useState<Array<{ workspaceId: string; displayName: string; path?: string; memberCount?: number }>>([]);
+  const [wsList, setWsList] = useState<WorkspaceSummary[]>([]);
   const refreshWs = () => {
-    const c = service as unknown as { listWorkspaces?: (r: object) => Promise<Array<{ workspaceId: string; displayName: string; path?: string; memberCount?: number }>> };
-    void c.listWorkspaces?.({ tenantId: service.identity.tenantId, userId: service.identity.userId, sessionId: service.identity.sessionId, requestId: `ws-${Date.now()}` } as never).then((w) => setWsList(w ?? [])).catch(() => {});
+    void service.listWorkspaces({ tenantId: service.identity.tenantId, sessionId: service.identity.sessionId, requestId: `ws-${Date.now()}` }).then(setWsList).catch(() => {});
   };
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [dragSid, setDragSid] = useState<string | null>(null);
@@ -47,23 +46,29 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
     const ws = wsList.find((w) => w.workspaceId === (sess?.workspaceId ?? ""));
     return ws?.path ?? "";
   };
-  const [browse, setBrowse] = useState<{ path: string; parent: string; dirs: string[]; home?: string } | null>(null);
+  const [browse, setBrowse] = useState<DirectoryListing | null>(null);
   useEffect(() => {
-    const c = service as unknown as { pickFolder?: () => Promise<{ path: string | null }> };
-    if (c.pickFolder) { setSidecarPicker(() => c.pickFolder!()); return () => setSidecarPicker(null); }
+    // Only the local client can drive a real folder picker via the sidecar;
+    // mock mode falls back to tauriBridge's webkitdirectory input.
+    if (service.mode !== "local") return;
+    setSidecarPicker(() => service.pickFolder());
+    return () => setSidecarPicker(null);
   }, [service]);
   const [attachMap] = useState(() => new Map<string, string[]>()); // runId → sent file paths
   const [searchOpen, setSearchOpen] = useState(false);
   const openBrowse = (p = "") => {
-    void (service as unknown as { listDirectory?: (p: string) => Promise<{ path: string; parent: string; dirs: string[]; home?: string }> })
-      .listDirectory?.(p).then(setBrowse).catch(() => setBrowse(null));
+    void service.listDirectory(p).then(setBrowse).catch(() => setBrowse(null));
   };
   const [dlg, setDlg] = useState<{ mode: "prompt" | "confirm"; title: string; value?: string; onOk: (v: string) => void } | null>(null);
   const [dlgInput, setDlgInput] = useState("");
   const folderOf = (sid: string) => sessions.find((x) => x.sessionId === sid)?.workspaceId ?? "";
   const setFolder = (sid: string, wsId: string) => {
-    const c = service as unknown as { assignSessionWorkspace?: (sid: string, wsid: string) => Promise<unknown> };
-    void c.assignSessionWorkspace?.(sid, wsId).then(() => { refreshWs(); void refresh(); });
+    void service.assignSessionWorkspace({
+      tenantId: service.identity.tenantId,
+      sessionId: sid,
+      requestId: `ws-${Date.now()}`,
+      workspaceId: wsId,
+    }).then(() => { refreshWs(); void refresh(); });
   };
   const folderNames = wsList.filter((w) => w.path).map((w) => w.workspaceId);
   const byFolder = (name: string) => filtered.filter((s) => folderOf(s.sessionId) === name);
@@ -176,12 +181,11 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
                 <button className={`rail-ico ${searchOpen ? "on" : ""}`} onClick={() => setSearchOpen((o) => !o)} title="搜索" type="button"><Icon name="search" size={13} /></button>
                 <button className="rail-ico" onClick={() => void pickFolder().then(async (picked) => {
                   if (!picked) return;
-                  const c = service as unknown as { upsertWorkspace?: (r: object) => Promise<unknown> };
-                  await c.upsertWorkspace?.({
-                    tenantId: service.identity.tenantId, userId: service.identity.userId,
+                  await service.upsertWorkspace({
+                    tenantId: service.identity.tenantId,
                     sessionId: service.identity.sessionId, requestId: `ws-${Date.now()}`,
                     workspaceId: picked.path, displayName: picked.name, path: picked.path,
-                  } as never);
+                  });
                   setFolder(sessionId, picked.path);   // assign session to the workspace
                 })} title="选择工作区" type="button"><Icon name="folder" size={13} /></button>
                 <button className="rail-ico accent" onClick={() => void newSession()} title="新建任务" type="button"><Icon name="plus" size={13} /></button>
@@ -239,15 +243,18 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
                             <i title="在此文件夹新建会话" onClick={() => void newSession().then((ns) => { if (ns?.sessionId) setFolder(ns.sessionId, name); })}>＋</i>
                             <i title="选项" onClick={() => { setDlgInput(name); setDlg({ mode: "prompt", title: `重命名「${name}」（留空删除工作区）`, onOk: (n) => {
                               const nn = n.trim();
-                              const c = service as unknown as { upsertWorkspace?: (r: object) => Promise<unknown>; deleteWorkspace?: (wsid: string) => Promise<unknown> };
                               if (nn) {
-                                void c.upsertWorkspace?.({
-                                  tenantId: service.identity.tenantId, userId: service.identity.userId,
+                                void service.upsertWorkspace({
+                                  tenantId: service.identity.tenantId,
                                   sessionId: service.identity.sessionId, requestId: `ws-${Date.now()}`,
                                   workspaceId: name, displayName: nn, path: wsList.find((w) => w.workspaceId === name)?.path ?? "",
-                                } as never).then(refreshWs);
+                                }).then(refreshWs);
                               } else {
-                                void c.deleteWorkspace?.(name).then(() => { refreshWs(); void refresh(); });
+                                void service.deleteWorkspace({
+                                  tenantId: service.identity.tenantId,
+                                  sessionId: service.identity.sessionId, requestId: `ws-${Date.now()}`,
+                                  workspaceId: name,
+                                }).then(() => { refreshWs(); void refresh(); });
                               }
                             } }); }}>···</i>
                           </span>
@@ -285,12 +292,11 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
               <div className="omni-dlg-btns">
                 <button className="omni-dlg-cancel" onClick={() => setBrowse(null)} type="button">取消</button>
                 <button className="omni-dlg-ok" onClick={() => {
-                  const c = service as unknown as { upsertWorkspace?: (r: object) => Promise<unknown> };
-                  void c.upsertWorkspace?.({
-                    tenantId: service.identity.tenantId, userId: service.identity.userId,
+                  void service.upsertWorkspace({
+                    tenantId: service.identity.tenantId,
                     sessionId: service.identity.sessionId, requestId: `ws-${Date.now()}`,
                     workspaceId: browse.path, displayName: browse.path.split("/").filter(Boolean).pop() ?? browse.path, path: browse.path,
-                  } as never).then(() => { setFolder(sessionId, browse.path); setBrowse(null); });
+                  }).then(() => { setFolder(sessionId, browse.path); setBrowse(null); });
                 }} type="button">选择此目录</button>
               </div>
             </div>

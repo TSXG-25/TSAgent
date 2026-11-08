@@ -33,6 +33,7 @@ import {
   type EvaluationSummary,
   type SettingsSummary,
   type WorkspaceSummary,
+  type DirectoryListing,
   type TaskHandle,
   type TaskRecord,
   type ResumeRunRequest,
@@ -157,6 +158,22 @@ export class UnavailableDesktopAgentServiceClient implements DesktopAgentService
   }
 
   async listWorkspaces(): Promise<WorkspaceSummary[]> {
+    throw this.error;
+  }
+
+  async assignSessionWorkspace(): Promise<{ sessionId: string; workspaceId: string }> {
+    throw this.error;
+  }
+
+  async deleteWorkspace(): Promise<{ removed: boolean }> {
+    throw this.error;
+  }
+
+  async pickFolder(): Promise<{ path: string | null }> {
+    throw this.error;
+  }
+
+  async listDirectory(): Promise<DirectoryListing> {
     throw this.error;
   }
 

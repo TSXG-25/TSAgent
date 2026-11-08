@@ -66,7 +66,7 @@ AgentService（service.py）→ SQLite runtime store / Runtime
 
 | 参数 | 环境变量 | 必填 |
 |---|---|---|
-| `--database PATH` | `TSAGENT_RUNTIME_DB` | 是 |
+| `--database PATH` | `TSAGENT_RUNTIME_DB` | 否；默认 `~/.tsagent/runtime.db`（父目录自动创建），会展开 `~` |
 | `--workspace-root PATH` | `TSAGENT_WORKSPACE_ROOT` | 否 |
 | `--writer-id ID` | `TSAGENT_WRITER_ID` | 否 |
 | `--http [PORT]` | — | 否；加上后走 HTTP，不加走 stdio |
@@ -81,7 +81,7 @@ AgentService（service.py）→ SQLite runtime store / Runtime
 | 浏览器联调（最常用） | `VITE_AGENT_SERVICE_MODE=local VITE_TSAGENT_TENANT_ID=tenant-local VITE_TSAGENT_USER_ID=user-local npm run dev` | `python -m agent.service.local_sidecar --database <db> --workspace-root <dir> --http 8765` |
 | Tauri 桌面 | `npm run tauri dev`；`tauriBridge.ts` 在 `__TAURI_INTERNALS__` 存在时注入 bridge | Rust `sidecar_spawn` 启动 `VITE_TSAGENT_SIDECAR_CMD/ARGS`（`src-tauri/src/main.rs:21`） |
 
-**注意**：Tauri 的默认 `ARGS` 不包含 `--database`，必须通过 `VITE_TSAGENT_SIDECAR_ARGS` 补上，或者让 Tauri 进程继承 `TSAGENT_RUNTIME_DB`，否则 sidecar 会以 argparse 错误退出，前端只看到 `PROVIDER_UNAVAILABLE`。
+**注意**：`--database` 已有默认值（`~/.tsagent/runtime.db`），Tauri 默认 `ARGS` 可以直接启动 sidecar；要用别的库路径时通过 `VITE_TSAGENT_SIDECAR_ARGS` 或 `TSAGENT_RUNTIME_DB` 覆盖。
 
 ---
 
@@ -191,7 +191,7 @@ AgentService（service.py）→ SQLite runtime store / Runtime
 | `list_skills` | `listSkills` | 无 DTO；读 SKILL.md 索引 | GlobalSettings, Uranus |
 | `web_search` | `webSearch` | `query`、`max_results?`（默认 8），无 DTO | Mercury |
 
-\* 标星号的方法只在 `LocalAgentServiceClient` 上实现，**不在 `DesktopAgentServiceClient` 接口里**，Mock 和 Unavailable 客户端也没有。页面通过 `as unknown as { x?: }` 调用它们，Mock 模式下会静默跳过。
+\* 标星号的方法都声明在 `WorkspaceClient` 上（`types/service.ts`），Mock 与 Unavailable 客户端也已实现；`pick_folder`/`list_directory` 仍然不经过请求 DTO、不做身份校验（见 §10-3）。
 
 ### 6.4 领域工作台（Jupiter / Saturn / Earth / Pluto / Uranus）
 
@@ -255,17 +255,17 @@ AgentService（service.py）→ SQLite runtime store / Runtime
 | Service | `IDENTITY_MISMATCH`、`RUN_NOT_FOUND`、`SESSION_NOT_FOUND`、`RUN_ALREADY_ACTIVE`、`RUN_ALREADY_CANCELLING`、`ALREADY_CANCELLED`、`ALREADY_TIMED_OUT`、`ALREADY_COMPLETED`、`RUN_NOT_CANCELLABLE`、`RESUME_NOT_ALLOWED`、`IDEMPOTENCY_CONFLICT`、`EVENT_SEQUENCE_INVALID`、`EVENT_CURSOR_EXPIRED`、`CURSOR_INVALID`、`STORE_BUSY`、`PROVIDER_UNAVAILABLE`、`SERVICE_CLOSED` 等 | **message 会被替换成固定的安全文案**（`_SAFE_ERROR_MESSAGES`），具体原因只在 stderr |
 | 未分类异常 | `INTERNAL_ERROR` | 堆栈打到 stderr，前端只收到 `internal service error` |
 
-### 8.2 前端收到的形态（两种传输**不一致**）
+### 8.2 前端收到的形态（两种传输一致）
 
 | 情况 | Tauri（JSONL） | HTTP |
 |---|---|---|
-| 业务失败 `ok:false` | `AgentServiceClientError{code=原码, retryable=原值, runId, requestId}` | **`INTERNAL_ERROR`，message 为 `local transport protocol error on <method>: <CODE>: <msg>`，retryable=false** |
-| HTTP 非 2xx | — | 同上，`INTERNAL_ERROR` |
+| 业务失败 `ok:false` | `AgentServiceClientError{code=原码, retryable=原值, runId, requestId}` | 同左 |
+| HTTP 非 2xx | — | `INTERNAL_ERROR`（`local transport protocol error on <method>: sidecar http <status>`） |
 | 网络或进程不可用 | `PROVIDER_UNAVAILABLE`，retryable=true | `PROVIDER_UNAVAILABLE`，retryable=true |
 | fetch 被中止 | — | 原样抛出 `DOMException AbortError`，调用方可以忽略 |
 | 响应 DTO 形状不对 | `INTERNAL_ERROR: AgentService returned an invalid public DTO`（原因被丢弃，`serviceProjectionError`） | 同左 |
 
-原因：`HttpLocalTransport.request` 把 `ok:false` 转成了 `LocalTransportProtocolError`（`httpTransport.ts:49`），`LocalAgentServiceClient.call` 再统一投影成 `INTERNAL_ERROR`（`:1268`）。**后果是浏览器联调时，按错误码分支的 UI 逻辑（例如 `RUN_ALREADY_ACTIVE` 的提示）不会生效**，只有 Tauri 下才会生效。
+`ok:false` → `AgentServiceClientError` 的投影由 `localTransport.ts` 的 `rpcErrorToClientError` 完成，stdio 与 HTTP 共用；HTTP 路径的响应同样经过 `decodeLocalRpcResponse` 信封校验和 id 匹配。
 
 ### 8.3 前端处理约定
 
@@ -284,7 +284,7 @@ AgentService（service.py）→ SQLite runtime store / Runtime
 3. `agent/service/service.py`：实现 `async def xxx(request)`，并在这里做身份和作用域校验。
 4. `agent/service/local_protocol.py`：在 `LocalTransportMethod` 里加枚举值。
 5. `agent/service/local_sidecar/dispatcher.py`：在方法表里注册，并实现 `_xxx`，用 `self._from_dto(XxxRequest.from_dict, params)` 构造请求。
-6. `tests/test_desktop_local_protocol.py`：更新方法白名单（**目前 HEAD 上这个测试是失败的**，原因是 `list_directory` 等 4 个方法没有同步进去）。
+6. `tests/test_desktop_local_protocol.py`：白名单测试直接解析 `localTransport.ts` 的数组与 Python 枚举对比，**不需要**改测试本身，但顺序要与 Python 枚举保持一致。
 7. `apps/desktop/src/service/localTransport.ts`：`LOCAL_TRANSPORT_METHODS` 加上该方法，顺序与 Python 枚举一致。
 8. `apps/desktop/src/types/service.ts`：camelCase 请求/返回类型，并把方法**加进某个 `*Client` 接口**，让它成为 `DesktopAgentServiceClient` 的一部分。
 9. `apps/desktop/src/service/localAgentServiceClient.ts`：写 camel→snake 参数映射和响应 `mapXxx` 校验。
@@ -308,25 +308,25 @@ cd apps/desktop && npm run test:sidecar-e2e
 
 | # | 问题 | 证据 | 影响 |
 |---|---|---|---|
-| 1 | HTTP 传输把业务错误码压平成 `INTERNAL_ERROR` | `httpTransport.ts:49`、`localAgentServiceClient.ts:1268` | 浏览器联调和 Tauri 的错误行为不同 |
+| 1 | ~~HTTP 传输把业务错误码压平成 `INTERNAL_ERROR`~~ **已修复** | `localTransport.ts` 的 `rpcErrorToClientError` 由两种传输共用 | §8.2 |
 | 2 | HTTP sidecar 设置 `ACAO: *` 且没有鉴权，而 `list_directory`、`read/write_workspace_file`、`start_run` 都可以通过 `/rpc` 调用 | `http_server.py:42`、`service.py:535` | 本机任意网页都可以向 `127.0.0.1:8765` 发请求。仅限开发使用，不要在不可信环境下开启 `--http` |
 | 3 | `list_directory`、`pick_folder` 绕过请求 DTO 和身份校验；`pick_folder` 只支持 macOS | `dispatcher.py:392-396`、`service.py:508` | 跨平台不可用；行为不受 tenant 约束 |
-| 4 | 4 个 UI 在用的方法不在 TS 接口里（§6.3 星号项） | `types/service.ts` 中无定义 | Mock 模式静默无效，类型检查拦不住 |
+| 4 | ~~4 个 UI 在用的方法不在 TS 接口里（§6.3 星号项）~~ **已修复** | 已并入 `WorkspaceClient`，Mock/Unavailable 同步实现 | §6.3 |
 | 5 | `start_run.metadata.model/effort` 由 Composer 发送，但 `agent/` 下没有任何代码读取 | grep `agent/` 无匹配 | 模型和强度选择器目前对执行**没有效果** |
 | 6 | `SUSPENDED` 被映射成 `blocked` | `localAgentServiceClient.ts:119` | 暂停态在 UI 上不可见；而且 `pause_run` 目前没有任何 UI 调用方 |
 | 7 | `workspace` 注册表同时承担两种语义：Sun 路由的"星球能力工作区"（`route.workspace_id` 会被当成 `target_planet`，`service.py:614`）和新的"文件夹工作区"（`workspace_id` 是绝对路径） | `service.py:607-616`、`:1505`、`SunWorkspace.tsx` upsert 时 `workspaceId: picked.path` | **[假设]** 请求文本命中文件夹名时，可能把路径当作 target_planet 来路由，需要离线测试确认 |
 | 8 | `from_dict` 忽略未知键 | `contracts.py:300` | 字段名拼错时静默丢失 |
 | 9 | `web_search` 的空 query 抛出 `ValueError`，被当作未分类异常处理 | `dispatcher.py:326` | 前端收到 `INTERNAL_ERROR`，而不是 `INVALID_REQUEST` |
-| 10 | Tauri 默认 sidecar 参数缺少 `--database` | `tauriBridge.ts:13`、`lifecycle.py:38` | 未配置时 sidecar 启动即退出 |
+| 10 | ~~Tauri 默认 sidecar 参数缺少 `--database`~~ **已修复** | `lifecycle.py` 默认 `~/.tsagent/runtime.db` | §2.2 |
 | 11 | `GET /events` SSE 在后端实现了，但前端没有使用 | `httpTransport.ts:60` 无调用方 | 两套事件推送路径，只有长轮询在用 |
-| 12 | `service-wire.md` 的过时描述：说"单一 HTTP 端点"（实际还有 stdio）、"响应 envelope 用 exactKeys 校验"（只有 JSONL 路径会校验，HTTP 路径不校验）、"SSE event stream"（实际未使用） | 对照本节 1、11 | 以本文为准 |
+| 12 | `service-wire.md` 的过时描述：说"单一 HTTP 端点"（实际还有 stdio）、"响应 envelope 用 exactKeys 校验"（~~只有 JSONL 路径会校验~~ 两种传输都已校验）、"SSE event stream"（实际未使用） | 对照本节 11 | 以本文为准 |
 | 13 | 已实现但 UI 没有调用的方法：`pause_run`、`create_task`、`get_task`、`list_history`、`create_schedule`、`upsert_profile`、`forget_fact`、`list_workflows`、`assign_motif` | §6 表格 | `desktop_p0_audit.md` 记录的 "Pause 按钮"、"MEMORY tab 删除" 在后续改版中丢失 |
 
 ---
 
 ## 11. 排查流程速查
 
-1. 看前端错误的 `code`：如果是 `INTERNAL_ERROR` 且 message 以 `local transport protocol error on <method>:` 开头，说明走的是 HTTP，真实错误码在 message 里（§8.2）。
+1. 看前端错误的 `code`：业务错误码在两种传输下都会原样到达（§8.2）；`INTERNAL_ERROR` 且 message 以 `local transport protocol error on <method>:` 开头说明是信封/HTTP 层的失败，看 sidecar stderr。
 2. 看 sidecar 的 **stderr**：`INVALID_REQUEST`（`from_dict` 失败）、`INTERNAL_ERROR` 的堆栈和 Service 的真实原因都只在那里。
 3. 直接用 curl 复现，绕开前端：
 

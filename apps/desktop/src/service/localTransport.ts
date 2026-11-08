@@ -5,6 +5,11 @@
  * correlation live in tauriSidecarTransport.ts; AgentService DTO mapping lives
  * in localAgentServiceClient.ts.
  */
+import {
+  AgentServiceClientError,
+  type ServiceErrorCode,
+} from "../types/service";
+
 export const LOCAL_TRANSPORT_METHODS = [
   "health",
   "start_run",
@@ -22,10 +27,6 @@ export const LOCAL_TRANSPORT_METHODS = [
   "create_session",
   "delete_session",
   "list_sessions",
-  "list_directory",
-  "pick_folder",
-  "assign_session_workspace",
-  "delete_workspace",
   "list_handoffs",
   "list_history",
   "create_schedule",
@@ -57,6 +58,10 @@ export const LOCAL_TRANSPORT_METHODS = [
   "record_evaluation",
   "list_evaluations",
   "list_workspace_files",
+  "list_directory",
+  "pick_folder",
+  "assign_session_workspace",
+  "delete_workspace",
   "read_workspace_file",
   "write_workspace_file",
   "read_events",
@@ -106,6 +111,98 @@ export class LocalTransportProtocolError extends Error {
     super(message);
     this.name = "LocalTransportProtocolError";
   }
+}
+
+const SERVICE_ERROR_CODES = new Set<ServiceErrorCode>([
+  "INVALID_REQUEST",
+  "IDENTITY_MISMATCH",
+  "RUN_NOT_FOUND",
+  "RUN_ALREADY_ACTIVE",
+  "RUN_ALREADY_CANCELLING",
+  "ALREADY_CANCELLED",
+  "ALREADY_TIMED_OUT",
+  "RUN_NOT_CANCELLABLE",
+  "ALREADY_COMPLETED",
+  "RESUME_NOT_ALLOWED",
+  "IDEMPOTENCY_CONFLICT",
+  "EVENT_CURSOR_EXPIRED",
+  "EVENT_SEQUENCE_INVALID",
+  "CURSOR_INVALID",
+  "STORE_BUSY",
+  "PROVIDER_UNAVAILABLE",
+  "SERVICE_CLOSED",
+  "UNSUPPORTED_OPERATION",
+  "INTERNAL_ERROR",
+]);
+
+const SAFE_MESSAGES: Partial<Record<ServiceErrorCode, string>> = {
+  INVALID_REQUEST: "request is invalid",
+  IDENTITY_MISMATCH: "request identity is not valid for this scope",
+  RUN_NOT_FOUND: "run was not found",
+  RUN_ALREADY_ACTIVE: "run is already active",
+  RUN_ALREADY_CANCELLING: "run is already cancelling",
+  ALREADY_CANCELLED: "run is already cancelled",
+  ALREADY_TIMED_OUT: "run has already timed out",
+  RUN_NOT_CANCELLABLE: "run cannot be cancelled",
+  ALREADY_COMPLETED: "run is already completed",
+  RESUME_NOT_ALLOWED: "run cannot be resumed",
+  IDEMPOTENCY_CONFLICT: "request conflicts with an existing operation",
+  EVENT_CURSOR_EXPIRED: "event cursor is no longer readable",
+  EVENT_SEQUENCE_INVALID: "event sequence is invalid",
+  CURSOR_INVALID: "event cursor is invalid",
+  STORE_BUSY: "durable store is busy",
+  PROVIDER_UNAVAILABLE: "provider is unavailable",
+  SERVICE_CLOSED: "service is closed",
+  UNSUPPORTED_OPERATION: "operation is not supported",
+  INTERNAL_ERROR: "internal service error",
+};
+
+function serviceCode(value: string): ServiceErrorCode {
+  return SERVICE_ERROR_CODES.has(value as ServiceErrorCode)
+    ? (value as ServiceErrorCode)
+    : "INTERNAL_ERROR";
+}
+
+function stableMessage(code: ServiceErrorCode, message?: string): string {
+  if (!message || /traceback|sqlite|database|workspace|api[_ -]?key|bearer|\/[A-Za-z]/i.test(message)) {
+    return SAFE_MESSAGES[code] ?? SAFE_MESSAGES.INTERNAL_ERROR!;
+  }
+  return message;
+}
+
+/** Project a failure envelope onto the client error model — shared by the
+ * stdio and HTTP transports so both surfaces report identical codes. */
+export function rpcErrorToClientError(error: LocalRpcError): AgentServiceClientError {
+  const code = serviceCode(error.code);
+  return new AgentServiceClientError({
+    code,
+    message: stableMessage(code, error.message),
+    retryable: error.retryable,
+    ...(error.run_id ? { runId: error.run_id } : {}),
+    ...(error.request_id ? { requestId: error.request_id } : {}),
+    ...(error.details
+      ? {
+          details: Object.fromEntries(
+            Object.entries(error.details).filter(([, value]) => typeof value === "string"),
+          ) as Record<string, string>,
+        }
+      : {}),
+  });
+}
+
+export function clientError(
+  code: ServiceErrorCode,
+  message: string,
+  retryable: boolean,
+): AgentServiceClientError {
+  return new AgentServiceClientError({ code, message, retryable });
+}
+
+export function transportError(
+  message: string,
+  code: ServiceErrorCode = "PROVIDER_UNAVAILABLE",
+): AgentServiceClientError {
+  return clientError(code, SAFE_MESSAGES[code] ?? message, code === "PROVIDER_UNAVAILABLE");
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

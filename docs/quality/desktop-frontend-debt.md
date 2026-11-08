@@ -40,7 +40,7 @@
 | CI 是否跑 desktop | 否 | `.github/workflows/ci.yml` 只有 Python 步骤 |
 | 近期 desktop 提交 | 30 feat / 6 fix；2026-11-05 一天约 25 个 feat | `git log -- apps/desktop` |
 
-基线（2026-11-08 本地运行）：`npm run typecheck` 通过（7s）；`npm test` 退出码 0（local-client 16/16、clientFactory 6/6 等）；**`pytest tests/test_desktop_local_protocol.py` 在 HEAD 上就失败**（见 §2.1）。
+基线（2026-11-08 本地运行）：`npm run typecheck` 通过（7s）；`npm test` 退出码 0（local-client 16/16、clientFactory 6/6 等）；`pytest tests/test_desktop_local_protocol.py` 通过（白名单已改为对比 Python 枚举与 `localTransport.ts`，不再是第三份手写列表）。
 
 ---
 
@@ -67,24 +67,15 @@
 
 证据：
 
-- 当前未提交的"会话归入工作区"改动，一个功能触及 13 个文件（`git diff --stat`）。
-- 提交 `0484b59d6`（2026-11-08）新增了 `list_directory` / `pick_folder`，但没有同步第三份白名单，导致 **HEAD 上 `test_desktop_method_allowlist_is_frozen` 已经失败**；未提交的 `assign_session_workspace` / `delete_workspace` 又扩大了差异：
+- 提交 `0484b59d6`（2026-11-08）新增了 `list_directory` / `pick_folder`，但没有同步第三份白名单，导致 **当时 HEAD 上 `test_desktop_method_allowlist_is_frozen` 失败**。已修复：测试改为解析 `apps/desktop/src/service/localTransport.ts` 的数组并与 Python 枚举逐项对比，手写清单只剩 `localTransport.ts` + Python 枚举两处。
+- ~~`assignSessionWorkspace` / `deleteWorkspace` / `pickFolder` / `listDirectory` 不在 `types/service.ts` 的任何接口里~~ 已并入 `WorkspaceClient`，Mock 与 Unavailable 客户端同步实现，`SunWorkspace.tsx` 的 `as unknown as` 已删除。
 
-  ```
-  At index 47 diff: 'list_directory' != 'read_workspace_file'
-  Left contains 4 more items, first extra item: 'read_workspace_file'
-  ```
-
-  CI 会跑这个 Python 测试，说明 HEAD 推上去就是红的。
-- `assignSessionWorkspace` / `deleteWorkspace` / `pickFolder` / `listDirectory` 只在 `LocalAgentServiceClient` 上有实现（`localAgentServiceClient.ts:1059-1079`），**不在 `types/service.ts` 的任何接口里**，Mock 和 Unavailable 桩里也没有。UI 只能通过强转访问它们（§2.2）。
-
-影响：每次改动都要人工对齐这些副本，漏一处就要等到运行时才暴露。
+影响：每次改动都要人工对齐这些副本，漏一处就要等到运行时才暴露。方法白名单和接口缺失这两处已经收敛，剩下的是 contracts/service/dispatcher/client/mock 的逐方法手工同步。
 
 ### 2.2 UI 层绕过类型系统
 
-- `as never` 47 处，几乎全部用在 service 请求对象上，例如 `SunWorkspace.tsx:75-77`、`delegate.ts:32,45,52`、`UranusWorkspace.tsx:25-26`。`as never` 能赋给任何类型，所以**请求 DTO 少字段、多字段、字段改名都能编译通过**。`typecheck` 全绿并不代表调用点和合同一致。
-- `SunWorkspace.tsx:38,52,58,65,179,242,288` 用 `service as unknown as { method?: (...) => ... }` 访问接口里没声明的方法，再用 `?.()` 调用。在 Mock 模式下方法不存在，调用会静默变成 no-op：拖拽归档、重命名、删除工作区、文件夹浏览在 Mock 下看起来"点了没反应"，而且没有任何报错。
-- `runController.ts:302,329` 把 `{ stop() }` 对象强转成 `setInterval` 句柄塞进 `pollTimers`，再用 `"stop" in timer` 区分，是同一个 Map 里混了两种类型。
+- `as never` 47 处，几乎全部用在 service 请求对象上，例如 `SunWorkspace.tsx`、`delegate.ts:32,45,52`、`UranusWorkspace.tsx:25-26`。`as never` 能赋给任何类型，所以**请求 DTO 少字段、多字段、字段改名都能编译通过**。`typecheck` 全绿并不代表调用点和合同一致。
+- ~~`SunWorkspace.tsx` 用 `service as unknown as { method?: }` 访问接口里没声明的方法~~ 已修复（方法并入 `WorkspaceClient`）。`as unknown as` 现在只剩 `runController.ts:302,329` 两处：`{ stop() }` 对象强转成 `setInterval` 句柄塞进 `pollTimers`，同一个 Map 里混了两种类型。
 
 影响：类型系统本来是这类多副本合同唯一便宜的约束，现在在 UI 边界被关掉了。
 
@@ -92,7 +83,7 @@
 
 - 静默吞错：`GlobalSettings.tsx:51-66`（4 处）、`UranusWorkspace.tsx:25-26`、`SunWorkspace.tsx:39,104,152,221`、`AgentComposer.tsx:148`（取消运行失败也被吞），以及 `SunWorkspace.tsx:91,107`、`EarthWorkspace.tsx:29,43`（`catch { /* */ }`）、`SunOrchestration.tsx:36`、`TaskTray.tsx:28`。
 - 后果：用户看到的是"空面板"或"没反应"，而不是错误。排查时只能接真实 sidecar、加日志、复现。这和 `README.md` 里"local 模式失败只显示 Backend unavailable，绝不静默回退"的原则相矛盾。
-- Mock 一致性：Mock 是手写的 986 行内存实现，缺 §2.1 列出的 4 个方法，所以 **Mock 模式通过不能说明 Local 模式可用**。
+- Mock 一致性：Mock 是手写的约 1000 行内存实现，**Mock 模式通过不能说明 Local 模式可用**。
 
 ### 2.4 测试与 CI 覆盖空洞
 
@@ -206,10 +197,12 @@ Mock 手写(2.3) ───┘                     │
 
 ### P0 —— 恢复反馈回路（先做，成本低）
 
-1. **修复 HEAD 上的红测试**：只保留一份方法清单。建议 `tests/test_desktop_local_protocol.py` 断言 Python 枚举和 `apps/desktop/src/service/localTransport.ts` 的数组一致（解析 TS 文件），而不是再维护第三份手写列表。
+1. ~~**修复 HEAD 上的红测试**~~ 已完成：白名单测试改为解析 `localTransport.ts` 对比 Python 枚举，不再维护第三份手写列表。
 2. **把 desktop 纳入 CI**：在 `ci.yml` 增加 Node job，跑 `npm ci && npm run typecheck && npm test && npm run build`（工作目录 `apps/desktop`）。
-3. **把 UI 实际用到的方法补进 `types/service.ts` 的接口**（`assignSessionWorkspace`、`deleteWorkspace`、`pickFolder`、`listDirectory`），Mock 和 Unavailable 桩同步实现，然后删掉 `SunWorkspace.tsx` 里全部 `as unknown as { x?: }` 和 `?.()`。缺方法应该是编译错误。
+3. ~~**把 UI 实际用到的方法补进 `types/service.ts` 的接口**~~ 已完成：`assignSessionWorkspace`、`deleteWorkspace`、`pickFolder`、`listDirectory` 已并入 `WorkspaceClient`，Mock/Unavailable 同步实现，`SunWorkspace.tsx` 的 `as unknown as` 与 `?.()` 已删除。
 4. **清除 `as never`**：逐个改成满足真实 Request 类型的对象。如果是 identity 字段反复拼装导致的，就在 client 层统一注入 identity（见 P1-2），而不是在每个调用点强转。
+5. ~~**HTTP 传输压平错误码**~~ 已完成（原对接文档 §10-1）：`rpcErrorToClientError` 由 stdio/HTTP 两种传输共用，HTTP 响应也经过信封校验。
+6. ~~**Tauri sidecar 缺 `--database`**~~ 已完成（原对接文档 §10-10）：sidecar 默认 `~/.tsagent/runtime.db`。
 
 ### P1 —— 收敛事实来源
 

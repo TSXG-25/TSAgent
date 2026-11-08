@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import re
+from pathlib import Path
 
 import pytest
 
@@ -18,61 +20,30 @@ from agent.service.local_protocol import (
     encode_response,
 )
 
+_DESKTOP_TRANSPORT_TS = (
+    Path(__file__).resolve().parents[1]
+    / "apps"
+    / "desktop"
+    / "src"
+    / "service"
+    / "localTransport.ts"
+)
 
-def test_desktop_method_allowlist_is_frozen() -> None:
-    assert LOCAL_TRANSPORT_METHODS == (
-        "health",
-        "start_run",
-        "get_run",
-        "resume_run",
-        "pause_run",
-        "cancel_run",
-        "list_artifacts",
-        "list_runs",
-        "create_task",
-        "list_tasks",
-        "get_task",
-        "list_approvals",
-        "decide_approval",
-        "create_session",
-        "delete_session",
-        "list_sessions",
-        "list_handoffs",
-        "list_history",
-        "create_schedule",
-        "list_schedules",
-        "update_schedule",
-        "upsert_profile",
-        "list_profiles",
-        "get_settings",
-        "update_settings",
-        "upsert_workspace",
-        "list_workspaces",
-        "list_capabilities",
-        "web_search",
-        "list_skills",
-        "delegate_run",
-        "subscribe_events",
-        "list_facts",
-        "forget_fact",
-        "list_participants",
-        "search_artifacts",
-        "list_workflows",
-        "upsert_workflow_graph",
-        "list_workflow_graphs",
-        "run_graph",
-        "create_motif",
-        "assign_motif",
-        "resolve_motif",
-        "list_motifs",
-        "record_evaluation",
-        "list_evaluations",
-        "list_workspace_files",
-        "read_workspace_file",
-        "write_workspace_file",
-        "read_events",
-        "shutdown",
+
+def _ts_transport_methods() -> tuple[str, ...]:
+    """The TS allowlist is the second copy of the protocol's method table; the
+    wire names must line up exactly or a method silently cannot be called."""
+    match = re.search(
+        r"LOCAL_TRANSPORT_METHODS\s*=\s*\[(.*?)\]\s*as const",
+        _DESKTOP_TRANSPORT_TS.read_text(encoding="utf-8"),
+        re.DOTALL,
     )
+    assert match, f"could not find LOCAL_TRANSPORT_METHODS in {_DESKTOP_TRANSPORT_TS}"
+    return tuple(re.findall(r'"([a-z_]+)"', match.group(1)))
+
+
+def test_desktop_method_allowlist_matches_ts_transport() -> None:
+    assert LOCAL_TRANSPORT_METHODS == _ts_transport_methods()
     assert tuple(method.value for method in LocalTransportMethod) == LOCAL_TRANSPORT_METHODS
 
 

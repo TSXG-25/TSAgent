@@ -5,10 +5,11 @@
  * using the same request/response envelopes as localTransport.
  */
 import {
+  decodeLocalRpcResponse,
   LocalTransportProtocolError,
+  rpcErrorToClientError,
   type LocalRpcParams,
   type LocalRpcRequest,
-  type LocalRpcResponse,
   type LocalTransport,
   type LocalTransportMethod,
 } from "./localTransport";
@@ -42,14 +43,16 @@ export class HttpLocalTransport implements LocalTransport {
         `sidecar http ${response.status}: ${await response.text().catch(() => "")}`,
       );
     }
-    const envelope = (await response.json()) as LocalRpcResponse;
+    const envelope = decodeLocalRpcResponse(await response.text());
+    if (envelope.id !== request.id) {
+      throw new LocalTransportProtocolError(
+        `sidecar response id ${envelope.id} does not match request ${request.id}`,
+      );
+    }
     if (envelope.ok === true) {
       return envelope.result as TResponse;
     }
-    const error = envelope.error;
-    throw new LocalTransportProtocolError(
-      `${error.code}: ${error.message}`,
-    );
+    throw rpcErrorToClientError(envelope.error);
   }
 
   /**

@@ -590,10 +590,42 @@ export interface ListWorkspacesRequest {
   limit?: number;
 }
 
+export interface AssignSessionWorkspaceRequest {
+  tenantId: string;
+  /** Session being filed — the target, which may differ from the caller's session. */
+  sessionId: string;
+  requestId: string;
+  /** "" moves the session back to the unfiled list. */
+  workspaceId: string;
+}
+
+export interface DeleteWorkspaceRequest {
+  tenantId: string;
+  /** Caller's current session — the wire DTO requires it as a locator. */
+  sessionId: string;
+  requestId: string;
+  workspaceId: string;
+}
+
+/** In-page folder-browser payload from the sidecar's `list_directory`. */
+export interface DirectoryListing {
+  path: string;
+  parent: string;
+  dirs: string[];
+  home?: string;
+}
+
 /** Planet/scene capability registry. */
 export interface WorkspaceClient {
   upsertWorkspace(request: UpsertWorkspaceRequest): Promise<WorkspaceSummary>;
   listWorkspaces(request: ListWorkspacesRequest): Promise<WorkspaceSummary[]>;
+  assignSessionWorkspace(
+    request: AssignSessionWorkspaceRequest,
+  ): Promise<{ sessionId: string; workspaceId: string }>;
+  deleteWorkspace(request: DeleteWorkspaceRequest): Promise<{ removed: boolean }>;
+  /** Native folder picker — resolves to the picked path or null on cancel. */
+  pickFolder(): Promise<{ path: string | null }>;
+  listDirectory(path: string): Promise<DirectoryListing>;
 }
 
 export interface CapabilitySummary {

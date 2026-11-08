@@ -34,6 +34,9 @@ import {
   type UpdateSettingsRequest,
   type UpsertWorkspaceRequest,
   type ListWorkspacesRequest,
+  type AssignSessionWorkspaceRequest,
+  type DeleteWorkspaceRequest,
+  type DirectoryListing,
 
   type WorkspaceSummary,
   type UpsertProfileRequest,
@@ -1056,28 +1059,33 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
     return (await this.call("delete_session", params)) as { removed: boolean };
   }
 
-  async assignSessionWorkspace(sessionId: string, workspaceId: string): Promise<unknown> {
-    return this.call("assign_session_workspace", {
-      tenant_id: this.identity.tenantId, user_id: this.identity.userId,
-      session_id: sessionId, request_id: `ws-${Date.now()}`,
-      workspace_id: workspaceId,
-    });
+  async assignSessionWorkspace(
+    request: AssignSessionWorkspaceRequest,
+  ): Promise<{ sessionId: string; workspaceId: string }> {
+    this.assertIdentity(request);
+    const result = (await this.call("assign_session_workspace", {
+      tenant_id: request.tenantId, user_id: this.identity.userId,
+      session_id: request.sessionId, request_id: request.requestId,
+      workspace_id: request.workspaceId,
+    })) as { session_id: string; workspace_id: string };
+    return { sessionId: result.session_id, workspaceId: result.workspace_id };
   }
 
-  async deleteWorkspace(workspaceId: string): Promise<unknown> {
-    return this.call("delete_workspace", {
-      tenant_id: this.identity.tenantId, user_id: this.identity.userId,
-      session_id: this.identity.sessionId, request_id: `ws-${Date.now()}`,
-      workspace_id: workspaceId,
-    });
+  async deleteWorkspace(request: DeleteWorkspaceRequest): Promise<{ removed: boolean }> {
+    this.assertIdentity(request);
+    return (await this.call("delete_workspace", {
+      tenant_id: request.tenantId, user_id: this.identity.userId,
+      session_id: request.sessionId, request_id: request.requestId,
+      workspace_id: request.workspaceId,
+    })) as { removed: boolean };
   }
 
   async pickFolder(): Promise<{ path: string | null }> {
     return (await this.call("pick_folder", {} as LocalRpcParams)) as { path: string | null };
   }
 
-  async listDirectory(path: string): Promise<{ path: string; parent: string; dirs: string[]; home?: string }> {
-    return (await this.call("list_directory", { path } as LocalRpcParams)) as { path: string; parent: string; dirs: string[]; home?: string };
+  async listDirectory(path: string): Promise<DirectoryListing> {
+    return (await this.call("list_directory", { path } as LocalRpcParams)) as DirectoryListing;
   }
 
   async listSessions(request: ListSessionsRequest): Promise<SessionSummary[]> {

@@ -438,7 +438,8 @@ def test_c_unauthorized_tool_call_retries_with_feedback_then_completes(
     run completes — the denied side effect never happens."""
     request = "写个计算器"
     provider = setup_provider(monkeypatch, [
-        (request, intent(request, artifact=True, outcomes=["FILE_MUTATION"])),
+        (request, intent(request, artifact=True, outcomes=["FILE_MUTATION"],
+                         write_targets=["output/"])),
         (request, call_tool("write_file", path="agent/evil.py",
                             content="x = 1\n")),
         ("EFFECT_SCOPE_VIOLATION", call_tool(
@@ -470,7 +471,8 @@ def test_c_persistent_unauthorized_calls_cannot_complete(
     monkeypatch.setenv("TSAGENT_MAX_GOAL_ROUNDS", "2")
     request = "写个计算器"
     provider = setup_provider(monkeypatch, [
-        (request, intent(request, artifact=True, outcomes=["FILE_MUTATION"])),
+        (request, intent(request, artifact=True, outcomes=["FILE_MUTATION"],
+                         write_targets=["output/"])),
         (request, call_tool("write_file", path="agent/evil.py",
                             content="x = 1\n")),
         ("EFFECT_SCOPE_VIOLATION", "已创建 output/calculator.py"),

@@ -32,15 +32,16 @@ def test_declared_write_targets_scope_mutation() -> None:
     assert authorization.allows_path("agent/runtime.py") is False
 
 
-def test_empty_write_targets_with_mutation_scopes_output_directory() -> None:
+def test_empty_write_targets_with_mutation_scopes_whole_workspace() -> None:
     authorization = EffectAuthorization.from_state(
         _state(requested_outcomes=["FILE_MUTATION"], artifact_required=True),
         "写个计算器",
     )
 
-    assert authorization.write_scopes == ("output/",)
+    assert authorization.write_scopes == (".",)
     assert authorization.allows_path("output/calculator.py") is True
-    assert authorization.allows_path("agent/runtime.py") is False
+    assert authorization.allows_path("agent/runtime.py") is True
+    assert authorization.allows_path("/etc/passwd") is False
 
 
 def test_no_mutation_outcome_rejects_writes() -> None:

@@ -69,7 +69,8 @@ def _tool_message(call: ToolCall, content: str, ok: bool = True,
     full = prefix + content
     if len(full) > TOOL_RESULT_CHAR_CAP:
         pointer = _spill_tool_result(workspace, call.id, full)
-        note = f"…（完整结果已外置保存 {pointer}）" if pointer else "…"
+        hint = f"完整结果已外置保存 {pointer}；" if pointer else ""
+        note = f"…（已截断：{hint}文件读取可用 read_file(path, offset=后续字符位置) 续读）"
         full = full[:TOOL_RESULT_CHAR_CAP] + note
     return {
         "role": "tool",

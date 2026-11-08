@@ -100,7 +100,7 @@ class EffectAuthorization:
             if str(target or "").strip()
         )
         if not write_targets and RequestedOutcome.FILE_MUTATION in outcomes:
-            write_targets = ("output/",)
+            write_targets = (".",)
         return cls(
             requested_outcomes=outcomes,
             write_scopes=write_targets,
@@ -163,6 +163,8 @@ class EffectAuthorization:
     def allows_path(self, path: str) -> bool:
         target = _normalize_scope(path)
         for scope in self.write_scopes:
+            if scope == "." and not target.startswith("/"):
+                return True  # whole-workspace grant
             if scope.endswith("/"):
                 if target == scope.rstrip("/") or target.startswith(scope):
                     return True

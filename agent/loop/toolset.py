@@ -57,8 +57,12 @@ def _fs_spec(
 # scoped executor argument names, not the legacy registry signatures.
 _FILESYSTEM_TOOLS = (
     ("read_file", "filesystem.read", "read", _fs_spec(
-        "read_file", "读取工作区内的文本文件内容",
-        {"path": {"type": "string", "description": "相对路径"}},
+        "read_file", "读取工作区内的文本文件内容；结果被截断时可用 offset/limit（字符偏移）续读",
+        {
+            "path": {"type": "string", "description": "相对路径"},
+            "offset": {"type": "integer", "description": "从第 N 个字符开始读（默认 0）"},
+            "limit": {"type": "integer", "description": "最多读取的字符数（默认全部）"},
+        },
         ["path"],
     )),
     ("list_directory", "filesystem.list", "list", _fs_spec(

@@ -669,7 +669,12 @@ class PlanExecutor:
 
         def invoke() -> str:
             if operation == "read":
-                return workspace.read_text(str(args.get("path", "")))
+                text = workspace.read_text(str(args.get("path", "")))
+                offset = max(0, int(args.get("offset") or 0))
+                limit = max(0, int(args.get("limit") or 0))
+                if offset or limit:
+                    return text[offset : offset + limit if limit else None]
+                return text
             if operation == "write":
                 return workspace.write_text(
                     str(args.get("path", "")),

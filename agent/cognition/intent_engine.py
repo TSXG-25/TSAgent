@@ -43,7 +43,7 @@ LLM_INTENT_PROMPT = """你是 TSAgent 的目标语义理解引擎。先判断用
 
 Gate A：用户是否要求得到可使用、可持久保存的产物？
 - 请求制作/实现一个工具、网页、应用、项目、脚本，或交付成份报告时，artifact_required=true。
-  不需要出现“文件”“保存”“写入”、文件扩展名、路径或“告诉我位置”。未指定路径由后续规划在 output/ 下选择。
+  不需要出现“文件”“保存”“写入”、文件扩展名、路径或“告诉我位置”。未指定路径由后续规划在工作区根目录选择。
 - 用户要的是成品，即使主题是数学、汇率、CSV 或 JSON，也不是一次聊天计算/知识解释。
   这种请求同时需要 FILE_MUTATION 和 requires_execution=true；这里的执行至少指实际写文件，
   不等于擅自运行生成的程序。只有用户要求运行/验证时才加入 CODE_EXECUTION 或 COMMAND_EXECUTION。
@@ -126,7 +126,7 @@ Domain 说明：
    用户明确说“不运行/不执行”时，prohibited_effects 同时包含 CODE_EXECUTION 与 COMMAND_EXECUTION。
 9. reference 延续前轮结果；correction 修正前轮目标的执行方式，必须在 resolved_request 中保留尚未交付的目标。
    上一轮助手声称成功不是执行证据；文件路径以 verified artifacts 为依据。修改已有文件时先读取真实文件。
-   不替用户扩大权限或编造文件路径/外部链接。用户未指定新文件路径时可让执行规划在 output/ 下选择合理名称。
+   不替用户扩大权限或编造文件路径/外部链接。用户未指定新文件路径时可让执行规划在工作区根目录选择合理名称。
 10. 总结已有搜索结果可使用 recent_conversation 中的[观察]，不必重复搜索；要求新资料或更充分来源则需要 source_grounding_required。
     今天/最新的事实必须 freshness_required=true 且 source_grounding_required=true。
     source_grounding_required 为 true 时给出 search_query（去掉保存/输出尾巴的检索主题）和

@@ -90,6 +90,8 @@ class ExecutionStage:
                 "task_id": str(task_dict.get("id", "")),
                 "verb": str(task_dict.get("verb", "")),
                 "executor": plan.executor,
+                "target": str(task_dict.get("target", "")),
+                "tool": str((task_dict.get("inputs") or {}).get("tool", "")),
             },
         )
         context = ExecutionContext(

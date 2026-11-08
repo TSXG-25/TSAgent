@@ -29,10 +29,15 @@ export function thinkingSteps(events: RunEventView[] | undefined): Step[] {
         if (i !== undefined) steps[i].done = true;
         break;
       }
-      case "task_started":
-        at("t", `${String(p.verb ?? "task")} · ${String(p.executor ?? "")}`, String(p.task_id ?? ""));
+      case "task_started": {
+        const target = String(p.target ?? "");
+        const tool = String(p.tool ?? "");
+        at("t",
+          `${String(p.verb ?? "task")}${target ? ` ${target}` : ""}`,
+          [tool, String(p.task_id ?? "")].filter(Boolean).join(" · "));
         open.set(`task:${p.task_id}`, steps.length - 1);
         break;
+      }
       case "task_completed": {
         const i = open.get(`task:${p.task_id}`);
         if (i !== undefined) steps[i].done = true;

@@ -532,6 +532,30 @@ class AgentService:
         removed = self._store.delete_workspace(request.tenant_id, request.workspace_id)
         return {"removed": removed}
 
+    async def reveal_path(self, request: Any) -> Any:
+        """Open a path in the OS file manager — Finder on macOS. Params carry
+        a plain `path`, same local-user trust boundary as list_directory."""
+        import asyncio
+        import os
+        import sys
+        from pathlib import Path
+
+        raw = str(getattr(request, "path", "") or "").strip()
+        if not raw:
+            return {"revealed": False}
+        target = Path(raw).expanduser()
+        if sys.platform == "win32":
+            os.startfile(str(target))  # type: ignore[attr-defined]
+            return {"revealed": True}
+        cmd = ("open", str(target)) if sys.platform == "darwin" else ("xdg-open", str(target))
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        await proc.wait()
+        return {"revealed": proc.returncode == 0}
+
     async def list_directory(self, request: Any) -> Any:
         """List subdirectories for the in-page folder picker. Params carry a
         plain `path` — the desktop is a local user, no tenant scoping on fs."""
@@ -866,11 +890,20 @@ class AgentService:
         self._ensure_open()
         import json as _json
 
+        # Source folders: `paths` is the full list, `path` is the primary one
+        # that scopes run file ops. A request that names only `path` is a
+        # single-source workspace.
+        paths = list(getattr(request, "paths", ()) or ())
+        if not paths and getattr(request, "path", ""):
+            paths = [request.path]
+        path = request.path if request.path in paths else (paths[0] if paths else "")
+
         record = self._store.upsert_workspace(
             request.tenant_id,
             request.workspace_id,
             display_name=request.display_name,
-            path=getattr(request, "path", ""),
+            path=path,
+            paths_json=_json.dumps(paths),
             capabilities_json=_json.dumps(list(request.capabilities)),
             default_profile_id=request.default_profile_id,
             description=request.description,
@@ -897,6 +930,9 @@ class AgentService:
             workspace_id=record.workspace_id,
             display_name=record.display_name,
             path=getattr(record, "path", ""),
+            paths=tuple(
+                str(v) for v in _json.loads(getattr(record, "paths_json", "") or "[]")
+            ),
             member_count=member_count,
             capabilities=tuple(
                 str(v) for v in _json.loads(record.capabilities_json or "[]")

@@ -332,6 +332,7 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
       workspaceId: request.workspaceId,
       displayName: request.displayName ?? "",
       path: request.path ?? "",
+      paths: request.paths ?? (request.path ? [request.path] : []),
       capabilities: request.capabilities ?? [],
       defaultProfileId: request.defaultProfileId ?? "",
       description: request.description ?? "",
@@ -368,6 +369,10 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
   async listDirectory(path: string): Promise<DirectoryListing> {
     const current = path || "/mock";
     return { path: current, parent: "/", dirs: ["docs/", "src/", "output/"], home: "/mock" };
+  }
+
+  async revealPath(): Promise<{ revealed: boolean }> {
+    return { revealed: false };
   }
 
   private workspaces: WorkspaceSummary[] = [

@@ -60,6 +60,7 @@ export const LOCAL_TRANSPORT_METHODS = [
   "list_workspace_files",
   "list_directory",
   "pick_folder",
+  "reveal_path",
   "assign_session_workspace",
   "delete_workspace",
   "read_workspace_file",

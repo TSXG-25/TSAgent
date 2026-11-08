@@ -1074,6 +1074,7 @@ class WorkspaceSummary:
     description: str
     updated_at: str
     path: str = ""
+    paths: tuple[str, ...] = ()
     member_count: int = 0
 
     def to_dict(self) -> dict[str, JSONValue]:
@@ -1081,6 +1082,7 @@ class WorkspaceSummary:
             "workspace_id": self.workspace_id,
             "display_name": self.display_name,
             "path": self.path,
+            "paths": list(self.paths),
             "member_count": self.member_count,
             "capabilities": list(self.capabilities),
             "default_profile_id": self.default_profile_id,
@@ -1098,6 +1100,7 @@ class UpsertWorkspaceRequest:
     workspace_id: str
     display_name: str = ""
     path: str = ""
+    paths: tuple[str, ...] = ()
     capabilities: tuple[str, ...] = ()
     default_profile_id: str = ""
     description: str = ""
@@ -1119,6 +1122,7 @@ class UpsertWorkspaceRequest:
             workspace_id=str(value.get("workspace_id", "")),
             display_name=str(value.get("display_name", "")),
             path=str(value.get("path", "")),
+            paths=tuple(str(v) for v in (value.get("paths") or ())),
             capabilities=tuple(str(v) for v in (value.get("capabilities") or ())),
             default_profile_id=str(value.get("default_profile_id", "")),
             description=str(value.get("description", "")),

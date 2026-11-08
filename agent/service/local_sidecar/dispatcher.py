@@ -76,6 +76,7 @@ class SidecarDispatcher:
             LocalTransportMethod.LIST_WORKSPACE_FILES: self._list_workspace_files,
             LocalTransportMethod.LIST_DIRECTORY: self._list_directory,
             LocalTransportMethod.PICK_FOLDER: self._pick_folder,
+            LocalTransportMethod.REVEAL_PATH: self._reveal_path,
             LocalTransportMethod.ASSIGN_SESSION_WORKSPACE: self._assign_session_workspace,
             LocalTransportMethod.DELETE_WORKSPACE: self._delete_workspace,
             LocalTransportMethod.READ_WORKSPACE_FILE: self._read_workspace_file,
@@ -391,6 +392,9 @@ class SidecarDispatcher:
 
     async def _pick_folder(self, params: Mapping[str, Any]) -> Any:
         return await self._service.pick_folder(type("Req", (), {})())
+
+    async def _reveal_path(self, params: Mapping[str, Any]) -> Any:
+        return await self._service.reveal_path(type("Req", (), {"path": params.get("path", "")})())
 
     async def _list_directory(self, params: Mapping[str, Any]) -> Any:
         return await self._service.list_directory(type("Req", (), {"path": params.get("path", "")})())

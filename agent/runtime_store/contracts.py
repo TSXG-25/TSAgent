@@ -119,6 +119,7 @@ class WorkspaceRecord:
     updated_at: str
     store_generation: str
     path: str = ""
+    paths_json: str = "[]"
 
 
 @dataclass(frozen=True)

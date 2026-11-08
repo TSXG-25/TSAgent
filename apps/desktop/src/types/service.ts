@@ -563,6 +563,8 @@ export interface WorkspaceSummary {
   workspaceId: string;
   displayName: string;
   path?: string;
+  /** All source folders; `path` is the primary one used for run scoping. */
+  paths?: string[];
   memberCount?: number;
   capabilities: string[];
   defaultProfileId: string;
@@ -571,8 +573,10 @@ export interface WorkspaceSummary {
 }
 
 export interface UpsertWorkspaceRequest {
-  /** Directory the workspace adopts — scopes run file ops. */
+  /** Primary directory — scopes run file ops. Must be a member of `paths`. */
   path?: string;
+  /** All source folders for this workspace. */
+  paths?: string[];
   tenantId: string;
   sessionId: string;
   requestId: string;
@@ -626,6 +630,8 @@ export interface WorkspaceClient {
   /** Native folder picker — resolves to the picked path or null on cancel. */
   pickFolder(): Promise<{ path: string | null }>;
   listDirectory(path: string): Promise<DirectoryListing>;
+  /** Open a path in the OS file manager (Finder on macOS). */
+  revealPath(path: string): Promise<{ revealed: boolean }>;
 }
 
 export interface CapabilitySummary {

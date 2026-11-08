@@ -70,7 +70,38 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
       workspaceId: wsId,
     }).then(() => { refreshWs(); void refresh(); });
   };
-  const folderNames = wsList.filter((w) => w.path).map((w) => w.workspaceId);
+  const [wsMenu, setWsMenu] = useState<string | null>(null);
+  const [editWs, setEditWs] = useState<{ wsId: string; name: string; paths: string[]; primary: string } | null>(null);
+  const [pinned, setPinned] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem("tsagent:pinned-ws") ?? "[]") as string[]; } catch { return []; }
+  });
+  const togglePin = (wsId: string) => {
+    const next = pinned.includes(wsId) ? pinned.filter((x) => x !== wsId) : [...pinned, wsId];
+    setPinned(next);
+    try { localStorage.setItem("tsagent:pinned-ws", JSON.stringify(next)); } catch { /* quota */ }
+  };
+  const openEditWs = (wsId: string) => {
+    const w = wsList.find((x) => x.workspaceId === wsId);
+    setEditWs({
+      wsId,
+      name: w?.displayName ?? "",
+      paths: w?.paths?.length ? [...w.paths] : w?.path ? [w.path] : [],
+      primary: w?.path ?? w?.paths?.[0] ?? "",
+    });
+  };
+  const removeWorkspace = (wsId: string, label: string) => {
+    setDlg({ mode: "confirm", title: `删除工作区「${label}」？`, onOk: () => {
+      void service.deleteWorkspace({
+        tenantId: service.identity.tenantId,
+        sessionId: service.identity.sessionId, requestId: `ws-${Date.now()}`,
+        workspaceId: wsId,
+      }).then(() => { refreshWs(); void refresh(); });
+    } });
+  };
+  const folderNames = [
+    ...pinned.filter((p) => wsList.some((w) => w.workspaceId === p && w.path)),
+    ...wsList.filter((w) => w.path && !pinned.includes(w.workspaceId)).map((w) => w.workspaceId),
+  ];
   const byFolder = (name: string) => filtered.filter((s) => folderOf(s.sessionId) === name);
   const [showReason, setShowReason] = useState(false);
 
@@ -233,32 +264,32 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
                 <>
                   {folderNames.map((name) => {
                     const inside = allSids.filter((sid) => folderOf(sid) === name);
+                    const ws = wsList.find((w) => w.workspaceId === name);
+                    const label = ws?.displayName || name.split("/").filter(Boolean).pop() || name;
                     return (
                       <div className={`omni-folder ${dragSid ? "droppable" : ""}`} key={name}
                         onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}
                         onDrop={(e) => { e.preventDefault(); if (dragSid) setFolder(dragSid, name); setDragSid(null); }}>
                         <span className="omni-group-label folder-head" onClick={() => setCollapsed((c) => { const n = new Set(c); n.has(name) ? n.delete(name) : n.add(name); return n; })}>
-                          {collapsed.has(name) ? "▸" : "▾"} {(wsList.find((w) => w.workspaceId === name)?.displayName || name.split("/").filter(Boolean).pop() || name)}
+                          {collapsed.has(name) ? "▸" : "▾"} {label}
                           <span className="folder-acts" onClick={(e) => e.stopPropagation()}>
                             <i title="在此文件夹新建会话" onClick={() => void newSession().then((ns) => { if (ns?.sessionId) setFolder(ns.sessionId, name); })}>＋</i>
-                            <i title="选项" onClick={() => { setDlgInput(name); setDlg({ mode: "prompt", title: `重命名「${name}」（留空删除工作区）`, onOk: (n) => {
-                              const nn = n.trim();
-                              if (nn) {
-                                void service.upsertWorkspace({
-                                  tenantId: service.identity.tenantId,
-                                  sessionId: service.identity.sessionId, requestId: `ws-${Date.now()}`,
-                                  workspaceId: name, displayName: nn, path: wsList.find((w) => w.workspaceId === name)?.path ?? "",
-                                }).then(refreshWs);
-                              } else {
-                                void service.deleteWorkspace({
-                                  tenantId: service.identity.tenantId,
-                                  sessionId: service.identity.sessionId, requestId: `ws-${Date.now()}`,
-                                  workspaceId: name,
-                                }).then(() => { refreshWs(); void refresh(); });
-                              }
-                            } }); }}>···</i>
+                            <i title="选项" onClick={() => setWsMenu(wsMenu === name ? null : name)}>···</i>
                           </span>
                         </span>
+                        {wsMenu === name && (
+                          <>
+                            <div className="ws-menu-mask" onClick={() => setWsMenu(null)} />
+                            <div className="ws-menu">
+                              <button onClick={() => { togglePin(name); setWsMenu(null); }} type="button">
+                                {pinned.includes(name) ? "Unpin" : "Pin"}
+                              </button>
+                              <button onClick={() => { openEditWs(name); setWsMenu(null); }} type="button">Edit</button>
+                              <button onClick={() => { if (ws?.path) void service.revealPath(ws.path); setWsMenu(null); }} type="button">Reveal in Finder</button>
+                              <button className="danger" onClick={() => { setWsMenu(null); removeWorkspace(name, label); }} type="button">Remove project</button>
+                            </div>
+                          </>
+                        )}
                         {!collapsed.has(name) && inside.map(row)}
                         {!collapsed.has(name) && inside.length === 0 && <span className="omni-folder-empty">拖会话到此处</span>}
                       </div>
@@ -298,6 +329,51 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
                     workspaceId: browse.path, displayName: browse.path.split("/").filter(Boolean).pop() ?? browse.path, path: browse.path,
                   }).then(() => { setFolder(sessionId, browse.path); setBrowse(null); });
                 }} type="button">选择此目录</button>
+              </div>
+            </div>
+          </div>
+        )}
+        {editWs && (
+          <div className="omni-dlg-mask" onClick={() => setEditWs(null)}>
+            <div className="omni-dlg omni-wsedit" onClick={(e) => e.stopPropagation()}>
+              <p className="omni-dlg-title">Edit project</p>
+              <input className="omni-dlg-input" onChange={(e) => setEditWs({ ...editWs, name: e.target.value })} value={editWs.name} />
+              <div className="ws-src-title">Source folders</div>
+              <div className="ws-src-list">
+                {editWs.paths.map((p) => (
+                  <div className="ws-src-row" key={p} onClick={() => setEditWs({ ...editWs, primary: p })} title="点击设为 Primary">
+                    <Icon name="folder" size={12} />
+                    <span className="ws-src-path" title={p}>{p.split("/").filter(Boolean).pop() ?? p}</span>
+                    {p === editWs.primary && <em className="ws-src-primary">Primary</em>}
+                    <i className="ws-src-del" onClick={(e) => {
+                      e.stopPropagation();
+                      const rest = editWs.paths.filter((x) => x !== p);
+                      setEditWs({ ...editWs, paths: rest, primary: editWs.primary === p ? (rest[0] ?? "") : editWs.primary });
+                    }}>✕</i>
+                  </div>
+                ))}
+                <button className="ws-src-add" onClick={() => void pickFolder().then((picked) => {
+                  if (picked && !editWs.paths.includes(picked.path)) {
+                    setEditWs({ ...editWs, paths: [...editWs.paths, picked.path], primary: editWs.primary || picked.path });
+                  }
+                })} type="button">＋ Add folder</button>
+              </div>
+              <div className="omni-dlg-btns ws-edit-btns">
+                <button className="ws-remove" onClick={() => {
+                  const label = editWs.name || editWs.wsId;
+                  const wsId = editWs.wsId;
+                  setEditWs(null);
+                  removeWorkspace(wsId, label);
+                }} type="button">Remove local project</button>
+                <button className="omni-dlg-cancel" onClick={() => setEditWs(null)} type="button">Cancel</button>
+                <button className="omni-dlg-ok" onClick={() => {
+                  void service.upsertWorkspace({
+                    tenantId: service.identity.tenantId,
+                    sessionId: service.identity.sessionId, requestId: `ws-${Date.now()}`,
+                    workspaceId: editWs.wsId, displayName: editWs.name.trim(),
+                    path: editWs.primary, paths: editWs.paths,
+                  }).then(() => { refreshWs(); setEditWs(null); });
+                }} type="button">Save</button>
               </div>
             </div>
           </div>

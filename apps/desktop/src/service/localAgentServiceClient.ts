@@ -338,6 +338,7 @@ function mapWorkspace(value: unknown): WorkspaceSummary {
     description: optionalString(raw.description) ?? "",
     updatedAt: optionalString(raw.updated_at) ?? "",
     path: optionalString(raw.path) ?? "",
+    paths: Array.isArray(raw.paths) ? raw.paths.map(String) : [],
     memberCount: Number(raw.member_count ?? 0),
   };
 }
@@ -666,6 +667,7 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
       workspace_id: request.workspaceId,
       display_name: request.displayName ?? "",
       path: request.path ?? "",
+      paths: request.paths ?? [],
       capabilities: request.capabilities ?? [],
       default_profile_id: request.defaultProfileId ?? "",
       description: request.description ?? "",
@@ -1086,6 +1088,10 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
 
   async listDirectory(path: string): Promise<DirectoryListing> {
     return (await this.call("list_directory", { path } as LocalRpcParams)) as DirectoryListing;
+  }
+
+  async revealPath(path: string): Promise<{ revealed: boolean }> {
+    return (await this.call("reveal_path", { path } as LocalRpcParams)) as { revealed: boolean };
   }
 
   async listSessions(request: ListSessionsRequest): Promise<SessionSummary[]> {

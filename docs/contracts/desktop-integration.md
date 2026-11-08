@@ -137,7 +137,7 @@ AgentService（service.py）→ SQLite runtime store / Runtime
 
 ---
 
-## 6. 方法目录（55 个）
+## 6. 方法目录（56 个）
 
 必填参数省略四件套（`tenant_id/user_id/session_id/request_id`），`?` 表示可选。参数清单从 `agent/service/contracts.py` 的 dataclass 字段提取。"前端调用方"由 grep `apps/desktop/src`（不含 `service/`）得到，"—"表示 UI 当前没有调用。
 
@@ -182,7 +182,8 @@ AgentService（service.py）→ SQLite runtime store / Runtime
 | `list_workspaces` | `listWorkspaces` | `limit?` | GlobalSettings, SunWorkspace |
 | `delete_workspace` | `deleteWorkspace`* | `workspace_id` | SunWorkspace |
 | `list_directory` | `listDirectory`* | 只传 `path`，**不经过 DTO、不做身份校验** | SunWorkspace |
-| `pick_folder` | `pickFolder`* | 无；macOS `osascript` 弹窗 | SunWorkspace（经 `setSidecarPicker`） |
+| `pick_folder` | `pickFolder` | 无；macOS `osascript` 弹窗 | SunWorkspace（经 `setSidecarPicker`） |
+| `reveal_path` | `revealPath` | 只传 `path`；`open`/`xdg-open`/`os.startfile`，不经过 DTO | SunWorkspace 文件夹菜单 |
 | `list_workspace_files` | `listWorkspaceFiles` | `limit?` | Mars |
 | `read_workspace_file` / `write_workspace_file` | 同名 camel | `path`；写入时带 `content` | Mars |
 | `get_settings` / `update_settings` | 同名 camel | 更新时：`provider_mode? deepseek_model? ollama_model?` | App（30s ping）、GlobalSettings |
@@ -191,7 +192,9 @@ AgentService（service.py）→ SQLite runtime store / Runtime
 | `list_skills` | `listSkills` | 无 DTO；读 SKILL.md 索引 | GlobalSettings, Uranus |
 | `web_search` | `webSearch` | `query`、`max_results?`（默认 8），无 DTO | Mercury |
 
-\* 标星号的方法都声明在 `WorkspaceClient` 上（`types/service.ts`），Mock 与 Unavailable 客户端也已实现；`pick_folder`/`list_directory` 仍然不经过请求 DTO、不做身份校验（见 §10-3）。
+\* `pick_folder`、`list_directory`、`reveal_path` 不经过请求 DTO、不做身份校验（见 §10-3）；`assign_session_workspace`、`delete_workspace` 走请求 DTO。五者都声明在 `WorkspaceClient` 上（`types/service.ts`），Mock 与 Unavailable 客户端均已实现。
+
+工作区源目录：`WorkspaceSummary.path` 是 primary 目录（run 文件操作的作用域），`paths` 是全部源目录；`upsert_workspace` 只传 `path` 时等价于单目录 `paths=[path]`，`paths` 非空时 primary 取 `path`（须在列表内）或回退 `paths[0]`。
 
 ### 6.4 领域工作台（Jupiter / Saturn / Earth / Pluto / Uranus）
 
@@ -310,7 +313,7 @@ cd apps/desktop && npm run test:sidecar-e2e
 |---|---|---|---|
 | 1 | ~~HTTP 传输把业务错误码压平成 `INTERNAL_ERROR`~~ **已修复** | `localTransport.ts` 的 `rpcErrorToClientError` 由两种传输共用 | §8.2 |
 | 2 | HTTP sidecar 设置 `ACAO: *` 且没有鉴权，而 `list_directory`、`read/write_workspace_file`、`start_run` 都可以通过 `/rpc` 调用 | `http_server.py:42`、`service.py:535` | 本机任意网页都可以向 `127.0.0.1:8765` 发请求。仅限开发使用，不要在不可信环境下开启 `--http` |
-| 3 | `list_directory`、`pick_folder` 绕过请求 DTO 和身份校验；`pick_folder` 只支持 macOS | `dispatcher.py:392-396`、`service.py:508` | 跨平台不可用；行为不受 tenant 约束 |
+| 3 | `list_directory`、`pick_folder`、`reveal_path` 绕过请求 DTO 和身份校验；`pick_folder` 只支持 macOS | `dispatcher.py:392-400`、`service.py:508` | 跨平台不可用；行为不受 tenant 约束 |
 | 4 | ~~4 个 UI 在用的方法不在 TS 接口里（§6.3 星号项）~~ **已修复** | 已并入 `WorkspaceClient`，Mock/Unavailable 同步实现 | §6.3 |
 | 5 | `start_run.metadata.model/effort` 由 Composer 发送，但 `agent/` 下没有任何代码读取 | grep `agent/` 无匹配 | 模型和强度选择器目前对执行**没有效果** |
 | 6 | `SUSPENDED` 被映射成 `blocked` | `localAgentServiceClient.ts:119` | 暂停态在 UI 上不可见；而且 `pause_run` 目前没有任何 UI 调用方 |

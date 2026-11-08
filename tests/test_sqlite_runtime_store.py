@@ -873,3 +873,34 @@ def test_session_workspace_assignment_round_trips(tmp_path: Path) -> None:
         assert store.workspace_member_ids("tenant-a", "/tmp/ws-a") == []
     finally:
         store.close()
+
+
+def test_workspace_source_folders_round_trip(tmp_path: Path) -> None:
+    """`paths` carries every source folder while `path` stays the primary."""
+    store = _store(tmp_path / "runtime.sqlite")
+    try:
+        record = store.upsert_workspace(
+            "tenant-a",
+            "ws-multi",
+            display_name="multi",
+            path="/a",
+            paths_json='["/a", "/b", "/c"]',
+        )
+        assert record.path == "/a"
+        assert record.paths_json == '["/a", "/b", "/c"]'
+
+        listed = {w.workspace_id: w for w in store.list_workspaces("tenant-a")}
+        assert listed["ws-multi"].paths_json == '["/a", "/b", "/c"]'
+
+        store.upsert_workspace(
+            "tenant-a",
+            "ws-multi",
+            display_name="multi",
+            path="/b",
+            paths_json='["/b"]',
+        )
+        listed = {w.workspace_id: w for w in store.list_workspaces("tenant-a")}
+        assert listed["ws-multi"].path == "/b"
+        assert listed["ws-multi"].paths_json == '["/b"]'
+    finally:
+        store.close()

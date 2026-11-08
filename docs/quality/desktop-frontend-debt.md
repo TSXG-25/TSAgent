@@ -31,7 +31,7 @@
 | `mockAgentService.ts` | 986 行，51 个 async 方法 | |
 | `clientFactory.ts` | 379 行，其中约 51 个 `throw this.error` 桩方法 | |
 | `types/service.ts` | 979 行，23 个 `*Client` 接口拼成 `DesktopAgentServiceClient` | `types/service.ts:970` |
-| wire 方法数 | 55（ADR-0025 冻结时是 8） | `service/localTransport.ts:8` |
+| wire 方法数 | 56（ADR-0025 冻结时是 8） | `service/localTransport.ts:8` |
 | `as never` | 47 处 / 15 个文件 | `grep -rc 'as never'` |
 | `as unknown as` | 9 处（7 处在 `SunWorkspace.tsx`） | |
 | `.catch(() => {})` | 11 处；带注释的空 `catch` 8 处 | |
@@ -155,7 +155,7 @@ Git 历史里连续的 session 相关修复提交（"first-class session switchi
 
 ### 2.9 文档与仓库卫生
 
-- 文档状态滞后：`apps/desktop/README.md` 仍写着"协议只允许 8 个方法"、"当前协议尚无 `list_runs`"、"不包含 Tauri Rust 壳"；`docs/quality/known-debt.md §7` 写着"仓库没有 Tauri/Rust host"。实际上已有 55 个方法、`list_runs`，`src-tauri/` 也存在。ADR-0025 和测试名 `..._is_frozen` 里的"冻结"概念已经和现实不符。
+- 文档状态滞后：`apps/desktop/README.md` 仍写着"协议只允许 8 个方法"、"当前协议尚无 `list_runs`"、"不包含 Tauri Rust 壳"；`docs/quality/known-debt.md §7` 写着"仓库没有 Tauri/Rust host"。实际上已有 56 个方法、`list_runs`，`src-tauri/` 也存在。ADR-0025 和测试名 `..._is_frozen` 里的"冻结"概念已经和现实不符。
 - `docs/desktop_p0_audit.md:80` 记录过"types/clientFactory 并行冲突 → 恢复 HEAD"，说明多个会话并行改同一组共享文件时发生过冲突。
 - 工作区长期有大量前后端混合的未提交改动（当前 13 个文件），`git log` 里有 "sync accumulated runtime, tools, and harness updates" 这种大杂烩提交。审查和回滚的粒度都很粗。
 - 仓库跟踪了 3 个 `.pyc`（`git ls-files | grep -c '\.pyc$'`）。

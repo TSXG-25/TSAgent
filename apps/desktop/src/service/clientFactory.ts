@@ -177,6 +177,10 @@ export class UnavailableDesktopAgentServiceClient implements DesktopAgentService
     throw this.error;
   }
 
+  async revealPath(): Promise<{ revealed: boolean }> {
+    throw this.error;
+  }
+
   async updateSettings(): Promise<SettingsSummary> {
     throw this.error;
   }

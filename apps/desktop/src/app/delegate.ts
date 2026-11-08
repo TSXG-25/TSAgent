@@ -10,6 +10,7 @@ export async function delegateToPlanet(
   targetPlanet: string,
   requestText: string,
   attachments: string[] = [],
+  options: { model?: string; effort?: string } = {},
 ): Promise<string> {
   const { service, activeRun } = ctx;
   // One live run *per session* — the guard is scoped to the session the
@@ -25,6 +26,7 @@ export async function delegateToPlanet(
       tenantId: service.identity.tenantId,
       sessionId,
       workspaceRoot: ctx.workspacePath,
+      metadata: { ...(options.model ? { model: options.model } : {}), ...(options.effort ? { effort: options.effort } : {}) },
       requestId: requestIdForRun(0),
       requestText,
     } as never);

@@ -23,6 +23,8 @@ export interface StartRunRequest {
   requestText: string;
   /** Session-bound workspace root — scopes the run's file ops to this dir. */
   workspaceRoot?: string;
+  /** Model/effort picks and other run metadata. */
+  metadata?: Record<string, unknown>;
   requestDigest?: string;
 }
 
@@ -386,6 +388,8 @@ export interface SessionSummary {
   latestRunId: string;
   latestStatus: string;
   latestUpdatedAt: string;
+  /** Workspace this session is filed under ("" = recent/ungrouped). */
+  workspaceId?: string;
 }
 
 export interface CreateSessionRequest {
@@ -558,6 +562,8 @@ export interface SettingsClient {
 export interface WorkspaceSummary {
   workspaceId: string;
   displayName: string;
+  path?: string;
+  memberCount?: number;
   capabilities: string[];
   defaultProfileId: string;
   description: string;
@@ -565,6 +571,8 @@ export interface WorkspaceSummary {
 }
 
 export interface UpsertWorkspaceRequest {
+  /** Directory the workspace adopts — scopes run file ops. */
+  path?: string;
   tenantId: string;
   sessionId: string;
   requestId: string;

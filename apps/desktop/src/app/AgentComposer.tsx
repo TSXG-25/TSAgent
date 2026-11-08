@@ -11,12 +11,14 @@ const BUSY = new Set(["active", "pending"]);
  *  (/mars x → @mars x, /model <m> → local hint, /help). Model select is a
  *  display+hint surface until a model-setting wire exists per-run. */
 const PLANETS = ["sun","mercury","venus","earth","mars","jupiter","saturn","uranus","neptune","pluto"];
+const MODELS = ["deepseek-chat", "deepseek-reasoner"];
+const EFFORTS = ["默认", "low", "medium", "high"];
 const PERMISSIONS = [
-  { id: "只读", icon: "◧", desc: "仅回答，不改文件" },
-  { id: "询问", icon: "◈", desc: "写操作逐个确认" },
-  { id: "智能", icon: "✦", desc: "低风险自动放行" },
-  { id: "计划", icon: "▤", desc: "先出方案再执行" },
-  { id: "放行", icon: "⏩", desc: "全部自动批准（本地偏好）" },
+  { id: "Read-only", icon: "◧", desc: "Answer only, no file changes" },
+  { id: "Ask", icon: "◈", desc: "Confirm each write operation" },
+  { id: "Smart", icon: "✦", desc: "Auto-approve low-risk actions" },
+  { id: "Plan", icon: "▤", desc: "Propose plan before executing" },
+  { id: "Bypass", icon: "⏩", desc: "Auto-approve everything (local pref)" },
 ] as const;
 
 export default function AgentComposer({ ctx, planet, placeholder }: { ctx: RunCtx; planet?: string; placeholder?: string }) {
@@ -24,7 +26,7 @@ export default function AgentComposer({ ctx, planet, placeholder }: { ctx: RunCt
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [files, setFiles] = useState<string[]>([]);
-  const [perm, setPerm] = useState(() => localStorage.getItem("tsagent:permission") ?? "询问");
+  const [perm, setPerm] = useState(() => localStorage.getItem("tsagent:permission") ?? "Ask");
   const [permOpen, setPermOpen] = useState(false);
   const pickPerm = (id: string) => { setPerm(id); localStorage.setItem("tsagent:permission", id); setPermOpen(false); };
   // context usage ring — ≈tokens from visible conversation text, cap 1M
@@ -33,6 +35,9 @@ export default function AgentComposer({ ctx, planet, placeholder }: { ctx: RunCt
   const pct = Math.min(estTokens / 1000000, 1);
   const R = 9, C = 2 * Math.PI * R;
   const [model, setModel] = useState("default");
+  const [effort, setEffort] = useState("默认");
+  const [modelOpen, setModelOpen] = useState(false);
+  const [pane, setPane] = useState<"root" | "model" | "effort">("root");
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -48,7 +53,9 @@ export default function AgentComposer({ ctx, planet, placeholder }: { ctx: RunCt
     setBusy(true); setNotice(null);
     try {
       const target = m ? m[1].toLowerCase() : (planet ?? "sun");
-      await delegateToPlanet(ctx, target, m ? m[2] : t, files);
+      await delegateToPlanet(ctx, target, m ? m[2] : t, files, {
+        ...(model !== "default" || effort !== "默认" ? { model: model === "default" ? undefined : model, effort: effort === "默认" ? undefined : effort } : {}),
+      });
       if (files.length && ctx.activeRun) {
         window.dispatchEvent(new CustomEvent("tsagent:run-attachments", { detail: { runId: ctx.activeRun.runId, files } }));
       }
@@ -76,9 +83,9 @@ export default function AgentComposer({ ctx, planet, placeholder }: { ctx: RunCt
         </div>
       )}
       <div className="ac-tools">
-        <button className="ac-attach" onClick={() => void pickFiles().then((f) => setFiles((x) => [...x, ...f]))} title="添加文件" type="button">＋</button>
+        <button className="ac-attach" onClick={() => void pickFiles().then((f) => setFiles((x) => [...x, ...f]))} title="Add files" type="button">＋</button>
         <div className="ac-permwrap">
-          <button className="ac-perm" onClick={() => setPermOpen((o) => !o)} title="权限档（本地偏好）" type="button">{perm} ▾</button>
+          <button className="ac-perm" onClick={() => setPermOpen((o) => !o)} title="Permission preset (local preference)" type="button">{perm} ▾</button>
           {permOpen && (
             <div className="ac-permmenu">
               {PERMISSIONS.map((p) => (
@@ -93,19 +100,49 @@ export default function AgentComposer({ ctx, planet, placeholder }: { ctx: RunCt
         </div>
         <span className="ac-planet">@{planet ?? "sun"}</span>
         <span className="ac-spacer" />
-        <span className="ac-ctxring" title={`上下文用量 ≈${estTokens.toLocaleString()} / 1M tokens（估算）`}>
+        <span className="ac-ctxring" title={`Context usage ≈${estTokens.toLocaleString()} / 1M tokens (est.)`}>
           <svg height="22" viewBox="0 0 22 22" width="22">
             <circle cx="11" cy="11" fill="none" r={R} stroke="rgba(255,255,255,.1)" strokeWidth="2" />
             <circle cx="11" cy="11" fill="none" r={R} stroke="var(--planet-accent)" strokeDasharray={`${pct * C} ${C}`} strokeLinecap="round" strokeWidth="2" transform="rotate(-90 11 11)" />
           </svg>
           <em>{Math.round(pct * 100)}%</em>
         </span>
-        <div className="ac-modelpill" title="Model">
-          <select onChange={(e) => setModel(e.target.value)} value={model}>
-            <option value="default">请选择模型</option>
-            <option value="deepseek-chat">deepseek-chat</option>
-            <option value="deepseek-reasoner">deepseek-reasoner</option>
-          </select>
+        <div className="ac-modelwrap">
+          <button className="ac-modeltrig" onClick={() => setModelOpen((o) => !o)} type="button">
+            {model === "default" ? "Select model" : model} <em>{effort}</em> ▾
+          </button>
+          {modelOpen && (
+            <div className="ac-modelmenu">
+              {pane === "root" ? (
+                <>
+                  <button className="ac-mrow" onClick={() => setPane("model")} type="button">
+                    <span>Model</span><em>{model === "default" ? "—" : model}</em><i>›</i>
+                  </button>
+                  <button className="ac-mrow" onClick={() => setPane("effort")} type="button">
+                    <span>Effort</span><em>{effort}</em><i>›</i>
+                  </button>
+                </>
+              ) : pane === "model" ? (
+                <>
+                  <button className="ac-mrow back" onClick={() => setPane("root")} type="button">‹ Model</button>
+                  {["default", ...MODELS].map((m) => (
+                    <button className={`ac-mrow ${model === m ? "on" : ""}`} key={m} onClick={() => { setModel(m); setPane("root"); setModelOpen(false); }} type="button">
+                      <span>{m === "default" ? "默认模型" : m}</span>{model === m && <i>✓</i>}
+                    </button>
+                  ))}
+                </>
+              ) : (
+                <>
+                  <button className="ac-mrow back" onClick={() => setPane("root")} type="button">‹ Effort</button>
+                  {EFFORTS.map((e) => (
+                    <button className={`ac-mrow ${effort === e ? "on" : ""}`} key={e} onClick={() => { setEffort(e); setPane("root"); setModelOpen(false); }} type="button">
+                      <span>{e}</span>{effort === e && <i>✓</i>}
+                    </button>
+                  ))}
+                </>
+              )}
+            </div>
+          )}
         </div>
         {ctx.activeRun && ctx.activeRun.sessionId === ctx.sessionId && BUSY.has(ctx.activeRun.status) ? (
           <button className="ac-send ac-stop" onClick={() => { void ctx.controller.cancelRun(ctx.activeRun!.runId).catch(() => {}); }} title="停止" type="button">

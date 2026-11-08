@@ -71,6 +71,8 @@ class LocalTransportMethod(str, Enum):
     LIST_WORKSPACE_FILES = "list_workspace_files"
     LIST_DIRECTORY = "list_directory"
     PICK_FOLDER = "pick_folder"
+    ASSIGN_SESSION_WORKSPACE = "assign_session_workspace"
+    DELETE_WORKSPACE = "delete_workspace"
     READ_WORKSPACE_FILE = "read_workspace_file"
     WRITE_WORKSPACE_FILE = "write_workspace_file"
     READ_EVENTS = "read_events"

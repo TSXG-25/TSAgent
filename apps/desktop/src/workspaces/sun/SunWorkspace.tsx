@@ -33,20 +33,19 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
   const [query, setQuery] = useState("");
   const [approvals, setApprovals] = useState<ApprovalSummary[]>([]);
   const [participants, setParticipants] = useState<ParticipantSummary[]>([]);
-  const [folderNames0, setFolderNames] = useState<string[]>(() => {
-    try { return JSON.parse(localStorage.getItem("tsagent.folderNames") ?? "[]") as string[]; } catch { return []; }
-  });
-  const saveFolderNames = (names: string[]) => { setFolderNames(names); try { localStorage.setItem("tsagent.folderNames", JSON.stringify(names)); } catch {} };
+  const [wsList, setWsList] = useState<Array<{ workspaceId: string; displayName: string; path?: string; memberCount?: number }>>([]);
+  const refreshWs = () => {
+    const c = service as unknown as { listWorkspaces?: (r: object) => Promise<Array<{ workspaceId: string; displayName: string; path?: string; memberCount?: number }>> };
+    void c.listWorkspaces?.({ tenantId: service.identity.tenantId, userId: service.identity.userId, sessionId: service.identity.sessionId, requestId: `ws-${Date.now()}` } as never).then((w) => setWsList(w ?? [])).catch(() => {});
+  };
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [dragSid, setDragSid] = useState<string | null>(null);
   const pickedSessionRef = useRef(false);
-  const [workspaces, setWorkspaces] = useState<Record<string, string>>(() => {
-    try { return JSON.parse(localStorage.getItem("tsagent:workspaces") ?? "{}"); } catch { return {}; }
-  });
-  const workspaceOf = (sid: string) => workspaces[sid] ?? "";
-  const setWorkspace = (sid: string, path: string) => {
-    const next = { ...workspaces }; if (path) next[sid] = path; else delete next[sid];
-    setWorkspaces(next); localStorage.setItem("tsagent:workspaces", JSON.stringify(next));
+  // session → workspace path (backend resolves run scope from session_heads)
+  const workspaceOf = (sid: string) => {
+    const sess = sessions.find((x) => x.sessionId === sid);
+    const ws = wsList.find((w) => w.workspaceId === (sess?.workspaceId ?? ""));
+    return ws?.path ?? "";
   };
   const [browse, setBrowse] = useState<{ path: string; parent: string; dirs: string[]; home?: string } | null>(null);
   useEffect(() => {
@@ -61,17 +60,12 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
   };
   const [dlg, setDlg] = useState<{ mode: "prompt" | "confirm"; title: string; value?: string; onOk: (v: string) => void } | null>(null);
   const [dlgInput, setDlgInput] = useState("");
-  const [folders, setFolders] = useState<Record<string, string>>(() => {
-    try { return JSON.parse(localStorage.getItem("tsagent:folders") ?? "{}") as Record<string, string>; } catch { return {}; }
-  });
-  const folderOf = (sid: string) => folders[sid] ?? "";
-  const setFolder = (sid: string, name: string) => {
-    const next = { ...folders };
-    if (name.trim()) next[sid] = name.trim(); else delete next[sid];
-    setFolders(next);
-    localStorage.setItem("tsagent:folders", JSON.stringify(next));
+  const folderOf = (sid: string) => sessions.find((x) => x.sessionId === sid)?.workspaceId ?? "";
+  const setFolder = (sid: string, wsId: string) => {
+    const c = service as unknown as { assignSessionWorkspace?: (sid: string, wsid: string) => Promise<unknown> };
+    void c.assignSessionWorkspace?.(sid, wsId).then(() => { refreshWs(); void refresh(); });
   };
-  const folderNames = [...new Set([...folderNames0, ...Object.values(folders)])].sort();
+  const folderNames = wsList.filter((w) => w.path).map((w) => w.workspaceId);
   const byFolder = (name: string) => filtered.filter((s) => folderOf(s.sessionId) === name);
   const [showReason, setShowReason] = useState(false);
 
@@ -96,7 +90,7 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
       });
     } catch { /* non-fatal */ }
   }, [service]);
-  useEffect(() => { void refresh(); const t = setInterval(() => void refresh(), 8000); return () => clearInterval(t); }, [refresh]);
+  useEffect(() => { void refresh(); refreshWs(); const t = setInterval(() => void refresh(), 8000); return () => clearInterval(t); }, [refresh]);
   // hydrate ALL runs in the selected session — the thread renders every
   // run's messages, so each one needs its conversation/events loaded.
   useEffect(() => {
@@ -180,10 +174,15 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
               <span className="omni-eyebrow">◈ 会话</span>
               <div className="omni-rail-icons">
                 <button className={`rail-ico ${searchOpen ? "on" : ""}`} onClick={() => setSearchOpen((o) => !o)} title="搜索" type="button"><Icon name="search" size={13} /></button>
-                <button className="rail-ico" onClick={() => void pickFolder().then((picked) => {
+                <button className="rail-ico" onClick={() => void pickFolder().then(async (picked) => {
                   if (!picked) return;
-                  setWorkspace(sessionId, picked.path);
-                  setFolder(sessionId, picked.name);
+                  const c = service as unknown as { upsertWorkspace?: (r: object) => Promise<unknown> };
+                  await c.upsertWorkspace?.({
+                    tenantId: service.identity.tenantId, userId: service.identity.userId,
+                    sessionId: service.identity.sessionId, requestId: `ws-${Date.now()}`,
+                    workspaceId: picked.path, displayName: picked.name, path: picked.path,
+                  } as never);
+                  setFolder(sessionId, picked.path);   // assign session to the workspace
                 })} title="选择工作区" type="button"><Icon name="folder" size={13} /></button>
                 <button className="rail-ico accent" onClick={() => void newSession()} title="新建任务" type="button"><Icon name="plus" size={13} /></button>
               </div>
@@ -235,12 +234,21 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
                         onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}
                         onDrop={(e) => { e.preventDefault(); if (dragSid) setFolder(dragSid, name); setDragSid(null); }}>
                         <span className="omni-group-label folder-head" onClick={() => setCollapsed((c) => { const n = new Set(c); n.has(name) ? n.delete(name) : n.add(name); return n; })}>
-                          {collapsed.has(name) ? "▸" : "▾"} {name}
+                          {collapsed.has(name) ? "▸" : "▾"} {(wsList.find((w) => w.workspaceId === name)?.displayName || name.split("/").filter(Boolean).pop() || name)}
                           <span className="folder-acts" onClick={(e) => e.stopPropagation()}>
                             <i title="在此文件夹新建会话" onClick={() => void newSession().then((ns) => { if (ns?.sessionId) setFolder(ns.sessionId, name); })}>＋</i>
-                            <i title="选项" onClick={() => { setDlgInput(name); setDlg({ mode: "prompt", title: `「${name}」重命名（留空删除工作区）`, onOk: (n) => {
-                              inside.forEach((sid) => setFolder(sid, n.trim()));
-                              saveFolderNames(n.trim() ? folderNames.map((x) => (x === name ? n.trim() : x)) : folderNames.filter((x) => x !== name));
+                            <i title="选项" onClick={() => { setDlgInput(name); setDlg({ mode: "prompt", title: `重命名「${name}」（留空删除工作区）`, onOk: (n) => {
+                              const nn = n.trim();
+                              const c = service as unknown as { upsertWorkspace?: (r: object) => Promise<unknown>; deleteWorkspace?: (wsid: string) => Promise<unknown> };
+                              if (nn) {
+                                void c.upsertWorkspace?.({
+                                  tenantId: service.identity.tenantId, userId: service.identity.userId,
+                                  sessionId: service.identity.sessionId, requestId: `ws-${Date.now()}`,
+                                  workspaceId: name, displayName: nn, path: wsList.find((w) => w.workspaceId === name)?.path ?? "",
+                                } as never).then(refreshWs);
+                              } else {
+                                void c.deleteWorkspace?.(name).then(() => { refreshWs(); void refresh(); });
+                              }
                             } }); }}>···</i>
                           </span>
                         </span>
@@ -277,9 +285,12 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
               <div className="omni-dlg-btns">
                 <button className="omni-dlg-cancel" onClick={() => setBrowse(null)} type="button">取消</button>
                 <button className="omni-dlg-ok" onClick={() => {
-                  setWorkspace(sessionId, browse.path);
-                  setFolder(sessionId, browse.path.split("/").filter(Boolean).pop() ?? browse.path);
-                  setBrowse(null);
+                  const c = service as unknown as { upsertWorkspace?: (r: object) => Promise<unknown> };
+                  void c.upsertWorkspace?.({
+                    tenantId: service.identity.tenantId, userId: service.identity.userId,
+                    sessionId: service.identity.sessionId, requestId: `ws-${Date.now()}`,
+                    workspaceId: browse.path, displayName: browse.path.split("/").filter(Boolean).pop() ?? browse.path, path: browse.path,
+                  } as never).then(() => { setFolder(sessionId, browse.path); setBrowse(null); });
                 }} type="button">选择此目录</button>
               </div>
             </div>
@@ -395,7 +406,7 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
             {viewRun?.failure && !isBlocked && <article className="msg3 error"><div className="msg3-body">{viewRun.failure.message}</div></article>}
           </div>
 
-          {workspaceOf(sessionId) && <div className="ws-bound" title={workspaceOf(sessionId)}>📁 工作区: {workspaceOf(sessionId).split("/").pop()}<i onClick={() => setWorkspace(sessionId, "")}>✕</i></div>}<AgentComposer ctx={{ ...ctx, sessionId, workspacePath: workspaceOf(sessionId) }} planet="sun" placeholder="发送消息 / 创建任务，@提及 · /命令…" />
+          {workspaceOf(sessionId) && <div className="ws-bound" title={workspaceOf(sessionId)}>📁 工作区: {workspaceOf(sessionId).split("/").pop()}<i onClick={() => setFolder(sessionId, "")}>✕</i></div>}<AgentComposer ctx={{ ...ctx, sessionId, workspacePath: workspaceOf(sessionId) }} planet="sun" placeholder="发送消息 / 创建任务，@提及 · /命令…" />
 
           {/* status footer — real counts */}
           <footer className="omni-statusbar">

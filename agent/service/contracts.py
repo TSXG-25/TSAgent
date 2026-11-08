@@ -709,10 +709,12 @@ class SessionSummary:
     latest_run_id: str = ""
     latest_status: str = ""
     latest_updated_at: str = ""
+    workspace_id: str = ""
 
     def to_dict(self) -> dict[str, JSONValue]:
         return {
             "tenant_id": self.tenant_id,
+            "workspace_id": self.workspace_id,
             "session_id": self.session_id,
             "user_id": self.user_id,
             "created_at": self.created_at,
@@ -1071,11 +1073,15 @@ class WorkspaceSummary:
     default_profile_id: str
     description: str
     updated_at: str
+    path: str = ""
+    member_count: int = 0
 
     def to_dict(self) -> dict[str, JSONValue]:
         return {
             "workspace_id": self.workspace_id,
             "display_name": self.display_name,
+            "path": self.path,
+            "member_count": self.member_count,
             "capabilities": list(self.capabilities),
             "default_profile_id": self.default_profile_id,
             "description": self.description,
@@ -1091,6 +1097,7 @@ class UpsertWorkspaceRequest:
     request_id: str
     workspace_id: str
     display_name: str = ""
+    path: str = ""
     capabilities: tuple[str, ...] = ()
     default_profile_id: str = ""
     description: str = ""
@@ -1111,6 +1118,7 @@ class UpsertWorkspaceRequest:
             request_id=str(value.get("request_id", "")),
             workspace_id=str(value.get("workspace_id", "")),
             display_name=str(value.get("display_name", "")),
+            path=str(value.get("path", "")),
             capabilities=tuple(str(v) for v in (value.get("capabilities") or ())),
             default_profile_id=str(value.get("default_profile_id", "")),
             description=str(value.get("description", "")),
@@ -2598,3 +2606,54 @@ __all__ = [
     "RunStatus",
     "StartRunRequest",
 ]
+
+
+@dataclass(frozen=True)
+class AssignSessionWorkspaceRequest:
+    tenant_id: str
+    user_id: str
+    session_id: str
+    request_id: str
+    workspace_id: str  # "" clears the assignment
+
+    def __post_init__(self) -> None:
+        _required_identifier(self.tenant_id, "tenant_id")
+        _required_identifier(self.user_id, "user_id")
+        _required_identifier(self.session_id, "session_id")
+        _required_identifier(self.request_id, "request_id")
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "AssignSessionWorkspaceRequest":
+        return cls(
+            tenant_id=str(value.get("tenant_id", "")),
+            user_id=str(value.get("user_id", "")),
+            session_id=str(value.get("session_id", "")),
+            request_id=str(value.get("request_id", "")),
+            workspace_id=str(value.get("workspace_id", "")),
+        )
+
+
+@dataclass(frozen=True)
+class DeleteWorkspaceRequest:
+    tenant_id: str
+    user_id: str
+    session_id: str
+    request_id: str
+    workspace_id: str
+
+    def __post_init__(self) -> None:
+        _required_identifier(self.tenant_id, "tenant_id")
+        _required_identifier(self.user_id, "user_id")
+        _required_identifier(self.session_id, "session_id")
+        _required_identifier(self.request_id, "request_id")
+        _required_identifier(self.workspace_id, "workspace_id")
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "DeleteWorkspaceRequest":
+        return cls(
+            tenant_id=str(value.get("tenant_id", "")),
+            user_id=str(value.get("user_id", "")),
+            session_id=str(value.get("session_id", "")),
+            request_id=str(value.get("request_id", "")),
+            workspace_id=str(value.get("workspace_id", "")),
+        )

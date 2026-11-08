@@ -82,7 +82,14 @@ class AgentService:
 
         self._store = runtime_store
         self._launcher = launcher
-        self._contexts = context_factory or ServiceContextFactory(runtime_store)
+        if context_factory is None:
+            context_factory = ServiceContextFactory(
+                runtime_store,
+                workspace_for_run=lambda tenant, session, _run: (
+                    (p := runtime_store.session_workspace_path(tenant, session)) and __import__("pathlib").Path(p)
+                ) or None,
+            )
+        self._contexts = context_factory
         # Durable SQLite events are the default Source of Truth in C-3.  A
         # caller may still inject an explicit repository for deterministic
         # tests or a future adapter, but the Service no longer silently falls
@@ -503,13 +510,27 @@ class AgentService:
         for the desktop client, even when it runs in a dev browser."""
         import asyncio
         proc = await asyncio.create_subprocess_exec(
-            "osascript", "-e",
-            'POSIX path of (choose folder with prompt "选择工作区目录")',
+            "osascript",
+            "-e", 'tell application "System Events"',
+            "-e", 'activate',
+            "-e", 'set chosen to POSIX path of (choose folder with prompt "选择工作区目录")',
+            "-e", 'end tell',
+            "-e", 'return chosen',
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
         )
         out, _ = await proc.communicate()
         path = out.decode().strip().rstrip("/")
         return {"path": path or None}
+
+    async def assign_session_workspace(self, request: Any) -> Any:
+        self._store.assign_session_workspace(
+            request.tenant_id, request.session_id, request.workspace_id,
+        )
+        return {"session_id": request.session_id, "workspace_id": request.workspace_id}
+
+    async def delete_workspace(self, request: Any) -> Any:
+        removed = self._store.delete_workspace(request.tenant_id, request.workspace_id)
+        return {"removed": removed}
 
     async def list_directory(self, request: Any) -> Any:
         """List subdirectories for the in-page folder picker. Params carry a
@@ -556,6 +577,7 @@ class AgentService:
             run_count=run_count,
             latest_run_id="" if latest_run is None else latest_run.run_id,
             latest_status="" if latest_run is None else latest_run.run_status,
+            workspace_id=getattr(head, "workspace_id", ""),
             latest_updated_at="" if latest_run is None else latest_run.updated_at,
         )
 
@@ -848,6 +870,7 @@ class AgentService:
             request.tenant_id,
             request.workspace_id,
             display_name=request.display_name,
+            path=getattr(request, "path", ""),
             capabilities_json=_json.dumps(list(request.capabilities)),
             default_profile_id=request.default_profile_id,
             description=request.description,
@@ -857,20 +880,24 @@ class AgentService:
     async def list_workspaces(self, request: Any) -> list[Any]:
         self._ensure_open()
         return [
-            self._workspace_summary(r)
+            self._workspace_summary(
+                r, len(self._store.workspace_member_ids(request.tenant_id, r.workspace_id)),
+            )
             for r in self._store.list_workspaces(
                 request.tenant_id, limit=request.limit
             )
         ]
 
     @staticmethod
-    def _workspace_summary(record: Any) -> Any:
+    def _workspace_summary(record: Any, member_count: int = 0) -> Any:
         import json as _json
         from .contracts import WorkspaceSummary
 
         return WorkspaceSummary(
             workspace_id=record.workspace_id,
             display_name=record.display_name,
+            path=getattr(record, "path", ""),
+            member_count=member_count,
             capabilities=tuple(
                 str(v) for v in _json.loads(record.capabilities_json or "[]")
             ),

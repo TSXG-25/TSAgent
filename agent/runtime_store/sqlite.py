@@ -596,6 +596,7 @@ class SqliteRuntimeStore:
                     tenant_id TEXT NOT NULL,
                     workspace_id TEXT NOT NULL,
                     display_name TEXT NOT NULL DEFAULT '',
+                    path TEXT NOT NULL DEFAULT '',
                     capabilities_json TEXT NOT NULL DEFAULT '[]',
                     default_profile_id TEXT NOT NULL DEFAULT '',
                     description TEXT NOT NULL DEFAULT '',
@@ -749,6 +750,22 @@ class SqliteRuntimeStore:
             if schedule_columns and "auto_eval" not in schedule_columns:
                 connection.execute(
                     "ALTER TABLE scheduled_tasks ADD COLUMN auto_eval INTEGER NOT NULL DEFAULT 0"
+                )
+            ws_columns = {
+                str(row["name"])
+                for row in connection.execute("PRAGMA table_info(workspace_registry)")
+            }
+            if ws_columns and "path" not in ws_columns:
+                connection.execute(
+                    "ALTER TABLE workspace_registry ADD COLUMN path TEXT NOT NULL DEFAULT ''"
+                )
+            head_columns = {
+                str(row["name"])
+                for row in connection.execute("PRAGMA table_info(session_heads)")
+            }
+            if head_columns and "workspace_id" not in head_columns:
+                connection.execute(
+                    "ALTER TABLE session_heads ADD COLUMN workspace_id TEXT NOT NULL DEFAULT ''"
                 )
             connection.execute("BEGIN IMMEDIATE")
             row = connection.execute(
@@ -2164,12 +2181,23 @@ class SqliteRuntimeStore:
             store_generation=str(row["store_generation"]),
         )
 
+    def _ensure_workspace_columns(self, connection: sqlite3.Connection) -> None:
+        for ddl in (
+            "ALTER TABLE workspace_registry ADD COLUMN path TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE session_heads ADD COLUMN workspace_id TEXT NOT NULL DEFAULT ''",
+        ):
+            try:
+                connection.execute(ddl)
+            except sqlite3.OperationalError:
+                pass  # column already exists
+
     def upsert_workspace(
         self,
         tenant_id: str,
         workspace_id: str,
         *,
         display_name: str = "",
+        path: str = "",
         capabilities_json: str = "[]",
         default_profile_id: str = "",
         description: str = "",
@@ -2177,29 +2205,31 @@ class SqliteRuntimeStore:
         tenant_id = _require_text(tenant_id, "tenant_id")
         workspace_id = _require_text(workspace_id, "workspace_id")
         with self._write_transaction() as connection:
+            self._ensure_workspace_columns(connection)
             connection.execute(
                 """
                 INSERT INTO workspace_registry
-                    (tenant_id, workspace_id, display_name, capabilities_json,
+                    (tenant_id, workspace_id, display_name, path, capabilities_json,
                      default_profile_id, description, created_at, updated_at,
                      store_generation)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (tenant_id, workspace_id) DO UPDATE SET
                     display_name = excluded.display_name,
+                    path = excluded.path,
                     capabilities_json = excluded.capabilities_json,
                     default_profile_id = excluded.default_profile_id,
                     description = excluded.description,
                     updated_at = excluded.updated_at
                 """,
                 (
-                    tenant_id, workspace_id, str(display_name),
+                    tenant_id, workspace_id, str(display_name), str(path),
                     str(capabilities_json), str(default_profile_id),
                     str(description), _now(), _now(), self.store_generation,
                 ),
             )
             row = connection.execute(
                 """
-                SELECT tenant_id, workspace_id, display_name, capabilities_json,
+                SELECT tenant_id, workspace_id, display_name, path, capabilities_json,
                        default_profile_id, description, created_at, updated_at,
                        store_generation
                 FROM workspace_registry
@@ -2217,7 +2247,7 @@ class SqliteRuntimeStore:
             self._ensure_open()
             rows = self._connection.execute(
                 """
-                SELECT tenant_id, workspace_id, display_name, capabilities_json,
+                SELECT tenant_id, workspace_id, display_name, path, capabilities_json,
                        default_profile_id, description, created_at, updated_at,
                        store_generation
                 FROM workspace_registry
@@ -2239,6 +2269,7 @@ class SqliteRuntimeStore:
             tenant_id=str(row["tenant_id"]),
             workspace_id=str(row["workspace_id"]),
             display_name=str(row["display_name"]),
+            path=str(row["path"]) if "path" in row.keys() else "",
             capabilities_json=str(row["capabilities_json"]),
             default_profile_id=str(row["default_profile_id"]),
             description=str(row["description"]),
@@ -2246,6 +2277,74 @@ class SqliteRuntimeStore:
             updated_at=str(row["updated_at"]),
             store_generation=str(row["store_generation"]),
         )
+
+    def assign_session_workspace(
+        self, tenant_id: str, session_id: str, workspace_id: str
+    ) -> None:
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        session_id = _require_text(session_id, "session_id")
+        with self._write_transaction() as connection:
+            self._ensure_workspace_columns(connection)
+            connection.execute(
+                "UPDATE session_heads SET workspace_id = ? WHERE tenant_id = ? AND session_id = ?",
+                (str(workspace_id), tenant_id, session_id),
+            )
+
+    def session_workspace_path(self, tenant_id: str, session_id: str) -> str:
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        session_id = _require_text(session_id, "session_id")
+        with self._lock:
+            self._ensure_open()
+            self._ensure_workspace_columns(self._connection)
+            row = self._connection.execute(
+                """
+                SELECT wr.path
+                FROM session_heads sh
+                JOIN workspace_registry wr
+                  ON wr.tenant_id = sh.tenant_id AND wr.workspace_id = sh.workspace_id
+                WHERE sh.tenant_id = ? AND sh.session_id = ?
+                """,
+                (tenant_id, session_id),
+            ).fetchone()
+            return str(row["path"]) if row else ""
+
+    def delete_workspace(self, tenant_id: str, workspace_id: str) -> bool:
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        workspace_id = _require_text(workspace_id, "workspace_id")
+        with self._write_transaction() as connection:
+            self._ensure_workspace_columns(connection)
+            connection.execute(
+                "UPDATE session_heads SET workspace_id = '' WHERE tenant_id = ? AND workspace_id = ?",
+                (tenant_id, workspace_id),
+            )
+            cur = connection.execute(
+                "DELETE FROM workspace_registry WHERE tenant_id = ? AND workspace_id = ?",
+                (tenant_id, workspace_id),
+            )
+            return cur.rowcount > 0
+
+    def workspace_member_ids(self, tenant_id: str, workspace_id: str) -> list[str]:
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        with self._lock:
+            self._ensure_open()
+            self._ensure_workspace_columns(self._connection)
+            rows = self._connection.execute(
+                "SELECT session_id FROM session_heads WHERE tenant_id = ? AND workspace_id = ?",
+                (tenant_id, workspace_id),
+            ).fetchall()
+            return [str(r["session_id"]) for r in rows]
+
+    def session_workspace_id(self, tenant_id: str, session_id: str) -> str:
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        session_id = _require_text(session_id, "session_id")
+        with self._lock:
+            self._ensure_open()
+            self._ensure_workspace_columns(self._connection)
+            row = self._connection.execute(
+                "SELECT workspace_id FROM session_heads WHERE tenant_id = ? AND session_id = ?",
+                (tenant_id, session_id),
+            ).fetchone()
+            return str(row["workspace_id"]) if row and "workspace_id" in row.keys() else ""
 
     def add_participant(
         self,
@@ -2672,7 +2771,7 @@ class SqliteRuntimeStore:
         with self._write_transaction() as connection:
             row = connection.execute(
                 """
-                SELECT tenant_id, session_id, user_id, store_generation, created_at
+                SELECT tenant_id, session_id, user_id, store_generation, created_at, workspace_id
                 FROM session_heads
                 WHERE tenant_id = ? AND session_id = ?
                 """,
@@ -2730,7 +2829,7 @@ class SqliteRuntimeStore:
             self._ensure_open()
             rows = self._connection.execute(
                 """
-                SELECT tenant_id, session_id, user_id, store_generation, created_at
+                SELECT tenant_id, session_id, user_id, store_generation, created_at, workspace_id
                 FROM session_heads
                 WHERE tenant_id = ?
                 ORDER BY created_at DESC

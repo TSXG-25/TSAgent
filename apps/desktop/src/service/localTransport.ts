@@ -24,6 +24,8 @@ export const LOCAL_TRANSPORT_METHODS = [
   "list_sessions",
   "list_directory",
   "pick_folder",
+  "assign_session_workspace",
+  "delete_workspace",
   "list_handoffs",
   "list_history",
   "create_schedule",

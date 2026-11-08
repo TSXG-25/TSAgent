@@ -334,6 +334,8 @@ function mapWorkspace(value: unknown): WorkspaceSummary {
     defaultProfileId: optionalString(raw.default_profile_id) ?? "",
     description: optionalString(raw.description) ?? "",
     updatedAt: optionalString(raw.updated_at) ?? "",
+    path: optionalString(raw.path) ?? "",
+    memberCount: Number(raw.member_count ?? 0),
   };
 }
 
@@ -418,6 +420,7 @@ function mapSession(value: unknown): SessionSummary {
     latestRunId: optionalString(raw.latest_run_id) ?? "",
     latestStatus: optionalString(raw.latest_status) ?? "",
     latestUpdatedAt: optionalString(raw.latest_updated_at) ?? "",
+    workspaceId: optionalString(raw.workspace_id) ?? "",
   };
 }
 
@@ -659,6 +662,7 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
       session_id: request.sessionId, request_id: request.requestId,
       workspace_id: request.workspaceId,
       display_name: request.displayName ?? "",
+      path: request.path ?? "",
       capabilities: request.capabilities ?? [],
       default_profile_id: request.defaultProfileId ?? "",
       description: request.description ?? "",
@@ -1052,6 +1056,22 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
     return (await this.call("delete_session", params)) as { removed: boolean };
   }
 
+  async assignSessionWorkspace(sessionId: string, workspaceId: string): Promise<unknown> {
+    return this.call("assign_session_workspace", {
+      tenant_id: this.identity.tenantId, user_id: this.identity.userId,
+      session_id: sessionId, request_id: `ws-${Date.now()}`,
+      workspace_id: workspaceId,
+    });
+  }
+
+  async deleteWorkspace(workspaceId: string): Promise<unknown> {
+    return this.call("delete_workspace", {
+      tenant_id: this.identity.tenantId, user_id: this.identity.userId,
+      session_id: this.identity.sessionId, request_id: `ws-${Date.now()}`,
+      workspace_id: workspaceId,
+    });
+  }
+
   async pickFolder(): Promise<{ path: string | null }> {
     return (await this.call("pick_folder", {} as LocalRpcParams)) as { path: string | null };
   }
@@ -1080,7 +1100,7 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
       request_id: request.requestId,
       request_text: request.requestText,
       workspace_root: request.workspaceRoot ?? "",
-      metadata: request.requestDigest ? { desktop_request_digest: request.requestDigest } : {},
+      metadata: { ...(request.metadata ?? {}), ...(request.requestDigest ? { desktop_request_digest: request.requestDigest } : {}) },
     };
     return this.project(async () => mapRunHandle(await this.call("start_run", params)));
   }

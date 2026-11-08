@@ -60,6 +60,7 @@ class MotifRecord:
     created_at: str
     updated_at: str
     store_generation: str
+    path: str = ""
 
 
 @dataclass(frozen=True)
@@ -117,6 +118,7 @@ class WorkspaceRecord:
     created_at: str
     updated_at: str
     store_generation: str
+    path: str = ""
 
 
 @dataclass(frozen=True)
@@ -183,6 +185,7 @@ class SessionHead:
     user_id: str
     store_generation: str
     created_at: str
+    workspace_id: str = ""
 
 
 @dataclass(frozen=True)

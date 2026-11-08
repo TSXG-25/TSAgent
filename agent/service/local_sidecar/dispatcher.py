@@ -76,6 +76,8 @@ class SidecarDispatcher:
             LocalTransportMethod.LIST_WORKSPACE_FILES: self._list_workspace_files,
             LocalTransportMethod.LIST_DIRECTORY: self._list_directory,
             LocalTransportMethod.PICK_FOLDER: self._pick_folder,
+            LocalTransportMethod.ASSIGN_SESSION_WORKSPACE: self._assign_session_workspace,
+            LocalTransportMethod.DELETE_WORKSPACE: self._delete_workspace,
             LocalTransportMethod.READ_WORKSPACE_FILE: self._read_workspace_file,
             LocalTransportMethod.WRITE_WORKSPACE_FILE: self._write_workspace_file,
             LocalTransportMethod.READ_EVENTS: self._read_events,
@@ -374,6 +376,18 @@ class SidecarDispatcher:
 
         request = self._from_dto(SearchArtifactsRequest.from_dict, params)
         return await self._service.search_artifacts(request)
+
+    async def _assign_session_workspace(self, params: Mapping[str, Any]) -> Any:
+        from ..contracts import AssignSessionWorkspaceRequest
+
+        request = self._from_dto(AssignSessionWorkspaceRequest.from_dict, params)
+        return await self._service.assign_session_workspace(request)
+
+    async def _delete_workspace(self, params: Mapping[str, Any]) -> Any:
+        from ..contracts import DeleteWorkspaceRequest
+
+        request = self._from_dto(DeleteWorkspaceRequest.from_dict, params)
+        return await self._service.delete_workspace(request)
 
     async def _pick_folder(self, params: Mapping[str, Any]) -> Any:
         return await self._service.pick_folder(type("Req", (), {})())

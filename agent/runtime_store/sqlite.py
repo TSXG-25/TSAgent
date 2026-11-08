@@ -2851,6 +2851,7 @@ class SqliteRuntimeStore:
             user_id=str(row["user_id"]),
             store_generation=str(row["store_generation"]),
             created_at=str(row["created_at"]),
+            workspace_id=str(row["workspace_id"]) if "workspace_id" in row.keys() else "",
         )
 
     @staticmethod

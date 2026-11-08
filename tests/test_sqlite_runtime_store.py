@@ -842,3 +842,34 @@ def test_busy_timeout_returns_stable_store_busy(tmp_path: Path) -> None:
             holder.connection.execute("ROLLBACK")
         contender.close()
         holder.close()
+
+
+def test_session_workspace_assignment_round_trips(tmp_path: Path) -> None:
+    """The assign write must be readable — _session_contract used to select
+    workspace_id and then silently drop it, so list_sessions always showed ""."""
+    store = _store(tmp_path / "runtime.sqlite")
+    try:
+        store.ensure_session("tenant-a", "session-1", "user-a")
+        store.ensure_session("tenant-a", "session-2", "user-a")
+        store.upsert_workspace("tenant-a", "/tmp/ws-a", display_name="ws-a", path="/tmp/ws-a")
+
+        store.assign_session_workspace("tenant-a", "session-1", "/tmp/ws-a")
+
+        heads = {h.session_id: h for h in store.list_sessions("tenant-a")}
+        assert heads["session-1"].workspace_id == "/tmp/ws-a"
+        assert heads["session-2"].workspace_id == ""
+        assert store.ensure_session("tenant-a", "session-1").workspace_id == "/tmp/ws-a"
+        assert store.session_workspace_path("tenant-a", "session-1") == "/tmp/ws-a"
+        assert store.workspace_member_ids("tenant-a", "/tmp/ws-a") == ["session-1"]
+
+        store.assign_session_workspace("tenant-a", "session-1", "")
+        heads = {h.session_id: h for h in store.list_sessions("tenant-a")}
+        assert heads["session-1"].workspace_id == ""
+
+        store.assign_session_workspace("tenant-a", "session-1", "/tmp/ws-a")
+        assert store.delete_workspace("tenant-a", "/tmp/ws-a") is True
+        heads = {h.session_id: h for h in store.list_sessions("tenant-a")}
+        assert heads["session-1"].workspace_id == ""
+        assert store.workspace_member_ids("tenant-a", "/tmp/ws-a") == []
+    finally:
+        store.close()

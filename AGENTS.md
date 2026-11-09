@@ -21,6 +21,17 @@
 
 在缺少真实场景验证条件时，应完成可执行的基础离线测试，并在交付说明中明确未覆盖的真实场景测试项，不将离线测试结果表述为真实环境验证结论。
 
+### Provider 使用（尽量少用 DeepSeek 真实 API）
+
+- `agent/llm.py` 和部分测试会 `load_dotenv()` 读取根目录 `.env` 中的 DeepSeek key；`tests/test_checkpoint_real_*.py`、`tests/test_checkpoint_no_live_objects.py` 在 key 可用时会真实调用 DeepSeek。
+- 离线全量 / 回归测试一律屏蔽 DeepSeek key 并强制本地 ollama（已设置的环境变量不会被 `load_dotenv` 覆盖）：
+
+  ```sh
+  OPENAI_API_KEY= LLM_API_KEY= P2_SECONDARY_API_KEY= TSAGENT_LLM_PROVIDER=ollama python -m pytest -q
+  ```
+
+- 需要真实模型的简单任务（冒烟、联调、sidecar 手测）用 ollama：`TSAGENT_LLM_PROVIDER=ollama`，`OLLAMA_MODEL` 默认 `qwen3:8b`（本机已有）。只有明确需要 DeepSeek 能力的验证才使用 DeepSeek，并在交付说明中写明。
+
 ## Bug 处理原则
 
 - 发现 Bug 时，必须分析并定位底层原因，不能只针对表面现象添加临时补丁或特殊分支。

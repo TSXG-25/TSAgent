@@ -10,13 +10,16 @@ export async function delegateToPlanet(
   targetPlanet: string,
   requestText: string,
   attachments: string[] = [],
-  options: { model?: string; effort?: string } = {},
+  options: { model?: string } = {},
 ): Promise<string> {
   const { service, activeRun } = ctx;
+  const metadata = options.model
+    ? { agent_profile: { model_ref: options.model } }
+    : {};
   // One live run *per session* — the guard is scoped to the session the
   // composer targets; a live run in another session must not block or
   // mis-anchor this send (service-wire.md §runs/§delegation).
-  const sessionId = ctx.sessionId ?? service.identity.sessionId;
+  const sessionId = ctx.sessionId;
   const liveRun = activeRun && activeRun.sessionId === sessionId ? activeRun : null;
   if (liveRun && (liveRun.status === "active" || liveRun.status === "blocked")) {
     throw new Error(`已有进行中的任务（${liveRun.runId}）——等待完成或先暂停再发送`);
@@ -26,10 +29,11 @@ export async function delegateToPlanet(
       tenantId: service.identity.tenantId,
       sessionId,
       workspaceRoot: ctx.workspacePath,
-      metadata: { ...(options.model ? { model: options.model } : {}), ...(options.effort ? { effort: options.effort } : {}) },
+      contextRefs: attachments,
+      metadata,
       requestId: requestIdForRun(0),
       requestText,
-    } as never);
+    });
     return "";
   }
   const result = await service.delegateRun({
@@ -42,13 +46,15 @@ export async function delegateToPlanet(
     contextRefs: attachments,
     requestText,
     targetPlanet,
-  } as never);
+  });
   await ctx.controller.startRun({
     tenantId: service.identity.tenantId,
-    sessionId: service.identity.sessionId,
+    sessionId: liveRun.sessionId,
     requestId: requestIdForRun(0),
     requestText,
-    ...(result?.taskId ? { taskId: result.taskId } : {}),
-  } as never);
+    taskId: result?.taskId ?? "",
+    contextRefs: attachments,
+    metadata: { ...metadata, delegation_depth: 1 },
+  });
   return result?.taskId ?? "";
 }

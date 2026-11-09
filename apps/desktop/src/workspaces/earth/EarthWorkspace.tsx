@@ -26,7 +26,7 @@ export default function EarthWorkspace({ ctx }: { ctx: RunCtx }) {
   const [busy, setBusy] = useState(false);
 
   const refreshEvals = useCallback(async () => {
-    try { setEvals(await ctx.service.listEvaluations({ tenantId: ctx.service.identity.tenantId, sessionId: ctx.service.identity.sessionId, requestId: requestIdForRun(0) } as never)); } catch { /* */ }
+    try { setEvals(await ctx.service.listEvaluations({ tenantId: ctx.service.identity.tenantId, sessionId: ctx.service.identity.sessionId, requestId: requestIdForRun(0) })); } catch { /* */ }
   }, [ctx.service]);
   useEffect(() => { void refreshEvals(); }, [refreshEvals]);
 
@@ -38,7 +38,7 @@ export default function EarthWorkspace({ ctx }: { ctx: RunCtx }) {
         name: `bio-sim-${Date.now().toString(36)}`, runId: ctx.activeRun?.runId ?? "",
         baselineRef: "baseline:defaults", candidateRef: `candidate:${PARAMS.map((p) => `${p.id}=${vals[p.id]}`).join(",")}`,
         verdict, notes: notes.trim() || `params: ${JSON.stringify(vals)}`,
-      } as never);
+      });
       setNotes(""); await refreshEvals();
     } catch { /* */ } finally { setBusy(false); }
   }

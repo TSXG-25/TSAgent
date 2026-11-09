@@ -75,11 +75,13 @@ export default function GlobalSettings({ service, onClose, runs = [] }: { servic
 
   useEffect(() => {
     const rows = runs.map((r) => {
-      const ev = [...(r.events ?? [])].reverse().find((e) => e.type === "token_usage" || (e as { eventType?: string }).eventType === "token_usage");
-      if (!ev) return null;
-      const payload = (ev as { payload?: Record<string, unknown> }).payload ?? (ev as { data?: Record<string, unknown> }).data ?? {};
-      return { runId: r.runId, tokens: payload as Record<string, number> };
-    }).filter(Boolean) as { runId: string; tokens: Record<string, number> }[];
+      const ev = [...(r.events ?? [])].reverse().find((e) => e.eventType === "token_usage");
+      if (!ev?.payload) return null;
+      const tokens = Object.fromEntries(
+        Object.entries(ev.payload).filter(([, v]) => typeof v === "number"),
+      ) as Record<string, number>;
+      return { runId: r.runId, tokens };
+    }).filter((u): u is { runId: string; tokens: Record<string, number> } => u !== null);
     setUsage(rows);
   }, [runs]);
 

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { SCENES } from "../../app/scenes";
 import { WorkspaceFrame } from "../../design-system/WorkspaceFrame";
 import AgentComposer from "../../app/AgentComposer";
@@ -14,7 +14,7 @@ const PRESETS = [
 ];
 
 export default function VenusWorkspace({ ctx }: { ctx: RunCtx }) {
-  const { runs } = ctx;
+  const { runs, service } = ctx;
   const scene = SCENES[2];
   const [sel, setSel] = useState<string | null>(null);
   const [style, setStyle] = useState("# style.md — 文稿风格偏好\n\n- 语气：冷静、克制\n- 结构：先结论后论证\n- 格式：Markdown");
@@ -23,6 +23,20 @@ export default function VenusWorkspace({ ctx }: { ctx: RunCtx }) {
   const docs = useMemo(() => runs.flatMap((r) => r.artifacts
     .filter((a) => /\.(md|txt|svg)$/i.test(a.path)).map((a) => ({ run: r, artifact: a }))), [runs]);
   const cur = docs.find((d) => d.artifact.artifactId === sel) ?? docs[0];
+  const [content, setContent] = useState<{ text: string; stale: boolean } | null>(null);
+  useEffect(() => {
+    if (!cur) { setContent(null); return; }
+    let staleFlag = false;
+    setContent(null);
+    void service.readArtifact({
+      tenantId: service.identity.tenantId,
+      sessionId: cur.run.sessionId,
+      runId: cur.run.runId,
+      artifactId: cur.artifact.artifactId,
+    }).then((c) => { if (!staleFlag) setContent({ text: c.text, stale: c.stale }); })
+      .catch((e) => { if (!staleFlag) setContent({ text: String(e instanceof Error ? e.message : e), stale: false }); });
+    return () => { staleFlag = true; };
+  }, [service, cur?.artifact.artifactId, cur?.run.runId]);
 
   return (
     <WorkspaceFrame scene={scene} ctx={ctx}>
@@ -55,7 +69,10 @@ export default function VenusWorkspace({ ctx }: { ctx: RunCtx }) {
           {cur ? (
             <>
               <header className="muse-title"><strong>{cur.artifact.path.split("/").pop()}</strong><code>{cur.run.runId}</code>{applied && <span className="muse-applied">{applied} applied</span>}</header>
-              <div className="muse-body"><pre>{cur.artifact.content}</pre></div>
+              <div className="muse-body">
+                {content?.stale && <p className="omni-empty">file changed since recorded</p>}
+                <pre>{content ? content.text : "…"}</pre>
+              </div>
             </>
           ) : <div className="empty-state"><p>Select a work</p></div>}
           <AgentComposer ctx={ctx} planet="venus" placeholder="创作指令 — @venus 生成版本…" />

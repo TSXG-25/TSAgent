@@ -322,6 +322,9 @@ class AgentLoop:
             workflows=workflows,
             skills=skills,
             mcp_tools=mcp_tools,
+            delegation_depth=int(
+                getattr(run_context, "delegation_depth", 0) or 0
+            ),
         )
         tool_specs = [tool.spec for tool in tools.values()]
 

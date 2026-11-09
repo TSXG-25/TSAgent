@@ -9,7 +9,7 @@ use std::{
         Mutex,
     },
 };
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 /// Registry of live sidecar processes: id → (stdin handle, child).
 /// Line-delimited JSON-RPC over stdio; stdout is fanned out to the
@@ -23,16 +23,14 @@ fn sidecar_spawn(
     procs: State<Procs>,
     program: String,
     args: Vec<String>,
-    cwd: Option<String>,
+    cwd: String,
 ) -> Result<u64, String> {
     let mut cmd = Command::new(program);
     cmd.args(&args)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::inherit());
-    if let Some(dir) = cwd {
-        cmd.current_dir(dir);
-    }
+        .stderr(Stdio::inherit())
+        .current_dir(cwd);
     let mut child = cmd.spawn().map_err(|e| e.to_string())?;
     let stdout = child
         .stdout
@@ -43,6 +41,11 @@ fn sidecar_spawn(
         .take()
         .ok_or_else(|| "sidecar stdin unavailable".to_string())?;
     let id = NEXT_ID.fetch_add(1, Ordering::SeqCst);
+    procs
+        .0
+        .lock()
+        .map_err(|_| "registry lock".to_string())?
+        .insert(id, (stdin, child));
     let out_event = format!("sidecar://{id}/stdout");
     let exit_event = format!("sidecar://{id}/exit");
     std::thread::spawn(move || {
@@ -54,13 +57,16 @@ fn sidecar_spawn(
                 Err(_) => break,
             }
         }
+        // EOF means the child died — drop the registry entry and reap it so
+        // the process cannot linger as a zombie. sidecar_close may have
+        // already removed and waited it; then there is nothing to reap.
+        if let Ok(mut map) = app.state::<Procs>().0.lock() {
+            if let Some((_, mut child)) = map.remove(&id) {
+                let _ = child.wait();
+            }
+        }
         let _ = app.emit(&exit_event, ());
     });
-    procs
-        .0
-        .lock()
-        .map_err(|_| "registry lock".to_string())?
-        .insert(id, (stdin, child));
     Ok(id)
 }
 
@@ -95,6 +101,18 @@ fn main() {
             sidecar_write,
             sidecar_close
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            if let tauri::RunEvent::Exit = event {
+                // Kill and reap every registered sidecar so app exit never
+                // orphans a python process.
+                if let Ok(mut map) = app.state::<Procs>().0.lock() {
+                    for (_, (_, mut child)) in map.drain() {
+                        let _ = child.kill();
+                        let _ = child.wait();
+                    }
+                }
+            }
+        });
 }

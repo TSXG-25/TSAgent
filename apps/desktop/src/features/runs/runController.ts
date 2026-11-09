@@ -4,19 +4,20 @@ import {
   type EventStreamRequest,
   type GetRunRequest,
   type ResumeRunRequest,
+  type RunEvent,
   type RunSnapshot,
   type ServiceErrorDTO,
   type StartRunRequest,
 } from "../../types/service";
 import type { RunView } from "../../types";
-import { foldLiveDelta, mergeRunEvents, toRunView } from "../../service/viewMapper";
+import { foldLiveDelta, mergeRunEvents, projectRuntimeWorkflow, toRunView } from "../../service/viewMapper";
 
 export interface RunControllerState {
   runs: RunView[];
   activeRunId: string;
   isLoading: boolean;
   error: ServiceErrorDTO | null;
-  operationState: "idle" | "starting" | "resuming" | "cancelling";
+  operationState: "idle" | "starting" | "resuming" | "cancelling" | "pausing";
 }
 
 export interface RunControllerOptions {
@@ -142,7 +143,7 @@ export class RunController {
       tenantId: current.tenantId ?? this.client.identity.tenantId,
       sessionId: current.sessionId,
       runId: current.runId,
-      resumeRequestId: `${current.runId}.resume-request`,
+      resumeRequestId: `${current.runId}.resume-${crypto.randomUUID()}`,
       checkpointId: current.resume.checkpointId,
       action: current.resume.action,
     };
@@ -186,7 +187,32 @@ export class RunController {
     }
   }
 
-  async refreshRun(runId: string, sessionId?: string): Promise<RunView | undefined> {
+  async pauseRun(runId: string): Promise<RunView | undefined> {
+    const current = this.runs.get(runId);
+    if (!current || current.status !== "active" || this.operationState !== "idle") return current;
+    this.operationState = "pausing";
+    this.dismissError();
+    this.emit();
+    try {
+      await this.client.pauseRun({
+        tenantId: current.tenantId ?? this.client.identity.tenantId,
+        sessionId: current.sessionId,
+        runId: current.runId,
+        requestId: `pause-${current.runId}-${crypto.randomUUID()}`,
+        requestedBy: this.client.identity.userId,
+      });
+      this.inFlight.delete(runId);
+      return await this.refreshRun(runId);
+    } catch (error) {
+      this.setError(error);
+      throw error;
+    } finally {
+      this.operationState = "idle";
+      this.emit();
+    }
+  }
+
+  async refreshRun(runId: string, sessionId?: string, prefetchedEvents?: RunEvent[]): Promise<RunView | undefined> {
     const current = this.runs.get(runId);
     if (this.inFlight.has(runId)) return current;
 
@@ -198,7 +224,7 @@ export class RunController {
         runId,
       });
       const snapshot = await this.client.getRun(request);
-      return await this.applySnapshot(snapshot, current);
+      return await this.applySnapshot(snapshot, current, prefetchedEvents);
     } catch (error) {
       this.setError(error);
       throw error;
@@ -247,12 +273,16 @@ export class RunController {
     }
   }
 
-  private async applySnapshot(snapshot: RunSnapshot, current: RunView | undefined): Promise<RunView> {
+  private async applySnapshot(
+    snapshot: RunSnapshot,
+    current: RunView | undefined,
+    prefetchedEvents?: RunEvent[],
+  ): Promise<RunView> {
     const request = locator(snapshot);
     const afterSequence = this.cursors.get(snapshot.runId)?.lastSequence ?? -1;
     const [artifacts, incomingEvents] = await Promise.all([
       this.client.listArtifacts(request),
-      this.client.readEvents({ ...request, afterSequence } satisfies EventStreamRequest),
+      prefetchedEvents ?? this.client.readEvents({ ...request, afterSequence } satisfies EventStreamRequest),
     ]);
 
     const cursor = this.cursors.get(snapshot.runId) ?? { lastSequence: afterSequence, eventIds: new Set<string>() };
@@ -264,6 +294,7 @@ export class RunController {
     const next = toRunView(snapshot, artifacts, []);
     next.events = mergeRunEvents(current?.events ?? [], unseenEvents);
     next.conversation = foldLiveDelta(next.conversation, next.events);
+    this.projectRuntimeWorkflowIfMissing(next);
     this.runs.set(snapshot.runId, next);
     this.currentError = null;
     this.emit();
@@ -279,12 +310,23 @@ export class RunController {
       this.client.readEvents({ ...request, afterSequence } satisfies EventStreamRequest),
     ]);
     const view = toRunView(snapshot, artifacts, events);
+    this.projectRuntimeWorkflowIfMissing(view);
     const eventIds = new Set(events.map((event) => event.eventId));
     this.cursors.set(snapshot.runId, {
       lastSequence: Math.max(afterSequence, ...events.map((event) => event.sequenceNumber)),
       eventIds,
     });
     return view;
+  }
+
+  /** Local snapshots carry no workflow records — the durable stage events
+   *  are the source of truth (mock snapshots ship their own workflows). */
+  private projectRuntimeWorkflowIfMissing(view: RunView): void {
+    if (view.workflows.length > 0) return;
+    view.workflows = projectRuntimeWorkflow(view.events);
+    if (!view.activeWorkflowId && view.workflows.length > 0) {
+      view.activeWorkflowId = view.workflows[0].workflowId;
+    }
   }
 
   private promote(runId: string, view: RunView): void {
@@ -306,14 +348,14 @@ export class RunController {
         try {
           const cursor = this.cursors.get(runId);
           const current = this.runs.get(runId) ?? view;
-          await this.client.subscribeEvents({
+          const pushed = await this.client.subscribeEvents({
             tenantId: current.tenantId ?? this.client.identity.tenantId,
             sessionId: current.sessionId ?? this.client.identity.sessionId,
             runId,
             afterSequence: cursor?.lastSequence ?? -1,
           } satisfies EventStreamRequest);
           if (!running) break;
-          await this.refreshRun(runId);
+          await this.refreshRun(runId, undefined, pushed);
         } catch {
           if (!running) break;
           await new Promise((resolve) => globalThis.setTimeout(resolve, this.pollIntervalMs));

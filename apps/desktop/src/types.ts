@@ -54,7 +54,6 @@ export interface ArtifactView {
   size: string;
   updatedAt: string;
   status: "generated" | "verified" | "pending";
-  content: string;
   /** Opaque service reference; the UI never treats this as a local path. */
   reference?: string;
   digest?: string;

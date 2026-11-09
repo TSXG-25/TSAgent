@@ -95,6 +95,10 @@ class ProgressRuntime(SuccessfulRuntime):
             "stage_completed",
             {"stage_id": "planning", "phase": "planning", "task_count": 1},
         )
+        bus.emit(
+            "token_usage",
+            {"prompt_tokens": 5, "completion_tokens": 3, "total_tokens": 8},
+        )
         return "ok"
 
 
@@ -298,12 +302,15 @@ def test_service_runtime_progress_events_are_durable_and_ordered(
                 EventType.TASK_STARTED,
                 EventType.TASK_COMPLETED,
                 EventType.STAGE_COMPLETED,
+                "token_usage",
                 EventType.RUN_COMPLETED,
             ]
             assert events[2].payload["phase"] == "planning"
             assert events[3].task_id == "task-1"
             assert events[3].payload["task_id"] == "task-1"
             assert events[4].payload["verified"] is True
+            assert events[6].payload["total_tokens"] == 8
+            assert events[6].payload["source"] == "runtime"
             assert events[-1].is_terminal is True
         finally:
             await service.close()

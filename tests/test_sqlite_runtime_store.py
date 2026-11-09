@@ -946,3 +946,86 @@ def test_create_run_resolves_bound_session_workspace(tmp_path: Path) -> None:
         factory.close()
     finally:
         store.close()
+
+
+def test_converge_orphaned_runs_sweeps_all_sessions(tmp_path: Path) -> None:
+    """Startup sweep: expired-lease and stale lease-less heads converge to
+    FAILED_TERMINAL/RUN_WORKER_LOST; live and just-created runs survive."""
+    store = _store(tmp_path / "orphan-sweep.sqlite")
+    try:
+        # Orphan 1: RUNNING with an expired lease.
+        dead = store.reserve_service_start(
+            "tenant-a", "session-a", requested_run_id="run-dead",
+            request_id="request-dead", request_digest="d1",
+            writer_id="writer-dead",
+            external_reference="service-start:run-dead",
+        )
+        store.transition_run_with_event(
+            "tenant-a", "session-a", "run-dead",
+            run_status="RUNNING", event_id="run-started:run-dead",
+            event_type="run_started", timestamp="2026-09-27T00:00:00Z",
+            payload={"request_id": "request-dead"},
+            writer_id="writer-dead",
+            fence_token=dead.head.current_fence_token,
+            request_id="request-dead", expected_status="CREATED",
+        )
+        # Orphan 2: CREATED in another session, no lease, stale updated_at.
+        store.reserve_service_start(
+            "tenant-a", "session-b", requested_run_id="run-stale",
+            request_id="request-stale", request_digest="d2",
+            writer_id="writer-stale",
+            external_reference="service-start:run-stale",
+        )
+        # Live: fresh-lease RUNNING + just-created CREATED.
+        live = store.reserve_service_start(
+            "tenant-a", "session-c", requested_run_id="run-live",
+            request_id="request-live", request_digest="d3",
+            writer_id="writer-live",
+            external_reference="service-start:run-live",
+        )
+        store.transition_run_with_event(
+            "tenant-a", "session-c", "run-live",
+            run_status="RUNNING", event_id="run-started:run-live",
+            event_type="run_started", timestamp="2026-09-27T00:00:01Z",
+            payload={"request_id": "request-live"},
+            writer_id="writer-live",
+            fence_token=live.head.current_fence_token,
+            request_id="request-live", expected_status="CREATED",
+        )
+        store.reserve_service_start(
+            "tenant-a", "session-d", requested_run_id="run-new",
+            request_id="request-new", request_digest="d4",
+            writer_id="writer-new",
+            external_reference="service-start:run-new",
+        )
+        store._connection.execute(
+            "UPDATE run_worker_leases SET expires_at = '2000-01-01T00:00:00Z'"
+            " WHERE run_id = 'run-dead'"
+        )
+        store._connection.execute(
+            "UPDATE run_heads SET updated_at = '2000-01-01T00:00:00Z'"
+            " WHERE run_id = 'run-stale'"
+        )
+        # Crash lost the process before/without lease bookkeeping.
+        store._connection.execute(
+            "DELETE FROM run_worker_leases WHERE run_id = 'run-stale'"
+        )
+
+        assert store.converge_orphaned_runs() == 2
+        for run_id, session_id in (("run-dead", "session-a"), ("run-stale", "session-b")):
+            head = store.get_run_head("tenant-a", run_id, session_id=session_id)
+            assert str(head.run_status) == "FAILED_TERMINAL"
+            event = store._connection.execute(
+                "SELECT payload_json FROM run_events"
+                " WHERE run_id = ? AND event_type = 'run_failed'",
+                (run_id,),
+            ).fetchone()
+            assert json.loads(event["payload_json"])["failure_code"] == "RUN_WORKER_LOST"
+        for run_id, session_id, status in (
+            ("run-live", "session-c", "RUNNING"),
+            ("run-new", "session-d", "CREATED"),
+        ):
+            head = store.get_run_head("tenant-a", run_id, session_id=session_id)
+            assert str(head.run_status) == status
+    finally:
+        store.close()

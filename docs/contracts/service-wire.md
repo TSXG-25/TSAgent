@@ -9,8 +9,9 @@ hit in production.
 
 ```
 POST http://127.0.0.1:8765/rpc          — every method, JSON body
-GET  http://127.0.0.1:8765/events?...   — SSE event stream (long-lived)
 ```
+
+Loopback only: non-loopback `Host` and non-allowlisted `Origin` are 403 (`--allow-origin` / `TSAGENT_SIDECAR_ALLOWED_ORIGINS`).
 
 Request envelope — flat JSON-RPC style, `id`/`method`/`params`:
 
@@ -50,7 +51,7 @@ Every params object carries `tenant_id`/`user_id`/`session_id`/`request_id`.
 ## Runs
 
 ```
-start_run   { request_text, task_id?, metadata? } → run handle {run_id, status}
+start_run   { request_text, task_id?, workspace_root?, context_refs?, metadata? } → run handle {run_id, status}
 get_run     { run_id }                             → snapshot (status/conversation/output)
 list_runs                                            → RunSnapshot[] (identity scope)
 read_events { run_id, after_sequence }              → RunEvent[]
@@ -66,6 +67,13 @@ pause_run / resume_run / cancel_run { run_id }      → lifecycle transitions
   chat thread should render; `conversation` is the interim message list.
 - `assistant_delta` events stream live tokens — fold them into the last
   assistant message for typing-effect output.
+- `context_refs` are workspace-scoped attachments: `file:<workspace-relative
+  path>`, `task:<task_id>`, `run:<run_id>` are accepted on `start_run`
+  (`artifact:` is not — no producing run exists yet); unresolvable refs are
+  `INVALID_REQUEST`. The run's resolved workspace root and validated refs
+  are persisted on the start record, so resume and `read_artifact` re-enter
+  the same workspace even when it was an explicit root rather than the
+  session binding.
 - **`refreshRun` must accept runs it has never seen** — pass the owning
   `session_id` so the locator can fetch cold runs. Runs not in the
   in-memory map are invisible to a plain `refreshRun(runId)`.
@@ -77,7 +85,7 @@ delegate_run { parent_run_id, request_text, target_planet, profile_id?, context_
              → { task_id, handoff_id, session_id, target_planet }
 create_task / list_tasks / list_handoffs / list_participants / list_approvals
 request_approval { run_id, action, params, risk_level } → approval record
-decide_approval  { approval_id, decision }              — APPROVED / DENIED
+decide_approval  { run_id, approval_id, decision }       — approve / deny
 ```
 
 - `delegate_run` needs a real `parent_run_id` — the child run anchors
@@ -118,7 +126,7 @@ pairs in edge order; every node is a real run with approvals/events.
 list_skills / list_profiles / upsert_profile / list_workspaces / upsert_workspace
 create_session / list_sessions           — session registry
 list_facts / forget_fact                 — governed memory
-search_artifacts / list_artifacts        — generated outputs
+search_artifacts / list_artifacts / read_artifact { run_id, artifact_id } → { text, stale } — generated outputs
 list_schedules / upsert_schedule         — Saturn timers
 record_evaluation / list_evaluations     — Earth verdicts
 list_workflows                           — code-registered workflows

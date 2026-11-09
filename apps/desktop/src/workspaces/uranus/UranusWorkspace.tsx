@@ -22,9 +22,9 @@ export default function UranusWorkspace({ ctx }: { ctx: RunCtx }) {
 
   const req = useCallback(() => ({ tenantId: service.identity.tenantId, sessionId: service.identity.sessionId, requestId: requestIdForRun(0) }), [service]);
   useEffect(() => {
-    service.listProfiles(req() as never).then(setProfiles).catch(() => {});
-    service.listSkills(req() as never).then(setSkills).catch(() => {});
-    service.listWorkflowGraphs(req() as never).then(setGraphs).catch((e) => setErr(String(e)));
+    service.listProfiles(req()).then(setProfiles).catch(() => {});
+    service.listSkills(req()).then(setSkills).catch(() => {});
+    service.listWorkflowGraphs(req()).then(setGraphs).catch((e) => setErr(String(e)));
   }, [service, req]);
 
   async function save() {
@@ -33,9 +33,9 @@ export default function UranusWorkspace({ ctx }: { ctx: RunCtx }) {
       await service.upsertWorkflowGraph({
         ...req(), graphId: `g-${Date.now().toString(36)}`, name: name.trim(),
         definition: { nodes: nodes.map((n, i) => ({ id: `n${i}`, type: n })), edges: nodes.slice(1).map((_, i) => [`n${i}`, `n${i + 1}`]) },
-      } as never);
+      });
       setName(""); setNodes([]);
-      setGraphs(await service.listWorkflowGraphs(req() as never));
+      setGraphs(await service.listWorkflowGraphs(req()));
     } catch (e) { setErr(String(e)); }
   }
 
@@ -77,7 +77,7 @@ export default function UranusWorkspace({ ctx }: { ctx: RunCtx }) {
           {graphs.map((g) => (
             <div className="lab-graph-row" key={g.graphId}>
               <strong>{g.name}</strong><small>{g.graphId}</small>
-              <button className="lab-run" disabled={!ctx.activeRun} onClick={() => void service.runGraph({ ...req(), graphId: g.graphId, parentRunId: ctx.activeRun!.runId } as never).then(() => {}).catch((e) => setErr(String(e)))} title={ctx.activeRun ? "Run graph (delegated child runs)" : "需要 active run 作宿主"} type="button">▶ run</button>
+              <button className="lab-run" disabled={!ctx.activeRun} onClick={() => void service.runGraph({ ...req(), graphId: g.graphId, parentRunId: ctx.activeRun!.runId }).then(() => {}).catch((e) => setErr(String(e)))} title={ctx.activeRun ? "Run graph (delegated child runs)" : "需要 active run 作宿主"} type="button">▶ run</button>
             </div>
           ))}
           {graphs.length === 0 && <p className="omni-empty">No saved graphs.</p>}

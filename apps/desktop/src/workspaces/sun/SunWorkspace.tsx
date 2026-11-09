@@ -5,7 +5,6 @@ import { pickFolder, setSidecarPicker } from "../../service/tauriBridge";
 import { WorkspaceFrame } from "../../design-system/WorkspaceFrame";
 import AgentComposer from "../../app/AgentComposer";
 import { requestIdForRun, StatusBadge, Icon, MarkdownText } from "../../app/ui";
-import { useOrchestration } from "./SunOrchestration";
 import type { RunCtx } from "../../app/runCtx";
 import type { ApprovalSummary, DirectoryListing, ParticipantSummary, SessionSummary, WorkspaceSummary } from "../../types/service";
 
@@ -26,10 +25,8 @@ const rel = (iso: string) => {
 export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
   const { service } = ctx;
   const scene = SCENES[0];
-  const orch = useOrchestration(ctx);
-  const { activeRun, runs } = ctx;
+  const { activeRun, runs, sessionId, selectSession } = ctx;
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
-  const [sessionId, setSessionId] = useState(service.identity.sessionId);
   const [query, setQuery] = useState("");
   const [approvals, setApprovals] = useState<ApprovalSummary[]>([]);
   const [participants, setParticipants] = useState<ParticipantSummary[]>([]);
@@ -108,15 +105,14 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
   const refresh = useCallback(async () => {
     try {
       const [ss, ap, pt] = await Promise.all([
-        service.listSessions({ tenantId: service.identity.tenantId, userId: service.identity.userId, requestId: requestIdForRun(0) } as never),
-        service.listApprovals({ tenantId: service.identity.tenantId, sessionId: service.identity.sessionId, requestId: requestIdForRun(0), status: "PENDING" } as never),
-        service.listParticipants({ tenantId: service.identity.tenantId, sessionId, requestId: requestIdForRun(0) } as never).catch(() => [] as ParticipantSummary[]),
+        service.listSessions({ tenantId: service.identity.tenantId, userId: service.identity.userId, requestId: requestIdForRun(0) }),
+        service.listApprovals({ tenantId: service.identity.tenantId, sessionId: service.identity.sessionId, requestId: requestIdForRun(0), status: "PENDING" }),
+        service.listParticipants({ tenantId: service.identity.tenantId, sessionId, requestId: requestIdForRun(0) }).catch(() => [] as ParticipantSummary[]),
       ]);
       setSessions(ss);
-      if (!pickedSessionRef.current && ss.length > 0 && sessionId === service.identity.sessionId) {
+      if (!pickedSessionRef.current && ss.length > 0 && !ss.some((x) => x.sessionId === sessionId)) {
         const latest = ss.slice().sort((a, b) => (b.latestUpdatedAt ?? "").localeCompare(a.latestUpdatedAt ?? ""))[0];
-        setSessionId(latest.sessionId);
-        service.setSession(latest.sessionId);
+        selectSession(latest.sessionId);
       }
       pickedSessionRef.current = true; setApprovals(ap); setParticipants(pt);
       ss.slice(0, 20).forEach((x) => {
@@ -162,8 +158,8 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
     const s = await service.createSession({
       tenantId: service.identity.tenantId, userId: service.identity.userId,
       sessionId: `session-${Date.now().toString(36)}`, requestId: `sun-new-${Date.now()}`,
-    } as never);
-    await refresh(); setSessionId(s.sessionId); service.setSession(s.sessionId);
+    });
+    await refresh(); selectSession(s.sessionId);
     return s;
   };
 
@@ -232,8 +228,7 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
                 const st = s?.latestStatus?.toUpperCase() ?? "";
                 return (
                   <button className={`omni-sess3 ${sid === sessionId ? "on" : ""}`} key={sid} onClick={() => {
-                    setSessionId(sid);
-                    service.setSession(sid);
+                    selectSession(sid);
                     const rid = s?.latestRunId;
                     if (rid && !runs.find((r) => r.runId === rid)) void ctx.controller.refreshRun(rid, sid);
                   }} onContextMenu={(e) => { e.preventDefault(); setDlgInput(folderOf(sid)); setDlg({ mode: "prompt", title: "文件夹（留空移出）", value: folderOf(sid), onOk: (n) => setFolder(sid, n) }); }}
@@ -247,10 +242,10 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
                     <span className="omni-sess-del" onClick={(e) => {
                       e.stopPropagation();
                       setDlg({ mode: "confirm", title: `删除会话「${titleOf(sid, s?.latestRunId)}」？`, onOk: () => {
-                        void service.deleteSession({ tenantId: service.identity.tenantId, userId: service.identity.userId, sessionId: sid, requestId: `req-${Date.now()}` } as never)
+                        void service.deleteSession({ tenantId: service.identity.tenantId, userId: service.identity.userId, sessionId: sid, requestId: `req-${Date.now()}` })
                           .then(() => {
                             const next = sessions.find((x) => x.sessionId !== sid);
-                            if (sid === sessionId) setSessionId(next?.sessionId ?? service.identity.sessionId);
+                            if (sid === sessionId) selectSession(next?.sessionId ?? service.identity.sessionId);
                             void refresh();
                           })
                           .catch(() => {});
@@ -407,8 +402,8 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
                 <code className="appr-params">{JSON.stringify(approvals[0].params ?? {}, null, 1).slice(0, 400)}</code>
                 {approvals[0].riskLevel && <span className="appr-risk">风险 {String(approvals[0].riskLevel)}</span>}
               </div>
-              <button className="btn primary" onClick={() => void service.decideApproval({ tenantId: service.identity.tenantId, sessionId: service.identity.sessionId, requestId: requestIdForRun(0), approvalId: approvals[0].approvalId, decision: "APPROVED" } as never).then(refresh)} type="button">批准</button>
-              <button className="btn danger" onClick={() => void service.decideApproval({ tenantId: service.identity.tenantId, sessionId: service.identity.sessionId, requestId: requestIdForRun(0), approvalId: approvals[0].approvalId, decision: "DENIED" } as never).then(refresh)} type="button">拒绝</button>
+              <button className="btn primary" onClick={() => void service.decideApproval({ tenantId: service.identity.tenantId, sessionId: service.identity.sessionId, requestId: requestIdForRun(0), runId: approvals[0].runId, approvalId: approvals[0].approvalId, decision: "approve", decidedBy: service.identity.userId }).then(refresh)} type="button">批准</button>
+              <button className="btn danger" onClick={() => void service.decideApproval({ tenantId: service.identity.tenantId, sessionId: service.identity.sessionId, requestId: requestIdForRun(0), runId: approvals[0].runId, approvalId: approvals[0].approvalId, decision: "deny", decidedBy: service.identity.userId }).then(refresh)} type="button">拒绝</button>
             </section>
           )}
 
@@ -496,14 +491,14 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
             {viewRun?.failure && !isBlocked && <article className="msg3 error"><div className="msg3-body">{viewRun.failure.message}</div></article>}
           </div>
 
-          {workspaceOf(sessionId) && <div className="ws-bound" title={workspaceOf(sessionId)}>📁 工作区: {workspaceOf(sessionId).split("/").pop()}<i onClick={() => setFolder(sessionId, "")}>✕</i></div>}<AgentComposer ctx={{ ...ctx, sessionId, workspacePath: workspaceOf(sessionId) }} planet="sun" placeholder="发送消息 / 创建任务，@提及 · /命令…" />
+          {workspaceOf(sessionId) && <div className="ws-bound" title={workspaceOf(sessionId)}>📁 工作区: {workspaceOf(sessionId).split("/").pop()}<i onClick={() => setFolder(sessionId, "")}>✕</i></div>}<AgentComposer ctx={{ ...ctx, workspacePath: workspaceOf(sessionId) }} planet="sun" placeholder="发送消息 / 创建任务，@提及 · /命令…" />
 
           {/* status footer — real counts */}
           <footer className="omni-statusbar">
             <span className="sys-ok">● SYSTEM ONLINE</span>
             <span>{activeCount} RUNNING · {runs.filter((r) => r.status === "blocked").length} WAITING</span>
             <span>{approvals.length} PENDING APPROVAL</span>
-            <span className="omni-status-right">{participants.length > 0 ? `👥 ${participants.map((x) => `${x.role}:${x.participantId.slice(0,12)}`).join(" ")} · ` : ""}{sessionId}</span>
+            <span className="omni-status-right" title={participants.map((x) => `${x.role}:${x.participantId}`).join(" ") + (participants.length ? " · " : "") + sessionId}>{participants.length > 0 ? `👥 ${participants.map((x) => `${x.role}:${x.participantId.slice(0,12)}`).join(" ")} · ` : ""}{sessionId}</span>
           </footer>
         </main>
       </div>

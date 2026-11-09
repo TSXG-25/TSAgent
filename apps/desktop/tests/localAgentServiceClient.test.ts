@@ -326,6 +326,43 @@ test("LC08 listArtifacts projects opaque references without exposing paths", asy
   assert.equal(artifact?.displayName, "output/result.py");
 });
 
+test("LC08b readArtifact maps the request locator and content payload", async () => {
+  const transport = new StubTransport();
+  transport.enqueue("read_artifact", {
+    artifact_id: "artifact-1",
+    reference: "artifact://tenant-1/run-1/artifact-1",
+    text: "print(49)\n",
+    stale: true,
+  });
+  const client = new LocalAgentServiceClient(transport, deterministicClientOptions);
+  const content = await client.readArtifact({
+    tenantId: "tenant-1",
+    sessionId: "session-1",
+    runId: "run-1",
+    artifactId: "artifact-1",
+  });
+  assert.equal(content.text, "print(49)\n");
+  assert.equal(content.stale, true);
+  assert.equal(transport.calls[0]?.method, "read_artifact");
+  assert.equal(transport.calls[0]?.params.artifact_id, "artifact-1");
+  assert.equal(transport.calls[0]?.params.run_id, "run-1");
+});
+
+test("LC08c startRun maps contextRefs to context_refs", async () => {
+  const transport = new StubTransport();
+  transport.enqueue("start_run", {
+    tenant_id: "tenant-1", session_id: "session-1", run_id: "run-1",
+    request_id: "req-1", status: "RUNNING", revision: 1,
+    created_at: "t", updated_at: "t",
+  });
+  const client = new LocalAgentServiceClient(transport, deterministicClientOptions);
+  await client.startRun({
+    tenantId: "tenant-1", sessionId: "session-1", requestId: "req-1",
+    requestText: "read the note", contextRefs: ["file:note.md"],
+  });
+  assert.deepEqual(transport.calls[0]?.params.context_refs, ["file:note.md"]);
+});
+
 test("LC09 readEvents enforces the exclusive cursor and deduplicates within a batch", async () => {
   const transport = new StubTransport();
   transport.enqueue("read_events", [

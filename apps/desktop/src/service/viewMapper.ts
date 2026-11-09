@@ -3,6 +3,8 @@ import type {
   EventTone,
   RunEventView,
   RunView,
+  StageStatus,
+  WorkflowView,
 } from "../types";
 import type {
   ArtifactSummary,
@@ -111,8 +113,8 @@ export function toServiceArtifact(
     type: artifact.kind,
     displayName: artifact.path,
     reference: artifact.reference ?? `artifact://${run.runId}/${artifact.artifactId}`,
-    digest: artifact.digest ?? digestText(artifact.content),
-    size: parseSize(artifact.size) || artifact.content.length,
+    digest: artifact.digest ?? digestText(artifact.artifactId),
+    size: parseSize(artifact.size),
     exists: artifact.status !== "pending",
     verified: artifact.status === "verified",
     producer: artifact.producer
@@ -120,7 +122,6 @@ export function toServiceArtifact(
       : { workflowId: run.activeWorkflowId, stageId: "implementation" },
     createdRevision: artifact.createdRevision ?? run.revision,
     createdAt: artifact.updatedAt || run.updatedAt,
-    preview: artifact.content,
   };
 }
 
@@ -156,7 +157,6 @@ export function toRunView(
       size: formatSize(artifact.size),
       updatedAt: artifact.createdAt,
       status: artifact.verified ? "verified" : artifact.exists ? "generated" : "pending",
-      content: artifact.preview ?? "Preview unavailable. Artifact content is not part of this MVP.",
       reference: artifact.reference,
       digest: artifact.digest,
       producer: artifact.producer
@@ -250,6 +250,61 @@ export function foldLiveDelta(
       streaming: true,
     } as RunView["conversation"][number] & { streaming?: boolean },
   ];
+}
+
+function stageDuration(start: string | undefined, end: string | undefined): string {
+  if (!start || !end) return "";
+  const ms = Date.parse(end) - Date.parse(start);
+  if (!Number.isFinite(ms) || ms < 0) return "";
+  const total = Math.round(ms / 1000);
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+}
+
+/** Local runs persist runtime `stage_started`/`stage_completed` events but no
+ *  workflow snapshots — project one synthetic "runtime" workflow so the
+ *  execution surfaces (Mission Control, Sun wfSteps) render real stages. */
+export function projectRuntimeWorkflow(events: RunEventView[]): WorkflowView[] {
+  const order: string[] = [];
+  // Latest start/end per stage by event position — the runtime can re-enter
+  // a stage on later goal rounds, so status follows the last boundary.
+  const started = new Map<string, number>();
+  const completed = new Map<string, number>();
+  events.forEach((event, index) => {
+    const stageId = typeof event.payload?.stage_id === "string" ? event.payload.stage_id : "";
+    if (!stageId) return;
+    const isStart = event.eventType === "stage_started";
+    const isEnd = event.eventType === "stage_completed";
+    if (!isStart && !isEnd) return;
+    if (!started.has(stageId) && !completed.has(stageId)) order.push(stageId);
+    if (isStart) started.set(stageId, index);
+    if (isEnd) completed.set(stageId, index);
+  });
+  if (order.length === 0) return [];
+  const stages = order.map((stageId) => {
+    const startIndex = started.get(stageId) ?? -1;
+    const endIndex = completed.get(stageId);
+    const done = endIndex !== undefined && endIndex > startIndex;
+    const status: StageStatus = done ? "completed" : "running";
+    const startEvent = startIndex >= 0 ? events[startIndex] : undefined;
+    return {
+      stageId,
+      name: stageId,
+      eyebrow: typeof startEvent?.payload?.phase === "string" ? startEvent.payload.phase : "",
+      description: "",
+      status,
+      duration: done && startEvent ? stageDuration(startEvent.timestamp, events[endIndex!].timestamp) : "",
+      tasks: [],
+    };
+  });
+  const done = stages.filter((stage) => stage.status === "completed").length;
+  return [{
+    workflowId: "runtime",
+    name: "runtime",
+    version: "",
+    status: done === stages.length ? "completed" : "active",
+    progress: Math.round((done / stages.length) * 100),
+    stages,
+  }];
 }
 
 export function mergeRunEvents(current: RunEventView[], incoming: RunEvent[]): RunEventView[] {

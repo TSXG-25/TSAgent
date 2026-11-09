@@ -475,3 +475,607 @@ def _terminate(process: subprocess.Popen[str]) -> None:
         process.stdout.close()
     if process.stderr is not None:
         process.stderr.close()
+
+
+def _workspace_file_service(
+    tmp_path: Path, *, workspace_root: Path | None = None
+) -> Any:
+    from agent.service.factory import create_default_agent_service
+
+    return create_default_agent_service(
+        tmp_path / "runtime.sqlite", workspace_root=workspace_root
+    )
+
+
+def test_workspace_file_apis_scope_to_bound_session_workspace(
+    tmp_path: Path,
+) -> None:
+    """Mars file APIs must resolve the session→folder binding the same way
+    create_run does — a bound session reads/writes its folder, an unbound
+    session falls back to the factory root."""
+    from agent.service.contracts import (
+        AssignSessionWorkspaceRequest,
+        CreateSessionRequest,
+        ListWorkspaceFilesRequest,
+        UpsertWorkspaceRequest,
+        WorkspaceFileRequest,
+    )
+
+    factory_root = tmp_path / "factory-ws"
+    bound_root = tmp_path / "bound-ws"
+    factory_root.mkdir()
+    bound_root.mkdir()
+    (factory_root / "factory.txt").write_text("factory-content")
+    (bound_root / "bound.txt").write_text("bound-content")
+
+    service = _workspace_file_service(tmp_path, workspace_root=factory_root)
+    ident = {"tenant_id": "tenant-1", "user_id": "user-1"}
+
+    async def scenario() -> None:
+        await service.create_session(
+            CreateSessionRequest(
+                **ident, session_id="s-bound", request_id="req-c1"
+            )
+        )
+        await service.upsert_workspace(
+            UpsertWorkspaceRequest(
+                **ident,
+                session_id="s-bound",
+                request_id="req-w1",
+                workspace_id="ws-dir",
+                path=str(bound_root),
+            )
+        )
+        await service.assign_session_workspace(
+            AssignSessionWorkspaceRequest(
+                **ident,
+                session_id="s-bound",
+                request_id="req-a1",
+                workspace_id="ws-dir",
+            )
+        )
+
+        listed = await service.list_workspace_files(
+            ListWorkspaceFilesRequest(
+                **ident, session_id="s-bound", request_id="req-l1"
+            )
+        )
+        assert [entry.path for entry in listed] == ["bound.txt"]
+
+        content = await service.read_workspace_file(
+            WorkspaceFileRequest(
+                **ident,
+                session_id="s-bound",
+                request_id="req-r1",
+                path="bound.txt",
+            )
+        )
+        assert content.text == "bound-content"
+
+        await service.write_workspace_file(
+            WorkspaceFileRequest(
+                **ident,
+                session_id="s-bound",
+                request_id="req-wr1",
+                path="created.txt",
+                content="created-content",
+            )
+        )
+        assert (bound_root / "created.txt").read_text() == "created-content"
+        assert not (factory_root / "created.txt").exists()
+
+        unbound = await service.list_workspace_files(
+            ListWorkspaceFilesRequest(
+                **ident, session_id="s-free", request_id="req-l2"
+            )
+        )
+        assert [entry.path for entry in unbound] == ["factory.txt"]
+
+    try:
+        _run(scenario())
+    finally:
+        _run(service.close())
+
+
+def test_workspace_file_apis_fail_loud_without_workspace_root(
+    tmp_path: Path,
+) -> None:
+    """No binding and no factory root → INVALID_REQUEST, not a silent
+    fallback to the process directory."""
+    from agent.service.contracts import ListWorkspaceFilesRequest
+
+    service = _workspace_file_service(tmp_path)
+    try:
+        with pytest.raises(AgentServiceError) as exc:
+            _run(
+                service.list_workspace_files(
+                    ListWorkspaceFilesRequest(
+                        tenant_id="tenant-1",
+                        user_id="user-1",
+                        session_id="s-free",
+                        request_id="req-l1",
+                    )
+                )
+            )
+        assert exc.value.code == ServiceErrorCode.INVALID_REQUEST
+    finally:
+        _run(service.close())
+
+
+def test_attach_files_copies_external_files_into_session_workspace(
+    tmp_path: Path,
+) -> None:
+    """Finder-picked files land in the session workspace's .attachments/ dir
+    and come back as file: refs; identical content reuses the same ref."""
+    from agent.service.contracts import (
+        AssignSessionWorkspaceRequest,
+        AttachFilesRequest,
+        CreateSessionRequest,
+        ListWorkspaceFilesRequest,
+        UpsertWorkspaceRequest,
+    )
+
+    bound_root = tmp_path / "bound-ws"
+    outside = tmp_path / "outside"
+    bound_root.mkdir()
+    outside.mkdir()
+    (bound_root / "bound.txt").write_text("bound-content")
+    (outside / "report.txt").write_text("external-content")
+    (outside / "report2.txt").write_text("different-content")
+
+    service = _workspace_file_service(tmp_path, workspace_root=tmp_path / "factory-ws")
+    ident = {"tenant_id": "tenant-1", "user_id": "user-1"}
+
+    async def scenario() -> None:
+        await service.create_session(
+            CreateSessionRequest(
+                **ident, session_id="s-bound", request_id="req-c1"
+            )
+        )
+        await service.upsert_workspace(
+            UpsertWorkspaceRequest(
+                **ident,
+                session_id="s-bound",
+                request_id="req-w1",
+                workspace_id="ws-dir",
+                path=str(bound_root),
+            )
+        )
+        await service.assign_session_workspace(
+            AssignSessionWorkspaceRequest(
+                **ident,
+                session_id="s-bound",
+                request_id="req-a1",
+                workspace_id="ws-dir",
+            )
+        )
+
+        result = await service.attach_files(
+            AttachFilesRequest(
+                **ident,
+                session_id="s-bound",
+                request_id="req-f1",
+                paths=(str(outside / "report.txt"),),
+            )
+        )
+        assert result == {"context_refs": ["file:.attachments/report.txt"]}
+        assert (bound_root / ".attachments" / "report.txt").read_text() == "external-content"
+
+        again = await service.attach_files(
+            AttachFilesRequest(
+                **ident,
+                session_id="s-bound",
+                request_id="req-f2",
+                paths=(str(outside / "report.txt"),),
+            )
+        )
+        assert again == result
+
+        listed = await service.list_workspace_files(
+            ListWorkspaceFilesRequest(
+                **ident, session_id="s-bound", request_id="req-l1"
+            )
+        )
+        assert all(not e.path.startswith(".attachments") for e in listed)
+
+    try:
+        _run(scenario())
+    finally:
+        _run(service.close())
+
+
+def test_attach_files_rejects_missing_file_and_missing_workspace(
+    tmp_path: Path,
+) -> None:
+    """Missing file path and missing session workspace both fail
+    INVALID_REQUEST — no silent skip or process-root fallback."""
+    from agent.service.contracts import AttachFilesRequest
+
+    service = _workspace_file_service(tmp_path, workspace_root=tmp_path / "ws")
+    ident = {"tenant_id": "tenant-1", "user_id": "user-1"}
+    try:
+        with pytest.raises(AgentServiceError) as exc:
+            _run(
+                service.attach_files(
+                    AttachFilesRequest(
+                        **ident,
+                        session_id="s-free",
+                        request_id="req-f1",
+                        paths=("/nonexistent/x.txt",),
+                    )
+                )
+            )
+        assert exc.value.code == ServiceErrorCode.INVALID_REQUEST
+
+        no_root = _workspace_file_service(tmp_path / "other")
+        try:
+            with pytest.raises(AgentServiceError) as exc2:
+                _run(
+                    no_root.attach_files(
+                        AttachFilesRequest(
+                            **ident,
+                            session_id="s-free",
+                            request_id="req-f2",
+                            paths=("/nonexistent/x.txt",),
+                        )
+                    )
+                )
+            assert exc2.value.code == ServiceErrorCode.INVALID_REQUEST
+        finally:
+            _run(no_root.close())
+    finally:
+        _run(service.close())
+
+
+def test_read_artifact_serves_workspace_file_and_flags_stale(
+    tmp_path: Path,
+) -> None:
+    """read_artifact reads the committed artifact's file through the session
+    workspace — bytes matching the digest are fresh; edits mark it stale."""
+    import hashlib
+
+    from agent.runtime_store import (
+        ArtifactCommitFact,
+        DurableRuntimeStoreView,
+        SqliteRuntimeStore,
+    )
+    from agent.service.contracts import ReadArtifactRequest, StartRunRequest
+    from agent.service.run_projector import encode_request_reference
+
+    workspace_root = tmp_path / "workspace"
+    (workspace_root / "output").mkdir(parents=True)
+    target = workspace_root / "output" / "result.txt"
+    target.write_text("artifact-body", encoding="utf-8")
+    digest = hashlib.sha256(target.read_bytes()).hexdigest()
+
+    database = tmp_path / "runtime.sqlite"
+    store = SqliteRuntimeStore.open(database)
+    request = StartRunRequest(
+        tenant_id="tenant-1",
+        user_id="user-1",
+        session_id="session-1",
+        request_id="request-art",
+        request_text="write output/result.txt",
+        run_id="run-art",
+    )
+    view = None
+    try:
+        store.reserve_service_start(
+            request.tenant_id,
+            request.session_id,
+            requested_run_id=request.run_id,
+            request_id=request.request_id,
+            request_digest=request.request_digest,
+            writer_id="writer-art",
+            external_reference=encode_request_reference(
+                request, run_id=request.run_id or ""
+            ),
+        )
+        view = DurableRuntimeStoreView(
+            store,
+            tenant_id=request.tenant_id,
+            session_id=request.session_id,
+            run_id=request.run_id or "",
+            request_id=request.request_id,
+            writer_id="writer-art",
+        )
+        view.transition_run_with_event(
+            run_status="RUNNING",
+            event_id="run-started:art",
+            event_type="run_started",
+            timestamp="2026-08-11T00:00:00Z",
+            payload={"request_id": request.request_id},
+            expected_status="CREATED",
+        )
+        artifact = ArtifactCommitFact(
+            artifact_id="artifact-art-result",
+            artifact_type="file",
+            reference="output/result.txt",
+            digest=digest,
+            producer_workflow_id="runtime-execution",
+            producer_stage_id="task:art-write",
+            producer_task_id="art-write",
+        )
+        view.transition_run_with_event(
+            run_status="COMPLETED",
+            event_id="run-completed:art",
+            event_type="run_completed",
+            timestamp="2026-08-11T00:00:01Z",
+            payload={"request_id": request.request_id},
+            run_output={
+                "text": "written",
+                "artifact_ids": [artifact.artifact_id],
+            },
+            artifacts=(artifact,),
+        )
+    finally:
+        if view is not None:
+            view.close()
+        store.close()
+
+    service = _workspace_file_service(tmp_path, workspace_root=workspace_root)
+    lookup = {
+        "tenant_id": "tenant-1",
+        "user_id": "user-1",
+        "session_id": "session-1",
+        "run_id": "run-art",
+    }
+
+    async def scenario() -> None:
+        content = await service.read_artifact(
+            ReadArtifactRequest(
+                **lookup, request_id="req-ra1", artifact_id="artifact-art-result"
+            )
+        )
+        assert content.text == "artifact-body"
+        assert content.stale is False
+        assert content.reference == "output/result.txt"
+
+        target.write_text("edited-after-commit", encoding="utf-8")
+        edited = await service.read_artifact(
+            ReadArtifactRequest(
+                **lookup, request_id="req-ra2", artifact_id="artifact-art-result"
+            )
+        )
+        assert edited.text == "edited-after-commit"
+        assert edited.stale is True
+
+        with pytest.raises(AgentServiceError) as exc:
+            await service.read_artifact(
+                ReadArtifactRequest(
+                    **lookup, request_id="req-ra3", artifact_id="artifact-missing"
+                )
+            )
+        assert exc.value.code == ServiceErrorCode.INVALID_REQUEST
+
+    try:
+        _run(scenario())
+    finally:
+        _run(service.close())
+
+
+def test_start_run_validates_and_persists_context_refs(tmp_path: Path) -> None:
+    """file:/task:/run: refs on start_run are validated against the resolved
+    workspace root and persisted on the request record together with it."""
+    from agent.runtime_store import SqliteRuntimeStore
+    from agent.service.context_factory import ServiceContextFactory
+    from agent.service.contracts import StartRunRequest
+    from agent.service.run_projector import (
+        request_context_refs,
+        request_workspace_root,
+    )
+    from agent.service.runtime_launcher import RuntimeExecutionLauncher
+    from agent.service.service import AgentService
+
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    (workspace / "note.md").write_text("hello", encoding="utf-8")
+    captured: list[Any] = []
+
+    class CapturingRuntime:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            captured.append(kwargs["run_context"])
+
+        async def run(self, _text: str) -> str:
+            return "ok"
+
+        def close(self) -> None:
+            return None
+
+    store = SqliteRuntimeStore.open(tmp_path / "refs.sqlite")
+    service = AgentService(
+        runtime_store=store,
+        launcher=RuntimeExecutionLauncher(runtime_factory=CapturingRuntime),
+        context_factory=ServiceContextFactory(store, workspace_root=workspace),
+    )
+    request = StartRunRequest(
+        tenant_id="tenant-1", user_id="user-1", session_id="session-1",
+        request_id="req-refs", request_text="read the note",
+        context_refs=("file:note.md",),
+    )
+
+    async def scenario() -> None:
+        handle = await service.start_run(request)
+        await asyncio.sleep(0.05)
+        read = store.read_run_snapshot(
+            "tenant-1", handle.run_id, session_id="session-1"
+        )
+        assert request_workspace_root(read) == str(workspace.resolve())
+        assert request_context_refs(read) == ("file:note.md",)
+        assert captured and captured[0].context_refs == ("file:note.md",)
+
+        with pytest.raises(AgentServiceError) as missing:
+            await service.start_run(StartRunRequest(
+                tenant_id="tenant-1", user_id="user-1",
+                session_id="session-2", request_id="req-miss",
+                request_text="bad", context_refs=("file:nope.txt",),
+            ))
+        assert missing.value.code == ServiceErrorCode.INVALID_REQUEST
+
+        with pytest.raises(AgentServiceError) as artifact:
+            await service.start_run(StartRunRequest(
+                tenant_id="tenant-1", user_id="user-1",
+                session_id="session-3", request_id="req-art",
+                request_text="bad", context_refs=("artifact:artifact-x",),
+            ))
+        assert artifact.value.code == ServiceErrorCode.INVALID_REQUEST
+
+    try:
+        _run(scenario())
+    finally:
+        _run(service.close())
+
+
+def test_read_artifact_uses_recorded_explicit_workspace_root(
+    tmp_path: Path,
+) -> None:
+    """A run started with an explicit root resolves artifacts there even
+    when the session binding points elsewhere."""
+    import hashlib
+
+    from agent.runtime_store import (
+        ArtifactCommitFact,
+        DurableRuntimeStoreView,
+        SqliteRuntimeStore,
+    )
+    from agent.service.contracts import ReadArtifactRequest, StartRunRequest
+    from agent.service.run_projector import encode_request_reference
+
+    explicit = tmp_path / "explicit"
+    bound = tmp_path / "bound"
+    for root in (explicit, bound):
+        (root / "output").mkdir(parents=True)
+    (explicit / "output" / "a.txt").write_text("explicit-body", encoding="utf-8")
+    (bound / "output" / "a.txt").write_text("bound-body", encoding="utf-8")
+    digest = hashlib.sha256(
+        (explicit / "output" / "a.txt").read_bytes()
+    ).hexdigest()
+
+    database = tmp_path / "runtime.sqlite"
+    store = SqliteRuntimeStore.open(database)
+    store.ensure_session("tenant-1", "session-1", "user-1")
+    store.upsert_workspace("tenant-1", "ws-bound", path=str(bound))
+    store.assign_session_workspace("tenant-1", "session-1", "ws-bound")
+    request = StartRunRequest(
+        tenant_id="tenant-1", user_id="user-1", session_id="session-1",
+        request_id="req-exp", request_text="write", run_id="run-exp",
+    )
+    view = None
+    try:
+        store.reserve_service_start(
+            "tenant-1", "session-1",
+            requested_run_id="run-exp", request_id="req-exp",
+            request_digest=request.request_digest,
+            writer_id="writer-exp",
+            external_reference=encode_request_reference(
+                request, run_id="run-exp",
+                workspace_root=str(explicit.resolve()),
+                context_refs=(),
+            ),
+        )
+        view = DurableRuntimeStoreView(
+            store, tenant_id="tenant-1", session_id="session-1",
+            run_id="run-exp", request_id="req-exp", writer_id="writer-exp",
+        )
+        view.transition_run_with_event(
+            run_status="RUNNING", event_id="run-started:exp",
+            event_type="run_started", timestamp="2026-08-11T00:00:00Z",
+            payload={"request_id": "req-exp"}, expected_status="CREATED",
+        )
+        view.transition_run_with_event(
+            run_status="COMPLETED", event_id="run-completed:exp",
+            event_type="run_completed", timestamp="2026-08-11T00:00:01Z",
+            payload={"request_id": "req-exp"},
+            run_output={"text": "done", "artifact_ids": ["artifact-exp"]},
+            artifacts=(ArtifactCommitFact(
+                artifact_id="artifact-exp", artifact_type="file",
+                reference="output/a.txt", digest=digest,
+                producer_workflow_id="runtime-execution",
+                producer_stage_id="task:w",
+            ),),
+        )
+    finally:
+        if view is not None:
+            view.close()
+        store.close()
+
+    service = _workspace_file_service(tmp_path, workspace_root=bound)
+    try:
+        content = _run(service.read_artifact(ReadArtifactRequest(
+            tenant_id="tenant-1", user_id="user-1", session_id="session-1",
+            request_id="req-ra", run_id="run-exp", artifact_id="artifact-exp",
+        )))
+        assert content.text == "explicit-body"
+        assert content.stale is False
+    finally:
+        _run(service.close())
+
+
+def test_http_sidecar_enforces_host_and_origin(tmp_path: Path) -> None:
+    """Loopback RPC has no auth — foreign Origins and non-loopback Host
+    headers (DNS rebinding) are rejected; curl-style no-Origin stays fine."""
+    import http.client
+    import socket
+    import threading
+
+    from agent.service.local_sidecar.http_server import run_http_sidecar
+
+    service = _workspace_file_service(tmp_path)
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+
+    allowed = frozenset({"http://localhost:4173"})
+    server_thread = threading.Thread(
+        target=run_http_sidecar,
+        kwargs={
+            "service": service,
+            "port": port,
+            "diagnostics": open(os.devnull, "w"),
+            "allowed_origins": allowed,
+        },
+        daemon=True,
+    )
+    server_thread.start()
+    for _ in range(50):
+        try:
+            socket.create_connection(("127.0.0.1", port), timeout=0.2).close()
+            break
+        except OSError:
+            time.sleep(0.05)
+    else:  # pragma: no cover
+        raise AssertionError("sidecar did not start listening")
+
+    host = f"127.0.0.1:{port}"
+
+    def request(method: str, path: str, *, headers: dict[str, str] | None = None) -> http.client.HTTPResponse:
+        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+        conn.request(method, path, body=b"{}", headers=headers or {})
+        response = conn.getresponse()
+        response.read()
+        acao = response.getheader("Access-Control-Allow-Origin")
+        conn.close()
+        return response.status, acao
+
+    try:
+        # allowed origin → 200 + echoed ACAO
+        status, acao = request("POST", "/rpc", headers={"Host": host, "Origin": "http://localhost:4173"})
+        assert status in (200, 400)  # 400 acceptable: {} is not a valid envelope, but it reached dispatch
+        assert acao == "http://localhost:4173"
+
+        # foreign origin → 403 on POST /rpc; GET /events handler is gone → 501
+        status, _ = request("POST", "/rpc", headers={"Host": host, "Origin": "http://evil.example"})
+        assert status == 403
+        status, _ = request("GET", "/events?tenant_id=t&session_id=s&run_id=r&user_id=u", headers={"Host": host, "Origin": "http://evil.example"})
+        assert status == 501
+
+        # DNS-rebinding Host → 403
+        status, _ = request("POST", "/rpc", headers={"Host": "rebind.example.com"})
+        assert status == 403
+
+        # no Origin (curl/e2e) → allowed
+        status, acao = request("POST", "/rpc", headers={"Host": host})
+        assert status in (200, 400)
+        assert acao is None
+    finally:
+        _run(service.close())

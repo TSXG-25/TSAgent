@@ -27,7 +27,7 @@ clientFactory.createAgentServiceClient()（service/clientFactory.ts:368）
                                    ▼
 python -m agent.service.local_sidecar [--http PORT]（local_sidecar/__main__.py）
    ├─ server.serve()        stdio JSONL
-   └─ run_http_sidecar()    POST /rpc、GET /events（http_server.py）
+   └─ run_http_sidecar()    POST /rpc（http_server.py）
                  │
                  ▼
 SidecarDispatcher（dispatcher.py:30）── 方法表 → XxxRequest.from_dict(params)
@@ -83,6 +83,22 @@ AgentService（service.py）→ SQLite runtime store / Runtime
 
 **注意**：`--database` 已有默认值（`~/.tsagent/runtime.db`），Tauri 默认 `ARGS` 可以直接启动 sidecar；要用别的库路径时通过 `VITE_TSAGENT_SIDECAR_ARGS` 或 `TSAGENT_RUNTIME_DB` 覆盖。
 
+### 2.4 Tauri 桌面（stdio sidecar）
+
+`tauri dev` 下 `tauriBridge.ts` 注入 `window.__TSAGENT_SIDECAR_BRIDGE__`，Rust `sidecar_spawn` 用 stdio 拉起 Python 进程。启动配置：
+
+| 变量 | 作用 | 默认 |
+|---|---|---|
+| `VITE_TSAGENT_SIDECAR_CWD` | **必填**，设为仓库根目录——`-m agent.service.local_sidecar` 要在这里解析；缺失时 spawn 直接抛错 | — |
+| `VITE_TSAGENT_SIDECAR_CMD` | Python 解释器；指向装了依赖的 venv python | `python3` |
+| `VITE_TSAGENT_SIDECAR_ARGS` | sidecar 参数，可追加 `--database` / `--workspace-root` | `-u -m agent.service.local_sidecar` |
+| `TSAGENT_RUNTIME_DB` / `TSAGENT_WORKSPACE_ROOT` | 由子进程环境继承（等价于 `--database` / `--workspace-root`，见 §2.2） | — |
+| `--allow-origin ORIGIN` / `TSAGENT_SIDECAR_ALLOWED_ORIGINS` | `--http` 模式允许的 Origin（可重复 / 逗号分隔）；HTTP RPC 无鉴权，非白名单 Origin 和非回环 Host 一律 403 | 默认 `localhost:4173` / `127.0.0.1:4173` |
+
+进程生命周期：sidecar stdout EOF（进程死亡）后 reader 线程会把条目移出注册表并 `wait` 回收，再向前端发 `sidecar://{id}/exit`；`sidecar_close` 仍是显式 kill；应用退出时 `RunEvent::Exit` 会 kill + wait 所有存活的 sidecar，不会遗留孤儿 python 进程。
+
+打包产物**不是自包含的**：`tauri build` 不会把 Python 或仓库代码打进包里，目标机器上仍需可用的 Python 环境、`VITE_TSAGENT_SIDECAR_CWD` 指向的源码目录和依赖。
+
 ---
 
 ## 3. 传输层
@@ -111,7 +127,6 @@ AgentService（service.py）→ SQLite runtime store / Runtime
 - 请求信封非法时返回 HTTP 400，body 是 `{"error": "..."}`；dispatcher 内部超时（300s）或异常时返回 500。
 - 前端 `fetch` 超时 30s（`httpTransport.ts:20`）。`subscribe_events` 最长会挂起约 8s，在这个范围内。
 - CORS 设置为 `Access-Control-Allow-Origin: *`（`http_server.py:42`），没有鉴权，见 §10 风险项。
-- `GET /events?tenant_id&session_id&user_id&run_id&after` 是一个 SSE 流（0.4s 轮询，15s 心跳，Run 终态后发送 `event: end`）。**前端目前没有使用它**：`HttpLocalTransport.subscribeEvents` 没有调用方，Run 事件走的是 `subscribe_events` 长轮询。
 
 ---
 

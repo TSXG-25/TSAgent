@@ -32,7 +32,7 @@ export default function MercuryWorkspace({ ctx }: { ctx: RunCtx }) {
       const res = await service.webSearch({
         tenantId: service.identity.tenantId, sessionId: service.identity.sessionId,
         requestId: requestIdForRun(0), query: q, maxResults: 4,
-      } as never);
+      });
       const srcs = res.sources ?? [];
       setSteps((s) => [...s, { plan: `${srcs.length} sources · ${res.provider}`, preview: srcs[0] ? String(srcs[0].title ?? srcs[0].url ?? "—") : res.content.slice(0, 80) }]);
       setViews((vs) => vs.map((v, i) => ({ ...v, source: srcs[i] ?? v.source, content: i === 0 ? res.content : v.content })));

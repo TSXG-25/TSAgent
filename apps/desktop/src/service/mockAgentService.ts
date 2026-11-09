@@ -1,4 +1,4 @@
-import { createMockRuns, createNewRun } from "../mocks/runData";
+import { artifactTextFor, createMockRuns, createNewRun } from "../mocks/runData";
 import type { RunView } from "../types";
 import {
   AgentServiceClientError,
@@ -9,6 +9,8 @@ import {
   type EventStreamRequest,
   type GetRunRequest,
   type ListArtifactsRequest,
+  type ReadArtifactRequest,
+  type ArtifactContent,
   type ApprovalSummary,
   type SessionSummary,
   type HandoffSummary,
@@ -159,6 +161,7 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
   }
   private readonly snapshots = new Map<string, RunSnapshot>();
   private readonly artifacts = new Map<string, ArtifactSummary[]>();
+  private readonly artifactText = new Map<string, string>();
   private readonly events = new Map<string, RunEvent[]>();
   private readonly requestIndex = new Map<string, { digest: string; runId: string }>();
   private readonly resumeIndex = new Map<string, { checkpointId: string; action: ResumeRunRequest["action"]; runId: string }>();
@@ -364,6 +367,18 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
   async pickFolder(): Promise<{ path: string | null }> {
     // Deterministic fake so the workspace-file flow is exercisable in mock mode.
     return { path: "/mock/picked-workspace" };
+  }
+
+  async pickFiles(): Promise<{ paths: string[] }> {
+    return { paths: ["/mock/outside/report.txt"] };
+  }
+
+  async attachFiles(request: { paths: string[] }): Promise<{ contextRefs: string[] }> {
+    return {
+      contextRefs: request.paths.map(
+        (p) => `file:.attachments/${p.split("/").filter(Boolean).pop()}`,
+      ),
+    };
   }
 
   async listDirectory(path: string): Promise<DirectoryListing> {
@@ -729,6 +744,9 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
 
     this.snapshots.set(snapshot.runId, snapshot);
     this.artifacts.set(snapshot.runId, run.artifacts.map((item) => toServiceArtifact(item, snapshot)));
+    for (const item of run.artifacts) {
+      this.artifactText.set(item.artifactId, artifactTextFor(item.path, item.status === "verified"));
+    }
     this.events.set(snapshot.runId, serviceEvents);
     this.oldestRetainedSequence.set(snapshot.runId, 1);
     this.requestIndex.set(requestKey, { digest, runId: snapshot.runId });
@@ -883,14 +901,19 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
         verified: true,
         createdRevision: nextRevision,
         createdAt: "刚刚",
-        preview:
-          artifact.displayName === "output/verification.json"
-            ? artifact.preview?.replace('"awaiting_resume"', '"verified"').replace('"checks": []', '"checks": ["exit_code", "stdout", "artifact"]')
-            : artifact.displayName === "logs/stdout.txt"
-              ? "49\n"
-              : artifact.preview,
       })),
     );
+    for (const artifact of this.artifacts.get(snapshot.runId) ?? []) {
+      const text = this.artifactText.get(artifact.artifactId) ?? "";
+      this.artifactText.set(
+        artifact.artifactId,
+        artifact.displayName === "output/verification.json"
+          ? text.replace('"awaiting_resume"', '"verified"').replace('"checks": []', '"checks": ["exit_code", "stdout", "artifact"]')
+          : artifact.displayName === "logs/stdout.txt"
+            ? "49\n"
+            : text,
+      );
+    }
 
     const runEvents = this.events.get(snapshot.runId) ?? [];
     const nextSequence = (runEvents[runEvents.length - 1]?.sequenceNumber ?? 0) + 1;
@@ -943,6 +966,20 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
     return clone(this.artifacts.get(request.runId) ?? []);
   }
 
+  async readArtifact(request: ReadArtifactRequest): Promise<ArtifactContent> {
+    this.getScopedRun(request);
+    const artifact = (this.artifacts.get(request.runId) ?? []).find((a) => a.artifactId === request.artifactId);
+    if (!artifact) {
+      throw clientError("INVALID_REQUEST", `Artifact not found: ${request.artifactId}`, { runId: request.runId });
+    }
+    return {
+      artifactId: artifact.artifactId,
+      reference: artifact.reference,
+      text: this.artifactText.get(artifact.artifactId) ?? "",
+      stale: false,
+    };
+  }
+
   async subscribeEvents(request: EventStreamRequest): Promise<RunEvent[]> {
     // Simulate the long-poll hold — real sidecar blocks ~8s; the mock paces
     // the loop so chained subscriptions don't hot-spin.
@@ -986,6 +1023,9 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
     });
     const serviceEvents = run.events.map((item, eventIndex) => toServiceEvent(item, snapshot, snapshot.revision, eventIndex + 1));
     const serviceArtifacts = run.artifacts.map((item) => toServiceArtifact(item, snapshot));
+    for (const item of run.artifacts) {
+      this.artifactText.set(item.artifactId, artifactTextFor(item.path, item.status === "verified"));
+    }
     this.snapshots.set(run.runId, snapshot);
     this.events.set(run.runId, serviceEvents);
     this.artifacts.set(run.runId, serviceArtifacts);

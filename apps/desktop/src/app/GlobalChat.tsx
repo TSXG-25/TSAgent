@@ -15,9 +15,8 @@ const MAP_KEY = "tsa.session-folder-map";
 const loadJson = <T,>(k: string, d: T): T => { try { return JSON.parse(localStorage.getItem(k) ?? "") ?? d; } catch { return d; } };
 
 export default function GlobalChat({ ctx, onClose, embedded = false, instant = false }: { ctx: RunCtx; onClose?: () => void; embedded?: boolean; instant?: boolean }) {
-  const { service, activeRun, requestDraft, setRequestDraft, createRun } = ctx;
+  const { service, sessionId, selectSession, activeRun, requestDraft, setRequestDraft, createRun } = ctx;
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
-  const [sessionId, setSessionId] = useState(service.identity.sessionId);
   const [delegateTo, setDelegateTo] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const threadRef = useRef<HTMLDivElement>(null);
@@ -49,9 +48,8 @@ export default function GlobalChat({ ctx, onClose, embedded = false, instant = f
       setSessions(await service.listSessions({
         tenantId: service.identity.tenantId,
         userId: service.identity.userId,
-        sessionId: service.identity.sessionId,
         requestId: `chat-${Date.now()}`,
-      } as never));
+      }));
     } catch { /* list unavailable */ }
   }, [service]);
 
@@ -73,8 +71,8 @@ export default function GlobalChat({ ctx, onClose, embedded = false, instant = f
   }, [onClose]);
 
   const allSessions = [
-    { sessionId: service.identity.sessionId, runCount: -1 },
-    ...sessions.filter((x) => x.sessionId !== service.identity.sessionId),
+    { sessionId, runCount: -1 },
+    ...sessions.filter((x) => x.sessionId !== sessionId),
   ];
 
   return (
@@ -95,8 +93,8 @@ export default function GlobalChat({ ctx, onClose, embedded = false, instant = f
                       tenantId: service.identity.tenantId, userId: service.identity.userId,
                       sessionId: `session-${Date.now().toString(36)}`,
                       requestId: `chat-new-${Date.now()}`,
-                    } as never);
-                    await refreshSessions(); setSessionId(s.sessionId); setPickerOpen(false);
+                    });
+                    await refreshSessions(); selectSession(s.sessionId); setPickerOpen(false);
                   } catch (err) { setNotice(String(err)); } finally { setCreating(false); }
                 }} disabled={creating} type="button">{creating ? "…" : "+ session"}</button>
                 <button className="btn secondary" onClick={addFolder} type="button">+ 文件夹</button>
@@ -114,7 +112,7 @@ export default function GlobalChat({ ctx, onClose, embedded = false, instant = f
                     <button className="sess-folder-x" onClick={() => removeFolder(fid)} type="button">×</button>
                   </div>
                   {allSessions.filter((s) => folderOf[s.sessionId] === fid).map((s) => (
-                    <SessionRow key={s.sessionId} s={s} cur={sessionId} onPick={(id) => { setSessionId(id); setPickerOpen(false); }} />
+                    <SessionRow key={s.sessionId} s={s} cur={sessionId} onPick={(id) => { selectSession(id); setPickerOpen(false); }} />
                   ))}
                 </div>
               ))}
@@ -127,7 +125,7 @@ export default function GlobalChat({ ctx, onClose, embedded = false, instant = f
                 }}>
                 <div className="sess-folder-head"><span>未分组</span></div>
                 {allSessions.filter((s) => !folderOf[s.sessionId]).map((s) => (
-                  <SessionRow key={s.sessionId} s={s} cur={sessionId} onPick={(id) => { setSessionId(id); setPickerOpen(false); }} />
+                  <SessionRow key={s.sessionId} s={s} cur={sessionId} onPick={(id) => { selectSession(id); setPickerOpen(false); }} />
                 ))}
               </div>
             </div>

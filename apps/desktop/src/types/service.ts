@@ -23,8 +23,12 @@ export interface StartRunRequest {
   requestText: string;
   /** Session-bound workspace root — scopes the run's file ops to this dir. */
   workspaceRoot?: string;
-  /** Model/effort picks and other run metadata. */
+  /** Model pick (agent_profile.model_ref) and other run metadata. */
   metadata?: Record<string, unknown>;
+  /** Anchor the run under an existing task (delegated child runs). */
+  taskId?: string;
+  /** Attachment refs (file:/task:/run:) — validated and recorded on start. */
+  contextRefs?: string[];
   requestDigest?: string;
 }
 
@@ -173,8 +177,22 @@ export interface ArtifactSummary {
   producer?: ArtifactProducer;
   createdRevision: number;
   createdAt: string;
-  /** Mock-only preview; content reads are intentionally not part of this MVP. */
-  preview?: string;
+}
+
+export interface ReadArtifactRequest {
+  tenantId: string;
+  sessionId: string;
+  runId: string;
+  artifactId: string;
+}
+
+/** Artifact file content; `stale` means the workspace file changed since
+ *  the artifact digest was recorded. */
+export interface ArtifactContent {
+  artifactId: string;
+  reference: string;
+  text: string;
+  stale: boolean;
 }
 
 export interface RunEvent {
@@ -284,6 +302,7 @@ export interface AgentServiceClient {
   resumeRun(request: ResumeRunRequest): Promise<RunHandle>;
   pauseRun(request: PauseRunRequest): Promise<RunHandle>;
   listArtifacts(request: ListArtifactsRequest): Promise<ArtifactSummary[]>;
+  readArtifact(request: ReadArtifactRequest): Promise<ArtifactContent>;
   readEvents(request: EventStreamRequest): Promise<RunEvent[]>;
   /** Long-poll variant — holds up to ~8s until new durable events arrive. */
   subscribeEvents(request: EventStreamRequest): Promise<RunEvent[]>;
@@ -629,6 +648,10 @@ export interface WorkspaceClient {
   deleteWorkspace(request: DeleteWorkspaceRequest): Promise<{ removed: boolean }>;
   /** Native folder picker — resolves to the picked path or null on cancel. */
   pickFolder(): Promise<{ path: string | null }>;
+  /** Native multi-file picker — resolves to picked absolute paths (empty on cancel). */
+  pickFiles(): Promise<{ paths: string[] }>;
+  /** Copy external files into the session workspace; returns file: context refs. */
+  attachFiles(request: AttachFilesRequest): Promise<{ contextRefs: string[] }>;
   listDirectory(path: string): Promise<DirectoryListing>;
   /** Open a path in the OS file manager (Finder on macOS). */
   revealPath(path: string): Promise<{ revealed: boolean }>;
@@ -794,6 +817,14 @@ export interface ListWorkspaceFilesRequest {
   sessionId: string;
   requestId: string;
   limit?: number;
+}
+
+export interface AttachFilesRequest {
+  tenantId: string;
+  userId: string;
+  sessionId: string;
+  requestId: string;
+  paths: string[];
 }
 
 export interface WorkspaceFileRequest {

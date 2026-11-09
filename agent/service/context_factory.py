@@ -96,18 +96,17 @@ class ServiceContextFactory:
         if existing is not None and not existing.closed:
             return existing
         explicit_root = str(getattr(request, "workspace_root", "") or "")
-        bound = (
-            self.workspace_for_run(
-                request.tenant_id,
-                request.session_id,
-                run_id,
-            )
-            if not explicit_root
-            else None
-        )
-        workspace = Path(explicit_root) if explicit_root else (bound or self.workspace_root)
-        if workspace is not None:
-            workspace = workspace.resolve()
+        if explicit_root:
+            workspace = Path(explicit_root).resolve()
+        elif isinstance(request, ResumeRunRequest):
+            # Resume carries no workspace_root field — recover the start's
+            # resolved root from its recorded intent.  Records written before
+            # the field existed resolve the way start does (durable boundary).
+            workspace = self._recorded_workspace_root(
+                request, run_id
+            ) or self._run_workspace(request, run_id)
+        else:
+            workspace = self._run_workspace(request, run_id)
         from agent.runtime_context import RunContext
 
         context = session.create_run(
@@ -124,7 +123,50 @@ class ServiceContextFactory:
         context.agent_profile = dict(
             (getattr(request, "metadata", None) or {}).get("agent_profile") or {}
         )
+        context.context_refs = tuple(
+            getattr(request, "context_refs", ()) or ()
+        )
+        context.delegation_depth = int(
+            (getattr(request, "metadata", None) or {}).get("delegation_depth", 0)
+            or 0
+        )
         return context
+
+    def session_workspace(self, tenant_id: str, session_id: str) -> Path | None:
+        """Resolved workspace for a session — bound folder, else factory root."""
+        root = self.workspace_for_run(tenant_id, session_id, "") or self.workspace_root
+        return root.resolve() if root is not None else None
+
+    def _run_workspace(
+        self, request: StartRunRequest | ResumeRunRequest, run_id: str
+    ) -> Path | None:
+        """Per-run workspace resolution — the registered callable sees the
+        real run_id (per-run roots) and returns None when unbound, in which
+        case the factory root applies."""
+        root = self.workspace_for_run(
+            request.tenant_id, request.session_id, run_id
+        ) or self.workspace_root
+        return root.resolve() if root is not None else None
+
+    def _recorded_workspace_root(
+        self, request: StartRunRequest | ResumeRunRequest, run_id: str
+    ) -> Path | None:
+        """Workspace root persisted on the run's start intent, if any."""
+        from agent.runtime_store.errors import DurableStoreError
+
+        from .run_projector import request_workspace_root
+
+        try:
+            read = self._store.read_run_snapshot(
+                request.tenant_id,
+                run_id,
+                session_id=request.session_id,
+            )
+        except DurableStoreError:
+            # Direct create_run without a reservation (unit tests, tools).
+            return None
+        recorded = request_workspace_root(read)
+        return Path(recorded).resolve() if recorded else None
 
     def release_run(self, run: RunContext) -> None:
         if not run.closed:

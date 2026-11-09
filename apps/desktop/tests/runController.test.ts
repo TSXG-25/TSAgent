@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { RunController } from "../src/features/runs/runController";
 import type {
+  PauseRunRequest,
   ArtifactSummary,
   CancelRunRequest,
   DesktopAgentServiceClient,
@@ -24,7 +25,7 @@ const identity: DesktopIdentity = {
   sessionId: "session-1",
 };
 
-function event(sequenceNumber: number, eventId: string, eventType: string): RunEvent {
+function event(sequenceNumber: number, eventId: string, eventType: string, payload: Record<string, unknown> = {}): RunEvent {
   return {
     eventId,
     sequenceNumber,
@@ -34,7 +35,7 @@ function event(sequenceNumber: number, eventId: string, eventType: string): RunE
     runId: "run-1",
     runRevision: sequenceNumber,
     timestamp: `2026-08-11T00:00:0${sequenceNumber}Z`,
-    payload: { title: eventType, description: eventType, tone: "info" },
+    payload: { title: eventType, description: eventType, tone: "info", ...payload },
   };
 }
 
@@ -198,4 +199,68 @@ test("4B04 dismissError clears the single controller-owned error", async () => {
   assert.equal(controller.getState().error, null);
   assert.equal(observed.at(-1), null);
   controller.dispose();
+});
+
+test("4B05 local stage events project a runtime workflow", async () => {
+  const client = new FakeAgentServiceClient(snapshot("active"), [
+    event(1, "event-1", "run_created"),
+    event(2, "event-2", "stage_started", { stage_id: "planning", phase: "planning" }),
+    event(3, "event-3", "stage_completed", { stage_id: "planning", phase: "planning", task_count: 1 }),
+    event(4, "event-4", "stage_started", { stage_id: "loop", phase: "execution" }),
+    // planning re-entered on a later goal round — latest event wins.
+    event(5, "event-5", "stage_started", { stage_id: "planning", phase: "planning" }),
+    event(7, "event-7", "stage_completed", { stage_id: "planning", phase: "planning", task_count: 2 }),
+  ]);
+  const controller = new RunController(client, { pollIntervalMs: 1000 });
+  await controller.initialize();
+
+  const run = controller.getState().runs[0];
+  assert.equal(run?.activeWorkflowId, "runtime");
+  assert.equal(run?.workflows.length, 1);
+  assert.equal(run?.workflows[0]?.status, "active");
+  assert.deepEqual(
+    run?.workflows[0]?.stages.map((stage) => [stage.stageId, stage.status, stage.duration]),
+    [["planning", "completed", "00:02"], ["loop", "running", ""]],
+  );
+  controller.stopAllPolling();
+});
+
+test("4B06 chained subscribe applies returned events without re-reading", async () => {
+  const pushed = event(4, "event-4", "assistant_delta", { delta: "hello" });
+  class PushOnceClient extends FakeAgentServiceClient {
+    subscribeCalls = 0;
+    async subscribeEvents(): Promise<RunEvent[]> {
+      this.subscribeCalls += 1;
+      if (this.subscribeCalls === 1) return [pushed];
+      return new Promise<RunEvent[]>(() => {});
+    }
+  }
+  const client = new PushOnceClient(snapshot("active"), [event(1, "event-1", "run_created")]);
+  const controller = new RunController(client, { pollIntervalMs: 10 });
+  await controller.initialize();
+  const readsAfterHydrate = client.eventCursors.length;
+  await new Promise((resolve) => setTimeout(resolve, 40));
+  const run = controller.getState().runs[0];
+  assert.ok(run?.events.some((e) => e.eventId === "event-4"), "pushed event merged");
+  assert.equal(client.eventCursors.length, readsAfterHydrate, "readEvents not re-called after subscribe returned events");
+  controller.stopAllPolling();
+});
+
+test("4B07 pause requests mint distinct idempotency ids", async () => {
+  const requests: string[] = [];
+  class PauseClient extends FakeAgentServiceClient {
+    async pauseRun(request: PauseRunRequest): Promise<RunHandle> {
+      requests.push(request.requestId);
+      return { tenantId: identity.tenantId, sessionId: identity.sessionId, runId: "run-1", requestId: request.requestId, status: "blocked", revision: 2, createdAt: "", updatedAt: "" };
+    }
+  }
+  const client = new PauseClient(snapshot("active"), [event(1, "event-1", "run_created")]);
+  const controller = new RunController(client, { pollIntervalMs: 1000 });
+  await controller.initialize();
+  await controller.pauseRun("run-1");
+  await controller.pauseRun("run-1");
+  assert.equal(requests.length, 2);
+  assert.notEqual(requests[0], requests[1]);
+  assert.match(requests[0]!, /^pause-run-1-/);
+  controller.stopAllPolling();
 });

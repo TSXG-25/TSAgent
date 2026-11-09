@@ -1,13 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { TauriSidecarBridge, TauriSidecarProcess } from "./tauriSidecarTransport";
+import { clientError } from "./localTransport";
 
 /**
- * Host bridge adapter: exposes `window.__TSAGENT_SIDECAR_BRIDGE__` when the
- * frontend runs inside the Tauri shell. The spawn target is intentionally
- * env-configurable — the AgentService CLI entry is still being defined
- * (`main.py` is a CLI today, not a service); once the service command
- * exists, set VITE_TSAGENT_SIDECAR_CMD/ARGS/CWD or edit these defaults.
+ * Host bridge adapter: inside the Tauri shell, exposes
+ * `window.__TSAGENT_SIDECAR_BRIDGE__` which spawns the Python stdio sidecar
+ * (`python -m agent.service.local_sidecar`). VITE_TSAGENT_SIDECAR_CWD must be
+ * the repo root so the module resolves.
  */
 const SIDECAR_CMD = import.meta.env.VITE_TSAGENT_SIDECAR_CMD ?? "python3";
 const SIDECAR_ARGS = (import.meta.env.VITE_TSAGENT_SIDECAR_ARGS ?? "-u -m agent.service.local_sidecar").split(" ");
@@ -16,10 +16,19 @@ const SIDECAR_CWD = import.meta.env.VITE_TSAGENT_SIDECAR_CWD;
 if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
   window.__TSAGENT_SIDECAR_BRIDGE__ = {
     async spawn(): Promise<TauriSidecarProcess> {
+      if (!SIDECAR_CWD) {
+        throw clientError(
+          "INVALID_REQUEST",
+          "Tauri sidecar requires VITE_TSAGENT_SIDECAR_CWD set to the repo root " +
+          "(so `-m agent.service.local_sidecar` resolves); point " +
+          "VITE_TSAGENT_SIDECAR_CMD at the venv python if `python3` lacks deps.",
+          false,
+        );
+      }
       const id = await invoke<number>("sidecar_spawn", {
         program: SIDECAR_CMD,
         args: SIDECAR_ARGS,
-        cwd: SIDECAR_CWD ?? null,
+        cwd: SIDECAR_CWD,
       });
       const stdoutListeners = new Set<(line: string) => void>();
       const exitListeners = new Set<(error?: unknown) => void>();
@@ -74,20 +83,6 @@ export async function pickFolder(): Promise<PickedFolder | null> {
       const name = rel ? rel.split("/")[0] : (files[0]?.name ?? "");
       resolve(files.length ? { name, path: name, files } : null);
     };
-    input.click();
-  });
-}
-
-export async function pickFiles(): Promise<string[]> {
-  if ("__TAURI__" in window || (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
-    const { open } = await import("@tauri-apps/plugin-dialog");
-    const sel = await open({ multiple: true, title: "添加文件" });
-    return sel ? (Array.isArray(sel) ? sel : [sel]) : [];
-  }
-  return new Promise((resolve) => {
-    const input = document.createElement("input");
-    input.type = "file"; input.multiple = true;
-    input.onchange = () => resolve(Array.from(input.files ?? []).map((f) => f.name));
     input.click();
   });
 }

@@ -23,7 +23,13 @@ from .errors import AgentServiceError, ServiceErrorCode
 _REQUEST_PREFIX = "tsagent-service-request-v1:"
 
 
-def encode_request_reference(request: Any, *, run_id: str) -> str:
+def encode_request_reference(
+    request: Any,
+    *,
+    run_id: str,
+    workspace_root: str = "",
+    context_refs: tuple[str, ...] | list[str] = (),
+) -> str:
     from .contracts import _thaw_json
 
     payload = {
@@ -33,6 +39,8 @@ def encode_request_reference(request: Any, *, run_id: str) -> str:
         "run_id": run_id,
         "request_id": request.request_id,
         "request_text": getattr(request, "request_text", ""),
+        "workspace_root": workspace_root,
+        "context_refs": [str(ref) for ref in context_refs],
         "metadata": _thaw_json(getattr(request, "metadata", {}) or {}),
     }
     return _REQUEST_PREFIX + json.dumps(
@@ -67,6 +75,20 @@ def _request_record(read: RunReadSnapshot) -> dict[str, Any]:
             "Run Service ownership record is unavailable",
         )
     return record
+
+
+def request_workspace_root(read: RunReadSnapshot) -> str:
+    """Workspace root recorded on the start intent; "" when absent.
+
+    Requests recorded before the field existed carry no key — callers fall
+    back to the session binding for those only."""
+    return str(_request_record(read).get("workspace_root", "") or "")
+
+
+def request_context_refs(read: RunReadSnapshot) -> tuple[str, ...]:
+    """Validated context refs recorded on the start intent."""
+    refs = _request_record(read).get("context_refs") or ()
+    return tuple(str(ref) for ref in refs)
 
 
 def _public_status(value: str) -> RunStatus:
@@ -305,4 +327,6 @@ __all__ = [
     "RunProjector",
     "encode_request_reference",
     "handle_from_head",
+    "request_workspace_root",
+    "request_context_refs",
 ]

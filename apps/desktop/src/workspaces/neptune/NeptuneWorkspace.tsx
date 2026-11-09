@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { SCENES } from "../../app/scenes";
 import { WorkspaceFrame } from "../../design-system/WorkspaceFrame";
 import AgentComposer from "../../app/AgentComposer";
@@ -12,7 +12,7 @@ const MEDIA = /\.(svg|png|jpe?g|gif|mp4|webm|wav|mp3|glb)$/i;
 const KINDS = { "图像": /\.(svg|png|jpe?g|gif)$/i, "视频": /\.(mp4|webm)$/i, "3D": /\.glb$/i, "预览": /.*/ } as const;
 
 export default function NeptuneWorkspace({ ctx }: { ctx: RunCtx }) {
-  const { runs } = ctx;
+  const { runs, service } = ctx;
   const scene = SCENES[8];
   const [tab, setTab] = useState<keyof typeof KINDS>("图像");
   const [sel, setSel] = useState<string | null>(null);
@@ -20,6 +20,21 @@ export default function NeptuneWorkspace({ ctx }: { ctx: RunCtx }) {
   const media = useMemo(() => runs.flatMap((r) => r.artifacts.filter((a) => MEDIA.test(a.path)).map((a) => ({ run: r, artifact: a }))), [runs]);
   const visible = media.filter((m) => KINDS[tab].test(m.artifact.path));
   const cur = visible.find((m) => m.artifact.artifactId === sel) ?? visible[0];
+  const isSvg = cur?.artifact.path.endsWith(".svg") ?? false;
+  const [content, setContent] = useState<{ text: string; stale: boolean } | null>(null);
+  useEffect(() => {
+    if (!cur || !isSvg) { setContent(null); return; }
+    let staleFlag = false;
+    setContent(null);
+    void service.readArtifact({
+      tenantId: service.identity.tenantId,
+      sessionId: cur.run.sessionId,
+      runId: cur.run.runId,
+      artifactId: cur.artifact.artifactId,
+    }).then((c) => { if (!staleFlag) setContent({ text: c.text, stale: c.stale }); })
+      .catch((e) => { if (!staleFlag) setContent({ text: String(e instanceof Error ? e.message : e), stale: false }); });
+    return () => { staleFlag = true; };
+  }, [service, cur?.artifact.artifactId, cur?.run.runId, isSvg]);
 
   return (
     <WorkspaceFrame scene={scene} ctx={ctx}>
@@ -32,8 +47,13 @@ export default function NeptuneWorkspace({ ctx }: { ctx: RunCtx }) {
           </div>
           <div className="media-canvas">
             {cur ? (
-              cur.artifact.path.endsWith(".svg")
-                ? <div className="media-svg" dangerouslySetInnerHTML={{ __html: cur.artifact.content }} />
+              isSvg
+                ? <div className="media-svg">
+                    {content?.stale && <p className="omni-empty">file changed since recorded</p>}
+                    {content
+                      ? <img alt={cur.artifact.path.split("/").pop()} src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(content.text)}`} />
+                      : <p className="omni-empty">…</p>}
+                  </div>
                 : <div className="empty-state"><p>{cur.artifact.path.split("/").pop()}</p><p className="omni-empty">{cur.artifact.size} — 二进制预览待接入</p></div>
             ) : <div className="empty-state"><p>还没有 {tab} 产物</p></div>}
           </div>
@@ -43,7 +63,7 @@ export default function NeptuneWorkspace({ ctx }: { ctx: RunCtx }) {
           <h4 className="ws-mod">工作</h4>
           {visible.map(({ artifact: a }) => (
             <button className={`nep-thumb ${cur?.artifact.artifactId === a.artifactId ? "on" : ""}`} key={a.artifactId} onClick={() => setSel(a.artifactId)} type="button">
-              {a.path.endsWith(".svg") ? <span className="nep-thumb-svg" dangerouslySetInnerHTML={{ __html: a.content }} /> : <span className="nep-thumb-kind">{a.path.split(".").pop()?.toUpperCase()}</span>}
+              <span className="nep-thumb-kind">{a.path.split(".").pop()?.toUpperCase()}</span>
             </button>
           ))}
           <h4 className="ws-mod">偏好</h4>

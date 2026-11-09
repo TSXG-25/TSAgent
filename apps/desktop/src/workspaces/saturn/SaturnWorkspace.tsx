@@ -14,21 +14,45 @@ export default function SaturnWorkspace({ ctx }: { ctx: RunCtx }) {
   const [schedules, setSchedules] = useState<ScheduleSummary[]>([]);
   const [sel, setSel] = useState<ScheduleSummary | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [text, setText] = useState("");
+  const [mins, setMins] = useState("60");
+  const [planet, setPlanet] = useState("");
+  const [creating, setCreating] = useState(false);
 
   const req = useCallback(() => ({ tenantId: service.identity.tenantId, sessionId: service.identity.sessionId, requestId: requestIdForRun(0) }), [service]);
   const refresh = useCallback(async () => {
-    try { setSchedules(await service.listSchedules(req() as never)); } catch (e) { setErr(String(e)); }
+    try { setSchedules(await service.listSchedules(req())); } catch (e) { setErr(String(e)); }
   }, [service, req]);
   useEffect(() => { void refresh(); const t = setInterval(() => void refresh(), 10_000); return () => clearInterval(t); }, [refresh]);
 
   async function toggle(s: ScheduleSummary) {
-    try { await service.updateSchedule({ ...req(), scheduleId: s.scheduleId, status: s.status === "ACTIVE" ? "PAUSED" : "ACTIVE" } as never); await refresh(); }
+    try { await service.updateSchedule({ ...req(), scheduleId: s.scheduleId, status: s.status === "ACTIVE" ? "PAUSED" : "ACTIVE" }); await refresh(); }
     catch (e) { setErr(String(e)); }
+  }
+
+  async function create() {
+    const seconds = Math.round(Number(mins) * 60);
+    if (!text.trim() || !(seconds > 0)) { setErr("request text + 正数分钟数"); return; }
+    setCreating(true); setErr(null);
+    try {
+      await service.createSchedule({ ...req(), sessionId: ctx.sessionId, requestText: text.trim(), intervalSeconds: seconds, ...(planet ? { targetPlanet: planet } : {}) });
+      setText(""); setMins("60"); setPlanet(""); await refresh();
+    } catch (e) { setErr(String(e)); } finally { setCreating(false); }
   }
 
   return (
     <WorkspaceFrame scene={scene} ctx={ctx}>
       <div className="chron">
+        <div className="chron-create">
+          <input className="chron-in" onChange={(e) => setText(e.target.value)} placeholder="定时任务内容…" value={text} />
+          <input className="chron-in chron-min" onChange={(e) => setMins(e.target.value)} placeholder="分钟" title="间隔（分钟）" type="number" value={mins} />
+          <select className="chron-in chron-pl" onChange={(e) => setPlanet(e.target.value)} value={planet}>
+            <option value="">planet…</option>
+            {["sun","mercury","venus","earth","mars","jupiter","saturn","uranus","neptune","pluto"].map((w) => <option key={w} value={w}>{w}</option>)}
+          </select>
+          <button className="lab-run" disabled={creating} onClick={() => void create()} type="button">+ 创建</button>
+        </div>
+        {err && <p className="chron-err">{err}</p>}
         <div className="chron-board">
           {schedules.map((s) => (
             <button className={`chron-card ${s.status.toLowerCase()} ${sel?.scheduleId === s.scheduleId ? "on" : ""}`} key={s.scheduleId}

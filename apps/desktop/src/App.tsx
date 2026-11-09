@@ -86,6 +86,7 @@ function App() {
     return () => clearTimeout(t);
   }, [location.pathname]);
   const activeRunId = controllerState.activeRunId;
+  const [sessionId, setSessionId] = useState(service.identity.sessionId);
   const [requestDraft, setRequestDraft] = useState("");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -174,7 +175,7 @@ function App() {
       setServiceError(null);
       await controller.startRun({
         tenantId: service.identity.tenantId,
-        sessionId: service.identity.sessionId,
+        sessionId,
         requestId,
         requestText: request,
       });
@@ -196,8 +197,15 @@ function App() {
     }
   }
 
+  function selectSession(id: string) {
+    service.setSession(id);
+    setSessionId(id);
+  }
+
   const ctx: RunCtx = {
     service,
+    sessionId,
+    selectSession,
     runtimeLabel,
     controller,
     runs,

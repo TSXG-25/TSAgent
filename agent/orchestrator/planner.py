@@ -724,6 +724,12 @@ class PlannerStage:
             return state, "FINISH", answer
 
         # ── Stage 2: LOOP — the model drives tool calls directly ──
+        run_context = getattr(self._orch, "run_context", None)
+        context_refs = tuple(getattr(run_context, "context_refs", ()) or ())
+        if context_refs:
+            untrusted_context["attachments"] = (
+                "用户附加的上下文: " + ", ".join(context_refs)
+            )
         state["loop_context"] = {
             key: value for key, value in untrusted_context.items() if value
         }

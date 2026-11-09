@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from agent.runtime_store.errors import DurableStoreError, StoreErrorCode
@@ -24,6 +25,10 @@ from .contracts import (
     TaskSnapshot,
 )
 from .errors import AgentServiceError, ServiceErrorCode
+
+# Derived delegated-run sessions share this id marker — one canonical
+# convention used at construction and anywhere they must be filtered out.
+SUBTASK_SESSION_MARKER = ":subtask:"
 
 if TYPE_CHECKING:
     from agent.interruption import CancelRunRequest
@@ -228,6 +233,24 @@ class AgentService:
                 role="owner",
             )
             task_id = self._resolve_task_id(request)
+            explicit_root = str(
+                getattr(request, "workspace_root", "") or ""
+            ).strip()
+            run_root = (
+                Path(explicit_root).resolve()
+                if explicit_root
+                else self._contexts.session_workspace(
+                    request.tenant_id, request.session_id
+                )
+            )
+            context_refs = self._validate_store_refs(
+                request.tenant_id,
+                request.session_id,
+                "",
+                getattr(request, "context_refs", ()),
+                root=run_root,
+                allow_artifact=False,
+            )
             try:
                 reservation = self._store.reserve_service_start(
                     request.tenant_id,
@@ -240,6 +263,8 @@ class AgentService:
                     external_reference=encode_request_reference(
                         request,
                         run_id=getattr(request, "run_id", None) or "",
+                        workspace_root=str(run_root) if run_root else "",
+                        context_refs=context_refs,
                     ),
                 )
             except DurableStoreError as error:
@@ -517,6 +542,72 @@ class AgentService:
         path = out.decode().strip().rstrip("/")
         return {"path": path or None}
 
+    async def pick_files(self, request: Any) -> Any:
+        """macOS native 'choose file' dialog — multi-select Finder picker,
+        same local-user trust boundary as pick_folder."""
+        import asyncio
+        proc = await asyncio.create_subprocess_exec(
+            "osascript",
+            "-e", 'tell application "System Events"',
+            "-e", 'activate',
+            "-e", 'set chosen to choose file with prompt "添加文件" with multiple selections allowed',
+            "-e", 'set out to ""',
+            "-e", 'repeat with f in chosen',
+            "-e", 'set out to out & (POSIX path of f) & linefeed',
+            "-e", 'end repeat',
+            "-e", 'end tell',
+            "-e", 'return out',
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        )
+        out, _ = await proc.communicate()
+        paths = [p.strip() for p in out.decode().splitlines() if p.strip()]
+        return {"paths": paths}
+
+    async def attach_files(self, request: Any) -> Any:
+        """Copy externally-picked files into the session workspace's hidden
+        .attachments/ dir and return file: refs the run context accepts."""
+        import asyncio
+        import hashlib
+        import shutil
+        from pathlib import Path
+
+        self._ensure_open()
+        root = self._contexts.session_workspace(
+            request.tenant_id, request.session_id
+        )
+        if root is None:
+            raise AgentServiceError(
+                ServiceErrorCode.INVALID_REQUEST,
+                "service has no workspace root",
+            )
+        sources: list[Path] = []
+        for raw in request.paths:
+            src = Path(raw).expanduser()
+            if not src.is_file():
+                raise AgentServiceError(
+                    ServiceErrorCode.INVALID_REQUEST,
+                    f"attachment is not a file: {raw}",
+                )
+            sources.append(src)
+
+        def _copy() -> list[str]:
+            dest_dir = root / ".attachments"
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            refs: list[str] = []
+            for src in sources:
+                digest = hashlib.sha256(src.read_bytes()).hexdigest()[:8]
+                target = dest_dir / src.name
+                if target.exists():
+                    if hashlib.sha256(target.read_bytes()).hexdigest()[:8] == digest:
+                        refs.append(f"file:.attachments/{target.name}")
+                        continue
+                    target = dest_dir / f"{src.stem}-{digest}{src.suffix}"
+                shutil.copy2(src, target)
+                refs.append(f"file:.attachments/{target.name}")
+            return refs
+
+        return {"context_refs": await asyncio.to_thread(_copy)}
+
     async def assign_session_workspace(self, request: Any) -> Any:
         self._store.assign_session_workspace(
             request.tenant_id, request.session_id, request.workspace_id,
@@ -571,6 +662,10 @@ class AgentService:
         heads = self._store.list_sessions(request.tenant_id, limit=request.limit)
         result = []
         for head in heads:
+            if SUBTASK_SESSION_MARKER in head.session_id:
+                # Delegated child runs live under derived sessions — they are
+                # run internals, not user sessions; keep them off pickers.
+                continue
             session_runs = self._store.list_run_heads(
                 head.tenant_id, head.session_id, limit=2000
             )
@@ -615,6 +710,12 @@ class AgentService:
         import asyncio
         import uuid
 
+        depth = int(getattr(run_context, "delegation_depth", 0) or 0)
+        if depth >= 1:
+            raise AgentServiceError(
+                ServiceErrorCode.INVALID_REQUEST,
+                "delegated runs cannot delegate further",
+            )
         view = run_context.durable_store_view
         tenant_id, session_id = view.tenant_id, view.session_id
         parent_head = self._store.get_run_head(
@@ -660,7 +761,7 @@ class AgentService:
             label = profile.display_name or profile.profile_id
             planet = f" @{profile.planet_affinity}" if profile.planet_affinity else ""
             child_text = f"[Agent: {label}{planet}]\n{child_text}"
-        child_session_id = f"{session_id}:subtask:{child_task.task_id}"
+        child_session_id = f"{session_id}{SUBTASK_SESSION_MARKER}{child_task.task_id}"
         self._store.add_participant(
             tenant_id,
             session_id,
@@ -679,6 +780,10 @@ class AgentService:
             context_refs_json=_json.dumps(resolved_refs),
             approval_state="not_required",
         )
+        # The derived child session has no workspace binding — inherit the
+        # parent's resolved root so file refs and file ops stay in scope.
+        parent_workspace = getattr(run_context, "workspace", None)
+        parent_root = str(parent_workspace.root) if parent_workspace else ""
         handle = await self.start_run(
             StartRunRequest(
                 tenant_id=tenant_id,
@@ -687,7 +792,10 @@ class AgentService:
                 request_id=f"subtask:{child_task.task_id}",
                 request_text=child_text,
                 task_id=child_task.task_id,
+                workspace_root=parent_root,
+                context_refs=tuple(resolved_refs),
                 metadata={
+                    "delegation_depth": depth + 1,
                     "agent_profile": {
                         "profile_id": profile.profile_id,
                         "model_ref": profile.model_ref,
@@ -695,8 +803,8 @@ class AgentService:
                         "permission_policy": _json.loads(
                             profile.permission_policy_json or "{}"
                         ),
-                    }
-                } if profile is not None else {},
+                    } if profile is not None else {},
+                },
             )
         )
         self._store.update_handoff_target_run(
@@ -967,24 +1075,30 @@ class AgentService:
             for r in rows
         ]
 
-    def _workspace_service(self) -> Any:
+    @staticmethod
+    def _scoped_workspace(root: Any) -> Any:
+        from agent.services.workspace_service import WorkspaceService
+
+        return WorkspaceService.scoped(root)
+
+    def _workspace_service(self, request: Any) -> Any:
         """Scoped filesystem view for the Mars/forge workspace surfaces."""
-        root = getattr(self._contexts, "workspace_root", None)
+        root = self._contexts.session_workspace(
+            request.tenant_id, request.session_id
+        )
         if root is None:
             raise AgentServiceError(
                 ServiceErrorCode.INVALID_REQUEST,
                 "service has no workspace root",
             )
-        from agent.services.workspace_service import WorkspaceService
-
-        return WorkspaceService.scoped(root)
+        return self._scoped_workspace(root)
 
     async def list_workspace_files(self, request: Any) -> list[Any]:
         """Mars forge: enumerate workspace files (names only)."""
         self._ensure_open()
         import asyncio
 
-        workspace = self._workspace_service()
+        workspace = self._workspace_service(request)
         from .contracts import WorkspaceFileSummary
 
         root = workspace.root
@@ -992,7 +1106,9 @@ class AgentService:
         files = await asyncio.to_thread(
             lambda: sorted(
                 p for p in root.rglob("*")
-                if p.is_file() and ".tsagent" not in p.parts
+                if p.is_file()
+                and ".tsagent" not in p.parts
+                and ".attachments" not in p.parts
             )
         )
         for path in files[: (getattr(request, "limit", 500) or 500)]:
@@ -1010,7 +1126,7 @@ class AgentService:
         self._ensure_open()
         import asyncio
 
-        workspace = self._workspace_service()
+        workspace = self._workspace_service(request)
         text = await asyncio.to_thread(workspace.read_text, request.path)
         from .contracts import WorkspaceFileContent
 
@@ -1023,7 +1139,7 @@ class AgentService:
         self._ensure_open()
         import asyncio
 
-        workspace = self._workspace_service()
+        workspace = self._workspace_service(request)
         message = await asyncio.to_thread(
             workspace.write_text, request.path, request.content
         )
@@ -1240,7 +1356,7 @@ class AgentService:
                     profile_id=str(node.get("profile_id", "")),
                 )
             )
-            child_session = f"{delegate_session}:subtask:{delegation['task_id']}"
+            child_session = f"{delegate_session}{SUBTASK_SESSION_MARKER}{delegation['task_id']}"
             started = await self.start_run(
                 StartRunRequest(
                     tenant_id=request.tenant_id,
@@ -1249,6 +1365,7 @@ class AgentService:
                     request_id=f"{request.request_id}-{node['id']}-run",
                     request_text=request_text,
                     task_id=delegation["task_id"],
+                    metadata={"delegation_depth": 1},
                 )
             )
             steps.append(
@@ -1378,16 +1495,28 @@ class AgentService:
         return entries
 
     def _validate_store_refs(
-        self, tenant_id: str, session_id: str, run_id: str, refs: Any
+        self,
+        tenant_id: str,
+        session_id: str,
+        run_id: str,
+        refs: Any,
+        *,
+        root: Path | None = None,
+        allow_artifact: bool = True,
     ) -> list[str]:
-        """Store-level context-ref validation for UI-side delegation —
-        same schemes as the loop path, no live run_context needed."""
+        """Store-level context-ref validation — same schemes as the loop
+        path, no live run_context needed.  ``root`` is the caller-resolved
+        workspace (defaults to the session resolution); ``allow_artifact``
+        gates the artifact scheme out of start_run, where no producing run
+        can exist yet."""
         resolved: list[str] = []
         for ref in refs or ():
             raw = str(ref)
             kind, _, target = raw.partition(":")
             if kind == "file" and target:
-                root = getattr(self._contexts, "workspace_root", None)
+                root = root or self._contexts.session_workspace(
+                    tenant_id, session_id
+                )
                 if root is None:
                     raise AgentServiceError(
                         ServiceErrorCode.INVALID_REQUEST,
@@ -1409,15 +1538,17 @@ class AgentService:
                     )
                 resolved.append(f"task:{target}")
             elif kind == "run" and target:
+                # Tenant-wide like task: — a ref forwarded to a derived
+                # subtask session still points at a durable parent run.
                 if self._store.get_run_head(
-                    tenant_id, target, session_id=session_id
+                    tenant_id, target, session_id=None
                 ) is None:
                     raise AgentServiceError(
                         ServiceErrorCode.INVALID_REQUEST,
                         f"context ref run not found in session: {raw}",
                     )
                 resolved.append(f"run:{target}")
-            elif kind == "artifact" and target:
+            elif kind == "artifact" and target and allow_artifact:
                 snapshot = self._store.read_run_snapshot(
                     tenant_id, run_id, session_id=session_id
                 )
@@ -2124,6 +2255,77 @@ class AgentService:
     ) -> tuple[Any, ...]:
         snapshot = await self.get_run(request)
         return snapshot.artifacts
+
+    async def read_artifact(self, request: Any) -> Any:
+        """Read one artifact's file via the session workspace — same guarded,
+        redacted path as read_workspace_file. ``stale`` marks a file whose
+        bytes no longer match the committed digest."""
+        self._ensure_open()
+        import asyncio
+        import hashlib
+
+        # The projected ArtifactSummary carries an opaque artifact://
+        # reference; the durable fact row holds the real workspace path.
+        try:
+            read = self._store.read_run_snapshot(
+                request.tenant_id,
+                request.run_id,
+                session_id=request.session_id,
+            )
+        except DurableStoreError as error:
+            raise self._store_error(
+                error,
+                run_id=request.run_id,
+                request_id=request.request_id,
+                lookup=True,
+            ) from error
+        artifact = next(
+            (
+                item
+                for item in read.artifacts
+                if item.artifact_id == request.artifact_id
+            ),
+            None,
+        )
+        if artifact is None:
+            raise AgentServiceError(
+                ServiceErrorCode.INVALID_REQUEST,
+                f"artifact not found for this run: {request.artifact_id}",
+            )
+        from .run_projector import request_workspace_root
+        # The run's resolved root is persisted on its start intent — an
+        # explicit workspace_root beats the session binding.  Records written
+        # before the field existed carry no key; those alone fall back to the
+        # session resolution (durable-data boundary).
+        root = (
+            Path(recorded)
+            if (recorded := request_workspace_root(read))
+            else self._contexts.session_workspace(
+                request.tenant_id, request.session_id
+            )
+        )
+        if root is None:
+            raise AgentServiceError(
+                ServiceErrorCode.INVALID_REQUEST,
+                "service has no workspace root",
+            )
+        workspace = self._scoped_workspace(root)
+
+        def _read() -> tuple[str, bytes]:
+            resolved = workspace.resolve_path(
+                artifact.reference, must_exist=True
+            )
+            return workspace.read_text(artifact.reference), resolved.read_bytes()
+
+        text, data = await asyncio.to_thread(_read)
+        from .contracts import ArtifactContent
+
+        return ArtifactContent(
+            artifact_id=artifact.artifact_id,
+            reference=artifact.reference,
+            text=text,
+            stale=hashlib.sha256(data).hexdigest() != artifact.digest,
+        )
 
     def stream_events(self, request: EventStreamRequest):
         self._ensure_open()

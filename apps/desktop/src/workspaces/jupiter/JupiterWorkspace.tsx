@@ -3,25 +3,26 @@ import { SCENES } from "../../app/scenes";
 import { WorkspaceFrame, CapNotInstalled } from "../../design-system/WorkspaceFrame";
 import { requestIdForRun } from "../../app/ui";
 import type { RunCtx } from "../../app/runCtx";
-import type { FactRecordSummary, JupiterArtifactSummary } from "../../types/service";
+import type { FactRecordSummary, HistoryEntry, JupiterArtifactSummary } from "../../types/service";
 
 /** Archive per hand-drawn spec §7 — Memory / File tabs + access/permission
  *  inspector + knowledge graph toggle. Real listFacts/searchArtifacts. */
 export default function JupiterWorkspace({ ctx }: { ctx: RunCtx }) {
   const { service } = ctx;
   const scene = SCENES[5];
-  const [tab, setTab] = useState<"memory" | "file">("memory");
+  const [tab, setTab] = useState<"memory" | "file" | "history">("memory");
   const [cloud, setCloud] = useState(true);
   const [facts, setFacts] = useState<FactRecordSummary[]>([]);
   const [files, setFiles] = useState<JupiterArtifactSummary[]>([]);
   const [sel, setSel] = useState<FactRecordSummary | JupiterArtifactSummary | null>(null);
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [q, setQ] = useState("");
   const [err, setErr] = useState<string | null>(null);
 
   const req = useCallback(() => ({ tenantId: service.identity.tenantId, sessionId: service.identity.sessionId, requestId: requestIdForRun(0) }), [service]);
   useEffect(() => {
-    service.listFacts(req() as never).then(setFacts).catch(() => setFacts([]));
-    service.searchArtifacts({ ...req(), query: "", allSessions: true } as never).then(setFiles).catch((e) => setErr(String(e)));
+    service.listFacts(req()).then(setFacts).catch(() => setFacts([]));
+    service.searchArtifacts({ ...req(), query: "", allSessions: true }).then(setFiles).catch((e) => setErr(String(e)));
   }, [service, req]);
 
   return (
@@ -30,6 +31,7 @@ export default function JupiterWorkspace({ ctx }: { ctx: RunCtx }) {
         <div className="jup-tabs">
           <button className={tab === "memory" ? "on" : ""} onClick={() => setTab("memory")} type="button">Memory</button>
           <button className={tab === "file" ? "on" : ""} onClick={() => setTab("file")} type="button">File Δ</button>
+          <button className={tab === "history" ? "on" : ""} onClick={() => { setTab("history"); service.listHistory(req()).then(setHistory).catch((e) => setErr(String(e))); }} type="button">History</button>
           <input className="jup-q" onChange={(e) => setQ(e.target.value)} placeholder="filter…" value={q} />
         </div>
         <div className="jup-split">
@@ -55,11 +57,25 @@ export default function JupiterWorkspace({ ctx }: { ctx: RunCtx }) {
                   </div>
                 )}
                 {!cloud && facts.filter((f) => !q || `${f.category}${f.key}`.includes(q)).map((f) => (
-                  <button className={`jup-row ${sel === f ? "on" : ""}`} key={f.category + ":" + f.key} onClick={() => setSel(f)} type="button">
+                  <span className={`jup-row ${sel === f ? "on" : ""}`} key={f.category + ":" + f.key} onClick={() => setSel(f)}>
                     <strong>{f.category}:{f.key}</strong><small>{f.value.slice(0, 40)}</small>
-                  </button>
+                    <i className="jup-forget" onClick={(e) => { e.stopPropagation(); void service.forgetFact({ ...req(), category: f.category, key: f.key }).then(() => service.listFacts(req()).then(setFacts)).catch((x) => setErr(String(x))); }}>✕</i>
+                  </span>
                 ))}
                 {!cloud && facts.length === 0 && <p className="omni-empty">No governed facts.</p>}
+              </>
+            ) : tab === "history" ? (
+              <>
+                <h4 className="ws-mod">History <em>本 session 的 run 记录</em></h4>
+                {history.filter((h) => !q || h.requestText.includes(q)).map((h) => (
+                  <button className="jup-row" key={h.runId}
+                    onClick={() => void ctx.controller.refreshRun(h.runId, ctx.sessionId).then(() => ctx.openRun(h.runId)).catch((e) => setErr(String(e)))} type="button">
+                    <strong>{h.requestText.slice(0, 42)}</strong>
+                    <small>{h.status} · {h.updatedAt.slice(0, 19)}</small>
+                    <small>{h.answerText.slice(0, 60)}</small>
+                  </button>
+                ))}
+                {history.length === 0 && <p className="omni-empty">No history.</p>}
               </>
             ) : (
               <>

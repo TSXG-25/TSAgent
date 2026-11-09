@@ -28,18 +28,18 @@ export default function MarsWorkspace({ ctx }: { ctx: RunCtx }) {
 
   const req = useCallback(() => ({ tenantId: service.identity.tenantId, sessionId: service.identity.sessionId, requestId: requestIdForRun(0) }), [service]);
   useEffect(() => {
-    service.listWorkspaceFiles(req() as never).then(setFiles).catch((e) => setErr(String(e)));
+    service.listWorkspaceFiles(req()).then(setFiles).catch((e) => setErr(String(e)));
   }, [service, req]);
 
   async function openFile(path: string) {
     setSel(path); setDirty(false);
-    try { const c = await service.readWorkspaceFile({ ...req(), path } as never); setContent(c.text); }
+    try { const c = await service.readWorkspaceFile({ ...req(), path }); setContent(c.text); }
     catch (e) { setErr(String(e)); }
   }
   async function save() {
     if (!sel) return;
     setSaving(true);
-    try { await service.writeWorkspaceFile({ ...req(), path: sel, content } as never); setDirty(false); }
+    try { await service.writeWorkspaceFile({ ...req(), path: sel, content }); setDirty(false); }
     catch (e) { setErr(String(e)); } finally { setSaving(false); }
   }
 

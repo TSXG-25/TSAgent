@@ -14,6 +14,12 @@ class SidecarConfig:
     database_path: Path
     workspace_root: Path | None = None
     writer_id: str | None = None
+    allowed_origins: frozenset[str] = frozenset()
+
+
+DEFAULT_ALLOWED_ORIGINS = frozenset(
+    {"http://localhost:4173", "http://127.0.0.1:4173"}
+)
 
 
 DEFAULT_DATABASE_PATH = Path.home() / ".tsagent" / "runtime.db"
@@ -36,11 +42,23 @@ def parse_args(argv: Sequence[str] | None = None) -> SidecarConfig:
         "--writer-id",
         default=os.getenv("TSAGENT_WRITER_ID"),
     )
+    parser.add_argument(
+        "--allow-origin",
+        action="append",
+        default=[
+            item.strip()
+            for item in os.getenv("TSAGENT_SIDECAR_ALLOWED_ORIGINS", "").split(",")
+            if item.strip()
+        ],
+        help="allowed Origin for the --http transport (repeatable); "
+             "defaults to the Vite dev origin",
+    )
     args = parser.parse_args(argv)
     return SidecarConfig(
         database_path=Path(args.database).expanduser(),
         workspace_root=(None if args.workspace_root is None else Path(args.workspace_root)),
         writer_id=args.writer_id,
+        allowed_origins=frozenset(args.allow_origin) or DEFAULT_ALLOWED_ORIGINS,
     )
 
 

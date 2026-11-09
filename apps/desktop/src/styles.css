@@ -3672,7 +3672,9 @@ html[data-fx="standard"] .ws-root::after { animation: none; }
 /* status footer */
 .omni-statusbar { display: flex; align-items: center; gap: 18px; padding: 8px 16px; border-top: 1px solid rgba(160,190,255,.08); font-size: 10px; color: var(--text-faint); letter-spacing: .05em; }
 .sys-ok { color: var(--st-ok,#4cc38a); }
-.omni-status-right { margin-left: auto; font-family: var(--font-mono); }
+.omni-status-right { margin-left: auto; font-family: var(--font-mono); min-width: 0; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ac-pause { color: var(--text-faint) !important; }
+.ac-pause:hover { color: var(--text-base) !important; }
 /* composer inside column */
 .omni-col .agent-composer { border-top: 1px solid rgba(160,190,255,.08); }
 /* tame the horizon glow — 65% down */
@@ -4186,3 +4188,24 @@ ol.md-list li::marker { color: var(--planet-accent); font-family: var(--font-mon
 .ac-mrow.on span { color: var(--planet-accent); }
 .ac-mrow.on i { color: var(--planet-accent); }
 .ac-mrow.back { font-size: 10.5px; color: var(--text-faint); border-bottom: 0.5px solid rgba(255,255,255,.07); border-radius: 0 0 0 0; }
+
+/* Workspace-file attach picker — mirrors the permission popover. */
+.ac-attachwrap { position: relative; }
+.ac-filepicker { position: absolute; bottom: calc(100% + 8px); left: 0; width: 280px; max-height: 260px; display: flex; flex-direction: column; background: rgba(16,20,27,.88); border: 0.5px solid rgba(160,190,255,.2); border-radius: 12px; backdrop-filter: blur(18px); padding: 5px; z-index: 60; box-shadow: 0 12px 40px rgba(0,0,0,.5); overflow-y: auto; }
+.ac-fp-filter { margin: 2px 2px 6px; padding: 6px 9px; background: rgba(255,255,255,.05); border: 0.5px solid rgba(160,190,255,.2); border-radius: 8px; color: var(--text-base); font-size: 12px; outline: none; }
+.ac-fp-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 10px; background: none; border: none; border-radius: 8px; text-align: left; cursor: pointer; font-size: 12px; color: var(--text-base); }
+.ac-fp-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ac-fp-row:hover { background: rgba(255,255,255,.06); }
+.ac-fp-row.on { background: rgba(95,224,177,.12); }
+.ac-fp-row.on i { color: var(--planet-accent); font-style: normal; font-size: 11px; }
+.ac-filepicker .omni-empty { padding: 8px 10px; }
+
+/* Saturn create row + Jupiter forget. */
+.chron-create { display: flex; gap: 6px; padding: 0 0 10px; align-items: center; }
+.chron-in { flex: 1; min-width: 0; padding: 7px 10px; background: rgba(255,255,255,.04); border: 0.5px solid rgba(160,190,255,.2); border-radius: 8px; color: var(--text-base); font-size: 12px; outline: none; }
+.chron-min { flex: 0 0 64px; }
+.chron-pl { flex: 0 0 96px; }
+.chron-err { color: #f0b0ba; font-size: 11px; padding: 0 0 8px; }
+.jup-row { position: relative; }
+.jup-forget { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font-style: normal; font-size: 11px; color: var(--text-faint); cursor: pointer; }
+.jup-forget:hover { color: #f0b0ba; }

@@ -263,6 +263,7 @@ class StartRunRequest:
     run_id: str | None = None
     task_id: str = ""
     workspace_root: str = ""
+    context_refs: tuple[str, ...] = ()
     metadata: Mapping[str, JSONValue] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -294,6 +295,8 @@ class StartRunRequest:
             value["run_id"] = self.run_id
         if self.task_id:
             value["task_id"] = self.task_id
+        if self.context_refs:
+            value["context_refs"] = list(self.context_refs)
         return value
 
     @classmethod
@@ -307,6 +310,9 @@ class StartRunRequest:
             run_id=(None if value.get("run_id") is None else str(value.get("run_id"))),
             task_id=str(value.get("task_id", "")),
             workspace_root=str(value.get("workspace_root", "")),
+            context_refs=tuple(
+                str(item) for item in (value.get("context_refs") or ())
+            ),
             metadata=cast(Mapping[str, JSONValue], value.get("metadata", {}) or {}),
         )
 
@@ -1470,6 +1476,33 @@ class ListWorkspaceFilesRequest:
 
 
 @dataclass(frozen=True)
+class AttachFilesRequest:
+    tenant_id: str
+    user_id: str
+    session_id: str
+    request_id: str
+    paths: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        _required_identifier(self.tenant_id, "tenant_id")
+        _required_identifier(self.user_id, "user_id")
+        _required_identifier(self.session_id, "session_id")
+        _required_identifier(self.request_id, "request_id")
+        if not self.paths or any(not str(p).strip() for p in self.paths):
+            raise ValueError("paths must be a non-empty list of paths")
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "AttachFilesRequest":
+        return cls(
+            tenant_id=str(value.get("tenant_id", "")),
+            user_id=str(value.get("user_id", "")),
+            session_id=str(value.get("session_id", "")),
+            request_id=str(value.get("request_id", "")),
+            paths=tuple(str(p) for p in (value.get("paths") or [])),
+        )
+
+
+@dataclass(frozen=True)
 class WorkspaceFileRequest:
     tenant_id: str
     user_id: str
@@ -2131,6 +2164,58 @@ class ArtifactSummary:
 
 
 ArtifactView = ArtifactSummary
+
+
+@dataclass(frozen=True)
+class ReadArtifactRequest:
+    """Read one artifact's workspace file through the guarded workspace path."""
+
+    tenant_id: str
+    user_id: str
+    session_id: str
+    request_id: str
+    run_id: str
+    artifact_id: str
+
+    def __post_init__(self) -> None:
+        _validate_identity(
+            tenant_id=self.tenant_id,
+            user_id=self.user_id,
+            session_id=self.session_id,
+            run_id=self.run_id,
+            request_id=self.request_id,
+        )
+        _required_identifier(self.artifact_id, "artifact_id")
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "ReadArtifactRequest":
+        return cls(
+            tenant_id=str(value.get("tenant_id", "")),
+            user_id=str(value.get("user_id", "")),
+            session_id=str(value.get("session_id", "")),
+            request_id=str(value.get("request_id", "")),
+            run_id=str(value.get("run_id", "")),
+            artifact_id=str(value.get("artifact_id", "")),
+        )
+
+
+@dataclass(frozen=True)
+class ArtifactContent:
+    """Artifact file text; ``stale`` means the workspace file's digest no
+    longer matches the committed artifact digest."""
+
+    artifact_id: str
+    reference: str
+    text: str
+    stale: bool
+
+    def to_dict(self) -> dict[str, JSONValue]:
+        return {
+            "artifact_id": self.artifact_id,
+            "reference": self.reference,
+            "text": self.text,
+            "stale": self.stale,
+        }
 
 
 @dataclass(frozen=True)

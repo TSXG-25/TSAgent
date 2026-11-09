@@ -1,18 +1,16 @@
 import { useState, type FormEvent } from "react";
 import { delegateToPlanet } from "./delegate";
-import { pickFiles } from "../service/tauriBridge";
-import { Icon } from "./ui";
+import { Icon, requestIdForRun } from "./ui";
 import type { RunCtx } from "./runCtx";
 
 const BUSY = new Set(["active", "pending"]);
 
 /** Shared AgentComposer — "same as Omni input". Planet-bound task dispatch
  *  via delegateToPlanet. Supports @planet delegation and /slash shortcuts
- *  (/mars x → @mars x, /model <m> → local hint, /help). Model select is a
- *  display+hint surface until a model-setting wire exists per-run. */
+ *  (/mars x → @mars x, /model <m> → local hint, /help). The model pick rides
+ *  the run's metadata.agent_profile.model_ref — a real per-run override. */
 const PLANETS = ["sun","mercury","venus","earth","mars","jupiter","saturn","uranus","neptune","pluto"];
 const MODELS = ["deepseek-chat", "deepseek-reasoner"];
-const EFFORTS = ["默认", "low", "medium", "high"];
 const PERMISSIONS = [
   { id: "Read-only", icon: "◧", desc: "Answer only, no file changes" },
   { id: "Ask", icon: "◈", desc: "Confirm each write operation" },
@@ -26,6 +24,42 @@ export default function AgentComposer({ ctx, planet, placeholder }: { ctx: RunCt
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [files, setFiles] = useState<string[]>([]);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [wsFiles, setWsFiles] = useState<{ path: string }[] | null>(null);
+  const [wsError, setWsError] = useState<string | null>(null);
+  const [wsFilter, setWsFilter] = useState("");
+  const refLabel = (ref: string) => ref.split(":").slice(1).join(":").split("/").pop() ?? ref;
+  const toggleRef = (ref: string) => setFiles((x) => x.includes(ref) ? x.filter((f) => f !== ref) : [...x, ref]);
+  const openPicker = () => {
+    setPickerOpen((o) => !o);
+    if (pickerOpen) return;
+    setWsError(null); setWsFiles(null);
+    void ctx.service.listWorkspaceFiles({
+      tenantId: ctx.service.identity.tenantId,
+      sessionId: ctx.sessionId,
+      requestId: requestIdForRun(0),
+    }).then(setWsFiles).catch((e) => setWsError(String(e instanceof Error ? e.message : e)));
+  };
+  const pickFromFinder = () => {
+    const pick = ("__TAURI_INTERNALS__" in window)
+      ? import("@tauri-apps/plugin-dialog").then(({ open }) =>
+          open({ multiple: true, title: "添加文件" }).then((r) => (r === null ? [] : Array.isArray(r) ? r : [r])))
+      : ctx.service.pickFiles().then((r) => r.paths);
+    void pick
+      .then((paths) => paths.length === 0 ? { contextRefs: [] as string[] } : ctx.service.attachFiles({
+        tenantId: ctx.service.identity.tenantId,
+        userId: ctx.service.identity.userId,
+        sessionId: ctx.sessionId,
+        requestId: requestIdForRun(0),
+        paths,
+      }))
+      .then((r) => {
+        if (r.contextRefs.length === 0) return;
+        setFiles((x) => [...x, ...r.contextRefs.filter((ref) => !x.includes(ref))]);
+        setPickerOpen(false);
+      })
+      .catch((e) => setWsError(String(e instanceof Error ? e.message : e)));
+  };
   const [perm, setPerm] = useState(() => localStorage.getItem("tsagent:permission") ?? "Ask");
   const [permOpen, setPermOpen] = useState(false);
   const pickPerm = (id: string) => { setPerm(id); localStorage.setItem("tsagent:permission", id); setPermOpen(false); };
@@ -35,9 +69,7 @@ export default function AgentComposer({ ctx, planet, placeholder }: { ctx: RunCt
   const pct = Math.min(estTokens / 1000000, 1);
   const R = 9, C = 2 * Math.PI * R;
   const [model, setModel] = useState("default");
-  const [effort, setEffort] = useState("默认");
   const [modelOpen, setModelOpen] = useState(false);
-  const [pane, setPane] = useState<"root" | "model" | "effort">("root");
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -54,7 +86,7 @@ export default function AgentComposer({ ctx, planet, placeholder }: { ctx: RunCt
     try {
       const target = m ? m[1].toLowerCase() : (planet ?? "sun");
       await delegateToPlanet(ctx, target, m ? m[2] : t, files, {
-        ...(model !== "default" || effort !== "默认" ? { model: model === "default" ? undefined : model, effort: effort === "默认" ? undefined : effort } : {}),
+        ...(model !== "default" ? { model } : {}),
       });
       if (files.length && ctx.activeRun) {
         window.dispatchEvent(new CustomEvent("tsagent:run-attachments", { detail: { runId: ctx.activeRun.runId, files } }));
@@ -76,14 +108,35 @@ export default function AgentComposer({ ctx, planet, placeholder }: { ctx: RunCt
         <div className="ac-chips">
           {files.map((f, i) => (
             <span className="ac-chip" key={i} title={f}>
-              {f.split("/").pop()}
+              {refLabel(f)}
               <i onClick={() => setFiles((x) => x.filter((_, j) => j !== i))}>✕</i>
             </span>
           ))}
         </div>
       )}
       <div className="ac-tools">
-        <button className="ac-attach" onClick={() => void pickFiles().then((f) => setFiles((x) => [...x, ...f]))} title="Add files" type="button">＋</button>
+        <div className="ac-attachwrap">
+          <button className="ac-attach" onClick={openPicker} title="Attach workspace file" type="button">＋</button>
+          {pickerOpen && (
+            <div className="ac-filepicker">
+              <button className="ac-fp-row" onClick={pickFromFinder} type="button">
+                <span>从 Finder 选择…</span>
+              </button>
+              <input autoFocus className="ac-fp-filter" onChange={(e) => setWsFilter(e.target.value)} placeholder="筛选…" value={wsFilter} />
+              {wsError && <p className="omni-empty">{wsError}</p>}
+              {!wsError && wsFiles === null && <p className="omni-empty">…</p>}
+              {(wsFiles ?? []).filter((f) => !wsFilter || f.path.toLowerCase().includes(wsFilter.toLowerCase())).map((f) => {
+                const ref = `file:${f.path}`;
+                return (
+                  <button className={`ac-fp-row ${files.includes(ref) ? "on" : ""}`} key={f.path} onClick={() => toggleRef(ref)} type="button">
+                    <span>{f.path}</span>{files.includes(ref) && <i>✓</i>}
+                  </button>
+                );
+              })}
+              {wsFiles !== null && wsFiles.length === 0 && !wsError && <p className="omni-empty">工作区为空</p>}
+            </div>
+          )}
+        </div>
         <div className="ac-permwrap">
           <button className="ac-perm" onClick={() => setPermOpen((o) => !o)} title="Permission preset (local preference)" type="button">{perm} ▾</button>
           {permOpen && (
@@ -109,45 +162,25 @@ export default function AgentComposer({ ctx, planet, placeholder }: { ctx: RunCt
         </span>
         <div className="ac-modelwrap">
           <button className="ac-modeltrig" onClick={() => setModelOpen((o) => !o)} type="button">
-            {model === "default" ? "Select model" : model} <em>{effort}</em> ▾
+            {model === "default" ? "Select model" : model} ▾
           </button>
           {modelOpen && (
             <div className="ac-modelmenu">
-              {pane === "root" ? (
-                <>
-                  <button className="ac-mrow" onClick={() => setPane("model")} type="button">
-                    <span>Model</span><em>{model === "default" ? "—" : model}</em><i>›</i>
-                  </button>
-                  <button className="ac-mrow" onClick={() => setPane("effort")} type="button">
-                    <span>Effort</span><em>{effort}</em><i>›</i>
-                  </button>
-                </>
-              ) : pane === "model" ? (
-                <>
-                  <button className="ac-mrow back" onClick={() => setPane("root")} type="button">‹ Model</button>
-                  {["default", ...MODELS].map((m) => (
-                    <button className={`ac-mrow ${model === m ? "on" : ""}`} key={m} onClick={() => { setModel(m); setPane("root"); setModelOpen(false); }} type="button">
-                      <span>{m === "default" ? "默认模型" : m}</span>{model === m && <i>✓</i>}
-                    </button>
-                  ))}
-                </>
-              ) : (
-                <>
-                  <button className="ac-mrow back" onClick={() => setPane("root")} type="button">‹ Effort</button>
-                  {EFFORTS.map((e) => (
-                    <button className={`ac-mrow ${effort === e ? "on" : ""}`} key={e} onClick={() => { setEffort(e); setPane("root"); setModelOpen(false); }} type="button">
-                      <span>{e}</span>{effort === e && <i>✓</i>}
-                    </button>
-                  ))}
-                </>
-              )}
+              {["default", ...MODELS].map((m) => (
+                <button className={`ac-mrow ${model === m ? "on" : ""}`} key={m} onClick={() => { setModel(m); setModelOpen(false); }} type="button">
+                  <span>{m === "default" ? "默认模型" : m}</span>{model === m && <i>✓</i>}
+                </button>
+              ))}
             </div>
           )}
         </div>
         {ctx.activeRun && ctx.activeRun.sessionId === ctx.sessionId && BUSY.has(ctx.activeRun.status) ? (
+          <>
+          <button className="ac-send ac-pause" onClick={() => { void ctx.controller.pauseRun(ctx.activeRun!.runId).catch(() => {}); }} title="暂停" type="button">❚❚</button>
           <button className="ac-send ac-stop" onClick={() => { void ctx.controller.cancelRun(ctx.activeRun!.runId).catch(() => {}); }} title="停止" type="button">
             <Icon name="x" size={12} />
           </button>
+          </>
         ) : (
           <button className="ac-send" disabled={busy || !text.trim()} type="submit">
             <Icon name="send" size={14} />
@@ -156,7 +189,7 @@ export default function AgentComposer({ ctx, planet, placeholder }: { ctx: RunCt
       </div>
       {text.endsWith("@") && (
         <div className="ac-atmenu">
-          <button className="ac-at-item" onClick={() => { setText((t) => t.slice(0, -1)); void pickFiles().then((f) => setFiles((x) => [...x, ...f])); }} type="button">📎 文件</button>
+          <button className="ac-at-item" onClick={() => { setText((t) => t.slice(0, -1)); openPicker(); }} type="button">📎 文件</button>
           {PLANETS.map((p) => (
             <button className="ac-at-item" key={p} onClick={() => setText((t) => t + p + " ")} type="button">@{p}</button>
           ))}

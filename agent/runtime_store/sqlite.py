@@ -4104,6 +4104,61 @@ class SqliteRuntimeStore:
             (tenant_id, run_id),
         )
 
+    @staticmethod
+    def _active_run_is_orphan(
+        lease_expires_at: str | None,
+        updated_at: str,
+        now: str,
+        lease_grace: str,
+    ) -> bool:
+        """Liveness predicate shared by session admission and the startup
+        sweep: live lease (unexpired) or a just-created head still inside the
+        lease-acquisition grace — anything else is an orphan."""
+        if lease_expires_at is not None and lease_expires_at > now:
+            return False
+        if lease_expires_at is None and updated_at > lease_grace:
+            return False
+        return True
+
+    def converge_orphaned_runs(self) -> int:
+        """Startup sweep: fail every active head whose worker is provably
+        gone, across all tenants/sessions — same predicate as the
+        per-session admission check, in one writer transaction."""
+        now = _now()
+        lease_grace = (
+            datetime.now(timezone.utc) - timedelta(seconds=WORKER_LEASE_SECONDS)
+        ).isoformat().replace("+00:00", "Z")
+        with self._write_transaction() as connection:
+            rows = connection.execute(
+                """
+                SELECT tenant_id, session_id, run_id, current_revision,
+                       updated_at
+                FROM run_heads
+                WHERE run_status IN ('CREATED', 'RUNNING', 'CANCELLING')
+                """,
+            ).fetchall()
+            converged = 0
+            for row in rows:
+                lease = connection.execute(
+                    """
+                    SELECT expires_at FROM run_worker_leases
+                    WHERE tenant_id = ? AND run_id = ?
+                    """,
+                    (row["tenant_id"], row["run_id"]),
+                ).fetchone()
+                if not self._active_run_is_orphan(
+                    None if lease is None else str(lease["expires_at"]),
+                    str(row["updated_at"]),
+                    now,
+                    lease_grace,
+                ):
+                    continue
+                self._converge_orphaned_run_tx(
+                    connection, row["tenant_id"], row["session_id"], row, now
+                )
+                converged += 1
+            return converged
+
     def _assert_session_run_available_tx(
         self,
         connection: sqlite3.Connection,
@@ -4134,15 +4189,12 @@ class SqliteRuntimeStore:
                 """,
                 (tenant_id, run_id),
             ).fetchone()
-            if lease is not None and str(lease["expires_at"]) > now:
-                raise DurableStoreError(
-                    StoreErrorCode.SESSION_RUN_ACTIVE,
-                    f"Run {run_id} is already active in this session",
-                    details={"active_run_id": run_id},
-                )
-            if lease is None and str(row["updated_at"]) > lease_grace:
-                # A just-created head may still be acquiring its worker
-                # lease; do not reap it out from under a live worker.
+            if not self._active_run_is_orphan(
+                None if lease is None else str(lease["expires_at"]),
+                str(row["updated_at"]),
+                now,
+                lease_grace,
+            ):
                 raise DurableStoreError(
                     StoreErrorCode.SESSION_RUN_ACTIVE,
                     f"Run {run_id} is already active in this session",

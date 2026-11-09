@@ -7,9 +7,11 @@ import type { RunController } from "../features/runs/runController";
  *  every workspace. Owns no state itself — App is the source of truth. */
 export interface RunCtx {
   /** UI-selected session — composer sends target this scope. */
-  sessionId?: string;
+  sessionId: string;
   /** Session-bound workspace root — runs scoped to this dir. */
   workspacePath?: string;
+  /** The only UI path that switches service.identity.sessionId. */
+  selectSession: (sessionId: string) => void;
   service: DesktopAgentServiceClient;
   runtimeLabel: string;
   controller: RunController;

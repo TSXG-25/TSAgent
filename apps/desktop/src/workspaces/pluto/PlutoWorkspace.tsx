@@ -22,7 +22,7 @@ export default function PlutoWorkspace({ ctx }: { ctx: RunCtx }) {
 
   const req = useCallback(() => ({ tenantId: service.identity.tenantId, sessionId: service.identity.sessionId, requestId: requestIdForRun(0) }), [service]);
   const refresh = useCallback(async () => {
-    try { setMotifs(await service.listMotifs(req() as never)); setErr(null); } catch (e) { setErr(String(e)); }
+    try { setMotifs(await service.listMotifs(req())); setErr(null); } catch (e) { setErr(String(e)); }
   }, [service, req]);
   useEffect(() => { void refresh(); const t = setInterval(() => void refresh(), 8000); return () => clearInterval(t); }, [refresh]);
 
@@ -33,7 +33,7 @@ export default function PlutoWorkspace({ ctx }: { ctx: RunCtx }) {
     e.preventDefault();
     if (!draft.trim()) return;
     setBusy(true);
-    try { await service.createMotif({ ...req(), text: draft.trim(), source: autoSrc ? "auto" : "user" } as never); setDraft(""); await refresh(); }
+    try { await service.createMotif({ ...req(), text: draft.trim(), source: autoSrc ? "auto" : "user" }); setDraft(""); await refresh(); }
     catch (e) { setErr(String(e)); } finally { setBusy(false); }
   }
   async function judge(m: MotifSummary, ok: boolean) {
@@ -42,7 +42,7 @@ export default function PlutoWorkspace({ ctx }: { ctx: RunCtx }) {
     const resolution = window.prompt("汇报——这轮探索真正搞明白了什么？", m.resolution || "");
     if (!resolution?.trim()) return;
     setBusy(true);
-    try { await service.resolveMotif({ ...req(), motifId: m.motifId, resolutionRunId: ctx.activeRun?.runId ?? "", resolution: resolution.trim() } as never); await refresh(); }
+    try { await service.resolveMotif({ ...req(), motifId: m.motifId, resolutionRunId: ctx.activeRun?.runId ?? "", resolution: resolution.trim() }); await refresh(); }
     catch (e) { setErr(String(e)); } finally { setBusy(false); }
   }
 
@@ -90,7 +90,7 @@ export default function PlutoWorkspace({ ctx }: { ctx: RunCtx }) {
                 {cur.status === "exploring" && (
                   <button className="btn secondary" disabled={busy} onClick={() => {
                     const r = window.prompt("汇报——这轮探索真正搞明白了什么？", cur.resolution || "");
-                    if (r?.trim()) void (async () => { setBusy(true); try { await service.resolveMotif({ ...req(), motifId: cur.motifId, resolutionRunId: ctx.activeRun?.runId ?? "", resolution: r.trim() } as never); await refresh(); } catch (e) { setErr(String(e)); } finally { setBusy(false); } })();
+                    if (r?.trim()) void (async () => { setBusy(true); try { await service.resolveMotif({ ...req(), motifId: cur.motifId, resolutionRunId: ctx.activeRun?.runId ?? "", resolution: r.trim() }); await refresh(); } catch (e) { setErr(String(e)); } finally { setBusy(false); } })();
                   }} type="button">◉ 记录汇报</button>
                 )}
                 <button className="btn primary" disabled={busy || cur.status === "resolved"} onClick={() => void judge(cur, true)} type="button">认可</button>

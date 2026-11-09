@@ -98,6 +98,25 @@ function workflow(
   };
 }
 
+/** Mock artifact file text, keyed on the well-known seed paths — the same
+ *  content the real read_artifact would return from the workspace. */
+export function artifactTextFor(path: string, verified: boolean): string {
+  if (path === "output/solution.py") return solutionSource;
+  if (path === "output/verification.json") {
+    return verified
+      ? verificationSource
+      : "{\n  \"status\": \"awaiting_resume\",\n  \"checks\": []\n}\n";
+  }
+  if (path === "logs/stdout.txt") return verified ? "49\n" : "No output captured yet.\n";
+  if (path === "output/architecture-summary.md") {
+    return "# v2.2C Resume Boundary\n\nRun-level coordination restores the active workflow while keeping stage facts in the checkpoint chain.\n";
+  }
+  if (path === "tests/test_context_isolation.py") {
+    return "def test_session_context_does_not_leak_run_state():\n    assert context_a.run_id != context_b.run_id\n";
+  }
+  return "";
+}
+
 function artifacts(runId: string, includeVerification = false): ArtifactView[] {
   return [
     {
@@ -107,7 +126,6 @@ function artifacts(runId: string, includeVerification = false): ArtifactView[] {
       size: "248 B",
       updatedAt: includeVerification ? "just now" : "2 min ago",
       status: includeVerification ? "verified" : "generated",
-      content: solutionSource,
     },
     {
       artifactId: `${runId}.verification`,
@@ -116,9 +134,6 @@ function artifacts(runId: string, includeVerification = false): ArtifactView[] {
       size: "172 B",
       updatedAt: includeVerification ? "just now" : "waiting",
       status: includeVerification ? "verified" : "pending",
-      content: includeVerification
-        ? verificationSource
-        : "{\n  \"status\": \"awaiting_resume\",\n  \"checks\": []\n}\n",
     },
     {
       artifactId: `${runId}.stdout`,
@@ -127,7 +142,6 @@ function artifacts(runId: string, includeVerification = false): ArtifactView[] {
       size: includeVerification ? "3 B" : "0 B",
       updatedAt: includeVerification ? "just now" : "waiting",
       status: includeVerification ? "verified" : "pending",
-      content: includeVerification ? "49\n" : "No output captured yet.\n",
     },
   ];
 }
@@ -369,8 +383,6 @@ export function createMockRuns(): RunView[] {
           size: "4.8 KB",
           updatedAt: "28 min ago",
           status: "verified",
-          content:
-            "# v2.2C Resume Boundary\n\nRun-level coordination restores the active workflow while keeping stage facts in the checkpoint chain.\n",
         },
       ],
       events: [
@@ -433,7 +445,6 @@ export function createMockRuns(): RunView[] {
           // A prior stage has already committed this artifact. Cancelling the
           // active Run must preserve and expose it as verified progress.
           status: "verified",
-          content: "def test_session_context_does_not_leak_run_state():\n    assert context_a.run_id != context_b.run_id\n",
         },
       ],
       events: [

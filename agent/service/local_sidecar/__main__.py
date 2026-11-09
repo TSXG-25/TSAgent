@@ -48,6 +48,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     service,
                     port=http_port,
                     diagnostics=sys.stderr,
+                    allowed_origins=config.allowed_origins,
                 )
                 return 0
             dispatcher = SidecarDispatcher(service, diagnostics=sys.stderr)

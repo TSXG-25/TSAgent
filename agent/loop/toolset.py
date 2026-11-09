@@ -182,6 +182,7 @@ def build_toolset(
     workflows: Sequence[Mapping[str, Any]] = (),
     skills: Mapping[str, Any] | None = None,
     mcp_tools: Sequence[Any] = (),
+    delegation_depth: int = 0,
 ) -> dict[str, LoopTool]:
     """Build the per-Run tool catalog under the intent-derived authorization."""
     tools: dict[str, LoopTool] = {}
@@ -318,35 +319,36 @@ def build_toolset(
         }),
     )
 
-    tools["spawn_subtask"] = LoopTool(
-        name="spawn_subtask",
-        executor_tool=None,
-        verb="execute",
-        risk_level="R1",
-        permission_scope="delegation",
-        side_effects=True,
-        spec=function_tool_spec("spawn_subtask", (
-            "把一个明确的子任务委派给子 Agent 执行并等待结果。"
-            "适合可独立完成的调研、文档、代码片段等任务；子任务有独立的 Run"
-            "和 Task 记录，结果作为工具结果返回。不要委派需要当前上下文的任务。"
-        ), {
-            "type": "object",
-            "properties": {
-                "request_text": {"type": "string", "description": "子任务的完整描述"},
-                "target_planet": {
-                    "type": "string",
-                    "description": "目标场景/星球（如 mercury/mars），留空为通用执行",
+    if delegation_depth < 1:
+        tools["spawn_subtask"] = LoopTool(
+            name="spawn_subtask",
+            executor_tool=None,
+            verb="execute",
+            risk_level="R1",
+            permission_scope="delegation",
+            side_effects=True,
+            spec=function_tool_spec("spawn_subtask", (
+                "把一个明确的子任务委派给子 Agent 执行并等待结果。"
+                "适合可独立完成的调研、文档、代码片段等任务；子任务有独立的 Run"
+                "和 Task 记录，结果作为工具结果返回。不要委派需要当前上下文的任务。"
+            ), {
+                "type": "object",
+                "properties": {
+                    "request_text": {"type": "string", "description": "子任务的完整描述"},
+                    "target_planet": {
+                        "type": "string",
+                        "description": "目标场景/星球（如 mercury/mars），留空为通用执行",
+                    },
+                    "profile_id": {"type": "string", "description": "目标 Agent Profile，可空"},
+                    "context_refs": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "传给子任务的上下文引用（文件路径、artifact id 等）",
+                    },
                 },
-                "profile_id": {"type": "string", "description": "目标 Agent Profile，可空"},
-                "context_refs": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "传给子任务的上下文引用（文件路径、artifact id 等）",
-                },
-            },
-            "required": ["request_text"],
-        }),
-    )
+                "required": ["request_text"],
+            }),
+        )
 
     if skills is None:
         from agent.skills import skills_index

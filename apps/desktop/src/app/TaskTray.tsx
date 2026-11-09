@@ -20,7 +20,7 @@ export default function TaskTray({ ctx }: { ctx: RunCtx }) {
           sessionId: service.identity.sessionId,
           requestId: requestIdForRun(0),
           status: "PENDING",
-        } as never),
+        }),
         service.listTasks(),
       ]);
       setApprovals(a);
@@ -45,7 +45,7 @@ export default function TaskTray({ ctx }: { ctx: RunCtx }) {
         approvalId: a.approvalId,
         decision,
         decidedBy: service.identity.userId,
-      } as never);
+      });
       await refresh();
     } finally { setBusy(null); }
   }

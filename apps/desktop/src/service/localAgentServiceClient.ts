@@ -73,6 +73,7 @@ import {
   type EvaluationSummary,
   type RecordEvaluationRequest,
   type ListEvaluationsRequest,
+  type AttachFilesRequest,
   type ListWorkspaceFilesRequest,
   type WorkspaceFileSummary,
   type WorkspaceFileContent,
@@ -82,6 +83,8 @@ import {
   type DelegateRunResult,
   type ListSchedulesRequest,
   type ListSessionsRequest,
+  type ReadArtifactRequest,
+  type ArtifactContent,
   type StartRunRequest,
   type TaskHandle,
   type TaskLookupRequest,
@@ -99,6 +102,7 @@ export type LocalClientOperation =
   | "get_run"
   | "get_task"
   | "list_artifacts"
+  | "read_artifact"
   | "read_events"
   | "cancel_run"
   | "pause_run";
@@ -1086,6 +1090,20 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
     return (await this.call("pick_folder", {} as LocalRpcParams)) as { path: string | null };
   }
 
+  async pickFiles(): Promise<{ paths: string[] }> {
+    return (await this.call("pick_files", {} as LocalRpcParams)) as { paths: string[] };
+  }
+
+  async attachFiles(request: AttachFilesRequest): Promise<{ contextRefs: string[] }> {
+    return (await this.call("attach_files", {
+      tenant_id: request.tenantId,
+      user_id: request.userId,
+      session_id: request.sessionId,
+      request_id: request.requestId,
+      paths: request.paths,
+    } as LocalRpcParams)) as { contextRefs: string[] };
+  }
+
   async listDirectory(path: string): Promise<DirectoryListing> {
     return (await this.call("list_directory", { path } as LocalRpcParams)) as DirectoryListing;
   }
@@ -1113,7 +1131,9 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
       session_id: request.sessionId,
       request_id: request.requestId,
       request_text: request.requestText,
+      task_id: request.taskId ?? "",
       workspace_root: request.workspaceRoot ?? "",
+      context_refs: request.contextRefs ?? [],
       metadata: { ...(request.metadata ?? {}), ...(request.requestDigest ? { desktop_request_digest: request.requestDigest } : {}) },
     };
     return this.project(async () => mapRunHandle(await this.call("start_run", params)));
@@ -1169,6 +1189,23 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
       const value = await this.call("list_artifacts", params);
       if (!Array.isArray(value)) throw new Error("list_artifacts result is not an array");
       return value.map((item) => mapArtifact(item, request.runId));
+    });
+  }
+
+  async readArtifact(request: ReadArtifactRequest): Promise<ArtifactContent> {
+    const params: LocalRpcParams = {
+      ...this.lookupParams(request, "read_artifact"),
+      artifact_id: request.artifactId,
+    };
+    return this.project(async () => {
+      const raw = await this.call("read_artifact", params);
+      if (!isRecord(raw)) throw new Error("read_artifact result is not an object");
+      return {
+        artifactId: requiredString(raw.artifact_id, "artifact_id"),
+        reference: requiredString(raw.reference, "artifact.reference"),
+        text: typeof raw.text === "string" ? raw.text : "",
+        stale: raw.stale === true,
+      };
     });
   }
 

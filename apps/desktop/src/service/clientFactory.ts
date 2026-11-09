@@ -6,6 +6,7 @@ import {
   type RunEvent,
   type RunHandle,
   type RunSnapshot,
+  type ArtifactContent,
   type ArtifactSummary,
   type StartRunRequest,
   type GetRunRequest,
@@ -36,6 +37,7 @@ import {
   type DirectoryListing,
   type TaskHandle,
   type TaskRecord,
+  type PauseRunRequest,
   type ResumeRunRequest,
   type ListArtifactsRequest,
   type EventStreamRequest,
@@ -170,6 +172,14 @@ export class UnavailableDesktopAgentServiceClient implements DesktopAgentService
   }
 
   async pickFolder(): Promise<{ path: string | null }> {
+    throw this.error;
+  }
+
+  async pickFiles(): Promise<{ paths: string[] }> {
+    throw this.error;
+  }
+
+  async attachFiles(): Promise<{ contextRefs: string[] }> {
     throw this.error;
   }
 
@@ -309,7 +319,7 @@ export class UnavailableDesktopAgentServiceClient implements DesktopAgentService
     throw this.error;
   }
 
-  async pauseRun(): Promise<RunSnapshot> {
+  async pauseRun(_request: PauseRunRequest): Promise<RunHandle> {
     throw this.error;
   }
 
@@ -318,6 +328,10 @@ export class UnavailableDesktopAgentServiceClient implements DesktopAgentService
   }
 
   async listArtifacts(_request: ListArtifactsRequest): Promise<ArtifactSummary[]> {
+    throw this.error;
+  }
+
+  async readArtifact(): Promise<ArtifactContent> {
     throw this.error;
   }
 

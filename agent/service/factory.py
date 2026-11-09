@@ -30,6 +30,10 @@ def create_default_agent_service(
 
     store = SqliteRuntimeStore.open(database_path)
     try:
+        # Reap runs whose worker died before the service accepts requests —
+        # otherwise crashed heads stay RUNNING and block their session or
+        # long-poll forever.
+        store.converge_orphaned_runs()
         contexts = ServiceContextFactory(
             store,
             workspace_root=workspace_root,

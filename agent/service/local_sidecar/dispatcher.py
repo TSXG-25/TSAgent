@@ -35,6 +35,7 @@ class SidecarDispatcher:
             LocalTransportMethod.PAUSE_RUN: self._pause_run,
             LocalTransportMethod.CANCEL_RUN: self._cancel_run,
             LocalTransportMethod.LIST_ARTIFACTS: self._list_artifacts,
+            LocalTransportMethod.READ_ARTIFACT: self._read_artifact,
             LocalTransportMethod.LIST_RUNS: self._list_runs,
             LocalTransportMethod.CREATE_TASK: self._create_task,
             LocalTransportMethod.LIST_TASKS: self._list_tasks,
@@ -76,6 +77,8 @@ class SidecarDispatcher:
             LocalTransportMethod.LIST_WORKSPACE_FILES: self._list_workspace_files,
             LocalTransportMethod.LIST_DIRECTORY: self._list_directory,
             LocalTransportMethod.PICK_FOLDER: self._pick_folder,
+            LocalTransportMethod.PICK_FILES: self._pick_files,
+            LocalTransportMethod.ATTACH_FILES: self._attach_files,
             LocalTransportMethod.REVEAL_PATH: self._reveal_path,
             LocalTransportMethod.ASSIGN_SESSION_WORKSPACE: self._assign_session_workspace,
             LocalTransportMethod.DELETE_WORKSPACE: self._delete_workspace,
@@ -393,6 +396,15 @@ class SidecarDispatcher:
     async def _pick_folder(self, params: Mapping[str, Any]) -> Any:
         return await self._service.pick_folder(type("Req", (), {})())
 
+    async def _pick_files(self, params: Mapping[str, Any]) -> Any:
+        return await self._service.pick_files(type("Req", (), {})())
+
+    async def _attach_files(self, params: Mapping[str, Any]) -> Any:
+        from ..contracts import AttachFilesRequest
+
+        request = self._from_dto(AttachFilesRequest.from_dict, params)
+        return await self._service.attach_files(request)
+
     async def _reveal_path(self, params: Mapping[str, Any]) -> Any:
         return await self._service.reveal_path(type("Req", (), {"path": params.get("path", "")})())
 
@@ -492,6 +504,12 @@ class SidecarDispatcher:
 
         request = self._from_dto(RunLookupRequest.from_dict, params)
         return await self._service.list_artifacts(request)
+
+    async def _read_artifact(self, params: Mapping[str, Any]) -> Any:
+        from ..contracts import ReadArtifactRequest
+
+        request = self._from_dto(ReadArtifactRequest.from_dict, params)
+        return await self._service.read_artifact(request)
 
     async def _read_events(self, params: Mapping[str, Any]) -> list[Any]:
         # A poll must return promptly when a live Run has no new event.  The

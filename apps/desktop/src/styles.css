@@ -3943,6 +3943,27 @@ html[data-fx="standard"] .ws-root::after { animation: none; }
 .rail-ico.accent { color: var(--planet-accent); }
 .rail-ico.accent:hover { background: color-mix(in srgb, var(--planet-accent) 15%, transparent); }
 
+/* thinking chain — work segments ("Worked for Ns") like the agent IDE */
+.think-seg { border-left: 1px solid rgba(160,190,255,.14); margin: 6px 0 6px 4px; }
+.think-seg summary { padding: 3px 0 3px 10px; font-size: 10.5px; color: var(--text-faint); cursor: pointer; list-style: none; }
+.think-seg summary::-webkit-details-marker { display: none; }
+.think-seg summary::before { content: "▸ "; color: rgba(160,190,255,.35); }
+.think-seg[open] summary::before { content: "▾ "; }
+.think-seg.live summary { color: var(--planet-accent); }
+.think-seg-body { padding: 2px 0 4px 10px; display: flex; flex-direction: column; gap: 2px; }
+.think-thought { margin: 2px 0; }
+.think-thought summary { font-size: 10px; color: rgba(160,190,255,.5); cursor: pointer; list-style: none; }
+.think-thought summary::-webkit-details-marker { display: none; }
+.think-thought summary::before { content: "▸ "; }
+.think-thought[open] summary::before { content: "▾ "; }
+.think-thought p { margin: 4px 0 4px 10px; font-size: 11px; line-height: 1.6; color: rgba(200,208,225,.55); white-space: pre-wrap; word-break: break-word; }
+.think-ran { display: flex; align-items: baseline; gap: 8px; font-size: 11px; color: var(--text-muted); }
+.think-ran .think-cmd { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: rgba(200,208,225,.8); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.think-ran.done .think-dot { color: #4ade80; }
+.think-ran.live .think-dot { color: var(--planet-accent); animation: thinkpulse 1.6s ease-in-out infinite; }
+.think-row { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-faint); }
+.think-row.done .think-dot { color: #4ade80; }
+.think-row.live .think-dot { color: var(--planet-accent); }
 /* thinking chain timeline */
 .think-list { padding: 4px 14px 10px; }
 .think-step { display: flex; align-items: center; gap: 9px; padding: 4px 0; font-size: 11px; color: var(--text-muted); position: relative; }

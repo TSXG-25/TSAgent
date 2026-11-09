@@ -179,7 +179,7 @@ def test_direct_chat_provider_failure_cannot_emit_completed(monkeypatch) -> None
 
     engine = IntentEngine()
     engine._llm = FailingLLM()
-    result = asyncio.run(engine.analyze_async(CognitiveContext(query="你好")))
+    result = asyncio.run(engine.analyze_async(CognitiveContext(query="请分析这段日志")))
 
     assert result.failure_code.startswith("PROVIDER_")
     assert result.failure_message

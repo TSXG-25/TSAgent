@@ -52,7 +52,7 @@ def _provider(monkeypatch, replies):
 def test_tsagent_run_returns_answer_and_rejects_empty(monkeypatch, tmp_path):
     from agent import TSAgent
 
-    provider = _provider(monkeypatch, [("你好", _intent("你好")), ("你好", "你好！我是助手。")])
+    provider = _provider(monkeypatch, [("你好", "你好！我是助手。")])
 
     async def scenario():
         agent = TSAgent(
@@ -86,9 +86,7 @@ def test_tsagent_history_crosses_facade_instances(monkeypatch, tmp_path):
     provider = _provider(
         monkeypatch,
         [
-            ("你好", _intent("你好")),
             ("你好", "你好！我是助手。"),
-            ("谢谢", _intent("谢谢")),
             ("谢谢", "不客气。"),
         ],
     )
@@ -119,8 +117,9 @@ def test_tsagent_history_crosses_facade_instances(monkeypatch, tmp_path):
     asyncio.run(scenario())
     assert not provider.replies
 
-    # calls: intent, answer (turn 1), intent, answer (turn 2)
-    second_call = provider.calls[3]
+    # calls: answer (turn 1), answer (turn 2); greetings resolve via
+    # cheap-chat intent without a provider round-trip.
+    second_call = provider.calls[1]
     assert any(
         isinstance(m, HumanMessage) and m.content == "你好" for m in second_call
     )
@@ -137,9 +136,7 @@ def test_tsagent_sessions_are_isolated_on_one_database(monkeypatch, tmp_path):
     provider = _provider(
         monkeypatch,
         [
-            ("你好", _intent("你好")),
             ("你好", "你好！我是助手。"),
-            ("谢谢", _intent("谢谢")),
             ("谢谢", "不客气。"),
         ],
     )
@@ -170,7 +167,7 @@ def test_tsagent_sessions_are_isolated_on_one_database(monkeypatch, tmp_path):
     asyncio.run(scenario())
     assert not provider.replies
 
-    second_call = provider.calls[3]
+    second_call = provider.calls[1]
     assert not any(
         isinstance(m, (HumanMessage, AIMessage)) and "你好" in str(m.content)
         for m in second_call

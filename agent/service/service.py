@@ -1249,19 +1249,31 @@ class AgentService:
             resolution_run_id=request.resolution_run_id,
             resolution=request.resolution.strip(),
         )
-        from agent.memory.long_term import _persist_fact
-
-        _persist_fact(
-            f"{request.tenant_id}:{request.user_id}",
-            "motif",
-            request.motif_id,
-            request.resolution.strip(),
-            scope="user",
-            action="INSERT",
-            evidence_id=request.request_id,
-            source_kind="motif",
-            source_ref=request.motif_id,
+        from agent.memory import MemoryPersistenceBoundary
+        from agent.memory.learning import (
+            MemoryLearningDecision,
+            MemoryPolicyProjection,
         )
+
+        decision = MemoryLearningDecision(
+            action="STORE",
+            memory_type="fact",
+            scope="user",
+            canonical_key=f"motif.{request.motif_id}",
+            value=request.resolution.strip(),
+            provenance={
+                "evidence_id": request.request_id,
+                "source_kind": "motif",
+                "source_ref": request.motif_id,
+            },
+            reason_code="motif_resolution",
+        )
+        policy = MemoryPolicyProjection(
+            scope="user",
+            namespace=f"{request.tenant_id}:{request.user_id}",
+            authorized_source_kinds=frozenset({"motif"}),
+        )
+        MemoryPersistenceBoundary.commit(decision, policy)
         return self._motif_summaries(request.tenant_id)
 
     def _motif_summary(self, record: Any) -> Any:

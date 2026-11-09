@@ -137,8 +137,7 @@ def test_agent_service_second_turn_sees_first_turn(monkeypatch, tmp_path) -> Non
     provider = _provider(
         monkeypatch,
         [
-            ("你好", intent("你好", domain="闲聊", action="answer")),
-        ("你好", "你好！我是助手。"),
+            ("你好", "你好！我是助手。"),
             (follow_up, intent(follow_up, domain="闲聊", action="answer")),
             (follow_up, "这是对上文的总结。"),
         ],
@@ -172,8 +171,7 @@ def test_conversation_history_survives_service_restart(monkeypatch, tmp_path) ->
     provider = _provider(
         monkeypatch,
         [
-            ("你好", intent("你好", domain="闲聊", action="answer")),
-        ("你好", "你好！我是助手。"),
+            ("你好", "你好！我是助手。"),
             (follow_up, intent(follow_up, domain="闲聊", action="answer")),
             (follow_up, "这是对上文的总结。"),
         ],

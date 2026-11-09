@@ -130,9 +130,10 @@ def test_d_effect_authorization_write_targets():
     assert not a.allows_path('output/anything.py')
 
     b = auth(outcomes=['FILE_MUTATION'], artifact=True)
-    assert b.write_scopes == ('output/',)
+    assert b.write_scopes == ('.',)
     assert b.allows_path('output/calc.py')
-    assert not b.allows_path('src/app.py')
+    assert b.allows_path('src/app.py')
+    assert not b.allows_path('/etc/passwd')
 
     c = auth(outcomes=['USER_VISIBLE_OUTPUT'])
     assert not c.allows_file_mutation

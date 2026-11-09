@@ -317,6 +317,8 @@ def test_cli_eof_waits_for_active_run_and_exits(monkeypatch) -> None:
 
     monkeypatch.setattr(builtins, "input", fake_input)
     monkeypatch.setattr(main_module, "load_all", lambda **_kwargs: None)
+    monkeypatch.setattr(main_module, "init_workspace", lambda *a, **k: None)
+    monkeypatch.setattr(main_module, "load_all_async", lambda *a, **k: asyncio.sleep(0))
     monkeypatch.setattr(sys, "argv", ["main.py"])
     monkeypatch.setattr(
         main_module,
@@ -357,6 +359,8 @@ def test_cli_queues_request_entered_while_run_is_active(monkeypatch, capsys) -> 
 
     monkeypatch.setattr(builtins, "input", fake_input)
     monkeypatch.setattr(main_module, "load_all", lambda **_kwargs: None)
+    monkeypatch.setattr(main_module, "init_workspace", lambda *a, **k: None)
+    monkeypatch.setattr(main_module, "load_all_async", lambda *a, **k: asyncio.sleep(0))
     monkeypatch.setattr(sys, "argv", ["main.py"])
     monkeypatch.setattr(
         main_module,

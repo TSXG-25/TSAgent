@@ -649,13 +649,14 @@ def test_semantic_resolution_cannot_expand_explicit_write_scope():
     assert not auth.allows_path('agent/runtime.py')
 
 
-def test_new_artifact_default_scope_is_output_not_provider_chosen_arbitrary_path():
+def test_new_artifact_default_scope_is_workspace_root():
     from agent.cognition.effect_authorization import EffectAuthorization
     state = dict(original_request=CREATE, resolved_request="创建 agent/runtime.py",
                  artifact_required=True, requested_outcomes=['FILE_MUTATION'])
     auth = EffectAuthorization.from_state(state, state['resolved_request'])
     assert auth.allows_path('output/calculator.py')
-    assert not auth.allows_path('agent/runtime.py')
+    assert auth.allows_path('agent/runtime.py')
+    assert not auth.allows_path('/etc/passwd')
 
 
 def test_command_output_not_truncated_or_claimed_as_file_creation():

@@ -58,12 +58,12 @@ _PLAN_REQUIREMENTS = {
 
 
 def _normalize_scope(value: str) -> str:
+    directory_scope = str(value or "").strip().replace("\\", "/").endswith("/")
     normalized = normalize_resource_path(value)
-    directory_scope = normalized.endswith("/")
     if normalized.startswith("./"):
         normalized = normalized[2:]
     if normalized.startswith("/"):
-        return normalized
+        return normalized + "/" if directory_scope and normalized != "/" else normalized
     normalized = PurePosixPath(normalized).as_posix()
     return normalized + "/" if directory_scope and normalized != "." else normalized
 

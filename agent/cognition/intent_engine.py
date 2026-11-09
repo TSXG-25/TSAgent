@@ -542,7 +542,10 @@ class IntentEngine:
             has_cue = any(c in user_input for c in cues)
             has_overlap = bool(
                 last_user
-                and any(tok in last_user for tok in user_input.split() if len(tok) > 1)
+                and (
+                    any(tok in last_user for tok in user_input.split() if len(tok) > 1)
+                    or any(tok in user_input for tok in last_user.split() if len(tok) > 1)
+                )
             )
             if not has_cue and not has_overlap:
                 relation = "new_request"

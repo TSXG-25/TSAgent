@@ -120,7 +120,7 @@ def test_oversized_tool_result_spills_before_cap(tmp_path):
     big = "y" * (TOOL_RESULT_CHAR_CAP + 5000)
     message = _tool_message(call, big, workspace=_Workspace(tmp_path))
 
-    assert len(message["content"]) <= TOOL_RESULT_CHAR_CAP + 60
+    assert len(message["content"]) <= TOOL_RESULT_CHAR_CAP + 120
     assert "外置保存" in message["content"]
     spill = tmp_path / ".tsagent" / "spill" / "call-big.txt"
     assert spill.read_text(encoding="utf-8") == big

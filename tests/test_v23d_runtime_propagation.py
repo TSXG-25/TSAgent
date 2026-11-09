@@ -178,7 +178,11 @@ def test_launcher_converges_observed_intent_to_single_cancelled_terminal(tmp_pat
     asyncio.run(scenario())
 
 
-def test_interruptible_provider_wait_aborts_without_fallback(tmp_path) -> None:
+def test_interruptible_provider_wait_aborts_without_fallback(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setenv("TSAGENT_LLM_PROVIDER", "auto")
+
     class _Provider:
         def __init__(self) -> None:
             self.calls = 0

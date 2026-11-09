@@ -67,7 +67,7 @@ def test_project_skills_load_from_repo():
     from agent.skills import load_project_skills
 
     loaded = load_project_skills()
-    assert set(loaded) == {"coding", "research"}
+    assert set(loaded) == {"coding", "research", "code-animation-prompts"}
 
 
 def test_workspace_skills_overlay_global_index(tmp_path):

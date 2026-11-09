@@ -130,17 +130,15 @@ AgentService.cancel_run 只记录用户取消意图，不声称执行已停止�
 
 ## 八、Resume 的实际分叉
 
-### Service resume：VERIFIED，但不是 checkpoint resume
+### Service resume：VERIFIED，经 RunResumeCoordinator
 
-AgentService.resume_run 会读取 run head、检查终态、准备 takeover writer/fence，然后由 RuntimeExecutionLauncher.resume 再次构造 UniversalAgent 并调用 runtime.run(request.request_text)。当前 Service DTO 的 checkpoint_id/action 没有被 launcher 用来恢复某个 Workflow stage；request_text 默认可以为空。
+AgentService.resume_run 会读取 run head、检查终态、准备 takeover writer/fence，然后由 RuntimeExecutionLauncher.resume → _resume_checkpoint 构造 RunResumeCoordinator 并调用 execute_or_resume：durable run index 缺失时提交 RUN_RESUME_INDEX_MISSING 的 BLOCKED 终态，否则用请求里的 checkpoint_id/action、workflow versions、artifacts 和 external guards 走 checkpoint 精确恢复；恢复期间工作区根从原 start intent 的 workspace_root 记录还原。
 
-这条路径证明的是 durable run 的重新接管/重新运行，不是从 RunCheckpoint 继续执行。
-
-### Workflow checkpoint/resume：实现存在，主路径未证明接入
+### Workflow checkpoint/resume：VERIFIED
 
 WorkflowExecutor 在收到 checkpoint_request 时会创建或恢复 RunCheckpoint，在 Stage 边界记录 checkpoint，并用 validate_resume 检查 workflow/version、artifacts、effects、external guards 和 ResumeAction。agent/run_resume/coordinator.py 能加载 index、hydrate artifacts、创建 WorkflowCheckpointRequest、调用 WorkflowExecutor 并提交 checkpoint/index。
 
-当前静态生产调用搜索没有找到 AgentService、Runtime、CLI 或 sidecar 调用 RunResumeCoordinator、resume_active、execute_or_resume 或构造 WorkflowCheckpointRequest 的路径。tests/test_run_resume_runtime.py 以及 realtest_reports 的 harness 会直接调用该协调器；这证明组件和测试场景，不证明公共 Service resume 已接线。
+生产调用点：RuntimeExecutionLauncher._resume_checkpoint（Service resume_run 入口）和 agent/loop/workflow_tool.py（运行中 workflow stage 的恢复/续跑）；tests/test_run_resume_runtime.py 覆盖组件行为。
 
 因此：
 
@@ -149,10 +147,8 @@ WorkflowExecutor 在收到 checkpoint_request 时会创建或恢复 RunCheckpoin
 | SQLite run head、revision、fence、事件、output、artifact | VERIFIED |
 | AgentService 的 takeover/re-launch resume | VERIFIED |
 | RunCheckpoint / ResumeValidator / WorkflowExecutor checkpoint 分支 | VERIFIED（组件/测试） |
-| RunResumeCoordinator 接入 AgentService.resume_run | DOCUMENTED_ONLY / 未找到生产调用 |
-| 主路径按 checkpoint stage 精确恢复 | 未证明 |
-
-README 和 ADR-0018 对 resume via checkpoint lineage 的描述比当前 Service 调用链更强，应视为待校正的文档债务。
+| RunResumeCoordinator 接入 AgentService.resume_run | VERIFIED |
+| 主路径按 checkpoint stage 精确恢复 | VERIFIED（Service resume + workflow tool 两条入口） |
 
 ## 九、Memory 与 Conversation
 
@@ -183,8 +179,8 @@ apps/desktop 的 clientFactory 默认 mode=mock；local mode 必须提供 tenant
 - Service 生命周期和 durable facts：agent/service 与 agent/runtime_store。
 - Runtime 状态和阶段转移：agent/runtime.py、agent/orchestrator。
 - Execution effect truth：agent/executor、ExecutionVerifier、Artifact/Workspace facts。
-- checkpoint resume 规则：agent/checkpoint、agent/run_resume，但其主路径接入仍未证明。
+- checkpoint resume 规则：agent/checkpoint、agent/run_resume，主路径经 RuntimeExecutionLauncher.resume 与 workflow_tool 接入。
 - Memory commit：agent/services/memory_service.py 与 agent/memory/persistence.py。
 - 公共契约：接受的 ADR 与对应的当前测试；过时叙述需要通过后续 ADR 校正。
 
-下一项最有价值的工程工作是先决定 Service resume 的正式契约：若目标是 checkpoint 精确恢复，需要明确由 Service 按 run/workflow 选择并调用 RunResumeCoordinator，随后补充主路径验收；若目标只是 re-launch，应相应降级 ADR/README 的表述。二者不应继续共用一个 resume 名称而不区分语义。
+Service resume 走 RunResumeCoordinator 的 checkpoint 精确恢复契约，此前"描述强于实现"的债务方向已消除；剩余工作是主路径端到端验收。

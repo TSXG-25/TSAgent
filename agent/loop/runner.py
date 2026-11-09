@@ -378,15 +378,8 @@ class AgentLoop:
             deltas: list[str] = []
             event_bus = getattr(run_context, "event_bus", None)
 
-            def _flush_delta() -> None:
-                if deltas and event_bus is not None:
-                    event_bus.emit("assistant_delta", {"delta": "".join(deltas)})
-                    deltas.clear()
-
             def _on_delta(text: str) -> None:
                 deltas.append(text)
-                if sum(len(part) for part in deltas) >= 80:
-                    _flush_delta()
 
             turn = await llm.achat(
                 transcript,
@@ -394,7 +387,13 @@ class AgentLoop:
                 on_delta=_on_delta if event_bus is not None else None,
                 model=str(_profile.get("model_ref") or "") or None,
             )
-            _flush_delta()
+            if deltas and event_bus is not None:
+                text = "".join(deltas)
+                # 工具轮的叙述属于思考过程；只有最终答复轮进入回复流。
+                if turn.tool_calls:
+                    event_bus.emit("assistant_note", {"text": text})
+                else:
+                    event_bus.emit("assistant_delta", {"delta": text})
             if getattr(turn, "usage", None):
                 totals = state.setdefault("token_usage", {})
                 for key, value in turn.usage.items():

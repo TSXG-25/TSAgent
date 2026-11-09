@@ -10,7 +10,7 @@ import {
   type StartRunRequest,
 } from "../../types/service";
 import type { RunView } from "../../types";
-import { foldLiveDelta, mergeRunEvents, projectRuntimeWorkflow, toRunView } from "../../service/viewMapper";
+import { foldAssistantNotes, foldLiveDelta, mergeRunEvents, projectRuntimeWorkflow, toRunView } from "../../service/viewMapper";
 
 export interface RunControllerState {
   runs: RunView[];
@@ -293,7 +293,10 @@ export class RunController {
 
     const next = toRunView(snapshot, artifacts, []);
     next.events = mergeRunEvents(current?.events ?? [], unseenEvents);
-    next.conversation = foldLiveDelta(next.conversation, next.events);
+    next.conversation = foldLiveDelta(
+      foldAssistantNotes(next.conversation, next.events),
+      next.events,
+    );
     this.projectRuntimeWorkflowIfMissing(next);
     this.runs.set(snapshot.runId, next);
     this.currentError = null;

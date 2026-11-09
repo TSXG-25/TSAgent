@@ -223,6 +223,28 @@ export function toServiceSnapshot(
   };
 }
 
+/** Fold assistant_note events into the conversation — intermediate-round
+ *  narration between tool calls. Each note becomes a durable assistant
+ *  message so the thinking chain's Thoughts blocks carry real content. */
+export function foldAssistantNotes(
+  conversation: RunView["conversation"],
+  events: RunEventView[],
+): RunView["conversation"] {
+  const base = conversation.filter((m) => !m.messageId.startsWith("note:"));
+  const notes = events
+    .filter((e) => e.eventType === "assistant_note")
+    .map((e) => ({
+      messageId: `note:${e.eventId}`,
+      role: "assistant" as const,
+      content: String(
+        (e.payload as Record<string, unknown> | undefined)?.text ?? "",
+      ),
+      at: e.timestamp ?? "",
+    }))
+    .filter((m) => m.content);
+  return [...base, ...notes];
+}
+
 /** Fold streamed assistant_delta events into the conversation — the live
  *  reply-in-progress renders as a single assistant message that updates as
  *  deltas arrive.  Finalized messages come from the snapshot; this only adds

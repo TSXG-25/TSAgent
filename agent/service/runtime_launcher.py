@@ -35,6 +35,7 @@ class RuntimeExecutionLauncher:
         "task_started",
         "task_completed",
         "assistant_delta",
+        "assistant_note",
         "token_usage",
     )
 

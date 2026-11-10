@@ -39,6 +39,10 @@ async def serve(
 
     import asyncio
 
+    # The Service may have been constructed outside an event loop — start
+    # the scheduler here so an idle sidecar still fires due schedules.
+    dispatcher._service._maybe_start_scheduler()
+
     try:
         while True:
             line = await asyncio.to_thread(stdin.readline)

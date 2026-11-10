@@ -1347,3 +1347,133 @@ def test_scheduler_autostarts_and_routes_target_planet(monkeypatch, tmp_path: Pa
             await service.close()
 
     asyncio.run(scenario())
+
+
+def test_sidecar_subprocess_autostarts_scheduler(tmp_path: Path) -> None:
+    """A05: 在事件循环外构造 Service 的真实 sidecar，空闲时也必须触发
+    已到期计划 — health 不需要经过 _ensure_open。"""
+    import json
+    import os
+    import subprocess
+    import sys
+    import time
+
+    from agent.runtime_store.sqlite import SqliteRuntimeStore
+
+    database = tmp_path / "sidecar-idle.sqlite"
+    store = SqliteRuntimeStore.open(database)
+    store.create_schedule(
+        "t", "sched-idle", "s", "idle fire", 3600,
+        user_id="u", next_fire_at="2020-01-01T00:00:00Z",
+    )
+    store.close()
+
+    env = dict(os.environ)
+    env.update({
+        "OPENAI_API_KEY": "",
+        "LLM_API_KEY": "",
+        "P2_SECONDARY_API_KEY": "",
+        "TSAGENT_LLM_PROVIDER": "ollama",
+        "OLLAMA_BASE_URL": "http://127.0.0.1:1/v1",
+        "HF_HUB_OFFLINE": "1",
+        "TRANSFORMERS_OFFLINE": "1",
+    })
+    process = subprocess.Popen(
+        [
+            sys.executable, "-m", "agent.service.local_sidecar",
+            "--database", str(database),
+        ],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=env,
+        cwd=Path(__file__).resolve().parents[1],
+    )
+    try:
+        assert process.stdin is not None and process.stdout is not None
+        process.stdin.write(json.dumps(
+            {"id": "h1", "method": "health", "params": {}}
+        ) + "\n")
+        process.stdin.flush()
+        process.stdout.readline()
+        record = None
+        for _ in range(100):
+            store = SqliteRuntimeStore.open(database)
+            records = store.list_schedules("t")
+            store.close()
+            if records and records[0].fire_count:
+                record = records[0]
+                break
+            time.sleep(0.1)
+        assert record is not None and record.fire_count >= 1
+        assert record.last_run_id
+    finally:
+        process.terminate()
+        process.wait(timeout=10)
+
+
+def test_scheduler_routes_profile_to_execution(monkeypatch, tmp_path: Path) -> None:
+    """A05: target_planet 的执行路由 — 匹配 planet_affinity 的 profile
+    经 metadata.agent_profile 进入 RunContext。"""
+    import asyncio
+
+    import tests.test_ha_r1_harness as harness
+    from agent.runtime_store.sqlite import SqliteRuntimeStore
+    from agent.service.context_factory import ServiceContextFactory
+    from agent.service.runtime_launcher import RuntimeExecutionLauncher
+    from agent.service.service import AgentService
+
+    harness.setup_provider(monkeypatch, [
+        ("profile route", harness.intent("profile route", artifact=False)),
+        ("profile route", "done"),
+    ])
+
+    class SpyLauncher:
+        def __init__(self) -> None:
+            self._inner = RuntimeExecutionLauncher()
+            self.seen_profile: dict = {}
+
+        async def start(self, **kwargs):
+            context = kwargs["run_context"]
+            self.seen_profile = dict(
+                getattr(context, "agent_profile", {}) or {}
+            )
+            return await self._inner.start(**kwargs)
+
+        async def resume(self, **kwargs):
+            return await self._inner.resume(**kwargs)
+
+    async def scenario() -> None:
+        store = SqliteRuntimeStore.open(tmp_path / "runtime.sqlite")
+        spy = SpyLauncher()
+        service = AgentService(
+            runtime_store=store,
+            launcher=spy,
+            context_factory=ServiceContextFactory(
+                store, workspace_root=tmp_path
+            ),
+        )
+        try:
+            store.upsert_profile(
+                "t", "prof-mars",
+                planet_affinity="mars",
+                model_ref="fake-mars-model",
+                skill_refs_json='["cap"]',
+                permission_policy_json='{"tier":"low"}',
+            )
+            store.create_schedule(
+                "t", "sched-m", "s", "profile route", 3600,
+                user_id="u", target_planet="mars",
+                next_fire_at="2020-01-01T00:00:00Z",
+            )
+            for _ in range(200):
+                if spy.seen_profile:
+                    break
+                await asyncio.sleep(0.05)
+            assert spy.seen_profile["profile_id"] == "prof-mars"
+            assert spy.seen_profile["model_ref"] == "fake-mars-model"
+        finally:
+            await service.close()
+
+    asyncio.run(scenario())

@@ -34,6 +34,8 @@ def run_http_sidecar(
     dispatcher = SidecarDispatcher(service, diagnostics=diagnostics)
     loop = asyncio.new_event_loop()
     threading.Thread(target=loop.run_forever, daemon=True).start()
+    # Same autostart as the stdio path — the Service was built outside a loop.
+    loop.call_soon_threadsafe(service._maybe_start_scheduler)
     allowed_hosts = {f"127.0.0.1:{port}", f"localhost:{port}"}
 
     class Handler(BaseHTTPRequestHandler):

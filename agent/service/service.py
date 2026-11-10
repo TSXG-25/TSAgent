@@ -1985,6 +1985,25 @@ class AgentService:
             claimed = self._store.claim_due_schedules_all(now, limit=10)
             for schedule in claimed:
                 try:
+                    import json as _json
+
+                    # target_planet 同时进入执行路由 — 与 planet_affinity
+                    # 匹配的 profile 经 metadata.agent_profile 交给 Runtime。
+                    profile = (
+                        next(
+                            (
+                                p
+                                for p in self._store.list_profiles(
+                                    schedule.tenant_id
+                                )
+                                if p.planet_affinity
+                                == schedule.target_planet
+                            ),
+                            None,
+                        )
+                        if schedule.target_planet
+                        else None
+                    )
                     handle = await self.start_run(
                         StartRunRequest(
                             tenant_id=schedule.tenant_id,
@@ -1999,6 +2018,20 @@ class AgentService:
                             ),
                             request_text=schedule.request_text,
                             origin_planet=schedule.target_planet,
+                            metadata={
+                                "agent_profile": {
+                                    "profile_id": profile.profile_id,
+                                    "model_ref": profile.model_ref,
+                                    "skill_refs": _json.loads(
+                                        profile.skill_refs_json or "[]"
+                                    ),
+                                    "permission_policy": _json.loads(
+                                        profile.permission_policy_json or "{}"
+                                    ),
+                                }
+                                if profile is not None
+                                else {},
+                            },
                         )
                     )
                     self._store.update_schedule_run(

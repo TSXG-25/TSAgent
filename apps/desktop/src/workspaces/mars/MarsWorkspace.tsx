@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { SCENES } from "../../app/scenes";
 import { WorkspaceFrame } from "../../design-system/WorkspaceFrame";
 import AgentComposer from "../../app/AgentComposer";
 import { requestIdForRun, StatusBadge, Icon } from "../../app/ui";
 import type { RunCtx } from "../../app/runCtx";
 import type { WorkspaceFileSummary } from "../../types/service";
+import { ForgeDocumentSession } from "./documentSession";
 
 /** Forge per hand-drawn spec §6 — mode rail | file tree | tabs+editor w/
  *  line numbers | right control rail | AgentComposer. Code mode first. */
@@ -20,44 +21,50 @@ export default function MarsWorkspace({ ctx }: { ctx: RunCtx }) {
   const scene = SCENES[4];
   const [mode, setMode] = useState("code");
   const [files, setFiles] = useState<WorkspaceFileSummary[]>([]);
-  const [sel, setSel] = useState<string | null>(null);
-  const [doc, setDoc] = useState<{ path: string; text: string; digest: string; redacted: boolean } | null>(null);
-  const [content, setContent] = useState("");
-  const [dirty, setDirty] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  // Document identity gate: only the response to the latest read may
-  // replace the editor document — an earlier in-flight read (A/B switch,
-  // workspace switch) is dropped instead of clobbering the current doc.
-  const readSeq = useRef(0);
+  const [, bump] = useState(0);
+  // The session binds the document (path + workspace identity + baseline +
+  // draft); it survives selection churn and rejects writes when the bound
+  // workspace or baseline no longer matches.
+  const session = useMemo(
+    () =>
+      new ForgeDocumentSession(
+        service,
+        () => ({ tenantId: service.identity.tenantId, sessionId: service.identity.sessionId }),
+        () => bump((v) => v + 1),
+      ),
+    [service],
+  );
+  const doc = session.doc;
 
-  const req = useCallback(() => ({ tenantId: service.identity.tenantId, sessionId: service.identity.sessionId, requestId: requestIdForRun(0) }), [service]);
   useEffect(() => {
-    service.listWorkspaceFiles(req()).then(setFiles).catch((e) => setErr(String(e)));
-  }, [service, req]);
+    const identity = service.identity;
+    service
+      .listWorkspaceFiles({
+        tenantId: identity.tenantId,
+        sessionId: identity.sessionId,
+        requestId: requestIdForRun(0),
+      })
+      .then(setFiles)
+      .catch((e) => setErr(String(e)));
+  }, [service]);
 
   async function openFile(path: string) {
-    const seq = ++readSeq.current;
-    setSel(path); setDirty(false); setErr(null);
+    setErr(null);
     try {
-      const c = await service.readWorkspaceFile({ ...req(), path });
-      if (seq !== readSeq.current) return;
-      setDoc({ path: c.path, text: c.text, digest: c.digest, redacted: c.redacted });
-      setContent(c.text);
+      if (!(await session.open(path))) {
+        if (!window.confirm(`Discard unsaved changes to ${session.doc?.path ?? "current file"}?`)) return;
+        await session.open(path, { discardDraft: true });
+      }
+    } catch (e) {
+      setErr(String(e));
     }
-    catch (e) { if (seq === readSeq.current) setErr(String(e)); }
   }
+
   async function save() {
-    if (!doc || doc.redacted) return;
-    setSaving(true);
-    // STALE_DOCUMENT leaves the draft in place so the user can re-read
-    // and merge instead of silently losing edits.
-    try {
-      const saved = await service.writeWorkspaceFile({ ...req(), path: doc.path, content, baseDigest: doc.digest });
-      setDoc((d) => (d ? { ...d, digest: saved.digest } : d));
-      setDirty(false);
-    }
-    catch (e) { setErr(String(e)); } finally { setSaving(false); }
+    setErr(null);
+    try { await session.save(); }
+    catch (e) { setErr(String(e)); }
   }
 
   return (
@@ -75,7 +82,7 @@ export default function MarsWorkspace({ ctx }: { ctx: RunCtx }) {
         <aside className="forge-tree">
           <h4 className="ws-mod">Explorer</h4>
           {files.map((f) => (
-            <button className={`forge-file ${sel === f.path ? "on" : ""}`} key={f.path} onClick={() => void openFile(f.path)} type="button">
+            <button className={`forge-file ${doc?.path === f.path ? "on" : ""}`} key={f.path} onClick={() => void openFile(f.path)} type="button">
               {f.path}
             </button>
           ))}
@@ -84,17 +91,25 @@ export default function MarsWorkspace({ ctx }: { ctx: RunCtx }) {
         {/* Tabs + editor */}
         <main className="forge-editor">
           <div className="ws-hud"><span className="hud-mark">◈</span>
-            <div className="ws-hud-info"><strong>{sel ?? "Forge"}</strong>
+            <div className="ws-hud-info"><strong>{doc?.path ?? "Forge"}</strong>
               <small>{ctx.activeRun ? <code>{ctx.activeRun.runId} · {ctx.activeRun.status}</code> : "no active run"}</small></div>
           </div>
           <div className="forge-tabs">
-            {sel ? <span className="forge-tab on">{sel}{dirty ? " ●" : ""}{doc?.redacted ? " · read-only" : ""}</span> : <span className="forge-tab">no file</span>}
-            {sel && !doc?.redacted && <button className="forge-save" disabled={!dirty || saving} onClick={() => void save()} type="button">{saving ? "…" : "Save"}</button>}
+            {doc ? (
+              <span className="forge-tab on">
+                {doc.path}{session.dirty ? " ●" : ""}{doc.redacted ? " · read-only" : ""}
+              </span>
+            ) : <span className="forge-tab">no file</span>}
+            {doc && !doc.redacted && (
+              <button className="forge-save" disabled={!session.dirty || session.saving} onClick={() => void save()} type="button">
+                {session.saving ? "…" : "Save"}
+              </button>
+            )}
           </div>
           <div className="forge-code">
-            {sel && doc ? content.split("\n").map((l, i) => (
+            {doc ? session.content.split("\n").map((l, i) => (
               <div className="forge-line" key={`${doc.path}:${i}`}><span>{i + 1}</span><textarea className="forge-line-edit" value={l} readOnly={doc.redacted} onChange={(e) => {
-                const lines = content.split("\n"); lines[i] = e.target.value; setContent(lines.join("\n")); setDirty(true);
+                const lines = session.content.split("\n"); lines[i] = e.target.value; session.edit(lines.join("\n"));
               }} rows={1} /></div>
             )) : <div className="empty-state"><p>Select a file</p></div>}
           </div>

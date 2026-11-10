@@ -1254,7 +1254,34 @@ def test_close_releases_paused_run(monkeypatch, tmp_path: Path) -> None:
     ])
 
     async def scenario() -> None:
-        service, store = harness.service_at(tmp_path)
+        from agent.runtime_store.sqlite import SqliteRuntimeStore
+        from agent.service.context_factory import ServiceContextFactory
+        from agent.service.runtime_launcher import RuntimeExecutionLauncher
+        from agent.service.service import AgentService
+
+        class SpyLauncher:
+            """捕获真正执行 Run 的 worker-lease 子任务。"""
+
+            def __init__(self) -> None:
+                self._inner = RuntimeExecutionLauncher()
+                self.launch_task: asyncio.Task | None = None
+
+            async def start(self, **kwargs):
+                self.launch_task = asyncio.current_task()
+                return await self._inner.start(**kwargs)
+
+            async def resume(self, **kwargs):
+                return await self._inner.resume(**kwargs)
+
+        store = SqliteRuntimeStore.open(tmp_path / "runtime.sqlite")
+        spy = SpyLauncher()
+        service = AgentService(
+            runtime_store=store,
+            launcher=spy,
+            context_factory=ServiceContextFactory(
+                store, workspace_root=tmp_path
+            ),
+        )
         handle = await service.start_run(StartRunRequest(
             tenant_id="t", user_id="u", session_id="s",
             request_id="r1", request_text=request))
@@ -1267,6 +1294,9 @@ def test_close_releases_paused_run(monkeypatch, tmp_path: Path) -> None:
             tenant_id="t", user_id="u", session_id="s",
             run_id=handle.run_id, request_id="p1"))
         await asyncio.wait_for(service.close(), timeout=10)
+        # 取消必须传到 worker-lease 子任务 — 不得留在 pause gate 上挂起。
+        assert spy.launch_task is not None
+        assert spy.launch_task.done()
 
         service2, _ = harness.service_at(tmp_path)
         try:

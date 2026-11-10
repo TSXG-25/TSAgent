@@ -206,20 +206,27 @@ class AgentService:
             return await operation
         task = asyncio.create_task(operation)
         heartbeat_seconds = WORKER_LEASE_SECONDS / 3
-        while not task.done():
-            done, _pending = await asyncio.wait(
-                {task},
-                timeout=heartbeat_seconds,
-            )
-            if done:
-                break
-            try:
-                view.renew_worker_lease()
-            except Exception:
-                task.cancel()
-                await asyncio.gather(task, return_exceptions=True)
-                raise
-        return await task
+        try:
+            while not task.done():
+                done, _pending = await asyncio.wait(
+                    {task},
+                    timeout=heartbeat_seconds,
+                )
+                if done:
+                    break
+                try:
+                    view.renew_worker_lease()
+                except Exception:
+                    task.cancel()
+                    await asyncio.gather(task, return_exceptions=True)
+                    raise
+            return await task
+        except asyncio.CancelledError:
+            # asyncio.wait does not propagate cancellation into the watched
+            # task — release the launcher child before letting it unwind.
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+            raise
 
     async def start_run(self, request: StartRunRequest) -> RunHandle:
         import asyncio

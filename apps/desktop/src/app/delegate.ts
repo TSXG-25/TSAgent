@@ -21,10 +21,12 @@ export async function delegateToPlanet(
   // mis-anchor this send (service-wire.md §runs/§delegation).
   const sessionId = ctx.sessionId;
   const liveRun = activeRun && activeRun.sessionId === sessionId ? activeRun : null;
-  if (liveRun && (liveRun.status === "active" || liveRun.status === "blocked")) {
+  if (liveRun && liveRun.status === "active") {
     throw new Error(`已有进行中的任务（${liveRun.runId}）——等待完成或先暂停再发送`);
   }
-  if (!liveRun) {
+  // A blocked run is parked awaiting resolution and must not deadlock the
+  // session — a new send starts a fresh run rather than anchoring on it.
+  if (!liveRun || liveRun.status === "blocked") {
     await ctx.controller.startRun({
       tenantId: service.identity.tenantId,
       sessionId,

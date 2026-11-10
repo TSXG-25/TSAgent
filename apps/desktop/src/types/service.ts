@@ -253,6 +253,7 @@ export type ServiceErrorCode =
   | "STORE_BUSY"
   | "STALE_DOCUMENT"
   | "READ_ONLY_DOCUMENT"
+  | "WORKSPACE_CHANGED"
   | "PROVIDER_UNAVAILABLE"
   | "SERVICE_CLOSED"
   | "UNSUPPORTED_OPERATION"
@@ -814,6 +815,7 @@ export interface WorkspaceFileContent {
   text: string;
   digest: string;
   redacted: boolean;
+  workspaceRoot: string;
 }
 
 export interface ListWorkspaceFilesRequest {
@@ -838,6 +840,7 @@ export interface WorkspaceFileRequest {
   path: string;
   content?: string;
   baseDigest?: string;
+  workspaceRoot?: string;
 }
 
 /** Forge workspace filesystem — guarded read/write surface. */

@@ -1447,6 +1447,7 @@ class WorkspaceFileContent:
     text: str
     digest: str = ""
     redacted: bool = False
+    workspace_root: str = ""
 
     def to_dict(self) -> dict[str, JSONValue]:
         return {
@@ -1454,6 +1455,7 @@ class WorkspaceFileContent:
             "text": self.text,
             "digest": self.digest,
             "redacted": self.redacted,
+            "workspace_root": self.workspace_root,
         }
 
 
@@ -1518,6 +1520,7 @@ class WorkspaceFileRequest:
     path: str
     content: str = ""
     base_digest: str = ""
+    workspace_root: str = ""
 
     def __post_init__(self) -> None:
         _required_identifier(self.tenant_id, "tenant_id")
@@ -1537,6 +1540,7 @@ class WorkspaceFileRequest:
             path=str(value.get("path", "")),
             content=str(value.get("content", "")),
             base_digest=str(value.get("base_digest", "")),
+            workspace_root=str(value.get("workspace_root", "")),
         )
 
 

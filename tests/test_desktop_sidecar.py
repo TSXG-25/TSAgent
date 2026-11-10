@@ -1146,6 +1146,30 @@ def test_workspace_file_document_contract(tmp_path: Path) -> None:
                     content='api_key = "x"\n', base_digest=read3.digest))
             assert ro.value.code.value == "READ_ONLY_DOCUMENT"
             assert "sk-SECRET000111222333" in secret.read_text()
+
+            # 同会话改绑工作区：读取绑定 A，改绑 B 后旧草稿不得写入新目录。
+            ws_a = tmp_path / "ws-a"
+            ws_b = tmp_path / "ws-b"
+            for ws in (ws_a, ws_b):
+                ws.mkdir()
+                (ws / "shared.txt").write_text("identical\n")
+            _store.ensure_session("t", "s-ws")
+            _store.upsert_workspace("t", "ws-a", path=str(ws_a))
+            _store.upsert_workspace("t", "ws-b", path=str(ws_b))
+            _store.assign_session_workspace("t", "s-ws", "ws-a")
+            ws_ident = {"tenant_id": "t", "user_id": "u", "session_id": "s-ws"}
+            read5 = await service.read_workspace_file(WorkspaceFileRequest(
+                **ws_ident, request_id="r7", path="shared.txt"))
+            assert read5.workspace_root == str(ws_a.resolve())
+            _store.assign_session_workspace("t", "s-ws", "ws-b")
+            with pytest.raises(AgentServiceError) as changed:
+                await service.write_workspace_file(WorkspaceFileRequest(
+                    **ws_ident, request_id="r8", path="shared.txt",
+                    content="draft", base_digest=read5.digest,
+                    workspace_root=read5.workspace_root))
+            assert changed.value.code.value == "WORKSPACE_CHANGED"
+            assert (ws_a / "shared.txt").read_text() == "identical\n"
+            assert (ws_b / "shared.txt").read_text() == "identical\n"
         finally:
             await service.close()
 

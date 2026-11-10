@@ -11,7 +11,9 @@ export interface DocumentSessionService {
 }
 
 export interface ForgeDocument {
-  identity: DocumentIdentity;
+  /** Resolved workspace root the read came from — the Service verifies it
+   *  on every save, so a same-session rebind cannot redirect the draft. */
+  workspaceRoot: string;
   path: string;
   text: string;
   digest: string;
@@ -46,7 +48,6 @@ export class ForgeDocumentSession {
   async open(path: string, opts: { discardDraft?: boolean } = {}): Promise<boolean> {
     if (this.dirty && !opts.discardDraft) return false;
     const seq = ++this.readSeq;
-    const identity = this.identity();
     let c: WorkspaceFileContent;
     try {
       c = await this.service.readWorkspaceFile({ ...this.req(), path });
@@ -56,7 +57,7 @@ export class ForgeDocumentSession {
     }
     if (seq !== this.readSeq) return true;
     this.doc = {
-      identity,
+      workspaceRoot: c.workspaceRoot,
       path: c.path,
       text: c.text,
       digest: c.digest,
@@ -78,15 +79,6 @@ export class ForgeDocumentSession {
   async save(): Promise<void> {
     const doc = this.doc;
     if (!doc || doc.redacted) return;
-    const current = this.identity();
-    if (
-      current.tenantId !== doc.identity.tenantId ||
-      current.sessionId !== doc.identity.sessionId
-    ) {
-      throw new Error(
-        "WORKSPACE_CHANGED: document is not bound to the active workspace",
-      );
-    }
     this.saving = true;
     const sent = this.editSeq;
     try {
@@ -95,6 +87,7 @@ export class ForgeDocumentSession {
         path: doc.path,
         content: this.content,
         baseDigest: doc.digest,
+        workspaceRoot: doc.workspaceRoot,
       });
       if (this.doc === doc) {
         // Keep typing during save: advance the baseline to the written

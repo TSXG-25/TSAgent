@@ -1081,8 +1081,8 @@ class AgentService:
 
         return WorkspaceService.scoped(root)
 
-    def _workspace_service(self, request: Any) -> Any:
-        """Scoped filesystem view for the Mars/forge workspace surfaces."""
+    def _workspace_service(self, request: Any) -> tuple[Any, Any]:
+        """Scoped filesystem view + the workspace root it is bound to."""
         root = self._contexts.session_workspace(
             request.tenant_id, request.session_id
         )
@@ -1091,17 +1091,16 @@ class AgentService:
                 ServiceErrorCode.INVALID_REQUEST,
                 "service has no workspace root",
             )
-        return self._scoped_workspace(root)
+        return self._scoped_workspace(root), Path(root).resolve()
 
     async def list_workspace_files(self, request: Any) -> list[Any]:
         """Mars forge: enumerate workspace files (names only)."""
         self._ensure_open()
         import asyncio
 
-        workspace = self._workspace_service(request)
+        workspace, root = self._workspace_service(request)
         from .contracts import WorkspaceFileSummary
 
-        root = workspace.root
         entries: list[Any] = []
         files = await asyncio.to_thread(
             lambda: sorted(
@@ -1126,7 +1125,7 @@ class AgentService:
         self._ensure_open()
         import asyncio
 
-        workspace = self._workspace_service(request)
+        workspace, root = self._workspace_service(request)
         text, digest, redacted = await asyncio.to_thread(
             workspace.read_document, request.path
         )
@@ -1137,6 +1136,7 @@ class AgentService:
             text=text,
             digest=digest,
             redacted=redacted,
+            workspace_root=str(root),
         )
 
     async def write_workspace_file(self, request: Any) -> Any:
@@ -1144,7 +1144,14 @@ class AgentService:
         self._ensure_open()
         import asyncio
 
-        workspace = self._workspace_service(request)
+        workspace, root = self._workspace_service(request)
+        # 文档必须仍绑定在其读取时的工作区 — 同会话改绑后不得把
+        # 旧草稿写进新目录。
+        if request.workspace_root and request.workspace_root != str(root):
+            raise AgentServiceError(
+                ServiceErrorCode.WORKSPACE_CHANGED,
+                "document is not bound to the active workspace",
+            )
         try:
             message, digest = await asyncio.to_thread(
                 workspace.write_document,

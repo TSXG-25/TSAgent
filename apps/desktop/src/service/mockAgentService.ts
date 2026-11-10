@@ -518,17 +518,20 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
   async readWorkspaceFile(request: WorkspaceFileRequest): Promise<WorkspaceFileContent> {
     const text = this.wsFiles.get(request.path);
     if (text === undefined) throw clientError("RUN_NOT_FOUND", `workspace file not found: ${request.path}`);
-    return { path: request.path, text, digest: `mock-${request.path}-${text.length}`, redacted: false };
+    return { path: request.path, text, digest: `mock-${request.path}-${text.length}`, redacted: false, workspaceRoot: "mock-ws" };
   }
 
   async writeWorkspaceFile(request: WorkspaceFileRequest): Promise<WorkspaceFileContent> {
+    if (request.workspaceRoot && request.workspaceRoot !== "mock-ws") {
+      throw clientError("WORKSPACE_CHANGED", `document not bound to the active workspace: ${request.path}`);
+    }
     const text = this.wsFiles.get(request.path) ?? "";
     if (request.baseDigest && request.baseDigest !== `mock-${request.path}-${text.length}`) {
       throw clientError("STALE_DOCUMENT", `file changed since it was read: ${request.path}`);
     }
     this.wsFiles.set(request.path, request.content ?? "");
     const next = this.wsFiles.get(request.path) ?? "";
-    return { path: request.path, text: "saved", digest: `mock-${request.path}-${next.length}`, redacted: false };
+    return { path: request.path, text: "saved", digest: `mock-${request.path}-${next.length}`, redacted: false, workspaceRoot: "mock-ws" };
   }
 
   async upsertWorkflowGraph(): Promise<WorkflowGraphSummary> {

@@ -298,12 +298,29 @@ class AgentService:
                     )
                     self._runs[run_id] = _ManagedRun(context, task)
             except DurableStoreError as error:
-                raise self._store_error(
+                failure = self._store_error(
                     error,
                     run_id=run_id,
                     request_id=request.request_id,
-                ) from error
+                )
+                self._persist_start_failure(
+                    tenant_id=request.tenant_id,
+                    session_id=request.session_id,
+                    run_id=run_id,
+                    request_id=request.request_id,
+                    context=None,
+                    error=error,
+                )
+                raise failure from error
             except Exception as error:
+                self._persist_start_failure(
+                    tenant_id=request.tenant_id,
+                    session_id=request.session_id,
+                    run_id=run_id,
+                    request_id=request.request_id,
+                    context=None,
+                    error=error,
+                )
                 raise self._runtime_error(error, run_id=run_id) from error
             return self._handle(reservation.head, request.request_id)
 
@@ -339,12 +356,85 @@ class AgentService:
             raise
         except Exception as error:
             self._task_errors[run_id] = self._runtime_error(error, run_id=run_id)
+            self._persist_start_failure(
+                tenant_id=request.tenant_id,
+                session_id=request.session_id,
+                run_id=run_id,
+                request_id=request.request_id,
+                context=context,
+                error=error,
+            )
         finally:
             managed = self._runs.get(run_id)
             if managed is not None and managed.run_context is context:
                 self._runs.pop(run_id, None)
             if context is not None:
                 self._contexts.release_run(context)
+
+    def _persist_start_failure(
+        self,
+        *,
+        tenant_id: str,
+        session_id: str,
+        run_id: str,
+        request_id: str,
+        context: Any | None,
+        error: BaseException,
+    ) -> None:
+        """The accepting entry owns the start outcome: a Run whose Context
+        or launcher never reached execution still commits a durable
+        terminal fact, so a later get_run can read the failure reason."""
+        from agent.execution_errors import stable_error_message
+        import logging
+
+        view = context.durable_store_view if context is not None else None
+        if view is None:
+            try:
+                from agent.runtime_store.view import DurableRuntimeStoreView
+
+                view = DurableRuntimeStoreView(
+                    self._store,
+                    tenant_id=tenant_id,
+                    session_id=session_id,
+                    run_id=run_id,
+                    request_id=request_id,
+                    writer_id=self._contexts.writer_id,
+                )
+            except DurableStoreError as error:
+                logging.getLogger(__name__).warning(
+                    "accepted Run %s start failure left in-memory only: %s",
+                    run_id,
+                    error,
+                )
+                return
+        try:
+            head = view.head()
+            if head is None or str(head.run_status).upper() != "CREATED":
+                # Past the accepted-only state — a failure after execution
+                # began is owned by the launcher's own failure commit (and
+                # by crash-recovery), not by the start entry.
+                return
+            view.transition_run_with_event(
+                run_status="FAILED_TERMINAL",
+                event_id=f"run_failed:{run_id}:{head.current_revision}",
+                event_type="run_failed",
+                timestamp=self._timestamp(),
+                payload={
+                    "failure_code": "RUNTIME_EXCEPTION",
+                    "failure_class": "start",
+                    "failure_detail": stable_error_message(
+                        error, fallback="run start failed"
+                    )[:300],
+                },
+            )
+        except DurableStoreError as error:
+            # A peer owner may have committed the terminal outcome first;
+            # the durable head is the authority either way.
+            logging.getLogger(__name__).warning(
+                "could not persist start failure for accepted Run %s: %s",
+                run_id,
+                error,
+            )
 
     async def get_run(self, request: RunLookupRequest) -> RunSnapshot:
         self._ensure_open()
@@ -2393,7 +2483,18 @@ class AgentService:
         if self._closed:
             return
         self._closed = True
-        tasks = tuple(managed.task for managed in self._runs.values())
+        if self._scheduler_task is not None:
+            self._scheduler_task.cancel()
+        tasks = []
+        for managed in self._runs.values():
+            context = managed.run_context
+            if getattr(context, "_pause_gate", None) is not None:
+                # 进程内暂停不跨进程存活：关闭时收束本地 gate 等待；不在
+                # durable 上落隐式用户取消 — Run 保持 SUSPENDED。
+                managed.task.cancel()
+            tasks.append(managed.task)
+        if self._scheduler_task is not None:
+            tasks.append(self._scheduler_task)
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
         self._runs.clear()

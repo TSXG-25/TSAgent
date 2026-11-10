@@ -1174,3 +1174,107 @@ def test_workspace_file_document_contract(tmp_path: Path) -> None:
             await service.close()
 
     asyncio.run(scenario())
+
+
+def test_start_failure_is_durable_across_reopen(tmp_path: Path) -> None:
+    """A04: 已接纳 Run 的 Context 构造失败必须落持久终态，
+    重开 Service 后仍能通过 get_run 读到失败原因。"""
+    import asyncio
+
+    import tests.test_ha_r1_harness as harness
+    from agent.runtime_store.sqlite import SqliteRuntimeStore
+    from agent.service.context_factory import ServiceContextFactory
+    from agent.service.contracts import RunLookupRequest, StartRunRequest
+    from agent.service.runtime_launcher import RuntimeExecutionLauncher
+    from agent.service.service import AgentService
+
+    async def scenario() -> None:
+        store = SqliteRuntimeStore.open(tmp_path / "runtime.sqlite")
+        service = AgentService(
+            runtime_store=store,
+            launcher=RuntimeExecutionLauncher(),
+            context_factory=ServiceContextFactory(
+                store, workspace_root=tmp_path
+            ),
+            defer_context_creation=True,
+        )
+        try:
+            def broken_create(*_a, **_k):
+                raise RuntimeError("context boom")
+
+            service._contexts.create_run = broken_create
+            handle = await service.start_run(StartRunRequest(
+                tenant_id="t", user_id="u", session_id="s",
+                request_id="r1", request_text="会失败的启动"))
+            head = None
+            for _ in range(200):
+                head = store.get_run_head(
+                    "t", handle.run_id, session_id="s"
+                )
+                if head is not None and head.run_status == "FAILED_TERMINAL":
+                    break
+                await asyncio.sleep(0.05)
+            assert head is not None
+            assert head.run_status == "FAILED_TERMINAL"
+        finally:
+            await service.close()
+
+        service2, _ = harness.service_at(tmp_path)
+        try:
+            snapshot = await service2.get_run(RunLookupRequest(
+                tenant_id="t", user_id="u", session_id="s",
+                run_id=handle.run_id, request_id="l1"))
+            assert snapshot.status.value == "FAILED_TERMINAL"
+            assert snapshot.failure_summary is not None
+            assert "boom" in snapshot.failure_summary.details["failure_detail"]
+        finally:
+            await service2.close()
+
+    asyncio.run(scenario())
+
+
+def test_close_releases_paused_run(monkeypatch, tmp_path: Path) -> None:
+    """A04: 暂停中的 Run 允许正常退出；退出不落隐式用户取消。"""
+    import asyncio
+
+    import tests.test_ha_r1_harness as harness
+    from agent.service.contracts import (
+        PauseRunRequest,
+        RunLookupRequest,
+        StartRunRequest,
+    )
+
+    request = "写一个文件"
+    harness.setup_provider(monkeypatch, [
+        (request, harness.intent(
+            request, artifact=True, outcomes=["FILE_MUTATION"])),
+        (request, harness.call_tool(
+            "write_file", path="output/p.txt", content="x")),
+        ("已写入", "完成"),
+    ])
+
+    async def scenario() -> None:
+        service, store = harness.service_at(tmp_path)
+        handle = await service.start_run(StartRunRequest(
+            tenant_id="t", user_id="u", session_id="s",
+            request_id="r1", request_text=request))
+        for _ in range(200):
+            head = store.get_run_head("t", handle.run_id, session_id="s")
+            if head is not None and head.run_status == "RUNNING":
+                break
+            await asyncio.sleep(0.05)
+        await service.pause_run(PauseRunRequest(
+            tenant_id="t", user_id="u", session_id="s",
+            run_id=handle.run_id, request_id="p1"))
+        await asyncio.wait_for(service.close(), timeout=10)
+
+        service2, _ = harness.service_at(tmp_path)
+        try:
+            snapshot = await service2.get_run(RunLookupRequest(
+                tenant_id="t", user_id="u", session_id="s",
+                run_id=handle.run_id, request_id="l1"))
+            assert snapshot.status.value == "SUSPENDED"
+        finally:
+            await service2.close()
+
+    asyncio.run(scenario())

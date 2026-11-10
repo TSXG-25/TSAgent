@@ -6616,7 +6616,10 @@ class SqliteRuntimeStore:
                 "TIMED_OUT": {"run_timed_out"},
             }
             allowed_targets = {
-                "CREATED": {"RUNNING", "CANCELLING"},
+                # CREATED is the accepted-but-not-yet-executing state: a
+                # start failure after reservation must still be able to
+                # commit a durable terminal fact.
+                "CREATED": {"RUNNING", "CANCELLING", "FAILED_TERMINAL"},
                 "RUNNING": {
                     "RUNNING",
                     "CANCELLING",

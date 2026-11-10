@@ -1110,10 +1110,29 @@ def test_workspace_file_document_contract(tmp_path: Path) -> None:
 
             read2 = await service.read_workspace_file(WorkspaceFileRequest(
                 **ident, request_id="r3", path="notes.txt"))
-            await service.write_workspace_file(WorkspaceFileRequest(
+            saved = await service.write_workspace_file(WorkspaceFileRequest(
                 **ident, request_id="r4", path="notes.txt",
                 content="merged\n", base_digest=read2.digest))
-            assert target.read_text() == "merged\n"
+            assert saved.digest
+            # 连续保存：回执 digest 推进基线，第二次保存不得误报冲突。
+            saved2 = await service.write_workspace_file(WorkspaceFileRequest(
+                **ident, request_id="r4b", path="notes.txt",
+                content="third\n", base_digest=saved.digest))
+            assert saved2.digest != saved.digest
+            assert target.read_text() == "third\n"
+
+            # 带基线保存已删除的文件：必须判为过期，不得用旧草稿重建。
+            doomed = tmp_path / "doomed.txt"
+            doomed.write_text("v1\n")
+            read4 = await service.read_workspace_file(WorkspaceFileRequest(
+                **ident, request_id="r5a", path="doomed.txt"))
+            doomed.unlink()
+            with pytest.raises(AgentServiceError) as gone:
+                await service.write_workspace_file(WorkspaceFileRequest(
+                    **ident, request_id="r5b", path="doomed.txt",
+                    content="resurrect", base_digest=read4.digest))
+            assert gone.value.code.value == "STALE_DOCUMENT"
+            assert not doomed.exists()
 
             secret = tmp_path / "config.txt"
             secret.write_text('api_key = "sk-SECRET000111222333"\n')

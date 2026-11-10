@@ -1146,7 +1146,7 @@ class AgentService:
 
         workspace = self._workspace_service(request)
         try:
-            message = await asyncio.to_thread(
+            message, digest = await asyncio.to_thread(
                 workspace.write_document,
                 request.path,
                 request.content,
@@ -1165,7 +1165,10 @@ class AgentService:
         from .contracts import WorkspaceFileContent
 
         return WorkspaceFileContent(
-            path=workspace.relative_path(request.path), text=message
+            path=workspace.relative_path(request.path),
+            text=message,
+            digest=digest,
+            redacted=False,
         )
 
     async def record_evaluation(self, request: Any) -> Any:

@@ -52,7 +52,11 @@ export default function MarsWorkspace({ ctx }: { ctx: RunCtx }) {
     setSaving(true);
     // STALE_DOCUMENT leaves the draft in place so the user can re-read
     // and merge instead of silently losing edits.
-    try { await service.writeWorkspaceFile({ ...req(), path: doc.path, content, baseDigest: doc.digest }); setDirty(false); }
+    try {
+      const saved = await service.writeWorkspaceFile({ ...req(), path: doc.path, content, baseDigest: doc.digest });
+      setDoc((d) => (d ? { ...d, digest: saved.digest } : d));
+      setDirty(false);
+    }
     catch (e) { setErr(String(e)); } finally { setSaving(false); }
   }
 

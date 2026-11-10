@@ -527,7 +527,8 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
       throw clientError("STALE_DOCUMENT", `file changed since it was read: ${request.path}`);
     }
     this.wsFiles.set(request.path, request.content ?? "");
-    return { path: request.path, text: "saved", digest: "", redacted: false };
+    const next = this.wsFiles.get(request.path) ?? "";
+    return { path: request.path, text: "saved", digest: `mock-${request.path}-${next.length}`, redacted: false };
   }
 
   async upsertWorkflowGraph(): Promise<WorkflowGraphSummary> {

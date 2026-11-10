@@ -185,12 +185,14 @@ class WorkspaceService:
         content: str,
         *,
         base_digest: str,
-    ) -> str:
-        """Editor write guarded by the read baseline.
+    ) -> tuple[str, str]:
+        """Editor write guarded by the read baseline → (message, digest).
 
         Whole-file overwrite is refused when the file on disk carries
         protected values — a redacted draft cannot round-trip — or when
-        its bytes moved past the digest the editor read."""
+        its bytes moved past the digest the editor read, including the
+        case where the file no longer exists.  The returned digest is the
+        baseline of the bytes just written so the caller can keep saving."""
         self._guard(path, operation="write")
         full = self.resolve_path(path)
         self._guard(full, operation="write")
@@ -211,7 +213,13 @@ class WorkspaceService:
                 raise ValueError(
                     "STALE_DOCUMENT: file changed on disk since it was read"
                 )
-        return self.write_text(path, content)
+        elif base_digest:
+            raise ValueError(
+                "STALE_DOCUMENT: file was deleted since it was read"
+            )
+        text = str(content)
+        message = self.write_text(path, text)
+        return message, hashlib.sha256(text.encode("utf-8")).hexdigest()
 
     def write_text(
         self,

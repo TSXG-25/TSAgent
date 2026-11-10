@@ -99,7 +99,7 @@ class AgentService:
         self._cancellation: Any | None = None
         self._defer_context_creation = defer_context_creation
         self._runs: dict[str, _ManagedRun] = {}
-        self._approval_waiters: dict[str, Any] = {}
+        self._approval_waiters: dict[tuple[str, str, str], Any] = {}
         self._scheduler_task: Any | None = None
         self._task_errors: dict[str, AgentServiceError] = {}
         self._operation_lock = asyncio.Lock()
@@ -1909,10 +1909,12 @@ class AgentService:
         risk_level: str = "R1",
     ) -> Any:
         """Runtime-side approval gate: persist the request, park the run in
-        WAITING_USER, and block until an external ``decide_approval`` lands.
+        WAITING_USER, and block until a committed ``decide_approval`` lands.
 
         Idempotent on approval_id — a replay after restart returns the
-        already-decided record instead of re-parking the run.
+        already-decided record instead of re-parking the run.  The waiter
+        observes the durable record, so a decision committed by another
+        Service sharing this SQLite store also releases the gate.
         """
         import asyncio
         import json
@@ -1931,7 +1933,8 @@ class AgentService:
         if record.status != "PENDING":
             return record
         waiter = asyncio.Event()
-        self._approval_waiters[record.approval_id] = waiter
+        waiter_key = (view.tenant_id, view.run_id, record.approval_id)
+        self._approval_waiters[waiter_key] = waiter
         timestamp = self._timestamp()
         try:
             view.transition_run_with_event(
@@ -1963,10 +1966,20 @@ class AgentService:
                     "params": dict(params or {}),
                 },
             )
-            await waiter.wait()
-            decided = self._store.get_approval(
-                view.tenant_id, view.run_id, record.approval_id
-            )
+            decided = record
+            while decided.status == "PENDING":
+                try:
+                    await asyncio.wait_for(waiter.wait(), timeout=0.5)
+                except asyncio.TimeoutError:
+                    pass
+                refreshed = self._store.get_approval(
+                    view.tenant_id, view.run_id, record.approval_id
+                )
+                if refreshed is None:
+                    raise RuntimeError(
+                        f"durable approval record vanished: {record.approval_id}"
+                    )
+                decided = refreshed
             view.transition_run_with_event(
                 run_status="RUNNING",
                 event_id=f"run_resumed:{view.run_id}:{record.approval_id}",
@@ -1994,7 +2007,7 @@ class AgentService:
             )
             return decided
         finally:
-            self._approval_waiters.pop(record.approval_id, None)
+            self._approval_waiters.pop(waiter_key, None)
 
     async def decide_approval(self, request: Any) -> Any:
         """Wire decision for one pending approval (idempotent replay-safe)."""
@@ -2006,7 +2019,9 @@ class AgentService:
             decision="APPROVED" if request.decision == "approve" else "DENIED",
             decided_by=request.decided_by or request.user_id,
         )
-        waiter = self._approval_waiters.get(request.approval_id)
+        waiter = self._approval_waiters.get(
+            (request.tenant_id, request.run_id, request.approval_id)
+        )
         if waiter is not None:
             waiter.set()
         return self._approval_summary(record)

@@ -228,36 +228,19 @@ class RunProjector:
         pending = tuple(getattr(index, "pending_workflow_ids", ())) if index else ()
         active_id = getattr(index, "active_workflow_id", "") if index else ""
         active = index.workflow(active_id) if index and active_id else None
-        head_status = _public_status(read.head.run_status)
-        terminal_statuses = {
-            RunStatus.COMPLETED,
-            RunStatus.FAILED_TERMINAL,
-            RunStatus.BLOCKED,
-            RunStatus.CANCELLED,
-            RunStatus.TIMED_OUT,
-        }
-        # The durable Run head and terminal event are authoritative.  An old
-        # or partially published RunResumeIndex must not turn a failed Run
-        # into a public COMPLETED snapshot.
-        if (
-            read.terminal_event is not None
-            or head_status in terminal_statuses
-            or head_status is RunStatus.CANCELLING
-        ):
-            status = head_status
-            verifier = "VERIFIED" if status is RunStatus.COMPLETED else None
-        elif active is not None:
-            status = _public_status(active.status.value)
-            verifier = str(active.verifier_status or "UNKNOWN")
-        elif index is not None and not pending and completed:
-            status = RunStatus.COMPLETED
+        # The durable Run head is the only public status source: a partially
+        # published RunResumeIndex must never project a terminal state before
+        # the Launcher commits it.  The index still supplies progress fields.
+        status = _public_status(read.head.run_status)
+        if status is RunStatus.COMPLETED:
             verifier = "VERIFIED"
+        elif active is not None:
+            verifier = str(active.verifier_status or "UNKNOWN")
         else:
-            status = _public_status(read.head.run_status)
             verifier = None
 
-        durable_artifacts = tuple(getattr(read, "artifacts", ()) or ())
-        indexed_artifacts = tuple(getattr(index, "artifacts", ()) if index else ())
+        # Public artifacts come from the committed publication only; an
+        # already-committed empty list is a valid result.
         artifacts = tuple(
             _artifact_summary(
                 artifact,
@@ -265,7 +248,7 @@ class RunProjector:
                 run_id=request.run_id,
                 revision=read.head.current_revision,
             )
-            for artifact in (durable_artifacts or indexed_artifacts)
+            for artifact in (getattr(read, "artifacts", ()) or ())
         )
         values: dict[str, Any] = {
             "tenant_id": request.tenant_id,

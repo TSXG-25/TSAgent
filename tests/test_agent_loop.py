@@ -446,7 +446,7 @@ def test_approval_gate_denies_gated_tool(tmp_path):
         assert msg.get("ok") is False or "拒绝" in msg["content"]
         assert "ERROR[APPROVAL_DENIED]" in msg["content"] or "拒绝" in msg["content"]
         assert state["authorization_denials"][0]["reason"] == "user_denied"
-        assert calls[0]["approval_id"] == "run-gate:c1"
+        assert calls[0]["approval_id"] == "run-gate:call-1"
         assert calls[0]["risk_level"] == "R2"
 
     asyncio.run(scenario())
@@ -489,3 +489,119 @@ def test_approval_gate_passes_approved_tool(tmp_path):
         assert "APPROVAL" not in msg["content"]
 
     asyncio.run(scenario())
+
+
+def test_approval_gate_binds_each_call_to_its_own_identity(tmp_path):
+    """A repeated provider call.id must not fold two different actions into
+    one approval record — identity is the Run-local call ordinal."""
+    calls = []
+
+    class FakeDelegation:
+        async def request_approval(self, run_context, **kwargs):
+            calls.append(kwargs)
+            return SimpleNamespace(status="APPROVED")
+
+    orch = _orchestrator(tmp_path)
+    orch.run_context.delegation = FakeDelegation()
+    orch.run_context.run_id = "run-bind"
+    state = _mutation_state(
+        requested_outcomes=["USER_VISIBLE_OUTPUT", "COMMAND_EXECUTION"],
+        artifact_required=False,
+    )
+    from agent.loop.toolset import LoopTool
+    toolset = {
+        "shell": LoopTool(
+            name="shell", executor_tool="shell", verb="execute", spec={},
+            risk_level="R2",
+        ),
+    }
+
+    async def scenario():
+        loop = AgentLoop(orch)
+        for index, command in enumerate(("echo a", "echo b"), start=1):
+            call = ToolCall(
+                id="call-0", name="shell", arguments={"command": command}
+            )
+            await loop._dispatch(
+                call, toolset, state, index=index,
+                run_context=orch.run_context, user_id="u", user_input="执行",
+            )
+
+    asyncio.run(scenario())
+    assert [entry["approval_id"] for entry in calls] == [
+        "run-bind:call-1",
+        "run-bind:call-2",
+    ]
+    assert calls[0]["params"] == {"command": "echo a"}
+    assert calls[1]["params"] == {"command": "echo b"}
+
+
+def test_approval_gate_fails_closed_without_approval_channel(tmp_path):
+    """An R2+ call in a runtime with no approval capability must not
+    execute — the missing channel fails closed."""
+    orch = _orchestrator(tmp_path)
+    orch.run_context.run_id = "run-nogate"
+    state = _mutation_state(
+        requested_outcomes=["USER_VISIBLE_OUTPUT", "COMMAND_EXECUTION"],
+        artifact_required=False,
+    )
+    from agent.loop.toolset import LoopTool
+    toolset = {
+        "shell": LoopTool(
+            name="shell", executor_tool="shell", verb="execute", spec={},
+            risk_level="R2",
+        ),
+    }
+
+    async def scenario():
+        loop = AgentLoop(orch)
+        call = ToolCall(
+            id="c1", name="shell",
+            arguments={"command": "echo x > gate-pwned.txt"},
+        )
+        msg = await loop._dispatch(
+            call, toolset, state, index=1,
+            run_context=orch.run_context, user_id="u", user_input="执行",
+        )
+        assert "APPROVAL_UNAVAILABLE" in msg["content"]
+
+    asyncio.run(scenario())
+    assert not (tmp_path / "gate-pwned.txt").exists()
+
+
+def test_approval_gate_blocks_undecided_record(tmp_path):
+    """Only an explicit APPROVED releases the gate — anything else stops
+    the call instead of passing it through."""
+    class PendingDelegation:
+        async def request_approval(self, run_context, **kwargs):
+            return SimpleNamespace(status="PENDING")
+
+    orch = _orchestrator(tmp_path)
+    orch.run_context.delegation = PendingDelegation()
+    orch.run_context.run_id = "run-pending"
+    state = _mutation_state(
+        requested_outcomes=["USER_VISIBLE_OUTPUT", "COMMAND_EXECUTION"],
+        artifact_required=False,
+    )
+    from agent.loop.toolset import LoopTool
+    toolset = {
+        "shell": LoopTool(
+            name="shell", executor_tool="shell", verb="execute", spec={},
+            risk_level="R2",
+        ),
+    }
+
+    async def scenario():
+        loop = AgentLoop(orch)
+        call = ToolCall(
+            id="c1", name="shell",
+            arguments={"command": "echo x > gate-pwned.txt"},
+        )
+        msg = await loop._dispatch(
+            call, toolset, state, index=1,
+            run_context=orch.run_context, user_id="u", user_input="执行",
+        )
+        assert "APPROVAL_NOT_GRANTED" in msg["content"]
+
+    asyncio.run(scenario())
+    assert not (tmp_path / "gate-pwned.txt").exists()

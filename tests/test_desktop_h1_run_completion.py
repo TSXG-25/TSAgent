@@ -180,6 +180,122 @@ def test_terminal_transition_persists_and_projects_verified_artifact(
         reopened.close()
 
 
+def test_projector_reports_head_until_terminal_commit(tmp_path: Path) -> None:
+    """A resume index claiming a completed workflow must not project a public
+    COMPLETED status or its artifacts before the terminal Run transaction."""
+
+    from dataclasses import replace
+
+    database = tmp_path / "runtime.sqlite"
+    request = StartRunRequest(
+        tenant_id="tenant-h1",
+        user_id="user-h1",
+        session_id="session-h1",
+        request_id="request-h1",
+        request_text="创建 output/result.txt",
+        run_id="run-h1",
+    )
+    store = SqliteRuntimeStore.open(database)
+    view = None
+    artifact = ArtifactCommitFact(
+        artifact_id="artifact-h1-result",
+        artifact_type="file",
+        reference="output/result.txt",
+        digest="sha256:desktop-h1",
+        producer_workflow_id="runtime-execution",
+        producer_stage_id="task:h1-write",
+        producer_task_id="h1-write",
+    )
+    lookup = RunLookupRequest(
+        tenant_id=request.tenant_id,
+        user_id=request.user_id,
+        session_id=request.session_id,
+        run_id=request.run_id or "",
+        request_id="lookup-h1",
+    )
+    ghost_index = SimpleNamespace(
+        completed_workflow_ids=("wf-ghost",),
+        pending_workflow_ids=(),
+        active_workflow_id="",
+        artifacts=(artifact,),
+        workflow=lambda _id: None,
+    )
+    try:
+        reservation = store.reserve_service_start(
+            request.tenant_id,
+            request.session_id,
+            requested_run_id=request.run_id,
+            request_id=request.request_id,
+            request_digest=request.request_digest,
+            writer_id="writer-h1",
+            external_reference=encode_request_reference(
+                request,
+                run_id=request.run_id or "",
+            ),
+        )
+        assert reservation.created is True
+        view = DurableRuntimeStoreView(
+            store,
+            tenant_id=request.tenant_id,
+            session_id=request.session_id,
+            run_id=request.run_id or "",
+            request_id=request.request_id,
+            writer_id="writer-h1",
+        )
+        view.transition_run_with_event(
+            run_status="RUNNING",
+            event_id="run-started:h1",
+            event_type="run_started",
+            timestamp="2026-08-11T00:00:00Z",
+            payload={"request_id": request.request_id},
+            expected_status="CREATED",
+        )
+
+        read = replace(
+            store.read_run_snapshot(
+                request.tenant_id,
+                request.run_id or "",
+                session_id=request.session_id,
+            ),
+            index=ghost_index,
+        )
+        snapshot = RunProjector().project(read, lookup)
+        assert snapshot.status.value == "RUNNING"
+        assert snapshot.output is None
+        assert snapshot.artifacts == ()
+
+        view.transition_run_with_event(
+            run_status="COMPLETED",
+            event_id="run-completed:h1",
+            event_type="run_completed",
+            timestamp="2026-08-11T00:00:01Z",
+            payload={"request_id": request.request_id},
+            run_output={
+                "text": "已成功写入：output/result.txt",
+                "artifact_ids": [artifact.artifact_id],
+            },
+            artifacts=(artifact,),
+        )
+        read = replace(
+            store.read_run_snapshot(
+                request.tenant_id,
+                request.run_id or "",
+                session_id=request.session_id,
+            ),
+            index=ghost_index,
+        )
+        snapshot = RunProjector().project(read, lookup)
+        assert snapshot.status.value == "COMPLETED"
+        assert [item.artifact_id for item in snapshot.artifacts] == [
+            "artifact-h1-result"
+        ]
+        assert snapshot.output is not None
+    finally:
+        if view is not None:
+            view.close()
+        store.close()
+
+
 def test_launcher_artifact_fact_is_bound_to_run_workspace(tmp_path: Path) -> None:
     run_workspace = WorkspaceService.scoped(
         tmp_path / "run-c",

@@ -143,6 +143,13 @@ def _require_text(value: str, label: str) -> str:
     return result
 
 
+def _json_text_equal(left: str, right: str) -> bool:
+    try:
+        return json.loads(left) == json.loads(right)
+    except (TypeError, ValueError):
+        return left == right
+
+
 def _is_busy(error: BaseException) -> bool:
     return isinstance(error, sqlite3.OperationalError) and any(
         marker in str(error).lower()
@@ -1534,7 +1541,15 @@ class SqliteRuntimeStore:
                 (tenant_id, run_id, approval_id),
             ).fetchone()
             if existing is not None:
-                return self._approval_contract(existing)
+                record = self._approval_contract(existing)
+                if record.action != action or not _json_text_equal(
+                    record.params_json, str(params_json)
+                ):
+                    raise DurableStoreError(
+                        StoreErrorCode.IDEMPOTENCY_CONFLICT,
+                        "approval id is already bound to a different action",
+                    )
+                return record
             connection.execute(
                 """
                 INSERT INTO run_approvals

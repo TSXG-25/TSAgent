@@ -592,7 +592,7 @@ class AgentLoop:
         return messages, index
 
     async def _approval_gate(
-        self, run_context, tool, call, state
+        self, run_context, tool, call, state, *, index: int
     ) -> dict[str, Any] | None:
         """Shared R2+ approval gate — builtin and executor paths both pass
         through it.  Returns a denial/failure tool message or None to
@@ -601,8 +601,14 @@ class AgentLoop:
             return None
         delegation = getattr(run_context, "delegation", None)
         if delegation is None:
-            return None
-        approval_id = f"{getattr(run_context, 'run_id', 'run')}:{call.id}"
+            return _tool_message(
+                call,
+                "需要人工审批的操作在当前运行环境没有审批通道，未执行",
+                ok=False, error_code="APPROVAL_UNAVAILABLE",
+            )
+        # 审批身份用 Run 内调用序号：Provider 的 call.id 只做协议关联，
+        # 缺省或重复时不能把不同动作绑到同一条审批记录。
+        approval_id = f"{getattr(run_context, 'run_id', 'run')}:call-{index}"
         try:
             record = await delegation.request_approval(
                 run_context,
@@ -623,7 +629,10 @@ class AgentLoop:
                 "审批请求失败: " + stable_error_message(exc),
                 ok=False, error_code="APPROVAL_FAILED",
             )
-        if getattr(record, "status", "PENDING") == "DENIED":
+        status = getattr(record, "status", "PENDING")
+        if status == "APPROVED":
+            return None
+        if status == "DENIED":
             denials = state.setdefault("authorization_denials", [])
             denials.append({
                 "tool": tool.executor_tool or call.name,
@@ -634,7 +643,10 @@ class AgentLoop:
                 call, "用户拒绝了该操作", ok=False,
                 error_code="APPROVAL_DENIED",
             )
-        return None
+        return _tool_message(
+            call, f"审批未放行（{status}），未执行", ok=False,
+            error_code="APPROVAL_NOT_GRANTED",
+        )
 
     async def _dispatch_browser(self, call, run_context, workspace) -> dict[str, Any]:
         from agent.browser.session import BrowserSession
@@ -717,7 +729,7 @@ class AgentLoop:
         if tool.executor_tool is None:
             if call.name.startswith("browser_"):
                 denied = await self._approval_gate(
-                    run_context, tool, call, state
+                    run_context, tool, call, state, index=index
                 )
                 if denied is not None:
                     return denied
@@ -849,7 +861,9 @@ class AgentLoop:
             return _tool_message(call, violation, ok=False,
                                  error_code="EFFECT_SCOPE_VIOLATION")
 
-        denied = await self._approval_gate(run_context, tool, call, state)
+        denied = await self._approval_gate(
+            run_context, tool, call, state, index=index
+        )
         if denied is not None:
             return denied
 

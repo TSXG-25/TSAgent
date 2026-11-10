@@ -9,6 +9,7 @@ from ..local_protocol import (
     LocalRpcFailure,
     LocalRpcRequest,
     LocalRpcResponse,
+    LocalTransportMethod,
     decode_json_line,
     encode_response,
 )
@@ -35,13 +36,33 @@ async def serve(
     stdout: TextIO,
     diagnostics: TextIO,
 ) -> int:
-    """Serve one request and one response per JSONL line."""
+    """Serve one request and one response per JSONL line.
+
+    ``subscribe_events`` is a long poll — it dispatches on a background
+    task so the serial loop keeps answering approvals, cancels, and
+    shutdown while it is pending.  All response writes serialize on one
+    lock so protocol lines never interleave.
+    """
 
     import asyncio
 
     # The Service may have been constructed outside an event loop — start
     # the scheduler here so an idle sidecar still fires due schedules.
     dispatcher._service._maybe_start_scheduler()
+
+    write_lock = asyncio.Lock()
+    subscriptions: set[asyncio.Task] = set()
+
+    async def _emit(response: LocalRpcResponse) -> None:
+        try:
+            async with write_lock:
+                _write_response(stdout, response)
+        except (BrokenPipeError, OSError):
+            print("local transport disconnected", file=diagnostics)
+
+    async def _run_subscription(request: LocalRpcRequest) -> None:
+        response = await dispatcher.dispatch(request)
+        await _emit(response)
 
     try:
         while True:
@@ -50,6 +71,11 @@ async def serve(
                 break
             try:
                 request = LocalRpcRequest.from_json_line(line)
+                if request.method is LocalTransportMethod.SUBSCRIBE_EVENTS:
+                    task = asyncio.create_task(_run_subscription(request))
+                    subscriptions.add(task)
+                    task.add_done_callback(subscriptions.discard)
+                    continue
                 response = await dispatcher.dispatch(request)
             except LocalProtocolError as error:
                 from .serializer import protocol_error_response
@@ -62,14 +88,16 @@ async def serve(
                 traceback.print_exc(file=diagnostics)
                 response = internal_error_response(_request_id_hint(line))
 
-            try:
-                _write_response(stdout, response)
-            except (BrokenPipeError, OSError):
-                print("local transport disconnected", file=diagnostics)
-                break
+            await _emit(response)
             if dispatcher.shutdown_requested:
                 break
     finally:
+        # EOF/shutdown cancels still-pending subscriptions rather than
+        # waiting out their poll windows.
+        for task in tuple(subscriptions):
+            task.cancel()
+        if subscriptions:
+            await asyncio.gather(*subscriptions, return_exceptions=True)
         # close() waits for normal Service tasks but never creates a
         # USER_CANCEL intent.  EOF is a transport event, not a business action.
         await dispatcher.close()

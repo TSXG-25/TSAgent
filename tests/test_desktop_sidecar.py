@@ -1549,3 +1549,70 @@ def test_accepted_run_executes_in_recorded_workspace(monkeypatch, tmp_path: Path
             await service.close()
 
     asyncio.run(scenario())
+
+
+def test_sidecar_subscription_does_not_block_control(tmp_path: Path) -> None:
+    """A09: 挂起的 subscribe_events 不阻塞后续控制请求；
+    shutdown 收掉订阅；stdout 逐行可解码。"""
+    import asyncio
+    import io
+    import json
+    import time
+
+    import tests.test_ha_r1_harness as harness
+    from agent.service.local_sidecar.dispatcher import SidecarDispatcher
+    from agent.service.local_sidecar.server import serve
+
+    async def scenario() -> None:
+        service, store = harness.service_at(tmp_path)
+        # 仅有 CREATED 预留、没有任何事件的 Run — 订阅会一直等到
+        # first_timeout（8s）才返回，复现串行阻塞场景。
+        from agent.service.contracts import StartRunRequest
+        from agent.service.run_projector import encode_request_reference
+
+        store.reserve_service_start(
+            "t", "s",
+            requested_run_id="run-sub",
+            request_id="r1",
+            request_digest="d1",
+            writer_id="w1",
+            external_reference=encode_request_reference(
+                StartRunRequest(
+                    tenant_id="t", user_id="u", session_id="s",
+                    request_id="r1", request_text="x"),
+                run_id="run-sub",
+            ),
+        )
+        dispatcher = SidecarDispatcher(service, diagnostics=io.StringIO())
+        stdin = io.StringIO(
+            json.dumps({"id": "sub-1", "method": "subscribe_events",
+                        "params": {"tenant_id": "t", "user_id": "u",
+                                   "session_id": "s", "run_id": "run-sub",
+                                   "request_id": "q1"}}) + "\n"
+            + json.dumps({"id": "h1", "method": "health",
+                          "params": {}}) + "\n"
+            + json.dumps({"id": "x", "method": "shutdown",
+                          "params": {}}) + "\n"
+        )
+        stdout = io.StringIO()
+        started = time.monotonic()
+        rc = await asyncio.wait_for(
+            serve(dispatcher, stdin=stdin, stdout=stdout,
+                  diagnostics=io.StringIO()),
+            timeout=10,
+        )
+        elapsed = time.monotonic() - started
+        assert rc == 0
+        # 若订阅仍串行，serve 至少要等 first_timeout（8s）才会读到 shutdown。
+        assert elapsed < 5
+        responses = [
+            json.loads(line) for line in stdout.getvalue().splitlines()
+        ]
+        ids = {r["id"] for r in responses}
+        assert "h1" in ids and "x" in ids
+        # 挂起的订阅被 shutdown 收掉，不落半截响应行。
+        assert "sub-1" not in ids
+        health = next(r for r in responses if r["id"] == "h1")
+        assert health["result"]["status"] == "ok"
+
+    asyncio.run(scenario())

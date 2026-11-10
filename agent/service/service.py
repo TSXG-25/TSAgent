@@ -1127,11 +1127,16 @@ class AgentService:
         import asyncio
 
         workspace = self._workspace_service(request)
-        text = await asyncio.to_thread(workspace.read_text, request.path)
+        text, digest, redacted = await asyncio.to_thread(
+            workspace.read_document, request.path
+        )
         from .contracts import WorkspaceFileContent
 
         return WorkspaceFileContent(
-            path=workspace.relative_path(request.path), text=text
+            path=workspace.relative_path(request.path),
+            text=text,
+            digest=digest,
+            redacted=redacted,
         )
 
     async def write_workspace_file(self, request: Any) -> Any:
@@ -1140,9 +1145,23 @@ class AgentService:
         import asyncio
 
         workspace = self._workspace_service(request)
-        message = await asyncio.to_thread(
-            workspace.write_text, request.path, request.content
-        )
+        try:
+            message = await asyncio.to_thread(
+                workspace.write_document,
+                request.path,
+                request.content,
+                base_digest=str(request.base_digest or ""),
+            )
+        except PermissionError as exc:
+            raise AgentServiceError(
+                ServiceErrorCode.READ_ONLY_DOCUMENT, str(exc)
+            ) from exc
+        except ValueError as exc:
+            if str(exc).startswith("STALE_DOCUMENT"):
+                raise AgentServiceError(
+                    ServiceErrorCode.STALE_DOCUMENT, str(exc)
+                ) from exc
+            raise
         from .contracts import WorkspaceFileContent
 
         return WorkspaceFileContent(

@@ -826,6 +826,8 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
     return {
       path: requiredString(raw.path, "path"),
       text: optionalString(raw.text) ?? "",
+      digest: optionalString(raw.digest) ?? "",
+      redacted: Boolean(raw.redacted),
     };
   }
 
@@ -834,10 +836,13 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
       tenant_id: request.tenantId, user_id: this.identity.userId,
       session_id: request.sessionId, request_id: request.requestId,
       path: request.path, content: request.content ?? "",
+      base_digest: request.baseDigest ?? "",
     })) as Record<string, unknown>;
     return {
       path: requiredString(raw.path, "path"),
       text: optionalString(raw.text) ?? "",
+      digest: optionalString(raw.digest) ?? "",
+      redacted: Boolean(raw.redacted),
     };
   }
 

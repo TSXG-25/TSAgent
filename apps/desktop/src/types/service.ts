@@ -251,6 +251,8 @@ export type ServiceErrorCode =
   | "EVENT_SEQUENCE_INVALID"
   | "CURSOR_INVALID"
   | "STORE_BUSY"
+  | "STALE_DOCUMENT"
+  | "READ_ONLY_DOCUMENT"
   | "PROVIDER_UNAVAILABLE"
   | "SERVICE_CLOSED"
   | "UNSUPPORTED_OPERATION"
@@ -810,6 +812,8 @@ export interface WorkspaceFileSummary {
 export interface WorkspaceFileContent {
   path: string;
   text: string;
+  digest: string;
+  redacted: boolean;
 }
 
 export interface ListWorkspaceFilesRequest {
@@ -833,6 +837,7 @@ export interface WorkspaceFileRequest {
   requestId: string;
   path: string;
   content?: string;
+  baseDigest?: string;
 }
 
 /** Forge workspace filesystem — guarded read/write surface. */

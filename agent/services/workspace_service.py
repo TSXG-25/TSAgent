@@ -3,6 +3,7 @@
 This is the ONLY way Planner/Executor/Tools should access Workspace.
 Service does NOT expose internal Workspace components.
 """
+import hashlib
 from pathlib import Path
 import shutil
 from typing import Optional
@@ -155,6 +156,62 @@ class WorkspaceService:
         cache.set(key, text, mtime_ns=mtime_ns)
         self.record_open(key)
         return text
+
+    def read_document(self, path: str | Path) -> tuple[str, str, bool]:
+        """One protected read → (redacted text, raw-bytes digest, redacted).
+
+        The digest and the projection come from the same bytes, so the
+        baseline an editor saves against always describes exactly what it
+        saw on screen."""
+        self._guard(path, operation="read")
+        full = self.resolve_path(path, must_exist=True)
+        self._guard(full, operation="read")
+        if full.is_dir():
+            raise IsADirectoryError(str(path))
+        data = full.read_bytes()
+        try:
+            text = data.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise ValueError(
+                f"cannot decode workspace file as text: {path}"
+            ) from exc
+        projected = redact_sensitive_text(text)
+        self.record_open(self.relative_path(full))
+        return projected, hashlib.sha256(data).hexdigest(), projected != text
+
+    def write_document(
+        self,
+        path: str | Path,
+        content: str,
+        *,
+        base_digest: str,
+    ) -> str:
+        """Editor write guarded by the read baseline.
+
+        Whole-file overwrite is refused when the file on disk carries
+        protected values — a redacted draft cannot round-trip — or when
+        its bytes moved past the digest the editor read."""
+        self._guard(path, operation="write")
+        full = self.resolve_path(path)
+        self._guard(full, operation="write")
+        if full.is_file():
+            data = full.read_bytes()
+            try:
+                current = data.decode("utf-8")
+            except UnicodeDecodeError as exc:
+                raise ValueError(
+                    f"cannot decode workspace file as text: {path}"
+                ) from exc
+            if redact_sensitive_text(current) != current:
+                raise PermissionError(
+                    "READ_ONLY_DOCUMENT: file contains protected values;"
+                    " whole-file overwrite is disabled"
+                )
+            if base_digest and hashlib.sha256(data).hexdigest() != base_digest:
+                raise ValueError(
+                    "STALE_DOCUMENT: file changed on disk since it was read"
+                )
+        return self.write_text(path, content)
 
     def write_text(
         self,

@@ -518,12 +518,16 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
   async readWorkspaceFile(request: WorkspaceFileRequest): Promise<WorkspaceFileContent> {
     const text = this.wsFiles.get(request.path);
     if (text === undefined) throw clientError("RUN_NOT_FOUND", `workspace file not found: ${request.path}`);
-    return { path: request.path, text };
+    return { path: request.path, text, digest: `mock-${request.path}-${text.length}`, redacted: false };
   }
 
   async writeWorkspaceFile(request: WorkspaceFileRequest): Promise<WorkspaceFileContent> {
+    const text = this.wsFiles.get(request.path) ?? "";
+    if (request.baseDigest && request.baseDigest !== `mock-${request.path}-${text.length}`) {
+      throw clientError("STALE_DOCUMENT", `file changed since it was read: ${request.path}`);
+    }
     this.wsFiles.set(request.path, request.content ?? "");
-    return { path: request.path, text: "saved" };
+    return { path: request.path, text: "saved", digest: "", redacted: false };
   }
 
   async upsertWorkflowGraph(): Promise<WorkflowGraphSummary> {

@@ -1080,3 +1080,54 @@ def test_http_sidecar_enforces_host_and_origin(tmp_path: Path) -> None:
         assert acao is None
     finally:
         _run(service.close())
+
+
+def test_workspace_file_document_contract(tmp_path: Path) -> None:
+    """A22: 脱敏文件只读且原字节保留；基线过期返回 STALE_DOCUMENT。"""
+    import asyncio
+
+    import tests.test_ha_r1_harness as harness
+    from agent.service.contracts import WorkspaceFileRequest
+    from agent.service.errors import AgentServiceError
+
+    async def scenario() -> None:
+        service, _store = harness.service_at(tmp_path)
+        try:
+            ident = {"tenant_id": "t", "user_id": "u", "session_id": "s"}
+            target = tmp_path / "notes.txt"
+            target.write_text("line1\n")
+            read = await service.read_workspace_file(WorkspaceFileRequest(
+                **ident, request_id="r1", path="notes.txt"))
+            assert read.digest and read.redacted is False
+
+            target.write_text("changed on disk\n")
+            with pytest.raises(AgentServiceError) as stale:
+                await service.write_workspace_file(WorkspaceFileRequest(
+                    **ident, request_id="r2", path="notes.txt",
+                    content="overwrite", base_digest=read.digest))
+            assert stale.value.code.value == "STALE_DOCUMENT"
+            assert target.read_text() == "changed on disk\n"
+
+            read2 = await service.read_workspace_file(WorkspaceFileRequest(
+                **ident, request_id="r3", path="notes.txt"))
+            await service.write_workspace_file(WorkspaceFileRequest(
+                **ident, request_id="r4", path="notes.txt",
+                content="merged\n", base_digest=read2.digest))
+            assert target.read_text() == "merged\n"
+
+            secret = tmp_path / "config.txt"
+            secret.write_text('api_key = "sk-SECRET000111222333"\n')
+            read3 = await service.read_workspace_file(WorkspaceFileRequest(
+                **ident, request_id="r5", path="config.txt"))
+            assert read3.redacted is True
+            assert "sk-SECRET000111222333" not in read3.text
+            with pytest.raises(AgentServiceError) as ro:
+                await service.write_workspace_file(WorkspaceFileRequest(
+                    **ident, request_id="r6", path="config.txt",
+                    content='api_key = "x"\n', base_digest=read3.digest))
+            assert ro.value.code.value == "READ_ONLY_DOCUMENT"
+            assert "sk-SECRET000111222333" in secret.read_text()
+        finally:
+            await service.close()
+
+    asyncio.run(scenario())

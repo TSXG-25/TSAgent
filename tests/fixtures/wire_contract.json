@@ -167,7 +167,21 @@
       "ts_result_fields": [
         "approvalId",
         "status"
-      ]
+      ],
+      "response": {
+        "approval_id": "ap-1",
+        "run_id": "run-1",
+        "action": "write_file",
+        "scope": "",
+        "params": {
+          "path": "x"
+        },
+        "risk_level": "R1",
+        "status": "APPROVED",
+        "decided_by": "u",
+        "created_at": "2026-11-10T00:00:00Z",
+        "decided_at": "2026-11-10T00:00:01Z"
+      }
     },
     "delegate_run": {
       "request": {
@@ -241,6 +255,15 @@
         "sessionId",
         "status",
         "taskId"
+      ],
+      "response": [
+        {
+          "node_id": "n1",
+          "task_id": "",
+          "run_id": "",
+          "session_id": "",
+          "status": "PENDING"
+        }
       ]
     }
   }

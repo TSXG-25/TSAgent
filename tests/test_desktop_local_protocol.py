@@ -215,3 +215,68 @@ def test_wire_contract_fixture_matches_ts_client() -> None:
             assert key in entry["request"] or key in (
                 "run_id", "decided_by",
             ), (method, key)  # client 可不发的可选字段
+
+
+def test_wire_contract_fixture_matches_real_serialization(tmp_path) -> None:
+    """A16: fixture 的 response 示例经真实 dispatcher + DTO 序列化
+    验证 — 语义漂移（approve→deny、序列化删字段）会让本测试失败。"""
+    import asyncio
+    import io
+    import json
+
+    import tests.test_ha_r1_harness as harness
+    from agent.service.local_sidecar.dispatcher import SidecarDispatcher
+
+    fixture = json.loads(
+        (Path(__file__).parent / "fixtures" / "wire_contract.json"
+         ).read_text())
+
+    async def scenario() -> None:
+        service, store = harness.service_at(tmp_path)
+        try:
+            dispatcher = SidecarDispatcher(
+                service, diagnostics=io.StringIO())
+
+            # decide_approval — 真实 dispatch → store → _to_wire → encode。
+            store.ensure_session("t", "s")
+            store.reserve_service_start(
+                "t", "s",
+                requested_run_id="run-1", request_id="r-p",
+                request_digest="d", writer_id="w",
+                external_reference="{}",
+            )
+            store.create_approval(
+                "t", "s", "run-1", "ap-1",
+                action="write_file", params_json='{"path":"x"}',
+                risk_level="R1",
+            )
+            response = await dispatcher.dispatch(LocalRpcRequest(
+                id="d1",
+                method=LocalTransportMethod.DECIDE_APPROVAL,
+                params=dict(
+                    fixture["methods"]["decide_approval"]["request"]),
+            ))
+            produced = json.loads(encode_response(response))["result"]
+            expected = fixture["methods"]["decide_approval"]["response"]
+            for key, value in expected.items():
+                assert produced.get(key) == value, (
+                    key, produced.get(key))
+
+            # run_graph — 返回的序列化步骤必须带 status 且值正确；
+            # 从 to_dict 删一个字段就会破坏这里。
+            store.upsert_workflow_graph(
+                "t", "g-1",
+                definition_json=json.dumps({"nodes": [
+                    {"id": "n1", "type": "task", "request_text": "x"},
+                ], "edges": []}))
+            graph_response = await dispatcher.dispatch(LocalRpcRequest(
+                id="g1",
+                method=LocalTransportMethod.RUN_GRAPH,
+                params=dict(fixture["methods"]["run_graph"]["request"]),
+            ))
+            steps = json.loads(encode_response(graph_response))["result"]
+            assert steps == fixture["methods"]["run_graph"]["response"]
+        finally:
+            await service.close()
+
+    asyncio.run(scenario())

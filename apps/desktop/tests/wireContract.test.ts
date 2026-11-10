@@ -94,13 +94,12 @@ test("list_approvals params match the wire fixture", async () => {
   assert.equal(result[0].status, "PENDING");
 });
 
-test("decide_approval params match the wire fixture", async () => {
+test("decide_approval params and values match the wire fixture", async () => {
   const t = new SpyTransport();
-  t.responses.decide_approval = {
-    approval_id: "ap-1", run_id: "run-1", action: "x", scope: "",
-    params: {}, risk_level: "low", status: "APPROVED",
-    decided_at: "x", decided_by: "u", created_at: "x",
-  };
+  // The fixture's response is the real dispatcher-serialized output —
+  // the Python test asserts the produced values, so a Python-side
+  // semantic change (approve→deny) is caught upstream.
+  t.responses.decide_approval = fixture.methods.decide_approval.response;
   const c = client(t);
   const result = await c.decideApproval({
     tenantId: "t", sessionId: "s", runId: "run-1",
@@ -109,7 +108,9 @@ test("decide_approval params match the wire fixture", async () => {
   const params = t.calls[0].params as Record<string, unknown>;
   const expected = fixture.methods.decide_approval.request;
   assert.deepEqual(Object.keys(params).sort(), Object.keys(expected).sort());
-  assert.equal(result.status, "APPROVED");
+  const produced = fixture.methods.decide_approval.response;
+  assert.equal(result.approvalId, produced.approval_id);
+  assert.equal(result.status, produced.status); // "APPROVED" verbatim
 });
 
 test("delegate_run params and mapped fields match the fixture", async () => {
@@ -137,9 +138,8 @@ test("delegate_run params and mapped fields match the fixture", async () => {
 
 test("run_graph steps carry node status per the fixture", async () => {
   const t = new SpyTransport();
-  t.responses.run_graph = [
-    { node_id: "n1", task_id: "", run_id: "", session_id: "", status: "PENDING" },
-  ];
+  // Same serialized output the Python dispatch test produces.
+  t.responses.run_graph = fixture.methods.run_graph.response;
   const c = client(t);
   const steps = await c.runGraph({
     tenantId: "t", sessionId: "s", requestId: "r6",
@@ -148,7 +148,9 @@ test("run_graph steps carry node status per the fixture", async () => {
   const params = t.calls[0].params as Record<string, unknown>;
   const expected = fixture.methods.run_graph.request;
   assert.deepEqual(Object.keys(params).sort(), Object.keys(expected).sort());
-  assert.equal(steps[0].status, "PENDING");
+  const produced = fixture.methods.run_graph.response[0];
+  assert.equal(steps[0].nodeId, produced.node_id);
+  assert.equal(steps[0].status, produced.status); // "PENDING" verbatim
 });
 
 test("ts_result_fields derive from wire response_fields", () => {

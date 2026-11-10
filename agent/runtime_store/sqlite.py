@@ -150,6 +150,34 @@ def _json_text_equal(left: str, right: str) -> bool:
         return left == right
 
 
+def _verify_store_identity(
+    row: sqlite3.Row,
+    *,
+    schema_version: str,
+    expected_store_generation: str | None,
+) -> str:
+    """Reject a store whose recorded identity may not be opened or
+    migrated.  Returns the stored schema version."""
+    stored_schema = str(row["schema_version"])
+    if stored_schema != schema_version and not (
+        stored_schema in _MIGRATABLE_SCHEMA_VERSIONS
+        and schema_version == SCHEMA_VERSION
+    ):
+        raise DurableStoreError(
+            StoreErrorCode.SCHEMA_INCOMPATIBLE,
+            f"schema version mismatch: stored={stored_schema} expected={schema_version}",
+        )
+    if (
+        expected_store_generation is not None
+        and str(row["store_generation"]) != expected_store_generation
+    ):
+        raise DurableStoreError(
+            StoreErrorCode.STORE_GENERATION_MISMATCH,
+            "database generation differs from the expected generation",
+        )
+    return stored_schema
+
+
 def _is_busy(error: BaseException) -> bool:
     return isinstance(error, sqlite3.OperationalError) and any(
         marker in str(error).lower()
@@ -336,10 +364,32 @@ class SqliteRuntimeStore:
         expected_store_generation: str | None,
     ) -> tuple[str, str]:
         try:
+            # Identity is verified before any DDL: an incompatible schema
+            # version or foreign store generation must be rejected without
+            # mutating the existing schema.  A database without
+            # ``runtime_meta`` is a fresh store and is bootstrapped below.
+            meta_table = connection.execute(
+                "SELECT 1 FROM sqlite_master"
+                " WHERE type = 'table' AND name = 'runtime_meta'"
+            ).fetchone()
+            if meta_table is not None:
+                stored_row = connection.execute(
+                    """
+                    SELECT schema_version, store_generation
+                    FROM runtime_meta
+                    WHERE meta_id = 1
+                    """
+                ).fetchone()
+                if stored_row is not None:
+                    _verify_store_identity(
+                        stored_row,
+                        schema_version=schema_version,
+                        expected_store_generation=expected_store_generation,
+                    )
             # ``executescript`` intentionally runs the DDL in SQLite's own
-            # schema transaction.  Start the explicit writer transaction only
-            # for the metadata read/insert below; otherwise sqlite3's
-            # executescript implicit commit would make our final COMMIT fail.
+            # schema transaction.  The explicit writer transaction below
+            # carries the column migrations and the metadata write; sqlite3's
+            # executescript implicit commit would otherwise split them.
             connection.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS runtime_meta (
@@ -738,7 +788,10 @@ class SqliteRuntimeStore:
                 """
             )
             # ``CREATE TABLE IF NOT EXISTS`` does not evolve existing
-            # databases; add the column for stores created before it.
+            # databases; the column migrations and the metadata write commit
+            # atomically in one writer transaction so a supported upgrade is
+            # either fully applied or not applied at all.
+            connection.execute("BEGIN IMMEDIATE")
             head_columns = {
                 str(row["name"])
                 for row in connection.execute("PRAGMA table_info(run_heads)")
@@ -779,7 +832,6 @@ class SqliteRuntimeStore:
                 connection.execute(
                     "ALTER TABLE session_heads ADD COLUMN workspace_id TEXT NOT NULL DEFAULT ''"
                 )
-            connection.execute("BEGIN IMMEDIATE")
             row = connection.execute(
                 """
                 SELECT schema_version, store_generation
@@ -800,33 +852,25 @@ class SqliteRuntimeStore:
                 )
                 stored_schema = schema_version
             else:
-                stored_schema = str(row["schema_version"])
+                # Re-verify under the writer lock — a peer process may have
+                # bootstrapped or migrated the store since the pre-DDL read.
+                stored_schema = _verify_store_identity(
+                    row,
+                    schema_version=schema_version,
+                    expected_store_generation=expected_store_generation,
+                )
                 generation = str(row["store_generation"])
                 if stored_schema != schema_version:
-                    if (
-                        stored_schema in _MIGRATABLE_SCHEMA_VERSIONS
-                        and schema_version == SCHEMA_VERSION
-                    ):
-                        # Later versions add idempotent tables/indexes only;
-                        # existing durable Run facts remain unchanged.
-                        stored_schema = schema_version
-                        connection.execute(
-                            """
-                            UPDATE runtime_meta
-                            SET schema_version = ?, updated_at = ?
-                            WHERE meta_id = 1
-                            """,
-                            (schema_version, now),
-                        )
-                    else:
-                        raise DurableStoreError(
-                            StoreErrorCode.SCHEMA_INCOMPATIBLE,
-                            f"schema version mismatch: stored={stored_schema} expected={schema_version}",
-                        )
-                if expected_store_generation is not None and generation != expected_store_generation:
-                    raise DurableStoreError(
-                        StoreErrorCode.STORE_GENERATION_MISMATCH,
-                        "database generation differs from the expected generation",
+                    # Later versions add idempotent tables/indexes only;
+                    # existing durable Run facts remain unchanged.
+                    stored_schema = schema_version
+                    connection.execute(
+                        """
+                        UPDATE runtime_meta
+                        SET schema_version = ?, updated_at = ?
+                        WHERE meta_id = 1
+                        """,
+                        (schema_version, now),
                     )
                 connection.execute(
                     "UPDATE runtime_meta SET updated_at = ? WHERE meta_id = 1",
@@ -2201,17 +2245,6 @@ class SqliteRuntimeStore:
             store_generation=str(row["store_generation"]),
         )
 
-    def _ensure_workspace_columns(self, connection: sqlite3.Connection) -> None:
-        for ddl in (
-            "ALTER TABLE workspace_registry ADD COLUMN path TEXT NOT NULL DEFAULT ''",
-            "ALTER TABLE workspace_registry ADD COLUMN paths_json TEXT NOT NULL DEFAULT '[]'",
-            "ALTER TABLE session_heads ADD COLUMN workspace_id TEXT NOT NULL DEFAULT ''",
-        ):
-            try:
-                connection.execute(ddl)
-            except sqlite3.OperationalError:
-                pass  # column already exists
-
     def upsert_workspace(
         self,
         tenant_id: str,
@@ -2227,7 +2260,6 @@ class SqliteRuntimeStore:
         tenant_id = _require_text(tenant_id, "tenant_id")
         workspace_id = _require_text(workspace_id, "workspace_id")
         with self._write_transaction() as connection:
-            self._ensure_workspace_columns(connection)
             connection.execute(
                 """
                 INSERT INTO workspace_registry
@@ -2292,8 +2324,8 @@ class SqliteRuntimeStore:
             tenant_id=str(row["tenant_id"]),
             workspace_id=str(row["workspace_id"]),
             display_name=str(row["display_name"]),
-            path=str(row["path"]) if "path" in row.keys() else "",
-            paths_json=str(row["paths_json"]) if "paths_json" in row.keys() else "[]",
+            path=str(row["path"]),
+            paths_json=str(row["paths_json"]),
             capabilities_json=str(row["capabilities_json"]),
             default_profile_id=str(row["default_profile_id"]),
             description=str(row["description"]),
@@ -2308,7 +2340,6 @@ class SqliteRuntimeStore:
         tenant_id = _require_text(tenant_id, "tenant_id")
         session_id = _require_text(session_id, "session_id")
         with self._write_transaction() as connection:
-            self._ensure_workspace_columns(connection)
             connection.execute(
                 "UPDATE session_heads SET workspace_id = ? WHERE tenant_id = ? AND session_id = ?",
                 (str(workspace_id), tenant_id, session_id),
@@ -2319,7 +2350,6 @@ class SqliteRuntimeStore:
         session_id = _require_text(session_id, "session_id")
         with self._lock:
             self._ensure_open()
-            self._ensure_workspace_columns(self._connection)
             row = self._connection.execute(
                 """
                 SELECT wr.path
@@ -2336,7 +2366,6 @@ class SqliteRuntimeStore:
         tenant_id = _require_text(tenant_id, "tenant_id")
         workspace_id = _require_text(workspace_id, "workspace_id")
         with self._write_transaction() as connection:
-            self._ensure_workspace_columns(connection)
             connection.execute(
                 "UPDATE session_heads SET workspace_id = '' WHERE tenant_id = ? AND workspace_id = ?",
                 (tenant_id, workspace_id),
@@ -2351,7 +2380,6 @@ class SqliteRuntimeStore:
         tenant_id = _require_text(tenant_id, "tenant_id")
         with self._lock:
             self._ensure_open()
-            self._ensure_workspace_columns(self._connection)
             rows = self._connection.execute(
                 "SELECT session_id FROM session_heads WHERE tenant_id = ? AND workspace_id = ?",
                 (tenant_id, workspace_id),
@@ -2363,12 +2391,11 @@ class SqliteRuntimeStore:
         session_id = _require_text(session_id, "session_id")
         with self._lock:
             self._ensure_open()
-            self._ensure_workspace_columns(self._connection)
             row = self._connection.execute(
                 "SELECT workspace_id FROM session_heads WHERE tenant_id = ? AND session_id = ?",
                 (tenant_id, session_id),
             ).fetchone()
-            return str(row["workspace_id"]) if row and "workspace_id" in row.keys() else ""
+            return str(row["workspace_id"]) if row else ""
 
     def add_participant(
         self,

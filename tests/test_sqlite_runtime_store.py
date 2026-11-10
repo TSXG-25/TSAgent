@@ -294,6 +294,85 @@ def test_h3_schema_migrates_worker_lease_table_without_losing_run(tmp_path: Path
         store.close()
 
 
+def test_incompatible_store_is_rejected_before_any_ddl(tmp_path: Path) -> None:
+    """An unknown schema version must be refused without mutating the
+    existing schema — version rejection protects the database itself."""
+    path = tmp_path / "foreign-version.sqlite"
+    store = SqliteRuntimeStore.open(path)
+    store.initialize_run("tenant-a", "session-a", "run-1")
+    store.close()
+
+    connection = sqlite3.connect(path)
+    try:
+        connection.execute("ALTER TABLE run_heads DROP COLUMN task_id")
+        connection.execute(
+            "UPDATE runtime_meta SET schema_version = 'v9.9-unknown'"
+            " WHERE meta_id = 1"
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    with pytest.raises(DurableStoreError) as incompatible:
+        SqliteRuntimeStore.open(path)
+    assert incompatible.value.code is StoreErrorCode.SCHEMA_INCOMPATIBLE
+
+    connection = sqlite3.connect(path)
+    try:
+        columns = {
+            row[1]
+            for row in connection.execute("PRAGMA table_info(run_heads)")
+        }
+        assert "task_id" not in columns
+        version = connection.execute(
+            "SELECT schema_version FROM runtime_meta WHERE meta_id = 1"
+        ).fetchone()[0]
+        assert version == "v9.9-unknown"
+    finally:
+        connection.close()
+
+
+def test_generation_mismatch_is_rejected_before_any_ddl(tmp_path: Path) -> None:
+    path = tmp_path / "foreign-generation.sqlite"
+    store = SqliteRuntimeStore.open(path)
+    store.close()
+
+    connection = sqlite3.connect(path)
+    try:
+        connection.execute("ALTER TABLE run_heads DROP COLUMN task_id")
+        connection.commit()
+    finally:
+        connection.close()
+
+    with pytest.raises(DurableStoreError) as mismatch:
+        SqliteRuntimeStore.open(path, expected_store_generation="other-gen")
+    assert mismatch.value.code is StoreErrorCode.STORE_GENERATION_MISMATCH
+
+    connection = sqlite3.connect(path)
+    try:
+        columns = {
+            row[1]
+            for row in connection.execute("PRAGMA table_info(run_heads)")
+        }
+        assert "task_id" not in columns
+    finally:
+        connection.close()
+
+    # The supported migration path still applies: the same store opened with
+    # its real generation regains the column.
+    migrated = SqliteRuntimeStore.open(path)
+    try:
+        columns = {
+            row[1]
+            for row in migrated._connection.execute(
+                "PRAGMA table_info(run_heads)"
+            )
+        }
+        assert "task_id" in columns
+    finally:
+        migrated.close()
+
+
 def test_revision_cas_with_two_independent_connections_has_one_winner(
     tmp_path: Path,
 ) -> None:

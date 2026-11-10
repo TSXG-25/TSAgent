@@ -836,6 +836,7 @@ class AgentLoop:
                         context_refs=tuple(
                             str(r) for r in (call.arguments.get("context_refs") or ())
                         ),
+                        request_key=f"{run_context.run_id}:call-{index}",
                     )
                 except Exception as exc:
                     return _tool_message(

@@ -797,6 +797,90 @@ class AgentService:
             latest_updated_at="" if latest_run is None else latest_run.updated_at,
         )
 
+    def _provision_delegation(
+        self,
+        *,
+        tenant_id: str,
+        session_id: str,
+        source_run_id: str,
+        parent_task_id: str,
+        request_key: str,
+        request_text: str,
+        target_planet: str,
+        profile: Any | None,
+        resolved_refs: tuple[str, ...] | list[str],
+        workspace_root: str,
+    ) -> dict[str, Any]:
+        """One durable provisioning for every delegation entry — child
+        Task, Handoff, participant, and the config the child Run must
+        receive (agent_profile metadata, inherited workspace, resolved
+        context refs).  Ids derive from request_key, so a retried request
+        finds the same delegation fact instead of a second Handoff."""
+        import hashlib
+        import json as _json
+        import uuid
+
+        task_id = (
+            "task-delegate-"
+            + hashlib.sha256(request_key.encode()).hexdigest()[:12]
+            if request_key
+            else f"task-{uuid.uuid4().hex[:12]}"
+        )
+        child_task = self._store.create_task_head(
+            tenant_id,
+            session_id,
+            task_id,
+            parent_task_id=parent_task_id,
+            origin_planet=target_planet,
+            owner_profile_id=profile.profile_id if profile else "",
+        )
+        child_text = request_text
+        if resolved_refs:
+            lines = "\n".join(f"- {r}" for r in resolved_refs)
+            child_text = f"{request_text}\n\n上下文引用（已验证可用）:\n{lines}"
+        if profile is not None:
+            label = profile.display_name or profile.profile_id
+            planet = (
+                f" @{profile.planet_affinity}"
+                if profile.planet_affinity
+                else ""
+            )
+            child_text = f"[Agent: {label}{planet}]\n{child_text}"
+        self._store.add_participant(
+            tenant_id, session_id, child_task.task_id, role="delegate"
+        )
+        handoff = self._store.create_handoff(
+            tenant_id,
+            session_id,
+            f"handoff:{child_task.task_id}",
+            source_run_id=source_run_id,
+            source_task_id=parent_task_id,
+            target_task_id=child_task.task_id,
+            target_planet=target_planet,
+            context_refs_json=_json.dumps(tuple(resolved_refs)),
+            approval_state="not_required",
+        )
+        return {
+            "task_id": child_task.task_id,
+            "handoff_id": handoff.handoff_id,
+            "session_id": session_id,
+            "target_planet": target_planet,
+            "workspace_root": workspace_root,
+            "agent_profile": (
+                {
+                    "profile_id": profile.profile_id,
+                    "model_ref": profile.model_ref,
+                    "skill_refs": _json.loads(profile.skill_refs_json or "[]"),
+                    "permission_policy": _json.loads(
+                        profile.permission_policy_json or "{}"
+                    ),
+                }
+                if profile is not None
+                else {}
+            ),
+            "request_text": child_text,
+        }
+
     async def spawn_subtask(
         self,
         run_context: Any,
@@ -805,12 +889,12 @@ class AgentService:
         target_planet: str = "",
         profile_id: str = "",
         context_refs: tuple[str, ...] | list[str] = (),
+        request_key: str = "",
     ) -> str:
         """Delegate a subtask: child Task -> child Run -> result back to
         the parent's tool result.  The parent run's loop blocks on this
         call; the delegation tree and handoff event are durable."""
         import asyncio
-        import uuid
 
         depth = int(getattr(run_context, "delegation_depth", 0) or 0)
         if depth >= 1:
@@ -847,83 +931,58 @@ class AgentService:
             target_planet = target_planet or profile.planet_affinity
         # The Task tree lives in the parent session; the delegated Run gets a
         # derived session — one active run per session plus context isolation.
-        child_task = self._store.create_task_head(
-            tenant_id,
-            session_id,
-            f"task-{uuid.uuid4().hex[:12]}",
-            parent_task_id=parent_head.task_id if parent_head else "",
-            origin_planet=target_planet,
-            owner_profile_id=profile_id,
-        )
-        child_text = request_text
-        if resolved_refs:
-            lines = "\n".join(f"- {r}" for r in resolved_refs)
-            child_text = f"{request_text}\n\n上下文引用（已验证可用）:\n{lines}"
-        if profile is not None:
-            label = profile.display_name or profile.profile_id
-            planet = f" @{profile.planet_affinity}" if profile.planet_affinity else ""
-            child_text = f"[Agent: {label}{planet}]\n{child_text}"
-        child_session_id = f"{session_id}{SUBTASK_SESSION_MARKER}{child_task.task_id}"
-        self._store.add_participant(
-            tenant_id,
-            session_id,
-            child_task.task_id,
-            role="delegate",
-        )
-        import json as _json
-        handoff = self._store.create_handoff(
-            tenant_id,
-            session_id,
-            f"handoff:{child_task.task_id}",
-            source_run_id=run_context.run_id,
-            source_task_id=parent_head.task_id if parent_head else "",
-            target_task_id=child_task.task_id,
-            target_planet=target_planet,
-            context_refs_json=_json.dumps(resolved_refs),
-            approval_state="not_required",
-        )
         # The derived child session has no workspace binding — inherit the
         # parent's resolved root so file refs and file ops stay in scope.
         parent_workspace = getattr(run_context, "workspace", None)
         parent_root = str(parent_workspace.root) if parent_workspace else ""
+        provisioned = self._provision_delegation(
+            tenant_id=tenant_id,
+            session_id=session_id,
+            source_run_id=run_context.run_id,
+            parent_task_id=parent_head.task_id if parent_head else "",
+            request_key=request_key,
+            request_text=request_text,
+            target_planet=target_planet,
+            profile=profile,
+            resolved_refs=resolved_refs,
+            workspace_root=parent_root,
+        )
+        child_session_id = (
+            f"{session_id}{SUBTASK_SESSION_MARKER}{provisioned['task_id']}"
+        )
         handle = await self.start_run(
             StartRunRequest(
                 tenant_id=tenant_id,
                 user_id=run_context.user_id,
                 session_id=child_session_id,
-                request_id=f"subtask:{child_task.task_id}",
-                request_text=child_text,
-                task_id=child_task.task_id,
-                workspace_root=parent_root,
+                request_id=f"subtask:{provisioned['task_id']}",
+                request_text=provisioned["request_text"],
+                task_id=provisioned["task_id"],
+                workspace_root=provisioned["workspace_root"],
                 context_refs=tuple(resolved_refs),
                 metadata={
                     "delegation_depth": depth + 1,
-                    "agent_profile": {
-                        "profile_id": profile.profile_id,
-                        "model_ref": profile.model_ref,
-                        "skill_refs": _json.loads(profile.skill_refs_json or "[]"),
-                        "permission_policy": _json.loads(
-                            profile.permission_policy_json or "{}"
-                        ),
-                    } if profile is not None else {},
+                    "agent_profile": provisioned["agent_profile"],
                 },
             )
         )
         self._store.update_handoff_target_run(
-            tenant_id, handoff.handoff_id, handle.run_id
+            tenant_id, provisioned["handoff_id"], handle.run_id
         )
         view.store.append_event(
             view.tenant_id,
             view.session_id,
             view.run_id,
-            event_id=f"task-delegated:{view.run_id}:{child_task.task_id}",
+            event_id=f"task-delegated:{view.run_id}:{provisioned['task_id']}",
             event_type="task.delegated",
             timestamp=self._timestamp(),
             payload={
-                "child_task_id": child_task.task_id,
+                "child_task_id": provisioned["task_id"],
                 "child_run_id": handle.run_id,
                 "child_session_id": child_session_id,
-                "parent_task_id": child_task.parent_task_id,
+                "parent_task_id": (
+                    parent_head.task_id if parent_head else ""
+                ),
                 "target_planet": target_planet,
                 "profile_id": profile_id,
                 "routed_by": "sun" if routed_planet else "caller",
@@ -942,7 +1001,7 @@ class AgentService:
                     user_id=run_context.user_id,
                     session_id=child_session_id,
                     run_id=handle.run_id,
-                    request_id=f"subtask-read:{child_task.task_id}",
+                    request_id=f"subtask-read:{provisioned['task_id']}",
                 )
             )
         except Exception as error:
@@ -950,11 +1009,11 @@ class AgentService:
             view.tenant_id,
             view.session_id,
             view.run_id,
-            event_id=f"task-result:{view.run_id}:{child_task.task_id}",
+            event_id=f"task-result:{view.run_id}:{provisioned['task_id']}",
             event_type="task.result",
             timestamp=self._timestamp(),
             payload={
-                    "child_task_id": child_task.task_id,
+                    "child_task_id": provisioned["task_id"],
                     "child_run_id": handle.run_id,
                     "outcome": "error",
                     "detail": str(error)[:500],
@@ -968,11 +1027,11 @@ class AgentService:
             view.tenant_id,
             view.session_id,
             view.run_id,
-            event_id=f"task-result:{view.run_id}:{child_task.task_id}",
+            event_id=f"task-result:{view.run_id}:{provisioned['task_id']}",
             event_type="task.result",
             timestamp=self._timestamp(),
             payload={
-                "child_task_id": child_task.task_id,
+                "child_task_id": provisioned["task_id"],
                 "child_run_id": handle.run_id,
                 "outcome": snapshot.status.value,
             },
@@ -1506,9 +1565,13 @@ class AgentService:
                     user_id=request.user_id,
                     session_id=child_session,
                     request_id=f"{request.request_id}-{node['id']}-run",
-                    request_text=request_text,
+                    request_text=delegation["request_text"],
                     task_id=delegation["task_id"],
-                    metadata={"delegation_depth": 1},
+                    workspace_root=delegation["workspace_root"],
+                    metadata={
+                        "delegation_depth": 1,
+                        "agent_profile": delegation["agent_profile"],
+                    },
                 )
             )
             steps.append(
@@ -1824,8 +1887,6 @@ class AgentService:
         desktop controller keeps its hydration path.
         """
         self._ensure_open()
-        import json as _json
-        import uuid
 
         from .errors import AgentServiceError, ServiceErrorCode
         from agent.runtime_store.errors import DurableStoreError
@@ -1859,31 +1920,24 @@ class AgentService:
             request.parent_run_id,
             request.context_refs,
         )
-        child_task = self._store.create_task_head(
-            tenant_id,
-            session_id,
-            f"task-{uuid.uuid4().hex[:12]}",
-            parent_task_id=parent_head.task_id if parent_head else "",
-            origin_planet=target_planet,
-            owner_profile_id=request.profile_id,
-        )
-        handoff = self._store.create_handoff(
-            tenant_id,
-            session_id,
-            f"handoff-{uuid.uuid4().hex[:12]}",
+        # The returned descriptor carries the child's full start config —
+        # agent_profile metadata, inherited workspace and the enriched
+        # request_text — so the separate start_run matches spawn_subtask's.
+        return self._provision_delegation(
+            tenant_id=tenant_id,
+            session_id=session_id,
             source_run_id=request.parent_run_id,
-            source_task_id=parent_head.task_id if parent_head else "",
-            target_task_id=child_task.task_id,
+            parent_task_id=parent_head.task_id if parent_head else "",
+            request_key=request.request_id,
+            request_text=request.request_text,
             target_planet=target_planet,
-            context_refs_json=_json.dumps(refs),
-            approval_state="not_required",
+            profile=profile,
+            resolved_refs=refs,
+            workspace_root=str(
+                self._contexts.session_workspace(tenant_id, session_id)
+                or ""
+            ),
         )
-        return {
-            "task_id": child_task.task_id,
-            "handoff_id": handoff.handoff_id,
-            "session_id": session_id,
-            "target_planet": target_planet,
-        }
 
     async def create_schedule(self, request: Any) -> Any:
         self._ensure_open()

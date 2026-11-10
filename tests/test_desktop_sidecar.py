@@ -1677,3 +1677,123 @@ def test_sidecar_exits_on_broken_transport(tmp_path: Path) -> None:
         assert dispatcher._closed
 
     asyncio.run(scenario())
+
+
+def test_delegation_provisioning_is_shared_and_idempotent(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """A06: 委派入口共用同一持久化用例 — 同请求重试不新增 Handoff；
+    图路径的子 Run 收到等价 agent_profile/workspace 配置。"""
+    import asyncio
+
+    import tests.test_ha_r1_harness as harness
+    from agent.runtime_store.sqlite import SqliteRuntimeStore
+    from agent.runtime_store.view import DurableRuntimeStoreView
+    from agent.service.context_factory import ServiceContextFactory
+    from agent.service.contracts import (
+        DelegateRunRequest,
+        RunWorkflowGraphRequest,
+        StartRunRequest,
+    )
+    from agent.service.runtime_launcher import RuntimeExecutionLauncher
+    from agent.service.run_projector import encode_request_reference
+    from agent.service.service import AgentService
+
+    request_text = "委托任务"
+    harness.setup_provider(monkeypatch, [
+        (request_text, harness.intent(request_text, artifact=False)),
+        (request_text, "完成"),
+    ])
+
+    class SpyLauncher:
+        def __init__(self) -> None:
+            self._inner = RuntimeExecutionLauncher()
+            self.profiles: list[dict] = []
+
+        async def start(self, **kwargs):
+            self.profiles.append(dict(
+                getattr(kwargs["run_context"], "agent_profile", {}) or {}
+            ))
+            return await self._inner.start(**kwargs)
+
+        async def resume(self, **kwargs):
+            return await self._inner.resume(**kwargs)
+
+    async def scenario() -> None:
+        store = SqliteRuntimeStore.open(tmp_path / "runtime.sqlite")
+        spy = SpyLauncher()
+        service = AgentService(
+            runtime_store=store,
+            launcher=spy,
+            context_factory=ServiceContextFactory(
+                store, workspace_root=tmp_path
+            ),
+        )
+        try:
+            store.ensure_session("t", "s")
+            store.upsert_workspace("t", "ws", path=str(tmp_path))
+            store.assign_session_workspace("t", "s", "ws")
+            store.upsert_profile(
+                "t", "prof-a", planet_affinity="mars",
+                model_ref="fake-model-a",
+            )
+            parent = StartRunRequest(
+                tenant_id="t", user_id="u", session_id="s",
+                request_id="r-parent", request_text="parent")
+            store.reserve_service_start(
+                "t", "s",
+                requested_run_id="run-parent", request_id="r-parent",
+                request_digest="d", writer_id="w",
+                external_reference=encode_request_reference(
+                    parent, run_id="run-parent",
+                    workspace_root=str(tmp_path)),
+            )
+            view = DurableRuntimeStoreView(
+                store, tenant_id="t", session_id="s",
+                run_id="run-parent", request_id="r-parent", writer_id="w")
+            view.transition_run_with_event(
+                run_status="RUNNING",
+                event_id="run-started:p", event_type="run_started",
+                timestamp="2026-11-10T00:00:00Z", payload={})
+
+            dr = DelegateRunRequest(
+                tenant_id="t", user_id="u", session_id="s",
+                request_id="del-1", parent_run_id="run-parent",
+                request_text=request_text,
+                target_planet="mars", profile_id="prof-a")
+            first = await service.delegate_run(dr)
+            second = await service.delegate_run(dr)
+            assert first["task_id"] == second["task_id"]
+            assert first["handoff_id"] == second["handoff_id"]
+            assert len(store.list_handoffs("t", "s")) == 1
+            assert first["agent_profile"]["model_ref"] == "fake-model-a"
+            assert first["workspace_root"] == str(tmp_path)
+            assert first["request_text"].startswith("[Agent:")
+
+            # 图路径共用同一 provision — 同 request_id 重跑不新增 Handoff。
+            store.upsert_workflow_graph("t", "g-1", definition_json=(
+                '{"nodes":[{"id":"n1","type":"task",'
+                '"request_text":"委托任务","profile_id":"prof-a",'
+                '"target_planet":"mars"}],"edges":[]}'))
+            steps = await service.run_graph(RunWorkflowGraphRequest(
+                tenant_id="t", user_id="u", session_id="s",
+                request_id="g-run-1", graph_id="g-1",
+                parent_run_id="run-parent"))
+            assert len(steps) == 1
+            assert len(store.list_handoffs("t", "s")) == 2
+            steps2 = await service.run_graph(RunWorkflowGraphRequest(
+                tenant_id="t", user_id="u", session_id="s",
+                request_id="g-run-1", graph_id="g-1",
+                parent_run_id="run-parent"))
+            assert steps2[0].task_id == steps[0].task_id
+            assert len(store.list_handoffs("t", "s")) == 2
+            # 图启动的子 Run 收到等价 agent_profile（此前只传 depth）。
+            for _ in range(100):
+                if spy.profiles:
+                    break
+                await asyncio.sleep(0.05)
+            assert spy.profiles[0]["model_ref"] == "fake-model-a"
+        finally:
+            await service.close()
+
+    asyncio.run(scenario())

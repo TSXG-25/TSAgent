@@ -1014,6 +1014,12 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
       handoffId: requiredString(raw.handoff_id, "handoff_id"),
       sessionId: optionalString(raw.session_id) ?? "",
       targetPlanet: optionalString(raw.target_planet) ?? "",
+      requestText: optionalString(raw.request_text) ?? undefined,
+      workspaceRoot: optionalString(raw.workspace_root) ?? undefined,
+      agentProfile:
+        raw.agent_profile && typeof raw.agent_profile === "object"
+          ? (raw.agent_profile as Record<string, unknown>)
+          : undefined,
     };
   }
 

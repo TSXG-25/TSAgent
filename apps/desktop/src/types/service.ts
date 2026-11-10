@@ -715,6 +715,10 @@ export interface DelegateRunResult {
   handoffId: string;
   sessionId: string;
   targetPlanet: string;
+  /** Provisioned child start config — forward into the start_run call. */
+  requestText?: string;
+  workspaceRoot?: string;
+  agentProfile?: Record<string, unknown>;
 }
 
 /** Durable child-task + handoff provisioning for UI delegation. */

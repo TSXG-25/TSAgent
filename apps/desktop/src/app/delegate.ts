@@ -49,14 +49,25 @@ export async function delegateToPlanet(
     requestText,
     targetPlanet,
   });
+  // The Service's provisioning is authoritative for the child's start —
+  // requestText carries verified refs/agent label, workspaceRoot and
+  // agentProfile carry the same config spawn_subtask would pass.
   await ctx.controller.startRun({
     tenantId: service.identity.tenantId,
     sessionId: liveRun.sessionId,
     requestId: requestIdForRun(0),
-    requestText,
+    requestText: result?.requestText ?? requestText,
     taskId: result?.taskId ?? "",
+    workspaceRoot: result?.workspaceRoot,
     contextRefs: attachments,
-    metadata: { ...metadata, delegation_depth: 1 },
+    metadata: {
+      ...metadata,
+      delegation_depth: 1,
+      agent_profile: {
+        ...((metadata.agent_profile as Record<string, unknown>) ?? {}),
+        ...(result?.agentProfile ?? {}),
+      },
+    },
   });
   return result?.taskId ?? "";
 }

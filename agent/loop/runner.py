@@ -56,11 +56,28 @@ _GAP_TOOL_HINTS = {
 }
 
 
+_GAP_REQUIRED_TOOLS = {
+    "deliverable": ("write_file", "edit_file"),
+    "outcome:FILE_MUTATION": ("write_file", "edit_file"),
+    "outcome:CODE_EXECUTION": ("run_python", "run_python_file"),
+    "outcome:COMMAND_EXECUTION": ("shell",),
+    "fresh external evidence": ("web_search", "web_fetch"),
+    "user-visible output": (),
+}
+
+
 def _gap_hint(gap: str) -> str:
     for key, hint in _GAP_TOOL_HINTS.items():
         if gap.startswith(key) or gap == key:
             return hint
     return "合适的工具调用"
+
+
+def _gap_unsatisfiable(gap: str, tool_names: frozenset[str]) -> bool:
+    for key, required in _GAP_REQUIRED_TOOLS.items():
+        if gap.startswith(key) or gap == key:
+            return bool(required) and tool_names.isdisjoint(required)
+    return False
 
 
 def _tool_message(call: ToolCall, content: str, ok: bool = True,
@@ -422,22 +439,38 @@ class AgentLoop:
                     and self._advance_goal_round(state)
                 ):
                     state["verification_feedback_rounds"] = feedback_round + 1
+                    tool_names = frozenset(tools)
+                    unsatisfiable = [
+                        gap for gap in gaps
+                        if _gap_unsatisfiable(gap, tool_names)
+                    ]
+                    fixable = [gap for gap in gaps if gap not in unsatisfiable]
+                    feedback_text = (
+                        "[运行时校验] 尚未满足: " + "; ".join(gaps) + "。"
+                    )
+                    if unsatisfiable:
+                        feedback_text += (
+                            "其中以下缺口当前没有可调用的工具："
+                            + "、".join(unsatisfiable)
+                            + "。不要虚构或声称已完成这些工具调用；"
+                            "请基于已有信息如实回答，并明确标注该部分无法核实。"
+                        )
+                    if fixable:
+                        feedback_text += (
+                            "其余缺口需要用工具补上，例如: "
+                            + "; ".join(dict.fromkeys(
+                                _gap_hint(gap) for gap in fixable
+                            ))
+                            + "。请直接调用工具完成，不要只输出文字；"
+                        )
+                    feedback_text += "确实无法完成时如实说明原因。"
                     transcript.append({
                         "role": "assistant",
                         "content": answer,
                     })
                     transcript.append({
                         "role": "user",
-                        "content": (
-                            "[运行时校验] 尚未满足: "
-                            + "; ".join(gaps)
-                            + "。缺口需要用工具补上，例如: "
-                            + "; ".join(dict.fromkeys(
-                                _gap_hint(gap) for gap in gaps
-                            ))
-                            + "。请直接调用工具完成，不要只输出文字；"
-                            "确实无法完成时如实说明原因。"
-                        ),
+                        "content": feedback_text,
                     })
                     continue
                 if event_bus is not None and state.get("token_usage"):

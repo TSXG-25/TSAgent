@@ -186,10 +186,13 @@ class Finalizer:
             bool(state.get("freshness_required", False))
             or bool(state.get("source_grounding_required", False))
         ) and not has_fresh_evidence(state):
-            state["runtime_terminal_status"] = "BLOCKED"
+            state["runtime_terminal_status"] = "FAILED_TERMINAL"
             state["runtime_failure_code"] = "RESEARCH_TOOL_UNAVAILABLE"
+            base = str(best_answer or "").strip()
             answer = (
-                "当前没有可核验的外部最新来源，因此不能可靠回答这项时效性问题；"
+                f"{base}\n\n（外部检索工具不可用，以上内容未能核实，仅供参考。）"
+                if base
+                else "当前没有可核验的外部最新来源，因此不能可靠回答这项时效性问题；"
                 "本次未生成无来源的当前信息。"
             )
             answer = self._project_goal_answer(state, answer)

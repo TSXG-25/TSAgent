@@ -6,6 +6,18 @@ from pathlib import Path
 
 import pytest
 
+from agent.service.contracts import (
+    ApprovalSummary,
+    DecideApprovalRequest,
+    DelegateRunRequest,
+    GraphRunStepSummary,
+    ListApprovalsRequest,
+    RunHandle,
+    RunLookupRequest,
+    RunSnapshot,
+    RunWorkflowGraphRequest,
+    StartRunRequest,
+)
 from agent.service.local_protocol import (
     LOCAL_TRANSPORT_METHODS,
     LocalProtocolError,
@@ -143,3 +155,63 @@ def test_response_shape_and_public_error_are_not_internal_objects() -> None:
         "ok": False,
         "error": {"code": "INTERNAL_ERROR", "message": "operation failed", "retryable": False},
     }
+
+
+def test_wire_contract_fixture_matches_python_dtos() -> None:
+    """A16: 契约 fixture 与 Python wire DTO 对齐 — 删改任一已支持
+    字段/枚举都会打破本测试（TS 侧同样读取此 fixture）。"""
+    import dataclasses
+    import json
+
+    fixture = json.loads(
+        (Path(__file__).parent / "fixtures" / "wire_contract.json"
+         ).read_text())
+    method_to_request = {
+        "start_run": StartRunRequest,
+        "get_run": RunLookupRequest,
+        "list_approvals": ListApprovalsRequest,
+        "decide_approval": DecideApprovalRequest,
+        "delegate_run": DelegateRunRequest,
+        "run_graph": RunWorkflowGraphRequest,
+    }
+    method_to_response = {
+        "start_run": RunHandle,
+        "get_run": RunSnapshot,
+        "list_approvals": ApprovalSummary,
+        "decide_approval": ApprovalSummary,
+        "delegate_run": None,  # plain dict — covered by delegation tests
+        "run_graph": GraphRunStepSummary,
+    }
+    assert set(fixture["methods"]) == set(method_to_request)
+    for method, entry in fixture["methods"].items():
+        request_cls = method_to_request[method]
+        declared = {
+            f.name for f in dataclasses.fields(request_cls)
+        }
+        assert set(entry["request_fields"]) == declared, method
+        dto = request_cls.from_dict(entry["request"])
+        assert dto is not None, method
+        response_cls = method_to_response[method]
+        if response_cls is not None:
+            response_fields = {
+                f.name for f in dataclasses.fields(response_cls)
+            }
+            assert set(entry["response_fields"]) == response_fields, method
+
+
+def test_wire_contract_fixture_matches_ts_client() -> None:
+    """A16: TS 侧由 apps/desktop/tests/wireContract.test.ts 校验 —
+    这里只校验 fixture 形状，防止漂移两侧都漏。"""
+    import json
+
+    fixture = json.loads(
+        (Path(__file__).parent / "fixtures" / "wire_contract.json"
+         ).read_text())
+    for method, entry in fixture["methods"].items():
+        for key in ("request", "request_fields",
+                    "response_fields", "ts_result_fields"):
+            assert key in entry, (method, key)
+        for key in entry["request_fields"]:
+            assert key in entry["request"] or key in (
+                "run_id", "decided_by",
+            ), (method, key)  # client 可不发的可选字段

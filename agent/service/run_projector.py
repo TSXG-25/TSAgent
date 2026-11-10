@@ -248,7 +248,7 @@ class RunProjector:
                 run_id=request.run_id,
                 revision=read.head.current_revision,
             )
-            for artifact in (getattr(read, "artifacts", ()) or ())
+            for artifact in read.artifacts
         )
         values: dict[str, Any] = {
             "tenant_id": request.tenant_id,

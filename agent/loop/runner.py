@@ -608,7 +608,7 @@ class AgentLoop:
             )
         # 审批身份用 Run 内调用序号：Provider 的 call.id 只做协议关联，
         # 缺省或重复时不能把不同动作绑到同一条审批记录。
-        approval_id = f"{getattr(run_context, 'run_id', 'run')}:call-{index}"
+        approval_id = f"{run_context.run_id}:call-{index}"
         try:
             record = await delegation.request_approval(
                 run_context,
@@ -629,7 +629,7 @@ class AgentLoop:
                 "审批请求失败: " + stable_error_message(exc),
                 ok=False, error_code="APPROVAL_FAILED",
             )
-        status = getattr(record, "status", "PENDING")
+        status = record.status
         if status == "APPROVED":
             return None
         if status == "DENIED":

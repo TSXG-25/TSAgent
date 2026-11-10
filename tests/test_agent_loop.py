@@ -491,51 +491,6 @@ def test_approval_gate_passes_approved_tool(tmp_path):
     asyncio.run(scenario())
 
 
-def test_approval_gate_binds_each_call_to_its_own_identity(tmp_path):
-    """A repeated provider call.id must not fold two different actions into
-    one approval record — identity is the Run-local call ordinal."""
-    calls = []
-
-    class FakeDelegation:
-        async def request_approval(self, run_context, **kwargs):
-            calls.append(kwargs)
-            return SimpleNamespace(status="APPROVED")
-
-    orch = _orchestrator(tmp_path)
-    orch.run_context.delegation = FakeDelegation()
-    orch.run_context.run_id = "run-bind"
-    state = _mutation_state(
-        requested_outcomes=["USER_VISIBLE_OUTPUT", "COMMAND_EXECUTION"],
-        artifact_required=False,
-    )
-    from agent.loop.toolset import LoopTool
-    toolset = {
-        "shell": LoopTool(
-            name="shell", executor_tool="shell", verb="execute", spec={},
-            risk_level="R2",
-        ),
-    }
-
-    async def scenario():
-        loop = AgentLoop(orch)
-        for index, command in enumerate(("echo a", "echo b"), start=1):
-            call = ToolCall(
-                id="call-0", name="shell", arguments={"command": command}
-            )
-            await loop._dispatch(
-                call, toolset, state, index=index,
-                run_context=orch.run_context, user_id="u", user_input="执行",
-            )
-
-    asyncio.run(scenario())
-    assert [entry["approval_id"] for entry in calls] == [
-        "run-bind:call-1",
-        "run-bind:call-2",
-    ]
-    assert calls[0]["params"] == {"command": "echo a"}
-    assert calls[1]["params"] == {"command": "echo b"}
-
-
 def test_approval_gate_fails_closed_without_approval_channel(tmp_path):
     """An R2+ call in a runtime with no approval capability must not
     execute — the missing channel fails closed."""

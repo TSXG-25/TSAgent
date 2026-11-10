@@ -373,6 +373,43 @@ def test_generation_mismatch_is_rejected_before_any_ddl(tmp_path: Path) -> None:
         migrated.close()
 
 
+def test_failed_migration_rolls_back_schema_and_metadata(tmp_path: Path) -> None:
+    """A migration failure mid-way must leave the store untouched — schema
+    DDL, column migrations and the metadata write commit in one transaction."""
+    path = tmp_path / "atomic-migration.sqlite"
+    old = SqliteRuntimeStore.open(path, schema_version="v2.3H3")
+    old.close()
+
+    connection = sqlite3.connect(path)
+    try:
+        connection.execute("DROP TABLE run_worker_leases")
+        connection.execute(
+            """
+            CREATE TRIGGER deny_meta_update
+            BEFORE UPDATE ON runtime_meta
+            BEGIN SELECT RAISE(ABORT, 'deny meta update'); END;
+            """
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    with pytest.raises(DurableStoreError):
+        SqliteRuntimeStore.open(path)
+
+    connection = sqlite3.connect(path)
+    try:
+        assert connection.execute(
+            "SELECT name FROM sqlite_master"
+            " WHERE type = 'table' AND name = 'run_worker_leases'"
+        ).fetchone() is None
+        assert connection.execute(
+            "SELECT schema_version FROM runtime_meta WHERE meta_id = 1"
+        ).fetchone()[0] == "v2.3H3"
+    finally:
+        connection.close()
+
+
 def test_revision_cas_with_two_independent_connections_has_one_winner(
     tmp_path: Path,
 ) -> None:

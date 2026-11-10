@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import tempfile
 from pathlib import Path
 
@@ -9,7 +10,11 @@ import pytest
 
 from agent.runtime_store.sqlite import SqliteRuntimeStore
 from agent.runtime_store.errors import DurableStoreError, StoreErrorCode
-from agent.service.contracts import DecideApprovalRequest, ListApprovalsRequest
+from agent.service.contracts import (
+    DecideApprovalRequest,
+    ListApprovalsRequest,
+    StartRunRequest,
+)
 
 
 def _store(tmp: str) -> SqliteRuntimeStore:
@@ -81,6 +86,18 @@ def test_create_approval_rejects_same_key_for_a_different_action() -> None:
                         action=action, params_json=params_json,
                     )
                 assert conflict.value.code is StoreErrorCode.IDEMPOTENCY_CONFLICT
+
+            # true 与 1 在 Python 层判等；审批参数比较必须区分 JSON 类型。
+            store.create_approval(
+                "t", "s", "run-1", "ap-bool",
+                action="shell", params_json='{"flag": true}',
+            )
+            with pytest.raises(DurableStoreError) as bool_conflict:
+                store.create_approval(
+                    "t", "s", "run-1", "ap-bool",
+                    action="shell", params_json='{"flag": 1}',
+                )
+            assert bool_conflict.value.code is StoreErrorCode.IDEMPOTENCY_CONFLICT
         finally:
             store.close()
 
@@ -164,6 +181,91 @@ def test_peer_service_decision_wakes_parked_waiter() -> None:
                 await service_b.close()
 
     asyncio.run(scenario())
+
+
+def test_second_fake_action_enters_its_own_approval(monkeypatch) -> None:
+    """假 Provider 同一 Run 两轮发出无 ID、参数不同的假动作：批准第一轮后，
+    第二轮必须单独进入待审批，不得继承第一轮的 APPROVED。"""
+    from dataclasses import replace
+
+    import tests.test_ha_r1_harness as harness
+    from agent.loop.runner import build_toolset as real_build_toolset
+
+    with tempfile.TemporaryDirectory() as tmp:
+        base = Path(tmp)
+        request = "写两个文件"
+        provider = harness.setup_provider(monkeypatch, [
+            (request, harness.intent(
+                request, artifact=True, outcomes=["FILE_MUTATION"])),
+            (request, harness.call_tool(
+                "write_file", path="output/a.txt", content="first")),
+            ("已写入", harness.call_tool(
+                "write_file", path="output/b.txt", content="second")),
+            ("已写入", "完成"),
+        ])
+
+        def gated_toolset(authorization, **kwargs):
+            tools = real_build_toolset(authorization, **kwargs)
+            if "write_file" in tools:
+                tools["write_file"] = replace(
+                    tools["write_file"], risk_level="R2"
+                )
+            return tools
+
+        monkeypatch.setattr("agent.loop.runner.build_toolset", gated_toolset)
+
+        async def scenario() -> None:
+            service, store = harness.service_at(base)
+            try:
+                handle = await service.start_run(StartRunRequest(
+                    tenant_id="t", user_id="u", session_id="s",
+                    request_id="r1", request_text=request,
+                ))
+                records = []
+                for _ in range(200):
+                    records = store.list_approvals(
+                        "t", "s", run_id=handle.run_id
+                    )
+                    if records:
+                        break
+                    await asyncio.sleep(0.05)
+                assert len(records) == 1
+                first = records[0]
+                assert first.status == "PENDING"
+                await service.decide_approval(DecideApprovalRequest(
+                    tenant_id="t", user_id="u", session_id="s",
+                    run_id=handle.run_id, approval_id=first.approval_id,
+                    decision="approve", request_id="dec-1",
+                ))
+                for _ in range(200):
+                    records = store.list_approvals(
+                        "t", "s", run_id=handle.run_id
+                    )
+                    if len(records) == 2:
+                        break
+                    await asyncio.sleep(0.05)
+                assert len(records) == 2
+                second = records[1]
+                assert second.approval_id != first.approval_id
+                assert second.status == "PENDING"
+                assert json.loads(second.params_json) != json.loads(
+                    first.params_json
+                )
+                assert (base / "output" / "a.txt").exists()
+                assert not (base / "output" / "b.txt").exists()
+                await service.decide_approval(DecideApprovalRequest(
+                    tenant_id="t", user_id="u", session_id="s",
+                    run_id=handle.run_id, approval_id=second.approval_id,
+                    decision="deny", request_id="dec-2",
+                ))
+                await asyncio.wait_for(
+                    service._runs[handle.run_id].task, timeout=15
+                )
+            finally:
+                await service.close()
+
+        asyncio.run(scenario())
+        assert not provider.replies
 
 
 def test_service_decide_releases_waiter() -> None:

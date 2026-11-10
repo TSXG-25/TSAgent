@@ -180,13 +180,23 @@ def test_terminal_transition_persists_and_projects_verified_artifact(
         reopened.close()
 
 
-def test_projector_reports_head_until_terminal_commit(tmp_path: Path) -> None:
+def test_get_run_reports_head_until_terminal_commit(tmp_path: Path) -> None:
     """A resume index claiming a completed workflow must not project a public
-    COMPLETED status or its artifacts before the terminal Run transaction."""
+    COMPLETED status or its indexed artifacts through ``get_run`` before the
+    terminal Run transaction commits."""
 
-    from dataclasses import replace
+    import asyncio
 
-    database = tmp_path / "runtime.sqlite"
+    import tests.test_ha_r1_harness as harness
+    from agent.run_resume.contracts import (
+        RunArtifactFact,
+        RunResumeIndex,
+        RunWorkflowStatus,
+        WorkflowDependency,
+        WorkflowSummary,
+    )
+
+    service, store = harness.service_at(tmp_path)
     request = StartRunRequest(
         tenant_id="tenant-h1",
         user_id="user-h1",
@@ -195,8 +205,6 @@ def test_projector_reports_head_until_terminal_commit(tmp_path: Path) -> None:
         request_text="创建 output/result.txt",
         run_id="run-h1",
     )
-    store = SqliteRuntimeStore.open(database)
-    view = None
     artifact = ArtifactCommitFact(
         artifact_id="artifact-h1-result",
         artifact_type="file",
@@ -213,87 +221,99 @@ def test_projector_reports_head_until_terminal_commit(tmp_path: Path) -> None:
         run_id=request.run_id or "",
         request_id="lookup-h1",
     )
-    ghost_index = SimpleNamespace(
-        completed_workflow_ids=("wf-ghost",),
-        pending_workflow_ids=(),
-        active_workflow_id="",
-        artifacts=(artifact,),
-        workflow=lambda _id: None,
-    )
-    try:
-        reservation = store.reserve_service_start(
-            request.tenant_id,
-            request.session_id,
-            requested_run_id=request.run_id,
-            request_id=request.request_id,
-            request_digest=request.request_digest,
-            writer_id="writer-h1",
-            external_reference=encode_request_reference(
-                request,
+    view = None
+
+    async def scenario() -> None:
+        try:
+            reservation = store.reserve_service_start(
+                request.tenant_id,
+                request.session_id,
+                requested_run_id=request.run_id,
+                request_id=request.request_id,
+                request_digest=request.request_digest,
+                writer_id="writer-h1",
+                external_reference=encode_request_reference(
+                    request,
+                    run_id=request.run_id or "",
+                ),
+            )
+            assert reservation.created is True
+            nonlocal view
+            view = DurableRuntimeStoreView(
+                store,
+                tenant_id=request.tenant_id,
+                session_id=request.session_id,
                 run_id=request.run_id or "",
-            ),
-        )
-        assert reservation.created is True
-        view = DurableRuntimeStoreView(
-            store,
-            tenant_id=request.tenant_id,
-            session_id=request.session_id,
-            run_id=request.run_id or "",
-            request_id=request.request_id,
-            writer_id="writer-h1",
-        )
-        view.transition_run_with_event(
-            run_status="RUNNING",
-            event_id="run-started:h1",
-            event_type="run_started",
-            timestamp="2026-08-11T00:00:00Z",
-            payload={"request_id": request.request_id},
-            expected_status="CREATED",
-        )
+                request_id=request.request_id,
+                writer_id="writer-h1",
+            )
+            # 恢复索引登记的 active Workflow 已标完成并带索引工件，但 Run
+            # 终态尚未提交 — head 仍为 RUNNING，公开投影不得推断 COMPLETED。
+            view.bootstrap_run_index(RunResumeIndex(
+                run_id="run-h1",
+                session_id="session-h1",
+                workflow_sequence=("wf-done", "wf-act"),
+                workflows=(
+                    WorkflowSummary(
+                        workflow_id="wf-done",
+                        workflow_version="1.0.0",
+                        status=RunWorkflowStatus.COMPLETED,
+                        checkpoint_id="cp-done",
+                    ),
+                    WorkflowSummary(
+                        workflow_id="wf-act",
+                        workflow_version="1.0.0",
+                        status=RunWorkflowStatus.COMPLETED,
+                        checkpoint_id="cp-act",
+                        depends_on=("wf-done",),
+                    ),
+                ),
+                completed_workflow_ids=("wf-done",),
+                active_workflow_id="wf-act",
+                active_checkpoint_id="cp-act",
+                pending_workflow_ids=(),
+                workflow_dependencies=(
+                    WorkflowDependency("wf-done"),
+                    WorkflowDependency("wf-act", ("wf-done",)),
+                ),
+                artifacts=(RunArtifactFact(
+                    artifact_id="artifact-ghost",
+                    producer_workflow_id="wf-act",
+                    digest="sha256:ghost",
+                ),),
+                created_at="2026-08-11T00:00:00Z",
+                updated_at="2026-08-11T00:00:00Z",
+            ))
 
-        read = replace(
-            store.read_run_snapshot(
-                request.tenant_id,
-                request.run_id or "",
-                session_id=request.session_id,
-            ),
-            index=ghost_index,
-        )
-        snapshot = RunProjector().project(read, lookup)
-        assert snapshot.status.value == "RUNNING"
-        assert snapshot.output is None
-        assert snapshot.artifacts == ()
+            snapshot = await service.get_run(lookup)
+            assert snapshot.status.value == "RUNNING"
+            assert snapshot.output is None
+            assert snapshot.artifacts == ()
 
-        view.transition_run_with_event(
-            run_status="COMPLETED",
-            event_id="run-completed:h1",
-            event_type="run_completed",
-            timestamp="2026-08-11T00:00:01Z",
-            payload={"request_id": request.request_id},
-            run_output={
-                "text": "已成功写入：output/result.txt",
-                "artifact_ids": [artifact.artifact_id],
-            },
-            artifacts=(artifact,),
-        )
-        read = replace(
-            store.read_run_snapshot(
-                request.tenant_id,
-                request.run_id or "",
-                session_id=request.session_id,
-            ),
-            index=ghost_index,
-        )
-        snapshot = RunProjector().project(read, lookup)
-        assert snapshot.status.value == "COMPLETED"
-        assert [item.artifact_id for item in snapshot.artifacts] == [
-            "artifact-h1-result"
-        ]
-        assert snapshot.output is not None
-    finally:
-        if view is not None:
-            view.close()
-        store.close()
+            view.transition_run_with_event(
+                run_status="COMPLETED",
+                event_id="run-completed:h1",
+                event_type="run_completed",
+                timestamp="2026-08-11T00:00:01Z",
+                payload={"request_id": request.request_id},
+                run_output={
+                    "text": "已成功写入：output/result.txt",
+                    "artifact_ids": [artifact.artifact_id],
+                },
+                artifacts=(artifact,),
+            )
+            snapshot = await service.get_run(lookup)
+            assert snapshot.status.value == "COMPLETED"
+            assert [item.artifact_id for item in snapshot.artifacts] == [
+                "artifact-h1-result"
+            ]
+            assert snapshot.output is not None
+        finally:
+            if view is not None:
+                view.close()
+            await service.close()
+
+    asyncio.run(scenario())
 
 
 def test_launcher_artifact_fact_is_bound_to_run_workspace(tmp_path: Path) -> None:

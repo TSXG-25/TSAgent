@@ -4,21 +4,24 @@ on:
   push:
   pull_request:
 
+# 默认门禁必须离线：屏蔽真实 Provider 凭据并强制本地 ollama（不可达
+# 地址让任何误触 Provider 的用例快速失败）。workflow 级 env 让 Python
+# job 和 Desktop job 共享同一配置 — Desktop 的 smoke 会拉起真实 Python
+# sidecar 子进程并继承这些变量。
+env:
+  TSAGENT_ALLOW_LOCAL_EXECUTION: "1"
+  HF_HUB_OFFLINE: "1"
+  TRANSFORMERS_OFFLINE: "1"
+  OPENAI_API_KEY: ""
+  LLM_API_KEY: ""
+  P2_SECONDARY_API_KEY: ""
+  TSAGENT_LLM_PROVIDER: "ollama"
+  OLLAMA_BASE_URL: "http://127.0.0.1:1/v1"
+
 jobs:
   quality-gate:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    env:
-      TSAGENT_ALLOW_LOCAL_EXECUTION: "1"
-      HF_HUB_OFFLINE: "1"
-      TRANSFORMERS_OFFLINE: "1"
-      # 默认门禁必须离线：屏蔽真实 Provider 凭据并强制本地 ollama
-      # （不可达地址让任何误触 Provider 的用例快速失败）。
-      OPENAI_API_KEY: ""
-      LLM_API_KEY: ""
-      P2_SECONDARY_API_KEY: ""
-      TSAGENT_LLM_PROVIDER: "ollama"
-      OLLAMA_BASE_URL: "http://127.0.0.1:1/v1"
 
     steps:
       - name: Checkout

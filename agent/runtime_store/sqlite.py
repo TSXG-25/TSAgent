@@ -144,8 +144,14 @@ def _require_text(value: str, label: str) -> str:
 
 
 def _json_text_equal(left: str, right: str) -> bool:
+    """Type-strict JSON equality — Python ``==`` conflates ``true``/``1``
+    and ``false``/``0``, so canonical encodings are compared instead."""
     try:
-        return json.loads(left) == json.loads(right)
+        return _canonical_json(json.loads(left)) == _canonical_json(
+            json.loads(right)
+        )
+    except DurableStoreError:
+        return False
     except (TypeError, ValueError):
         return left == right
 
@@ -364,33 +370,10 @@ class SqliteRuntimeStore:
         expected_store_generation: str | None,
     ) -> tuple[str, str]:
         try:
-            # Identity is verified before any DDL: an incompatible schema
-            # version or foreign store generation must be rejected without
-            # mutating the existing schema.  A database without
-            # ``runtime_meta`` is a fresh store and is bootstrapped below.
-            meta_table = connection.execute(
-                "SELECT 1 FROM sqlite_master"
-                " WHERE type = 'table' AND name = 'runtime_meta'"
-            ).fetchone()
-            if meta_table is not None:
-                stored_row = connection.execute(
-                    """
-                    SELECT schema_version, store_generation
-                    FROM runtime_meta
-                    WHERE meta_id = 1
-                    """
-                ).fetchone()
-                if stored_row is not None:
-                    _verify_store_identity(
-                        stored_row,
-                        schema_version=schema_version,
-                        expected_store_generation=expected_store_generation,
-                    )
-            # ``executescript`` intentionally runs the DDL in SQLite's own
-            # schema transaction.  The explicit writer transaction below
-            # carries the column migrations and the metadata write; sqlite3's
-            # executescript implicit commit would otherwise split them.
-            connection.executescript(
+            # Identity check, schema DDL, column migrations and the metadata
+            # write commit atomically in one writer transaction — a rejected
+            # or failed bootstrap leaves no partial schema behind.
+            schema_ddl = (
                 """
                 CREATE TABLE IF NOT EXISTS runtime_meta (
                     meta_id INTEGER PRIMARY KEY CHECK (meta_id = 1),
@@ -787,11 +770,40 @@ class SqliteRuntimeStore:
                     ON task_heads (tenant_id, session_id, created_at ASC);
                 """
             )
-            # ``CREATE TABLE IF NOT EXISTS`` does not evolve existing
-            # databases; the column migrations and the metadata write commit
-            # atomically in one writer transaction so a supported upgrade is
-            # either fully applied or not applied at all.
             connection.execute("BEGIN IMMEDIATE")
+            meta_table = connection.execute(
+                "SELECT 1 FROM sqlite_master"
+                " WHERE type = 'table' AND name = 'runtime_meta'"
+            ).fetchone()
+            row = (
+                connection.execute(
+                    """
+                    SELECT schema_version, store_generation
+                    FROM runtime_meta
+                    WHERE meta_id = 1
+                    """
+                ).fetchone()
+                if meta_table is not None
+                else None
+            )
+            # Rejection must precede any schema mutation: an incompatible
+            # version or foreign generation aborts before the first DDL.
+            stored_schema = (
+                _verify_store_identity(
+                    row,
+                    schema_version=schema_version,
+                    expected_store_generation=expected_store_generation,
+                )
+                if row is not None
+                else ""
+            )
+            # ``CREATE TABLE IF NOT EXISTS`` does not evolve existing
+            # databases; column migrations below cover stores created
+            # before a later column existed.
+            for statement in schema_ddl.split(";"):
+                statement = statement.strip()
+                if statement:
+                    connection.execute(statement)
             head_columns = {
                 str(row["name"])
                 for row in connection.execute("PRAGMA table_info(run_heads)")
@@ -832,13 +844,6 @@ class SqliteRuntimeStore:
                 connection.execute(
                     "ALTER TABLE session_heads ADD COLUMN workspace_id TEXT NOT NULL DEFAULT ''"
                 )
-            row = connection.execute(
-                """
-                SELECT schema_version, store_generation
-                FROM runtime_meta
-                WHERE meta_id = 1
-                """
-            ).fetchone()
             now = _now()
             if row is None:
                 generation = expected_store_generation or uuid.uuid4().hex
@@ -852,13 +857,6 @@ class SqliteRuntimeStore:
                 )
                 stored_schema = schema_version
             else:
-                # Re-verify under the writer lock — a peer process may have
-                # bootstrapped or migrated the store since the pre-DDL read.
-                stored_schema = _verify_store_identity(
-                    row,
-                    schema_version=schema_version,
-                    expected_store_generation=expected_store_generation,
-                )
                 generation = str(row["store_generation"])
                 if stored_schema != schema_version:
                     # Later versions add idempotent tables/indexes only;

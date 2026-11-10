@@ -53,12 +53,15 @@ async def serve(
     write_lock = asyncio.Lock()
     subscriptions: set[asyncio.Task] = set()
 
-    async def _emit(response: LocalRpcResponse) -> None:
+    async def _emit(response: LocalRpcResponse) -> bool:
+        """Write one protocol line; False when the transport is dead."""
         try:
             async with write_lock:
                 _write_response(stdout, response)
         except (BrokenPipeError, OSError):
             print("local transport disconnected", file=diagnostics)
+            return False
+        return True
 
     async def _run_subscription(request: LocalRpcRequest) -> None:
         response = await dispatcher.dispatch(request)
@@ -88,7 +91,8 @@ async def serve(
                 traceback.print_exc(file=diagnostics)
                 response = internal_error_response(_request_id_hint(line))
 
-            await _emit(response)
+            if not await _emit(response):
+                break
             if dispatcher.shutdown_requested:
                 break
     finally:

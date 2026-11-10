@@ -1616,3 +1616,64 @@ def test_sidecar_subscription_does_not_block_control(tmp_path: Path) -> None:
         assert health["result"]["status"] == "ok"
 
     asyncio.run(scenario())
+
+
+def test_sidecar_exits_on_broken_transport(tmp_path: Path) -> None:
+    """A09: 普通响应写入失败后主循环立即退出 — 不再继续分发
+    后续请求；后台订阅和 dispatcher 都被清理。"""
+    import asyncio
+    import io
+    import json
+    import time
+
+    import tests.test_ha_r1_harness as harness
+    from agent.service.local_sidecar.dispatcher import SidecarDispatcher
+    from agent.service.local_sidecar.server import serve
+
+    class CountingDispatcher(SidecarDispatcher):
+        def __init__(self, *args, **kwargs) -> None:
+            super().__init__(*args, **kwargs)
+            self.methods: list[str] = []
+
+        async def dispatch(self, request):
+            self.methods.append(request.method.value)
+            return await super().dispatch(request)
+
+    class DeadStdout(io.StringIO):
+        def write(self, _s):
+            raise BrokenPipeError("transport gone")
+
+    async def scenario() -> None:
+        service, _store = harness.service_at(tmp_path)
+        dispatcher = CountingDispatcher(
+            service, diagnostics=io.StringIO()
+        )
+        stdin = io.StringIO(
+            json.dumps({"id": "sub-1", "method": "subscribe_events",
+                        "params": {"tenant_id": "t", "user_id": "u",
+                                   "session_id": "s", "run_id": "r",
+                                   "request_id": "q1"}}) + "\n"
+            + json.dumps({"id": "h1", "method": "health",
+                          "params": {}}) + "\n"
+            + json.dumps({"id": "h2", "method": "health",
+                          "params": {}}) + "\n"
+            + json.dumps({"id": "x", "method": "shutdown",
+                          "params": {}}) + "\n"
+        )
+        started = time.monotonic()
+        rc = await asyncio.wait_for(
+            serve(dispatcher, stdin=stdin, stdout=DeadStdout(),
+                  diagnostics=io.StringIO()),
+            timeout=10,
+        )
+        elapsed = time.monotonic() - started
+        assert rc == 0
+        # 首个 health 写入失败后循环退出：第二条 health 和 shutdown
+        # 都不再被分发。
+        assert dispatcher.methods.count("health") == 1
+        assert "shutdown" not in dispatcher.methods
+        # 挂起的订阅被取消（没有等满 8s 轮询窗口），dispatcher 已关闭。
+        assert elapsed < 5
+        assert dispatcher._closed
+
+    asyncio.run(scenario())

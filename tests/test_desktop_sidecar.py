@@ -1308,3 +1308,42 @@ def test_close_releases_paused_run(monkeypatch, tmp_path: Path) -> None:
             await service2.close()
 
     asyncio.run(scenario())
+
+
+def test_scheduler_autostarts_and_routes_target_planet(monkeypatch, tmp_path: Path) -> None:
+    """A05: 重建 Service 后 scheduler 自启并消费到期计划；
+    触发的 Run 携带 schedule 的 target_planet 路由。"""
+    import asyncio
+
+    import tests.test_ha_r1_harness as harness
+
+    request_text = "定时任务触发"
+    harness.setup_provider(monkeypatch, [
+        (request_text, harness.intent(request_text, artifact=False)),
+        (request_text, "定时完成"),
+    ])
+
+    async def scenario() -> None:
+        service, store = harness.service_at(tmp_path)
+        try:
+            store.create_schedule(
+                "t", "sched-1", "s", request_text, 3600,
+                user_id="u", target_planet="mars",
+                next_fire_at="2020-01-01T00:00:00Z",
+            )
+            # 不调用任何 schedule API — 自启的 tick 必须自己认领并触发。
+            record = None
+            for _ in range(200):
+                records = store.list_schedules("t")
+                if records and records[0].fire_count and records[0].last_run_id:
+                    record = records[0]
+                    break
+                await asyncio.sleep(0.05)
+            assert record is not None and record.last_run_id, records
+            heads = store.list_task_heads("t", "s:sched:sched-1")
+            assert heads
+            assert heads[0].origin_planet == "mars"
+        finally:
+            await service.close()
+
+    asyncio.run(scenario())

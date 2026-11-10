@@ -1141,6 +1141,7 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
       request_text: request.requestText,
       task_id: request.taskId ?? "",
       workspace_root: request.workspaceRoot ?? "",
+      origin_planet: request.originPlanet ?? "",
       context_refs: request.contextRefs ?? [],
       metadata: { ...(request.metadata ?? {}), ...(request.requestDigest ? { desktop_request_digest: request.requestDigest } : {}) },
     };

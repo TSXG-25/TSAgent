@@ -104,6 +104,9 @@ class AgentService:
         self._task_errors: dict[str, AgentServiceError] = {}
         self._operation_lock = asyncio.Lock()
         self._closed = False
+        # Saturn autostart: a rebuilt Service must fire due schedules
+        # without waiting for a schedule API call.
+        self._maybe_start_scheduler()
 
     def _event_repository(self) -> Any:
         if self._events is None:
@@ -136,6 +139,7 @@ class AgentService:
                 ServiceErrorCode.SERVICE_CLOSED,
                 "AgentService is closed",
             )
+        self._maybe_start_scheduler()
 
     @staticmethod
     def _store_error(
@@ -498,6 +502,7 @@ class AgentService:
                 request.tenant_id,
                 request.session_id,
                 f"task-{uuid.uuid4().hex[:12]}",
+                origin_planet=request.origin_planet,
             )
             return head.task_id
         # Delegated Runs attach to a Task created in the parent session; the
@@ -1942,6 +1947,18 @@ class AgentService:
             created_at=record.created_at,
         )
 
+    def _maybe_start_scheduler(self) -> None:
+        """Start the scheduler under a running loop — construction may
+        happen outside one (sync entry points); the first service call
+        under a loop performs the same lazy start."""
+        import asyncio
+
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        self._ensure_scheduler()
+
     def _ensure_scheduler(self) -> None:
         import asyncio
 
@@ -1981,6 +1998,7 @@ class AgentService:
                                 f"{schedule.fire_count}"
                             ),
                             request_text=schedule.request_text,
+                            origin_planet=schedule.target_planet,
                         )
                     )
                     self._store.update_schedule_run(
@@ -1991,9 +2009,11 @@ class AgentService:
                             self._auto_eval(schedule, handle)
                         )
                 except Exception:
-                    import traceback
+                    import logging
 
-                    traceback.print_exc()
+                    logging.getLogger(__name__).exception(
+                        "schedule fire failed: %s", schedule.schedule_id
+                    )
 
     async def _auto_eval(self, schedule: Any, handle: Any) -> None:
         """Watch a schedule-fired run to terminal state, then persist its

@@ -27,6 +27,8 @@ export interface StartRunRequest {
   metadata?: Record<string, unknown>;
   /** Anchor the run under an existing task (delegated child runs). */
   taskId?: string;
+  /** Route recorded on the run's implicit task (scheduler/delegation). */
+  originPlanet?: string;
   /** Attachment refs (file:/task:/run:) — validated and recorded on start. */
   contextRefs?: string[];
   requestDigest?: string;

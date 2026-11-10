@@ -263,6 +263,7 @@ class StartRunRequest:
     run_id: str | None = None
     task_id: str = ""
     workspace_root: str = ""
+    origin_planet: str = ""
     context_refs: tuple[str, ...] = ()
     metadata: Mapping[str, JSONValue] = field(default_factory=dict)
 
@@ -295,6 +296,8 @@ class StartRunRequest:
             value["run_id"] = self.run_id
         if self.task_id:
             value["task_id"] = self.task_id
+        if self.origin_planet:
+            value["origin_planet"] = self.origin_planet
         if self.context_refs:
             value["context_refs"] = list(self.context_refs)
         return value
@@ -310,6 +313,7 @@ class StartRunRequest:
             run_id=(None if value.get("run_id") is None else str(value.get("run_id"))),
             task_id=str(value.get("task_id", "")),
             workspace_root=str(value.get("workspace_root", "")),
+            origin_planet=str(value.get("origin_planet", "")),
             context_refs=tuple(
                 str(item) for item in (value.get("context_refs") or ())
             ),

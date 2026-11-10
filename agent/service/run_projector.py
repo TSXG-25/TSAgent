@@ -77,12 +77,17 @@ def _request_record(read: RunReadSnapshot) -> dict[str, Any]:
     return record
 
 
-def request_workspace_root(read: RunReadSnapshot) -> str:
-    """Workspace root recorded on the start intent; "" when absent.
+def request_workspace_root(read: RunReadSnapshot) -> str | None:
+    """Workspace root recorded on the start intent; ``None`` when absent.
 
-    Requests recorded before the field existed carry no key — callers fall
-    back to the session binding for those only."""
-    return str(_request_record(read).get("workspace_root", "") or "")
+    Requests recorded before the field existed carry no key — callers may
+    fall back to the session binding for those only.  An explicitly
+    recorded empty string stays empty: admission resolved no workspace
+    root, so nothing may silently rebind the run."""
+    record = _request_record(read)
+    if "workspace_root" not in record:
+        return None
+    return str(record["workspace_root"] or "")
 
 
 def request_context_refs(read: RunReadSnapshot) -> tuple[str, ...]:

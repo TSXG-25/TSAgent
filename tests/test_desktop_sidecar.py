@@ -768,7 +768,9 @@ def test_read_artifact_serves_workspace_file_and_flags_stale(
             request_digest=request.request_digest,
             writer_id="writer-art",
             external_reference=encode_request_reference(
-                request, run_id=request.run_id or ""
+                request,
+                run_id=request.run_id or "",
+                workspace_root=str(workspace_root.resolve()),
             ),
         )
         view = DurableRuntimeStoreView(
@@ -1473,6 +1475,76 @@ def test_scheduler_routes_profile_to_execution(monkeypatch, tmp_path: Path) -> N
                 await asyncio.sleep(0.05)
             assert spy.seen_profile["profile_id"] == "prof-mars"
             assert spy.seen_profile["model_ref"] == "fake-mars-model"
+        finally:
+            await service.close()
+
+    asyncio.run(scenario())
+
+
+def test_accepted_run_executes_in_recorded_workspace(monkeypatch, tmp_path: Path) -> None:
+    """A15: 接纳后改绑工作区不得影响已接纳 Run — 执行仍使用
+    接纳时记录的 root，下一次接纳才使用新绑定。"""
+    import asyncio
+    import threading
+
+    import tests.test_ha_r1_harness as harness
+    from agent.runtime_store.sqlite import SqliteRuntimeStore
+    from agent.service.context_factory import ServiceContextFactory
+    from agent.service.contracts import StartRunRequest
+    from agent.service.runtime_launcher import RuntimeExecutionLauncher
+    from agent.service.service import AgentService
+
+    request_text = "在 A 工作区执行"
+    harness.setup_provider(monkeypatch, [
+        (request_text, harness.intent(request_text, artifact=False)),
+        (request_text, "完成"),
+    ])
+
+    async def scenario() -> None:
+        ws_a = tmp_path / "ws-a"
+        ws_b = tmp_path / "ws-b"
+        for ws in (ws_a, ws_b):
+            ws.mkdir()
+        store = SqliteRuntimeStore.open(tmp_path / "runtime.sqlite")
+        service = AgentService(
+            runtime_store=store,
+            launcher=RuntimeExecutionLauncher(),
+            context_factory=ServiceContextFactory(
+                store, workspace_root=tmp_path
+            ),
+            defer_context_creation=True,
+        )
+        try:
+            store.ensure_session("t", "s")
+            store.upsert_workspace("t", "ws-a", path=str(ws_a))
+            store.upsert_workspace("t", "ws-b", path=str(ws_b))
+            store.assign_session_workspace("t", "s", "ws-a")
+
+            entered = threading.Event()
+            gate = threading.Event()
+            seen: dict = {}
+            real_create = service._contexts.create_run
+
+            def delayed(request, *, run_id, **kwargs):
+                entered.set()
+                gate.wait()
+                context = real_create(request, run_id=run_id, **kwargs)
+                workspace = getattr(context, "workspace", None)
+                seen["root"] = str(getattr(workspace, "root", ""))
+                return context
+
+            service._contexts.create_run = delayed
+            handle = await service.start_run(StartRunRequest(
+                tenant_id="t", user_id="u", session_id="s",
+                request_id="r1", request_text=request_text))
+            entered.wait(timeout=10)
+            store.assign_session_workspace("t", "s", "ws-b")
+            gate.set()
+            for _ in range(200):
+                if "root" in seen:
+                    break
+                await asyncio.sleep(0.05)
+            assert seen["root"] == str(ws_a.resolve())
         finally:
             await service.close()
 

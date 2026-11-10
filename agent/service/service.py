@@ -2499,17 +2499,17 @@ class AgentService:
                 f"artifact not found for this run: {request.artifact_id}",
             )
         from .run_projector import request_workspace_root
-        # The run's resolved root is persisted on its start intent — an
-        # explicit workspace_root beats the session binding.  Records written
-        # before the field existed carry no key; those alone fall back to the
-        # session resolution (durable-data boundary).
-        root = (
-            Path(recorded)
-            if (recorded := request_workspace_root(read))
-            else self._contexts.session_workspace(
+        # The run's resolved root is persisted on its start intent — the
+        # recorded root is authoritative even when explicitly empty.
+        # Records written before the field existed carry no key; those
+        # alone fall back to the session resolution (durable boundary).
+        recorded = request_workspace_root(read)
+        if recorded is not None:
+            root = Path(recorded).resolve() if recorded else None
+        else:
+            root = self._contexts.session_workspace(
                 request.tenant_id, request.session_id
             )
-        )
         if root is None:
             raise AgentServiceError(
                 ServiceErrorCode.INVALID_REQUEST,

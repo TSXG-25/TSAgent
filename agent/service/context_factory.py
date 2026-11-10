@@ -95,16 +95,17 @@ class ServiceContextFactory:
         existing = session.get_run(run_id)
         if existing is not None and not existing.closed:
             return existing
+        # Start 与 Resume 共用接纳时记录的 workspace — 之后的改绑只影响
+        # 下一次接纳。仅历史记录缺字段（或直接 create_run）才回落到
+        # 当前会话绑定。
+        recorded, recorded_root = self._recorded_workspace_root(
+            request, run_id
+        )
         explicit_root = str(getattr(request, "workspace_root", "") or "")
-        if explicit_root:
+        if recorded:
+            workspace = recorded_root
+        elif explicit_root:
             workspace = Path(explicit_root).resolve()
-        elif isinstance(request, ResumeRunRequest):
-            # Resume carries no workspace_root field — recover the start's
-            # resolved root from its recorded intent.  Records written before
-            # the field existed resolve the way start does (durable boundary).
-            workspace = self._recorded_workspace_root(
-                request, run_id
-            ) or self._run_workspace(request, run_id)
         else:
             workspace = self._run_workspace(request, run_id)
         from agent.runtime_context import RunContext
@@ -150,8 +151,12 @@ class ServiceContextFactory:
 
     def _recorded_workspace_root(
         self, request: StartRunRequest | ResumeRunRequest, run_id: str
-    ) -> Path | None:
-        """Workspace root persisted on the run's start intent, if any."""
+    ) -> tuple[bool, "Path | None"]:
+        """(recorded, root) — whether the start intent carried the field.
+
+        A legacy record without the key lets the caller fall back to the
+        live session binding; a recorded value — including empty — is the
+        accepted Run's authority and must not be rebound."""
         from agent.runtime_store.errors import DurableStoreError
 
         from .run_projector import request_workspace_root
@@ -164,9 +169,11 @@ class ServiceContextFactory:
             )
         except DurableStoreError:
             # Direct create_run without a reservation (unit tests, tools).
-            return None
+            return False, None
         recorded = request_workspace_root(read)
-        return Path(recorded).resolve() if recorded else None
+        if recorded is None:
+            return False, None
+        return True, Path(recorded).resolve() if recorded else None
 
     def release_run(self, run: RunContext) -> None:
         if not run.closed:

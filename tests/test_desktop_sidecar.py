@@ -1011,6 +1011,7 @@ def test_read_artifact_uses_recorded_explicit_workspace_root(
         _run(service.close())
 
 
+@pytest.mark.host_integration
 def test_http_sidecar_enforces_host_and_origin(tmp_path: Path) -> None:
     """Loopback RPC has no auth — foreign Origins and non-loopback Host
     headers (DNS rebinding) are rejected; curl-style no-Origin stays fine."""

@@ -12,6 +12,13 @@ jobs:
       TSAGENT_ALLOW_LOCAL_EXECUTION: "1"
       HF_HUB_OFFLINE: "1"
       TRANSFORMERS_OFFLINE: "1"
+      # 默认门禁必须离线：屏蔽真实 Provider 凭据并强制本地 ollama
+      # （不可达地址让任何误触 Provider 的用例快速失败）。
+      OPENAI_API_KEY: ""
+      LLM_API_KEY: ""
+      P2_SECONDARY_API_KEY: ""
+      TSAGENT_LLM_PROVIDER: "ollama"
+      OLLAMA_BASE_URL: "http://127.0.0.1:1/v1"
 
     steps:
       - name: Checkout
@@ -28,7 +35,10 @@ jobs:
         run: python -m pip install --upgrade pip && python -m pip install -r requirements-lock.txt
 
       - name: Offline regression tests
-        run: python -m pytest -q tests --ignore=tests/test_tools_execution.py
+        run: python -m pytest -q tests --ignore=tests/test_tools_execution.py -m "not host_integration"
+
+      - name: Host capability tests
+        run: python -m pytest -q tests -m host_integration
 
       - name: Offline tool tests
         run: python -m pytest -q tests/test_tools_execution.py -k "not web_search and not web_fetch"
@@ -52,3 +62,33 @@ jobs:
 
       - name: Trend Gate
         run: python evaluation/benchmark/trend_gate.py
+
+  desktop-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+
+      - name: Install dependencies
+        working-directory: apps/desktop
+        run: npm ci
+
+      - name: Typecheck and unit tests
+        working-directory: apps/desktop
+        run: npm test
+
+      - name: Orbit and scene contract scripts
+        working-directory: apps/desktop
+        run: npm run test:orbits && npm run test:scenes
+
+      - name: Production build
+        working-directory: apps/desktop
+        run: npm run build

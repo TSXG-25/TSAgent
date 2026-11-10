@@ -74,7 +74,11 @@ def _mcp_tool(name, description="", schema=None):
 
 
 @pytest.fixture(autouse=True)
-def _clean_cache(monkeypatch):
+def _clean_cache(monkeypatch, tmp_path):
+    # 缓存路径指向临时目录：默认门禁不得读写真实用户目录。
+    monkeypatch.setattr(
+        "agent.mcp.tools._DISK_CACHE", tmp_path / "mcp_catalog.json"
+    )
     clear_tool_cache()
     yield
     clear_tool_cache()

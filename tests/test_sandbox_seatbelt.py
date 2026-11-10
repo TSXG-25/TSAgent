@@ -34,6 +34,7 @@ def test_seatbelt_skipped_when_unavailable(monkeypatch):
     _reset()
 
 
+@pytest.mark.host_integration
 @pytest.mark.skipif(platform.system() != "Darwin",
                     reason="Seatbelt is macOS-only")
 def test_real_seatbelt_workspace_write():
@@ -97,6 +98,7 @@ def test_dotfile_read_toggle(monkeypatch):
     assert "file-read*" not in sandbox._seatbelt_profile()
 
 
+@pytest.mark.host_integration
 @pytest.mark.skipif(platform.system() != "Darwin",
                     reason="Seatbelt is macOS-only")
 def test_real_dotfile_read_denied(monkeypatch, tmp_path):

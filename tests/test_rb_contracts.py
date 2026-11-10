@@ -35,6 +35,31 @@ def test_b_memory_action_remember_commit_and_miss(tmp_path, monkeypatch):
     monkeypatch.setattr(long_term, "FACTS_DB_PATH", tmp_path / "facts.db")
     long_term._init_facts_db()
 
+    # 确定性事实学习 Provider：默认离线门禁不得触达真实 LLM。
+    from agent.memory.learning import decide_memory_learning
+    from agent.memory.learning_provider import (
+        MemoryLearningSelection,
+        MemoryLearningSelectionEvidence,
+    )
+
+    class DeterministicMemoryProvider:
+        async def select_with_evidence(self, evidence, existing, policy):
+            decision = decide_memory_learning(evidence, policy)
+            return MemoryLearningSelection(
+                decision=decision,
+                evidence=MemoryLearningSelectionEvidence(
+                    provider="deterministic-test",
+                    provider_path="SINGLE_PROVIDER",
+                    format_path="RAW_ONLY",
+                    raw_output=decision.to_dict(),
+                ),
+            )
+
+    monkeypatch.setattr(
+        "agent.services.memory_service.MemoryLearningProvider",
+        lambda *_a, **_k: DeterministicMemoryProvider(),
+    )
+
     user_id = "rb-memory"
     agent = UniversalAgent.__new__(UniversalAgent)
     agent._memory_view = ScopedMemoryView(user_id, learning_scope="user")

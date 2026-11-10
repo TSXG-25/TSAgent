@@ -1780,12 +1780,17 @@ def test_delegation_provisioning_is_shared_and_idempotent(
                 request_id="g-run-1", graph_id="g-1",
                 parent_run_id="run-parent"))
             assert len(steps) == 1
+            # 图执行在后台推进 — 等 n1 的委派落成。
+            for _ in range(200):
+                if len(store.list_handoffs("t", "s")) >= 2:
+                    break
+                await asyncio.sleep(0.05)
             assert len(store.list_handoffs("t", "s")) == 2
             steps2 = await service.run_graph(RunWorkflowGraphRequest(
                 tenant_id="t", user_id="u", session_id="s",
                 request_id="g-run-1", graph_id="g-1",
                 parent_run_id="run-parent"))
-            assert steps2[0].task_id == steps[0].task_id
+            assert [s.status for s in steps2] == ["PENDING"]
             assert len(store.list_handoffs("t", "s")) == 2
             # 图启动的子 Run 收到等价 agent_profile（此前只传 depth）。
             for _ in range(100):
@@ -1859,17 +1864,47 @@ def test_run_graph_task_nodes_and_success_dependency(
                 tenant_id="t", user_id="u", session_id="s",
                 request_id="g-1", graph_id="g-ok",
                 parent_run_id="run-parent"))
-            assert [s.status for s in steps] == ["COMPLETED", "COMPLETED"]
+            # run_graph 只返回接纳计划 — 执行在后台推进，不被串行等待。
+            assert [s.status for s in steps] == ["PENDING", "PENDING"]
+
+            async def _wait(check):
+                for _ in range(200):
+                    value = check()
+                    if value:
+                        return value
+                    await asyncio.sleep(0.05)
+                raise AssertionError("timeout waiting for graph chain")
+
+            def _n1():
+                handoffs = store.list_handoffs("t", "s")
+                if not handoffs or not handoffs[0].target_run_id:
+                    return None
+                child = f"s:subtask:{handoffs[0].target_task_id}"
+                head = store.get_run_head(
+                    "t", handoffs[0].target_run_id, session_id=child)
+                if head is not None and head.run_status == "COMPLETED":
+                    return handoffs[0], child
+            n1 = await _wait(_n1)
+
+            def _n2():
+                handoffs = store.list_handoffs("t", n1[1])
+                if not handoffs or not handoffs[0].target_run_id:
+                    return None
+                child2 = f"{n1[1]}:subtask:{handoffs[0].target_task_id}"
+                head = store.get_run_head(
+                    "t", handoffs[0].target_run_id, session_id=child2)
+                return head is not None and head.run_status == "COMPLETED"
+            assert await _wait(_n2)
             # n1 的 Handoff 在父会话；n2 的 Handoff 在 n1 的派生会话。
             assert len(store.list_handoffs("t", "s")) == 1
-            assert len(store.list_handoffs("t", steps[0].session_id)) == 1
+            assert len(store.list_handoffs("t", n1[1])) == 1
             # 同 request_id 重跑 — 委派事实复用，不新增 Handoff。
-            steps2 = await service.run_graph(RunWorkflowGraphRequest(
+            await service.run_graph(RunWorkflowGraphRequest(
                 tenant_id="t", user_id="u", session_id="s",
                 request_id="g-1", graph_id="g-ok",
                 parent_run_id="run-parent"))
             assert len(store.list_handoffs("t", "s")) == 1
-            assert len(store.list_handoffs("t", steps[0].session_id)) == 1
+            assert len(store.list_handoffs("t", n1[1])) == 1
 
             # 未知节点类型 — 产生任何 Task/Handoff/Run 前拒绝。
             store.upsert_workflow_graph("t", "g-bad", definition_json=(
@@ -1891,12 +1926,13 @@ def test_run_graph_task_nodes_and_success_dependency(
     asyncio.run(scenario())
 
 
-def test_run_graph_skips_dependents_of_failed_node(
+def test_run_graph_skips_only_dependents_of_failed_node(
     monkeypatch, tmp_path: Path
 ) -> None:
-    """A07: 上游节点运行失败后，下游节点标记 SKIPPED —
-    不为其产生 Task/Handoff/Run。"""
+    """A07: 上游失败只跳过它的依赖 — A→B 失败时 B 跳过，
+    无依赖的 C 仍正常启动执行。"""
     import asyncio
+    import hashlib
     import json as _json
 
     import tests.test_ha_r1_harness as harness
@@ -1905,6 +1941,11 @@ def test_run_graph_skips_dependents_of_failed_node(
     from agent.service.contracts import RunWorkflowGraphRequest
     from agent.service.runtime_launcher import RuntimeExecutionLauncher
     from agent.service.service import AgentService
+
+    harness.setup_provider(monkeypatch, [
+        ("later", harness.intent("later", artifact=False)),
+        ("later", "完成"),
+    ])
 
     async def scenario() -> None:
         store = SqliteRuntimeStore.open(tmp_path / "runtime.sqlite")
@@ -1928,17 +1969,210 @@ def test_run_graph_skips_dependents_of_failed_node(
             store.upsert_workflow_graph("t", "g-fail", definition_json=(
                 _json.dumps({"nodes": [
                     {"id": "n1", "type": "task", "request_text": "boom"},
-                    {"id": "n2", "type": "task", "request_text": "later"},
+                    {"id": "n2", "type": "task", "request_text": "dep"},
+                    {"id": "n3", "type": "task", "request_text": "later"},
                 ], "edges": [{"from": "n1", "to": "n2"}]})))
             steps = await service.run_graph(RunWorkflowGraphRequest(
                 tenant_id="t", user_id="u", session_id="s",
                 request_id="g-1", graph_id="g-fail",
                 parent_run_id="run-parent"))
-            assert [s.status for s in steps] == ["FAILED_TERMINAL", "SKIPPED"]
-            assert steps[1].task_id == "" and steps[1].run_id == ""
-            # 下游节点未被接纳 — 只有 n1 的 Handoff。
-            assert len(store.list_handoffs("t", "s")) == 1
+            assert [s.status for s in steps] == ["PENDING"] * 3
+
+            async def _wait(check):
+                for _ in range(200):
+                    value = check()
+                    if value:
+                        return value
+                    await asyncio.sleep(0.05)
+                raise AssertionError("timeout")
+
+            # C 独立 — 即使 A 失败也正常执行。
+            def _n3():
+                for handoff in store.list_handoffs("t", "s"):
+                    if not handoff.target_run_id:
+                        continue
+                    child = f"s:subtask:{handoff.target_task_id}"
+                    head = store.get_run_head(
+                        "t", handoff.target_run_id, session_id=child)
+                    if head and head.run_status == "COMPLETED":
+                        return True
+                return None
+            assert await _wait(_n3)
+            # A 失败（context 构造注入）— 终态可读。
+            n1_task = (
+                "task-delegate-"
+                + hashlib.sha256(b"g-1-n1").hexdigest()[:12]
+            )
+            n1_child = f"s:subtask:{n1_task}"
+            n1_handoff = next(
+                h for h in store.list_handoffs("t", "s")
+                if h.target_task_id == n1_task
+            )
+            head = await _wait(lambda: store.get_run_head(
+                "t", n1_handoff.target_run_id, session_id=n1_child))
+            assert head.run_status == "FAILED_TERMINAL"
+            # B 从未被接纳 — 它的 Task/Handoff/Run 不存在。
+            n2_task = (
+                "task-delegate-"
+                + hashlib.sha256(b"g-1-n2").hexdigest()[:12]
+            )
+            assert store.get_task_head("t", n2_task) is None
+            assert all(
+                h.target_task_id != n2_task
+                for h in store.list_handoffs("t", n1_child)
+            )
         finally:
             await service.close()
+
+    asyncio.run(scenario())
+
+
+def test_sidecar_graph_run_does_not_block_control(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """A07: 图执行在后台任务推进 — 子 Run 挂起时，同一连接上的
+    控制请求仍能返回；释放后图继续推进。"""
+    import asyncio
+    import io
+    import json
+    import queue
+    import threading
+
+    import tests.test_ha_r1_harness as harness
+    from agent.runtime_store.sqlite import SqliteRuntimeStore
+    from agent.service.context_factory import ServiceContextFactory
+    from agent.service.local_sidecar.dispatcher import SidecarDispatcher
+    from agent.service.local_sidecar.server import serve
+    from agent.service.runtime_launcher import RuntimeExecutionLauncher
+    from agent.service.service import AgentService
+
+    harness.setup_provider(monkeypatch, [
+        ("parent task", harness.intent("parent task", artifact=False)),
+        ("parent task", "parent done"),
+        ("step-one", harness.intent("step-one", artifact=False)),
+        ("step-one", "done one"),
+        ("step-two", harness.intent("step-two", artifact=False)),
+        ("step-two", "done two"),
+    ])
+
+    class _QueuedStdin(io.TextIOBase):
+        def __init__(self) -> None:
+            self._q: queue.Queue[str] = queue.Queue()
+
+        def feed(self, line: str) -> None:
+            self._q.put(line)
+
+        def readline(self, _size: int = -1) -> str:
+            return self._q.get()
+
+    async def scenario() -> None:
+        store = SqliteRuntimeStore.open(tmp_path / "runtime.sqlite")
+        service = AgentService(
+            runtime_store=store,
+            launcher=RuntimeExecutionLauncher(),
+            context_factory=ServiceContextFactory(
+                store, workspace_root=tmp_path
+            ),
+            defer_context_creation=True,
+        )
+        store.ensure_session("t", "s")
+        store.upsert_workspace("t", "ws", path=str(tmp_path))
+        store.assign_session_workspace("t", "s", "ws")
+        # 把子 Run 的 Context 构造停在门后 — 复现"子 Run 未终结，
+        # 图任务仍在等待"的阻塞面。
+        entered = threading.Event()
+        gate = threading.Event()
+        real_create = service._contexts.create_run
+
+        def delayed(request, *, run_id, **kwargs):
+            if str(request.request_id).endswith("-n1-run"):
+                entered.set()
+                gate.wait()
+            return real_create(request, run_id=run_id, **kwargs)
+
+        service._contexts.create_run = delayed
+        dispatcher = SidecarDispatcher(service, diagnostics=io.StringIO())
+        stdin = _QueuedStdin()
+        stdout = io.StringIO()
+        server = asyncio.create_task(
+            serve(dispatcher, stdin=stdin, stdout=stdout,
+                  diagnostics=io.StringIO()))
+
+        def feed(req_id: str, method: str, params: dict | None = None):
+            stdin.feed(json.dumps(
+                {"id": req_id, "method": method,
+                 "params": params or {}}) + "\n")
+
+        async def respond(req_id: str) -> dict:
+            for _ in range(200):
+                for line in stdout.getvalue().splitlines():
+                    if not line.strip():
+                        continue
+                    parsed = json.loads(line)
+                    if parsed.get("id") == req_id:
+                        return parsed
+                await asyncio.sleep(0.05)
+            raise AssertionError(f"no response for {req_id}")
+
+        try:
+            feed("u1", "upsert_workflow_graph", {
+                "tenant_id": "t", "user_id": "u", "session_id": "s",
+                "request_id": "u1", "graph_id": "g-1",
+                "definition": {"nodes": [
+                    {"id": "n1", "type": "task",
+                     "request_text": "step-one"},
+                    {"id": "n2", "type": "task",
+                     "request_text": "step-two"},
+                ], "edges": [{"from": "n1", "to": "n2"}]},
+            })
+            assert "result" in await respond("u1")
+            feed("r1", "start_run", {
+                "tenant_id": "t", "user_id": "u", "session_id": "s",
+                "request_id": "r1", "request_text": "parent task"})
+            parent = await respond("r1")
+            parent_run_id = parent["result"]["run_id"]
+            for _ in range(200):
+                head = store.get_run_head(
+                    "t", parent_run_id, session_id="s")
+                if head is not None and head.run_status == "COMPLETED":
+                    break
+                await asyncio.sleep(0.05)
+
+            feed("g1", "run_graph", {
+                "tenant_id": "t", "user_id": "u", "session_id": "s",
+                "request_id": "g-1", "graph_id": "g-1",
+                "parent_run_id": parent_run_id})
+            # 若 run_graph 仍串行等待子 Run，子 Run 停在 gate 上时
+            # 这里永远不会返回 — 死锁即回归。
+            graph_resp = await respond("g1")
+            assert [s["status"] for s in graph_resp["result"]] == [
+                "PENDING", "PENDING"]
+            assert entered.wait(timeout=10)
+
+            # 子 Run 未终结、图任务仍在等待 — 同一连接的控制请求
+            # 仍要立即返回。
+            feed("h1", "health")
+            assert "result" in await respond("h1")
+            feed("lg", "list_workflow_graphs", {
+                "tenant_id": "t", "user_id": "u", "session_id": "s",
+                "request_id": "lg"})
+            assert "result" in await respond("lg")
+
+            gate.set()  # 放行 — 图链继续：n1 完成 → n2 启动。
+            child_run_id = None
+            for _ in range(200):
+                handoffs = store.list_handoffs("t", "s")
+                if handoffs and handoffs[0].target_run_id:
+                    child_run_id = handoffs[0].target_run_id
+                    break
+                await asyncio.sleep(0.05)
+            assert child_run_id
+            feed("x", "shutdown")
+            assert "result" in await respond("x")
+        finally:
+            gate.set()
+            await asyncio.wait_for(server, timeout=10)
+        for line in stdout.getvalue().splitlines():
+            json.loads(line)  # 每行都是完整的协议响应
 
     asyncio.run(scenario())

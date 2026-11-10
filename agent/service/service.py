@@ -101,6 +101,7 @@ class AgentService:
         self._runs: dict[str, _ManagedRun] = {}
         self._approval_waiters: dict[tuple[str, str, str], Any] = {}
         self._scheduler_task: Any | None = None
+        self._graph_tasks: set[Any] = set()
         self._task_errors: dict[str, AgentServiceError] = {}
         self._operation_lock = asyncio.Lock()
         self._closed = False
@@ -1584,92 +1585,145 @@ class AgentService:
             for n in nodes.values() if n.get("type") == "input"
         }
         order = _topo_task_order(task_nodes, edges)
-        steps: list = []
-        parent_run_id = request.parent_run_id
+        from .contracts import GraphRunStepSummary
+
+        # 图执行在 Service 管理的后台任务里推进 — run_graph 在接纳
+        # （整图预检 + 计划）后返回，不持有 JSONL 控制流等待子 Run。
+        import asyncio
+
+        task = asyncio.create_task(
+            self._graph_execute(request, order, edges, inputs),
+            name=f"graph:{request.graph_id}:{request.request_id}",
+        )
+        self._graph_tasks.add(task)
+        task.add_done_callback(self._graph_tasks.discard)
+        return [
+            GraphRunStepSummary(
+                node_id=str(node["id"]),
+                task_id="",
+                run_id="",
+                session_id="",
+                status="PENDING",
+            )
+            for node in order
+        ]
+
+    async def _graph_execute(
+        self,
+        request: Any,
+        order: list,
+        edges: list,
+        inputs: dict[str, str],
+    ) -> None:
+        """Advance the graph chain in the background: provision + start
+        each node, wait for its terminal head, then gate dependents on
+        their own predecessors — an independent branch still runs when
+        a sibling fails."""
+        import asyncio
+        import logging
+
         from .contracts import (
             DelegateRunRequest,
-            GraphRunStepSummary,
             RunLookupRequest,
             StartRunRequest,
         )
 
-        failed_upstream = False
-        delegate_session = request.session_id
-        for node in order:
-            if failed_upstream:
-                # 成功依赖：上游未完成的下游节点不被接纳 — 不产生
-                # Task/Handoff/Run，只在步骤列表中标记跳过。
-                steps.append(
-                    GraphRunStepSummary(
-                        node_id=str(node["id"]),
-                        task_id="",
-                        run_id="",
-                        session_id="",
-                        status="SKIPPED",
+        order_index = {
+            str(node["id"]): i for i, node in enumerate(order)
+        }
+        deps: dict[str, set[str]] = {}
+        for edge in edges:
+            deps.setdefault(str(edge["to"]), set()).add(str(edge["from"]))
+        results: dict[str, str] = {}
+        run_by_node: dict[str, str] = {}
+        session_by_node: dict[str, str] = {}
+        try:
+            for node in order:
+                node_id = str(node["id"])
+                if self._closed:
+                    return
+                preds = deps.get(node_id, set())
+                if any(
+                    results.get(pred) != "COMPLETED" for pred in preds
+                ):
+                    # 成功依赖：前任未完成的节点不被接纳 — 不产生
+                    # Task/Handoff/Run；无依赖的兄弟分支继续。
+                    results[node_id] = "SKIPPED"
+                    continue
+                request_text = str(node.get("request_text", "")).strip()
+                for key, value in inputs.items():
+                    request_text = request_text.replace(
+                        "{" + key + "}", value
+                    )
+                parent_run_id = request.parent_run_id
+                delegate_session = request.session_id
+                if preds:
+                    # 依赖节点的委派归属在拓扑上最近完成的前任之下。
+                    pred = max(preds, key=lambda p: order_index[p])
+                    parent_run_id = run_by_node[pred]
+                    delegate_session = session_by_node[pred]
+                delegation = await self.delegate_run(
+                    DelegateRunRequest(
+                        tenant_id=request.tenant_id,
+                        user_id=request.user_id,
+                        session_id=delegate_session,
+                        request_id=f"{request.request_id}-{node_id}",
+                        parent_run_id=parent_run_id,
+                        request_text=request_text,
+                        target_planet=str(node.get("target_planet", "")),
+                        profile_id=str(node.get("profile_id", "")),
                     )
                 )
-                continue
-            request_text = str(node.get("request_text", "")).strip()
-            for key, value in inputs.items():
-                request_text = request_text.replace("{" + key + "}", value)
-            delegation = await self.delegate_run(
-                DelegateRunRequest(
-                    tenant_id=request.tenant_id,
-                    user_id=request.user_id,
-                    session_id=delegate_session,
-                    request_id=f"{request.request_id}-{node['id']}",
-                    parent_run_id=parent_run_id,
-                    request_text=request_text,
-                    target_planet=str(node.get("target_planet", "")),
-                    profile_id=str(node.get("profile_id", "")),
+                child_session = (
+                    f"{delegate_session}{SUBTASK_SESSION_MARKER}"
+                    f"{delegation['task_id']}"
                 )
-            )
-            child_session = f"{delegate_session}{SUBTASK_SESSION_MARKER}{delegation['task_id']}"
-            started = await self.start_run(
-                StartRunRequest(
-                    tenant_id=request.tenant_id,
-                    user_id=request.user_id,
-                    session_id=child_session,
-                    request_id=f"{request.request_id}-{node['id']}-run",
-                    request_text=delegation["request_text"],
-                    task_id=delegation["task_id"],
-                    workspace_root=delegation["workspace_root"],
-                    metadata={
-                        "delegation_depth": 1,
-                        "agent_profile": delegation["agent_profile"],
-                    },
+                started = await self.start_run(
+                    StartRunRequest(
+                        tenant_id=request.tenant_id,
+                        user_id=request.user_id,
+                        session_id=child_session,
+                        request_id=f"{request.request_id}-{node_id}-run",
+                        request_text=delegation["request_text"],
+                        task_id=delegation["task_id"],
+                        workspace_root=delegation["workspace_root"],
+                        metadata={
+                            "delegation_depth": 1,
+                            "agent_profile": delegation["agent_profile"],
+                        },
+                    )
                 )
-            )
-            managed = self._runs.get(started.run_id)
-            if managed is not None and managed.task is not None:
-                try:
-                    await managed.task
-                except Exception:
-                    pass  # terminal state is read from the durable head
-            snapshot = await self.get_run(
-                RunLookupRequest(
-                    tenant_id=request.tenant_id,
-                    user_id=request.user_id,
-                    session_id=child_session,
-                    run_id=started.run_id,
-                    request_id=f"{request.request_id}-{node['id']}-status",
+                self._store.update_handoff_target_run(
+                    request.tenant_id,
+                    delegation["handoff_id"],
+                    started.run_id,
                 )
-            )
-            status = snapshot.status.value
-            steps.append(
-                GraphRunStepSummary(
-                    node_id=str(node["id"]),
-                    task_id=delegation["task_id"],
-                    run_id=started.run_id,
-                    session_id=child_session,
-                    status=status,
+                managed = self._runs.get(started.run_id)
+                if managed is not None and managed.task is not None:
+                    try:
+                        await managed.task
+                    except Exception:
+                        pass  # terminal state is read from the durable head
+                snapshot = await self.get_run(
+                    RunLookupRequest(
+                        tenant_id=request.tenant_id,
+                        user_id=request.user_id,
+                        session_id=child_session,
+                        run_id=started.run_id,
+                        request_id=(
+                            f"{request.request_id}-{node_id}-status"
+                        ),
+                    )
                 )
+                results[node_id] = snapshot.status.value
+                run_by_node[node_id] = started.run_id
+                session_by_node[node_id] = child_session
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logging.getLogger(__name__).exception(
+                "graph execution failed: %s", request.graph_id
             )
-            if status != "COMPLETED":
-                failed_upstream = True
-            parent_run_id = started.run_id
-            delegate_session = child_session
-        return steps
 
     async def list_workflow_graphs(self, request: Any) -> list[Any]:
         self._ensure_open()
@@ -2694,6 +2748,9 @@ class AgentService:
             tasks.append(managed.task)
         if self._scheduler_task is not None:
             tasks.append(self._scheduler_task)
+        for task in tuple(self._graph_tasks):
+            task.cancel()
+            tasks.append(task)
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
         self._runs.clear()

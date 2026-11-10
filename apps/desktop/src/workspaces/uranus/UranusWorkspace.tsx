@@ -4,7 +4,7 @@ import { WorkspaceFrame } from "../../design-system/WorkspaceFrame";
 import AgentComposer from "../../app/AgentComposer";
 import { requestIdForRun } from "../../app/ui";
 import type { RunCtx } from "../../app/runCtx";
-import type { ProfileSummary, SkillSummary, WorkflowGraphSummary } from "../../types/service";
+import type { GraphRunStepSummary, ProfileSummary, SkillSummary, WorkflowGraphSummary } from "../../types/service";
 
 /** Laboratory per hand-drawn spec §9 — element palette | workflow canvas
  *  (nodes + save) | workflow list. Real workflow_graphs domain. */
@@ -17,6 +17,7 @@ export default function UranusWorkspace({ ctx }: { ctx: RunCtx }) {
   const [skills, setSkills] = useState<SkillSummary[]>([]);
   const [graphs, setGraphs] = useState<WorkflowGraphSummary[]>([]);
   const [nodes, setNodes] = useState<string[]>([]);
+  const [lastSteps, setLastSteps] = useState<GraphRunStepSummary[]>([]);
   const [name, setName] = useState("");
   const [err, setErr] = useState<string | null>(null);
 
@@ -82,9 +83,19 @@ export default function UranusWorkspace({ ctx }: { ctx: RunCtx }) {
           {graphs.map((g) => (
             <div className="lab-graph-row" key={g.graphId}>
               <strong>{g.name}</strong><small>{g.graphId}</small>
-              <button className="lab-run" disabled={!ctx.activeRun} onClick={() => void service.runGraph({ ...req(), graphId: g.graphId, parentRunId: ctx.activeRun!.runId }).then(() => {}).catch((e) => setErr(String(e)))} title={ctx.activeRun ? "Run graph (delegated child runs)" : "需要 active run 作宿主"} type="button">▶ run</button>
+              <button className="lab-run" disabled={!ctx.activeRun} onClick={() => void service.runGraph({ ...req(), graphId: g.graphId, parentRunId: ctx.activeRun!.runId }).then((steps) => setLastSteps(steps)).catch((e) => setErr(String(e)))} title={ctx.activeRun ? "Run graph (delegated child runs)" : "需要 active run 作宿主"} type="button">▶ run</button>
             </div>
           ))}
+          {lastSteps.length > 0 && (
+            <div className="lab-steps">
+              {lastSteps.map((s) => (
+                <div className="lab-graph-row" key={s.nodeId}>
+                  <strong>{s.nodeId}</strong>
+                  <small>{s.status || "PENDING"}{s.runId ? ` · ${s.runId}` : ""}</small>
+                </div>
+              ))}
+            </div>
+          )}
           {graphs.length === 0 && <p className="omni-empty">No saved graphs.</p>}
           <h4 className="ws-mod">skills</h4>
           {skills.map((sk) => <div className="lab-graph-row" key={sk.skillId}><strong>{sk.name}</strong><small>{sk.description.slice(0, 40)}</small></div>)}

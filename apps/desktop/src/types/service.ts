@@ -993,6 +993,8 @@ export interface GraphRunStepSummary {
   taskId: string;
   runId: string;
   sessionId: string;
+  /** Terminal status (COMPLETED, FAILED_*), or SKIPPED for dependents of a failed node. */
+  status?: string;
 }
 
 export interface RunWorkflowGraphRequest {

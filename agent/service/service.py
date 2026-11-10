@@ -1510,12 +1510,16 @@ class AgentService:
         return self._graph_summary(record)
 
     async def run_graph(self, request: Any) -> list[Any]:
-        """Execute a persisted canvas graph — task nodes run sequentially in
-        edge order as delegated child runs.  input nodes provide {name}
-        substitutions into request_text; the graph is a plan template, not a
-        program — each run is a real run with full lifecycle semantics."""
+        """Execute a persisted canvas graph — task nodes are delegated
+        child runs and edges are success dependencies: a node starts
+        only after every upstream node completed.  input nodes provide
+        {name} substitutions into request_text.  The whole graph is
+        validated before the first Run — unknown node types, malformed
+        edges or missing profiles are rejected with INVALID_REQUEST
+        before any Task/Handoff/Run is created."""
         self._ensure_open()
         import json as _json
+        from collections.abc import Mapping
 
         record = self._store.get_workflow_graph(request.tenant_id, request.graph_id)
         if record is None:
@@ -1524,26 +1528,88 @@ class AgentService:
                 f"workflow graph not found: {request.graph_id}",
             )
         definition = _json.loads(record.definition_json)
-        nodes = {str(n.get("id")): n for n in definition.get("nodes", [])}
+        raw_nodes = definition.get("nodes", [])
         edges = definition.get("edges", [])
+        # 整图预检：未知节点类型 / 缺 request_text / 非法边 / 未知 profile
+        # 一律在产生任何 Task/Handoff/Run 之前明确拒绝。
+        node_ids: set[str] = set()
+        for node in raw_nodes:
+            node_id = str(node.get("id", ""))
+            node_type = str(node.get("type", ""))
+            if node_type not in {"task", "input"}:
+                raise AgentServiceError(
+                    ServiceErrorCode.INVALID_REQUEST,
+                    f"unknown node type '{node_type}' in node {node_id}",
+                )
+            if node_type == "task" and not str(
+                node.get("request_text", "")
+            ).strip():
+                raise AgentServiceError(
+                    ServiceErrorCode.INVALID_REQUEST,
+                    f"task node has no request_text: {node_id}",
+                )
+            node_ids.add(node_id)
+        for edge in edges:
+            if not isinstance(edge, Mapping):
+                raise AgentServiceError(
+                    ServiceErrorCode.INVALID_REQUEST,
+                    "graph edges must be {from, to} objects",
+                )
+            for key in ("from", "to"):
+                if str(edge.get(key, "")) not in node_ids:
+                    raise AgentServiceError(
+                        ServiceErrorCode.INVALID_REQUEST,
+                        f"edge references unknown node: {edge.get(key)}",
+                    )
+        known_profiles = {
+            profile.profile_id
+            for profile in self._store.list_profiles(request.tenant_id)
+        }
+        task_nodes = [n for n in raw_nodes if n.get("type") == "task"]
+        if not task_nodes:
+            raise AgentServiceError(
+                ServiceErrorCode.INVALID_REQUEST,
+                "workflow graph has no executable task nodes",
+            )
+        for node in task_nodes:
+            profile_id = str(node.get("profile_id", ""))
+            if profile_id and profile_id not in known_profiles:
+                raise AgentServiceError(
+                    ServiceErrorCode.INVALID_REQUEST,
+                    f"agent profile not found: {profile_id}",
+                )
+        nodes = {str(n.get("id")): n for n in raw_nodes}
         inputs = {
             str(n.get("name")): str(n.get("value", ""))
             for n in nodes.values() if n.get("type") == "input"
         }
-        task_nodes = [n for n in nodes.values() if n.get("type") == "task"]
         order = _topo_task_order(task_nodes, edges)
-        steps = []
+        steps: list = []
         parent_run_id = request.parent_run_id
-        from .contracts import DelegateRunRequest, GraphRunStepSummary, StartRunRequest
+        from .contracts import (
+            DelegateRunRequest,
+            GraphRunStepSummary,
+            RunLookupRequest,
+            StartRunRequest,
+        )
 
+        failed_upstream = False
         delegate_session = request.session_id
         for node in order:
-            request_text = str(node.get("request_text", "")).strip()
-            if not request_text:
-                raise AgentServiceError(
-                    ServiceErrorCode.INVALID_REQUEST,
-                    f"task node has no request_text: {node.get('id')}",
+            if failed_upstream:
+                # 成功依赖：上游未完成的下游节点不被接纳 — 不产生
+                # Task/Handoff/Run，只在步骤列表中标记跳过。
+                steps.append(
+                    GraphRunStepSummary(
+                        node_id=str(node["id"]),
+                        task_id="",
+                        run_id="",
+                        session_id="",
+                        status="SKIPPED",
+                    )
                 )
+                continue
+            request_text = str(node.get("request_text", "")).strip()
             for key, value in inputs.items():
                 request_text = request_text.replace("{" + key + "}", value)
             delegation = await self.delegate_run(
@@ -1574,14 +1640,33 @@ class AgentService:
                     },
                 )
             )
+            managed = self._runs.get(started.run_id)
+            if managed is not None and managed.task is not None:
+                try:
+                    await managed.task
+                except Exception:
+                    pass  # terminal state is read from the durable head
+            snapshot = await self.get_run(
+                RunLookupRequest(
+                    tenant_id=request.tenant_id,
+                    user_id=request.user_id,
+                    session_id=child_session,
+                    run_id=started.run_id,
+                    request_id=f"{request.request_id}-{node['id']}-status",
+                )
+            )
+            status = snapshot.status.value
             steps.append(
                 GraphRunStepSummary(
                     node_id=str(node["id"]),
                     task_id=delegation["task_id"],
                     run_id=started.run_id,
                     session_id=child_session,
+                    status=status,
                 )
             )
+            if status != "COMPLETED":
+                failed_upstream = True
             parent_run_id = started.run_id
             delegate_session = child_session
         return steps

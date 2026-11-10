@@ -905,9 +905,11 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
     })) as Array<Record<string, unknown>>;
     return result.map((raw) => ({
       nodeId: requiredString(raw.node_id, "node_id"),
-      taskId: requiredString(raw.task_id, "task_id"),
-      runId: requiredString(raw.run_id, "run_id"),
-      sessionId: requiredString(raw.session_id, "session_id"),
+      // SKIPPED steps carry empty ids — only status reports the outcome.
+      taskId: optionalString(raw.task_id) ?? "",
+      runId: optionalString(raw.run_id) ?? "",
+      sessionId: optionalString(raw.session_id) ?? "",
+      status: optionalString(raw.status) ?? "",
     }));
   }
 

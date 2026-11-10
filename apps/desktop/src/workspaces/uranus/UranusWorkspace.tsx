@@ -32,7 +32,12 @@ export default function UranusWorkspace({ ctx }: { ctx: RunCtx }) {
     try {
       await service.upsertWorkflowGraph({
         ...req(), graphId: `g-${Date.now().toString(36)}`, name: name.trim(),
-        definition: { nodes: nodes.map((n, i) => ({ id: `n${i}`, type: n })), edges: nodes.slice(1).map((_, i) => [`n${i}`, `n${i + 1}`]) },
+        // Canvas contract: nodes are delegated tasks, edges are {from,to}
+        // success dependencies — the backend rejects anything else.
+        definition: {
+          nodes: nodes.map((n, i) => ({ id: `n${i}`, type: "task", request_text: n })),
+          edges: nodes.slice(1).map((_, i) => ({ from: `n${i}`, to: `n${i + 1}` })),
+        },
       });
       setName(""); setNodes([]);
       setGraphs(await service.listWorkflowGraphs(req()));

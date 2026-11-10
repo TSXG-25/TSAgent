@@ -1900,6 +1900,7 @@ class GraphRunStepSummary:
     task_id: str
     run_id: str
     session_id: str
+    status: str = ""
 
     def to_dict(self) -> dict[str, JSONValue]:
         return {
@@ -1907,6 +1908,7 @@ class GraphRunStepSummary:
             "task_id": self.task_id,
             "run_id": self.run_id,
             "session_id": self.session_id,
+            "status": self.status,
         }
 
 

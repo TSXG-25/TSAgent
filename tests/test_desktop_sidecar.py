@@ -1797,3 +1797,148 @@ def test_delegation_provisioning_is_shared_and_idempotent(
             await service.close()
 
     asyncio.run(scenario())
+
+
+def _running_parent(service, store, tmp_path):
+    """A RUNNING parent head + session/workspace for delegation tests."""
+    from agent.runtime_store.view import DurableRuntimeStoreView
+    from agent.service.contracts import StartRunRequest
+    from agent.service.run_projector import encode_request_reference
+
+    store.ensure_session("t", "s")
+    store.upsert_workspace("t", "ws", path=str(tmp_path))
+    store.assign_session_workspace("t", "s", "ws")
+    parent = StartRunRequest(
+        tenant_id="t", user_id="u", session_id="s",
+        request_id="r-parent", request_text="parent")
+    store.reserve_service_start(
+        "t", "s",
+        requested_run_id="run-parent", request_id="r-parent",
+        request_digest="d", writer_id="w",
+        external_reference=encode_request_reference(
+            parent, run_id="run-parent", workspace_root=str(tmp_path)),
+    )
+    view = DurableRuntimeStoreView(
+        store, tenant_id="t", session_id="s",
+        run_id="run-parent", request_id="r-parent", writer_id="w")
+    view.transition_run_with_event(
+        run_status="RUNNING",
+        event_id="run-started:p", event_type="run_started",
+        timestamp="2026-11-10T00:00:00Z", payload={})
+
+
+def test_run_graph_task_nodes_and_success_dependency(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """A07: task 节点 + {from,to} 边的图按成功依赖执行；
+    未知节点类型在产生 Task/Handoff/Run 前拒绝；同请求重试不新增 Handoff。"""
+    import asyncio
+    import json as _json
+
+    import tests.test_ha_r1_harness as harness
+    from agent.service.contracts import RunWorkflowGraphRequest
+    from agent.service.errors import AgentServiceError
+
+    harness.setup_provider(monkeypatch, [
+        ("step-one", harness.intent("step-one", artifact=False)),
+        ("step-one", "完成一"),
+        ("step-two", harness.intent("step-two", artifact=False)),
+        ("step-two", "完成二"),
+    ])
+
+    async def scenario() -> None:
+        service, store = harness.service_at(tmp_path)
+        try:
+            _running_parent(service, store, tmp_path)
+            store.upsert_workflow_graph("t", "g-ok", definition_json=(
+                _json.dumps({"nodes": [
+                    {"id": "n1", "type": "task", "request_text": "step-one"},
+                    {"id": "n2", "type": "task", "request_text": "step-two"},
+                ], "edges": [{"from": "n1", "to": "n2"}]})))
+            steps = await service.run_graph(RunWorkflowGraphRequest(
+                tenant_id="t", user_id="u", session_id="s",
+                request_id="g-1", graph_id="g-ok",
+                parent_run_id="run-parent"))
+            assert [s.status for s in steps] == ["COMPLETED", "COMPLETED"]
+            # n1 的 Handoff 在父会话；n2 的 Handoff 在 n1 的派生会话。
+            assert len(store.list_handoffs("t", "s")) == 1
+            assert len(store.list_handoffs("t", steps[0].session_id)) == 1
+            # 同 request_id 重跑 — 委派事实复用，不新增 Handoff。
+            steps2 = await service.run_graph(RunWorkflowGraphRequest(
+                tenant_id="t", user_id="u", session_id="s",
+                request_id="g-1", graph_id="g-ok",
+                parent_run_id="run-parent"))
+            assert len(store.list_handoffs("t", "s")) == 1
+            assert len(store.list_handoffs("t", steps[0].session_id)) == 1
+
+            # 未知节点类型 — 产生任何 Task/Handoff/Run 前拒绝。
+            store.upsert_workflow_graph("t", "g-bad", definition_json=(
+                _json.dumps({"nodes": [
+                    {"id": "n1", "type": "read_file", "request_text": "x"},
+                ], "edges": []})))
+            try:
+                await service.run_graph(RunWorkflowGraphRequest(
+                    tenant_id="t", user_id="u", session_id="s",
+                    request_id="g-2", graph_id="g-bad",
+                    parent_run_id="run-parent"))
+                raise AssertionError("expected INVALID_REQUEST")
+            except AgentServiceError as error:
+                assert error.code.value == "INVALID_REQUEST"
+            assert len(store.list_handoffs("t", "s")) == 1
+        finally:
+            await service.close()
+
+    asyncio.run(scenario())
+
+
+def test_run_graph_skips_dependents_of_failed_node(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """A07: 上游节点运行失败后，下游节点标记 SKIPPED —
+    不为其产生 Task/Handoff/Run。"""
+    import asyncio
+    import json as _json
+
+    import tests.test_ha_r1_harness as harness
+    from agent.runtime_store.sqlite import SqliteRuntimeStore
+    from agent.service.context_factory import ServiceContextFactory
+    from agent.service.contracts import RunWorkflowGraphRequest
+    from agent.service.runtime_launcher import RuntimeExecutionLauncher
+    from agent.service.service import AgentService
+
+    async def scenario() -> None:
+        store = SqliteRuntimeStore.open(tmp_path / "runtime.sqlite")
+        service = AgentService(
+            runtime_store=store,
+            launcher=RuntimeExecutionLauncher(),
+            context_factory=ServiceContextFactory(
+                store, workspace_root=tmp_path
+            ),
+            defer_context_creation=True,
+        )
+        try:
+            def broken_for_n1(request, *, run_id, **kwargs):
+                if request.request_id.endswith("-n1-run"):
+                    raise RuntimeError("n1 context boom")
+                return real_create(request, run_id=run_id, **kwargs)
+
+            real_create = service._contexts.create_run
+            service._contexts.create_run = broken_for_n1
+            _running_parent(service, store, tmp_path)
+            store.upsert_workflow_graph("t", "g-fail", definition_json=(
+                _json.dumps({"nodes": [
+                    {"id": "n1", "type": "task", "request_text": "boom"},
+                    {"id": "n2", "type": "task", "request_text": "later"},
+                ], "edges": [{"from": "n1", "to": "n2"}]})))
+            steps = await service.run_graph(RunWorkflowGraphRequest(
+                tenant_id="t", user_id="u", session_id="s",
+                request_id="g-1", graph_id="g-fail",
+                parent_run_id="run-parent"))
+            assert [s.status for s in steps] == ["FAILED_TERMINAL", "SKIPPED"]
+            assert steps[1].task_id == "" and steps[1].run_id == ""
+            # 下游节点未被接纳 — 只有 n1 的 Handoff。
+            assert len(store.list_handoffs("t", "s")) == 1
+        finally:
+            await service.close()
+
+    asyncio.run(scenario())

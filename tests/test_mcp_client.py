@@ -184,7 +184,6 @@ def test_lazy_spawn_starts_and_waits(monkeypatch):
     monkeypatch.setattr(
         client.subprocess, "Popen", lambda args, **kw: spawned.append(args)
     )
-    client._spawn_failed.discard("reme")
     session = _FakeSession(results=[_FakeResult(text="mem")])
     _patch_transport(monkeypatch, session)
 
@@ -200,7 +199,6 @@ def test_spawn_failure_is_retryable(monkeypatch):
     call re-checks the endpoint instead of short-circuiting."""
     monkeypatch.setattr(client, "_endpoint_reachable", lambda _url: False)
     monkeypatch.setattr(client.shutil, "which", lambda _cmd: None)
-    client._spawn_failed.discard("reme")
 
     async def run():
         return await call_mcp_tool(REME, "search", {})
@@ -216,7 +214,6 @@ def test_spawn_failure_is_retryable(monkeypatch):
     with pytest.raises(RuntimeError, match="not on PATH"):
         asyncio.run(run())
     assert checks, "retry must re-probe the endpoint"
-    client._spawn_failed.discard("reme")
 
 
 def test_existing_adapters_delegates(monkeypatch):

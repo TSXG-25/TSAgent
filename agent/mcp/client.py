@@ -68,7 +68,6 @@ class MCPServerSpec:
 
 
 _locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
-_spawn_failed: set[str] = set()  # compat: tests reset it; not consulted
 
 
 def _endpoint_reachable(url: str) -> bool:
@@ -223,10 +222,12 @@ async def mcp_session(
 async def list_tools(
     spec: MCPServerSpec, *, timeout: int | None = None
 ) -> list[Any]:
-    """Tool discovery: raises on transport/protocol failure — a missing or
-    unavailable server still yields [] so callers can cache that outcome."""
-    if unavailable_reason(spec):
-        return []
+    """Tool discovery: raises whenever the server cannot answer —
+    unavailable, uninstalled, or transport/protocol failure.  Only a real
+    MCP response (empty or not) is a cacheable result."""
+    reason = unavailable_reason(spec)
+    if reason:
+        raise RuntimeError(reason)
     async with _open_session(spec, timeout=timeout) as session:
         return list((await session.list_tools()).tools)
 

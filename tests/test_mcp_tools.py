@@ -283,3 +283,29 @@ def test_successful_empty_discovery_is_cached(monkeypatch):
     assert asyncio.run(discover_exposed_tools([EXPOSED_SPEC])) == []
     assert asyncio.run(discover_exposed_tools([EXPOSED_SPEC])) == []
     assert len(calls) == 1
+
+
+def test_unavailable_recovery_rediscovers_tools(monkeypatch):
+    """A19: 未安装/暂不可用也是发现失败 — 不缓存，恢复后下一次
+    发现重新探测可用性并列出工具。"""
+    probes: list[int] = []
+    session = _FakeSession(
+        tools=[_mcp_tool("search"), _mcp_tool("create")]
+    )
+    _patch_transport(monkeypatch, session)
+
+    state = {"unavailable": True}
+    monkeypatch.setattr(
+        client, "unavailable_reason",
+        lambda _spec: (
+            probes.append(1),
+            "NOTES_UNAVAILABLE: offline" if state["unavailable"] else "",
+        )[1],
+    )
+    assert asyncio.run(discover_exposed_tools([EXPOSED_SPEC])) == []
+    assert len(probes) == 1
+    # 服务恢复 — 缓存没有空目录，可用性检查重新执行。
+    state["unavailable"] = False
+    found = asyncio.run(discover_exposed_tools([EXPOSED_SPEC]))
+    assert [t.tool_name for t in found] == ["search", "create"]
+    assert len(probes) == 2

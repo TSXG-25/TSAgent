@@ -258,7 +258,14 @@ def test_wire_contract_fixture_matches_real_serialization(tmp_path) -> None:
             ))
             produced = json.loads(encode_response(response))["result"]
             expected = fixture["methods"]["decide_approval"]["response"]
+            volatile = {"created_at", "decided_at", "updated_at"}
             for key, value in expected.items():
+                assert key in produced, key
+                if key in volatile:
+                    # 时间戳类字段是真实生成值 — 校验存在非空即可；
+                    # 语义字段（status/action/decision 路径）逐项等值。
+                    assert produced[key], key
+                    continue
                 assert produced.get(key) == value, (
                     key, produced.get(key))
 

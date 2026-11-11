@@ -33,6 +33,12 @@ export default function MercuryWorkspace({ ctx }: { ctx: RunCtx }) {
     search.listener = () => bump();
     return () => { search.listener = null; };
   }, [search]);
+  // 会话切换与组件卸载都让在途响应失效 — 旧会话的晚到响应不得
+  // 更新当前页面（service 对象在会话间复用，memo 不会重建）。
+  useEffect(() => {
+    search.bind(service.identity.sessionId);
+    return () => search.stop();
+  }, [search, service.identity.sessionId]);
 
   const doSearch = useCallback(async (e: FormEvent) => {
     e.preventDefault();

@@ -110,3 +110,22 @@ test("empty and unavailable outcomes are distinct", async () => {
   assert.equal(session.status, "unavailable");
   assert.match(session.err ?? "", /not installed/);
 });
+
+
+test("session switch drops the previous session's response", async () => {
+  const calls: Array<ReturnType<typeof deferred>> = [];
+  const session = new MercurySearchSession(() => {
+    const d = deferred();
+    calls.push(d);
+    return d.promise;
+  });
+  session.bind("session-a");
+  const first = session.run("q");
+  assert.equal(session.sessionId, "session-a");
+
+  session.bind("session-b");            // 切到 B — A 的在途响应失效
+  calls[0].resolve({ sources: [src(1)], provider: "p", content: "a" });
+  assert.equal(await first, false);     // 结果面板和日志都不更新
+  assert.equal(session.panes[0].source, null);
+  assert.equal(session.sourceCount, 0);
+});

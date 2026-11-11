@@ -30,6 +30,7 @@ export class MercurySearchSession {
   private seq = 0;
   listener: (() => void) | null = null;
 
+  sessionId = "";
   status: MercurySearchStatus = "idle";
   running = false;
   err: string | null = null;
@@ -90,6 +91,13 @@ export class MercurySearchSession {
     this.seq++;
     this.running = false;
     this.notify();
+  }
+
+  /** Re-bind to a chat session — a response from a search issued under
+   *  a different session must not write this session's view. */
+  bind(sessionId: string): void {
+    this.sessionId = sessionId;
+    this.stop();
   }
 
   addPane(): void {

@@ -195,7 +195,9 @@ def test_lazy_spawn_starts_and_waits(monkeypatch):
     assert spawned == [["/usr/bin/reme", "start"]]
 
 
-def test_spawn_failure_is_sticky(monkeypatch):
+def test_spawn_failure_is_retryable(monkeypatch):
+    """A19: a failed spawn no longer poisons later probes — the next
+    call re-checks the endpoint instead of short-circuiting."""
     monkeypatch.setattr(client, "_endpoint_reachable", lambda _url: False)
     monkeypatch.setattr(client.shutil, "which", lambda _cmd: None)
     client._spawn_failed.discard("reme")
@@ -203,14 +205,17 @@ def test_spawn_failure_is_sticky(monkeypatch):
     async def run():
         return await call_mcp_tool(REME, "search", {})
 
+    checks = []
     with pytest.raises(RuntimeError, match="REME_UNAVAILABLE"):
         asyncio.run(run())
-    # Second call fails fast without re-checking the endpoint.
-    client._endpoint_reachable = lambda _url: (_ for _ in ()).throw(  # type: ignore[assignment]
-        AssertionError("should not re-check")
-    )
-    with pytest.raises(RuntimeError, match="previously failed"):
+    # Second call retries: endpoint checked again, still unavailable.
+    def endpoint_check(url):
+        checks.append(url)
+        return False
+    client._endpoint_reachable = endpoint_check  # type: ignore[assignment]
+    with pytest.raises(RuntimeError, match="not on PATH"):
         asyncio.run(run())
+    assert checks, "retry must re-probe the endpoint"
     client._spawn_failed.discard("reme")
 
 

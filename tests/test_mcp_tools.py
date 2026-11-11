@@ -241,3 +241,45 @@ def test_shipped_specs_exposure_invariant():
     assert set(UTIL.expose_tools) == {
         "word_count", "json_format", "regex_findall", "base64_convert",
     }
+
+
+def test_discovery_failure_retries_and_recovers(monkeypatch):
+    """A19: 失败不缓存 — 假 MCP 首次发现失败、第二次成功，
+    下一次目录重新出现该工具。"""
+    attempts = {"n": 0}
+
+    class _FlakySession(_FakeSession):
+        async def list_tools(self):
+            attempts["n"] += 1
+            if attempts["n"] == 1:
+                raise RuntimeError("first discovery boom")
+            return await super().list_tools()
+
+    session = _FlakySession(
+        tools=[_mcp_tool("search"), _mcp_tool("create")]
+    )
+    _patch_transport(monkeypatch, session)
+
+    assert asyncio.run(discover_exposed_tools([EXPOSED_SPEC])) == []
+    assert attempts["n"] == 1
+    # 失败未写缓存 — 重试真实 list_tools，第二次成功。
+    found = asyncio.run(discover_exposed_tools([EXPOSED_SPEC]))
+    assert [t.tool_name for t in found] == ["search", "create"]
+    assert attempts["n"] == 2
+    # 成功缓存 — 不再调用。
+    assert asyncio.run(discover_exposed_tools([EXPOSED_SPEC]))
+    assert attempts["n"] == 2
+
+
+def test_successful_empty_discovery_is_cached(monkeypatch):
+    """A19: 成功的空结果仍可缓存 — 第二次发现不再探测。"""
+    calls = []
+
+    async def fake_list_tools(spec, *, timeout=None):
+        calls.append(1)
+        return []
+
+    monkeypatch.setattr("agent.mcp.tools.list_tools", fake_list_tools)
+    assert asyncio.run(discover_exposed_tools([EXPOSED_SPEC])) == []
+    assert asyncio.run(discover_exposed_tools([EXPOSED_SPEC])) == []
+    assert len(calls) == 1

@@ -70,8 +70,8 @@ async def discover_exposed_tools(
 ) -> list[ExposedTool]:
     """List each opted-in server's tools; unavailable servers yield none."""
     # 发现并行化：stdio server 各需 1-4s 启动，串行叠加会拖慢
-    # build_toolset（首轮 run 延迟可超 10s）；失败由 list_tools 返回 []
-    # 兜底，不影响其他 server。
+    # build_toolset（首轮 run 延迟可超 10s）；失败 raise、不缓存，
+    # 不影响其他 server 且下一次发现会重试。
     pending = [
         spec for spec in (specs if specs is not None else SERVERS.values())
         if spec.expose_tools
@@ -88,7 +88,10 @@ async def discover_exposed_tools(
         )
         dirty = False
         for spec, result in zip(uncached, results):
-            tools = result if isinstance(result, list) else []
+            if not isinstance(result, list):
+                # 发现失败 — 不缓存，下一次发现会重试。未安装与
+                # 无导出工具的 [] 是成功结果，照常缓存。
+                continue
             wanted = set(spec.expose_tools)
             _tool_cache[_spec_sig(spec)] = [
                 {
@@ -96,7 +99,7 @@ async def discover_exposed_tools(
                     "description": str(getattr(t, "description", "") or ""),
                     "inputSchema": dict(getattr(t, "inputSchema", None) or {}),
                 }
-                for t in tools if t.name in wanted
+                for t in result if t.name in wanted
             ]
             dirty = True
         if dirty:

@@ -68,7 +68,7 @@ class MCPServerSpec:
 
 
 _locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
-_spawn_failed: set[str] = set()
+_spawn_failed: set[str] = set()  # compat: tests reset it; not consulted
 
 
 def _endpoint_reachable(url: str) -> bool:
@@ -105,13 +105,9 @@ def unavailable_reason(spec: MCPServerSpec) -> str:
 
 
 async def _ensure_server(spec: MCPServerSpec) -> None:
-    """Lazily start a local HTTP sidecar once (detached, outlives caller)."""
+    """Lazily start a local HTTP sidecar (detached, outlives caller)."""
     if spec.transport != "http" or not spec.spawn_command:
         return
-    if spec.name in _spawn_failed:
-        raise RuntimeError(
-            f"{spec.unavailable_code}: service spawn previously failed"
-        )
     if _endpoint_reachable(spec.url):
         return
     async with _locks[spec.name]:
@@ -119,7 +115,6 @@ async def _ensure_server(spec: MCPServerSpec) -> None:
             return
         binary = shutil.which(spec.spawn_command[0])
         if binary is None:
-            _spawn_failed.add(spec.name)
             raise RuntimeError(
                 spec.spawn_hint
                 or f"{spec.unavailable_code}: `{spec.spawn_command[0]}` not on PATH"
@@ -134,7 +129,6 @@ async def _ensure_server(spec: MCPServerSpec) -> None:
         waited = 0.0
         while not _endpoint_reachable(spec.url):
             if waited >= spec.spawn_ready_timeout:
-                _spawn_failed.add(spec.name)
                 raise RuntimeError(
                     f"{spec.unavailable_code}: `{' '.join(spec.spawn_command)}` "
                     f"did not become ready within {spec.spawn_ready_timeout:.0f}s"
@@ -229,14 +223,12 @@ async def mcp_session(
 async def list_tools(
     spec: MCPServerSpec, *, timeout: int | None = None
 ) -> list[Any]:
-    """Best-effort tool discovery; an unavailable server yields []."""
+    """Tool discovery: raises on transport/protocol failure — a missing or
+    unavailable server still yields [] so callers can cache that outcome."""
     if unavailable_reason(spec):
         return []
-    try:
-        async with _open_session(spec, timeout=timeout) as session:
-            return list((await session.list_tools()).tools)
-    except Exception:
-        return []
+    async with _open_session(spec, timeout=timeout) as session:
+        return list((await session.list_tools()).tools)
 
 
 def _stdio_transport(command: str, spec: MCPServerSpec, errlog):

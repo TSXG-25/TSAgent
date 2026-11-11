@@ -2176,3 +2176,137 @@ def test_sidecar_graph_run_does_not_block_control(
             json.loads(line)  # 每行都是完整的协议响应
 
     asyncio.run(scenario())
+
+
+def test_sidecar_web_tools_registered_before_first_run(tmp_path: Path) -> None:
+    """A21: 真实 python -m 入口在首个 Run 前完成 Web 注册 —
+    假 Provider 断言首轮目录含 web_search/web_fetch；依赖缺失时
+    目录不含；JSONL health 正常。意图为非研究执行任务，Planner
+    不会按需加载 Web — 目录证据只能来自入口注册。"""
+    import http.server
+    import os
+    import threading
+    import time
+
+    captured: list[list[str]] = []
+    intent = {
+        "domain": "开发", "action": "code", "target": "",
+        "entities": [], "confidence": 0.95,
+        "requires_execution": True, "summary": "写一个文件",
+        "resolved_request": "写一个文件",
+        "conversation_relation": "new_request",
+        "requested_outcomes": ["USER_VISIBLE_OUTPUT"],
+        "artifact_required": True,
+        "delivery_requirements": [{
+            "id": "d", "kind": "file", "quantity": 1,
+            "target": "", "acceptance_criteria": [],
+        }],
+        "prohibited_effects": [], "acceptance_criteria": [],
+        "write_targets": [], "external_effects": [],
+        "search_query": "", "search_timeliness": "any",
+        "context_needs": {"memory": False, "repository": False},
+        "memory_action": "none",
+        "freshness_required": False,
+        "source_grounding_required": False,
+    }
+
+    class _FakeProvider(http.server.BaseHTTPRequestHandler):
+        def do_POST(self) -> None:
+            length = int(self.headers.get("Content-Length", 0) or 0)
+            body = json.loads(self.rfile.read(length) or b"{}")
+            tools = [
+                item["function"]["name"]
+                for item in body.get("tools") or []
+            ]
+            captured.append(tools)
+            # 意图/规划轮不带 tools — 回契约 JSON；执行轮带目录 — 回文本。
+            content = (
+                "done" if tools
+                else json.dumps(intent, ensure_ascii=False)
+            )
+            payload = json.dumps({
+                "model": "m", "created_at": "x",
+                "message": {"role": "assistant", "content": content},
+                "done": True, "done_reason": "stop",
+            }).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def log_message(self, *args: object) -> None:
+            pass
+
+    server = http.server.HTTPServer(("127.0.0.1", 0), _FakeProvider)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    base_url = f"http://127.0.0.1:{server.server_address[1]}/v1"
+
+    # 可用替身 — duckduckgo-mcp-server 空壳固定在 PATH 上。
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    stub = bin_dir / "duckduckgo-mcp-server"
+    stub.write_text("#!/bin/sh\nexit 0\n")
+    stub.chmod(0o755)
+
+    def _launch(*, db_name: str, web_dep: bool):
+        env = {
+            "OPENAI_API_KEY": "",
+            "LLM_API_KEY": "",
+            "P2_SECONDARY_API_KEY": "",
+            "TSAGENT_LLM_PROVIDER": "ollama",
+            "OLLAMA_BASE_URL": base_url,
+        }
+        if web_dep:
+            env["PATH"] = (
+                str(bin_dir) + os.pathsep + os.environ.get("PATH", "")
+            )
+        else:
+            # duckduckgo-mcp-server 不在此 PATH 上 — 依赖缺失分支。
+            env["PATH"] = "/usr/bin:/bin:/usr/local/bin"
+        return _spawn_sidecar(
+            tmp_path,
+            database_path=tmp_path / db_name,
+            extra_env=env,
+        )
+
+    def _drive(process) -> set[str]:
+        _send(process, {"id": "h1", "method": "health", "params": {}})
+        health = _read_response(process)
+        assert health.get("id") == "h1" and health.get("result")
+        _send(process, {
+            "id": "r1", "method": "start_run",
+            "params": {
+                "tenant_id": "t", "user_id": "u", "session_id": "s",
+                "request_id": "r1", "request_text": "写一个文件",
+            },
+        })
+        started = _read_response(process)
+        assert started.get("id") == "r1" and started.get("result")
+        deadline = time.time() + 90
+        while time.time() < deadline:
+            for tools in captured:
+                if tools:
+                    return set(tools)
+            time.sleep(0.1)
+        raise AssertionError("provider never received a tool catalog")
+
+    try:
+        process = _launch(db_name="web-ok.sqlite", web_dep=True)
+        try:
+            catalog = _drive(process)
+            assert "web_search" in catalog
+            assert "web_fetch" in catalog
+        finally:
+            _terminate(process)
+
+        captured.clear()
+        process = _launch(db_name="web-missing.sqlite", web_dep=False)
+        try:
+            catalog = _drive(process)
+            assert "web_search" not in catalog
+            assert "web_fetch" not in catalog
+        finally:
+            _terminate(process)
+    finally:
+        server.shutdown()

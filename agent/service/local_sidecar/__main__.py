@@ -28,9 +28,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         # Every ordinary print/progress bar in the Runtime is redirected to
         # stderr.  Only server.py receives the saved protocol stdout handle.
         with redirect_stdout(sys.stderr):
-            # Tool registrations are loaded at the first plan boundary.  The
-            # sidecar must acknowledge durable start requests without paying
-            # cold imports for tools that the Run may never use.
+            # Plan-boundary tool modules load lazily at the first plan
+            # boundary; web schemas are registered in create_service so the
+            # model-facing catalog advertises them from the first Run.
             service = create_service(
                 config,
                 bootstrap_tools=False,

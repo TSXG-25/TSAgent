@@ -83,17 +83,21 @@ def create_service(
     execution remains bound to the RunContext by PlanExecutor.
     """
 
-    if bootstrap_tools:
-        from agent.bootstrap import load_tool_modules
+    from agent.bootstrap import load_tool_modules
 
-        # Core deterministic tools are enough for direct callers that compile
-        # a plan immediately.  Optional modules are loaded by PlanExecutor
-        # when a plan actually references one; importing them here makes
-        # health/start_run pay for unused dependencies.  "web" is core: its
-        # schema must be in the registry for the model to see web_search /
-        # web_fetch at all — PlanExecutor's lazy load can never trigger for
-        # a tool the catalog doesn't advertise.
-        load_tool_modules(("filesystem", "web"))
+    # "web" is core: its schema must be in the registry for the model to
+    # see web_search / web_fetch at all — PlanExecutor's lazy load can
+    # never trigger for a tool the catalog doesn't advertise.  The schema
+    # import is cheap (pydantic + registry); the existing availability
+    # check still drops web tools from the catalog when the DuckDuckGo
+    # backend is missing.
+    load_tool_modules(("web",))
+    if bootstrap_tools:
+        # Core deterministic tools are enough for direct callers that
+        # compile a plan immediately.  Optional modules are loaded by
+        # PlanExecutor when a plan actually references one; importing
+        # them here makes health/start_run pay for unused dependencies.
+        load_tool_modules(("filesystem",))
 
     # Capability resolution is an application-level registry lookup used by
     # the effect-truth gate.  Registering it here keeps the sidecar and CLI

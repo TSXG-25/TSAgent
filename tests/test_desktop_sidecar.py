@@ -2456,3 +2456,42 @@ def test_read_artifact_body_and_stale_come_from_one_byte_read(
 
     import asyncio
     asyncio.run(scenario())
+
+
+def test_provider_settings_non_first_model_persists_for_next_run(
+    tmp_path: Path,
+) -> None:
+    """A13: 选择非首项模型 → update_settings → get_settings 重开
+    仍返回该模型 → 下一个 Provider 实例按同一模型构造。"""
+    import asyncio
+
+    import tests.test_ha_r1_harness as harness
+    from agent import llm as _llm_module
+    from agent.service.contracts import (
+        GetSettingsRequest,
+        UpdateSettingsRequest,
+    )
+
+    async def scenario() -> None:
+        service, _store = harness.service_at(tmp_path)
+        router = _llm_module.llm
+        original = router.ollama_model
+        try:
+            await service.update_settings(UpdateSettingsRequest(
+                tenant_id="t", user_id="u", session_id="s",
+                request_id="set-1",
+                ollama_model="qwen3:14b",
+            ))
+            reopened = await service.get_settings(GetSettingsRequest(
+                tenant_id="t", user_id="u", session_id="s",
+                request_id="set-2",
+            ))
+            assert reopened.ollama_model == "qwen3:14b"
+            # 实例缓存已失效 — 下一个 Provider 实例按新模型构造。
+            provider = router._provider_ollama
+            assert provider.model == "qwen3:14b"
+        finally:
+            router.configure(ollama_model=original)
+            await service.close()
+
+    asyncio.run(scenario())

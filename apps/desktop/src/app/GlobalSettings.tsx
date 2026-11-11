@@ -41,8 +41,11 @@ export default function GlobalSettings({ service, onClose, runs = [] }: { servic
     }).then((s) => {
       if (stale) return;
       setSettings(s); setMode(s.providerMode); setDeepseek(s.deepseekModel); setOllama(s.ollamaModel);
-      const p = PROVIDERS.find((x) => x.models.includes(s.providerMode === "api" ? s.deepseekModel : s.ollamaModel) && x.mode === s.providerMode) ?? PROVIDERS[0];
-      setProviderId(p.id); setApiBase(p.base); setModelSel(p.models[0] ?? "__custom__");
+      const savedModel = s.providerMode === "api" ? s.deepseekModel : s.ollamaModel;
+      const p = PROVIDERS.find((x) => x.models.includes(savedModel) && x.mode === s.providerMode) ?? PROVIDERS[0];
+      setProviderId(p.id); setApiBase(p.base);
+      // 恢复已保存的模型而非首项 — 非首项模型重开不再跳回列表头。
+      setModelSel(p.models.includes(savedModel) ? savedModel : "__custom__");
     }).catch((e) => setError(String(e)));
     service.listProfiles({
       tenantId: service.identity.tenantId,

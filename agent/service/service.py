@@ -1124,14 +1124,14 @@ class AgentService:
         except Exception:
             name = "unavailable"
         return SettingsSummary(
-            provider_mode=router._provider_mode,
+            provider_mode=router.provider_mode,
             active_provider=name,
             active_model=(
-                _llm_module.DEEPSEEK_MODEL if name == "deepseek"
-                else _llm_module.OLLAMA_MODEL if name == "ollama" else ""
+                router.deepseek_model if name == "deepseek"
+                else router.ollama_model if name == "ollama" else ""
             ),
-            deepseek_model=_llm_module.DEEPSEEK_MODEL,
-            ollama_model=_llm_module.OLLAMA_MODEL,
+            deepseek_model=router.deepseek_model,
+            ollama_model=router.ollama_model,
         )
 
     async def update_settings(self, request: Any) -> Any:
@@ -1141,14 +1141,11 @@ class AgentService:
         from .. import llm as _llm_module
 
         router = _llm_module.llm
-        if request.provider_mode:
-            router._provider_mode = request.provider_mode
-        if request.deepseek_model:
-            _llm_module.DEEPSEEK_MODEL = request.deepseek_model
-            router._deepseek = None
-        if request.ollama_model:
-            _llm_module.OLLAMA_MODEL = request.ollama_model
-            router._ollama = None
+        router.configure(
+            provider_mode=request.provider_mode,
+            deepseek_model=request.deepseek_model,
+            ollama_model=request.ollama_model,
+        )
         return await self.get_settings(request)
 
     async def upsert_workspace(self, request: Any) -> Any:

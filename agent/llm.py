@@ -622,6 +622,10 @@ class LLMRouter:
         self._provider_mode = configured_mode
         self._deepseek = None
         self._ollama = None
+        # Model names are router instance state: live settings updates
+        # reconfigure them and invalidate the cached provider instances.
+        self._deepseek_model = DEEPSEEK_MODEL
+        self._ollama_model = OLLAMA_MODEL
         self._deepseek_available = True
         self._ollama_available = True
         self._fallback_count = 0
@@ -672,12 +676,45 @@ class LLMRouter:
         return (provider_name, str(model), str(base_url).rstrip("/"))
 
     @property
+    def provider_mode(self) -> str:
+        return self._provider_mode
+
+    @property
+    def deepseek_model(self) -> str:
+        return self._deepseek_model
+
+    @property
+    def ollama_model(self) -> str:
+        return self._ollama_model
+
+    def configure(
+        self,
+        *,
+        provider_mode: str | None = None,
+        deepseek_model: str | None = None,
+        ollama_model: str | None = None,
+    ) -> None:
+        """Public live-config surface — the next request takes effect.
+
+        Updating a model invalidates the cached provider instance so the
+        next call builds one under the new model; in-flight requests keep
+        the instance they already hold."""
+        if provider_mode:
+            self._provider_mode = provider_mode
+        if deepseek_model:
+            self._deepseek_model = deepseek_model
+            self._deepseek = None
+        if ollama_model:
+            self._ollama_model = ollama_model
+            self._ollama = None
+
+    @property
     def _provider_deepseek(self):
         if self._deepseek is None:
             from langchain_openai import ChatOpenAI
 
             self._deepseek = ChatOpenAI(
-                model=DEEPSEEK_MODEL,
+                model=self._deepseek_model,
                 openai_api_key=DEEPSEEK_API_KEY,
                 openai_api_base=DEEPSEEK_BASE_URL,
                 temperature=0,
@@ -690,7 +727,7 @@ class LLMRouter:
     def _provider_ollama(self):
         if self._ollama is None:
             self._ollama = _OllamaHTTPProvider(
-                model=OLLAMA_MODEL,
+                model=self._ollama_model,
                 base_url=OLLAMA_BASE_URL,
                 timeout=OLLAMA_REQUEST_TIMEOUT,
             )

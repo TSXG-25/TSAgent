@@ -7,6 +7,7 @@ import AgentComposer from "../../app/AgentComposer";
 import { requestIdForRun, StatusBadge, Icon, MarkdownText } from "../../app/ui";
 import type { RunCtx } from "../../app/runCtx";
 import type { ApprovalSummary, DirectoryListing, ParticipantSummary, SessionSummary, WorkspaceSummary } from "../../types/service";
+import { fetchSessionSnapshot } from "./sessionSnapshot";
 
 /** Omni v3 — task-workbench layout per review:
  *  SessionSidebar (task titles+status+search) | TaskControl bar +
@@ -102,26 +103,30 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
   const byFolder = (name: string) => filtered.filter((s) => folderOf(s.sessionId) === name);
   const [showReason, setShowReason] = useState(false);
 
+  const sessionIdRef = useRef(sessionId);
+  useEffect(() => { sessionIdRef.current = sessionId; }, [sessionId]);
+  const runsRef = useRef(runs);
+  useEffect(() => { runsRef.current = runs; }, [runs]);
+
   const refresh = useCallback(async () => {
+    const sid = sessionId;
     try {
-      const [ss, ap, pt] = await Promise.all([
-        service.listSessions({ tenantId: service.identity.tenantId, userId: service.identity.userId, requestId: requestIdForRun(0) }),
-        service.listApprovals({ tenantId: service.identity.tenantId, sessionId: service.identity.sessionId, requestId: requestIdForRun(0), status: "PENDING" }),
-        service.listParticipants({ tenantId: service.identity.tenantId, sessionId, requestId: requestIdForRun(0) }).catch(() => [] as ParticipantSummary[]),
-      ]);
-      setSessions(ss);
-      if (!pickedSessionRef.current && ss.length > 0 && !ss.some((x) => x.sessionId === sessionId)) {
-        const latest = ss.slice().sort((a, b) => (b.latestUpdatedAt ?? "").localeCompare(a.latestUpdatedAt ?? ""))[0];
+      const snap = await fetchSessionSnapshot(service, sid);
+      setSessions(snap.sessions);
+      // 会话已切换 — 丢弃按旧 session 取回的审批/参与者。
+      if (sessionIdRef.current !== snap.sessionId) return;
+      if (!pickedSessionRef.current && snap.sessions.length > 0 && !snap.sessions.some((x) => x.sessionId === sid)) {
+        const latest = snap.sessions.slice().sort((a, b) => (b.latestUpdatedAt ?? "").localeCompare(a.latestUpdatedAt ?? ""))[0];
         selectSession(latest.sessionId);
       }
-      pickedSessionRef.current = true; setApprovals(ap); setParticipants(pt);
-      ss.slice(0, 20).forEach((x) => {
-        if (x.latestRunId && !runs.find((r) => r.runId === x.latestRunId)) {
+      pickedSessionRef.current = true; setApprovals(snap.approvals); setParticipants(snap.participants);
+      snap.sessions.slice(0, 20).forEach((x) => {
+        if (x.latestRunId && !runsRef.current.find((r) => r.runId === x.latestRunId)) {
           void ctx.controller.refreshRun(x.latestRunId, x.sessionId);
         }
       });
     } catch { /* non-fatal */ }
-  }, [service]);
+  }, [service, sessionId]);
   useEffect(() => { void refresh(); refreshWs(); const t = setInterval(() => void refresh(), 8000); return () => clearInterval(t); }, [refresh]);
   // hydrate ALL runs in the selected session — the thread renders every
   // run's messages, so each one needs its conversation/events loaded.

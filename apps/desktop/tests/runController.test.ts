@@ -124,7 +124,9 @@ class FakeAgentServiceClient extends UnavailableDesktopAgentServiceClient {
 
   async readEvents(request: EventStreamRequest): Promise<RunEvent[]> {
     this.eventCursors.push(request.afterSequence);
-    return (this.events.get(request.runId) ?? []).filter((item) => item.sequenceNumber > request.afterSequence);
+    return (this.events.get(request.runId) ?? [])
+      .filter((item) => item.sequenceNumber > request.afterSequence)
+      .slice(0, request.limit ?? Number.MAX_SAFE_INTEGER);
   }
 
   // Never resolves — the controller's chained subscription parks here, so
@@ -262,5 +264,19 @@ test("4B07 pause requests mint distinct idempotency ids", async () => {
   assert.equal(requests.length, 2);
   assert.notEqual(requests[0], requests[1]);
   assert.match(requests[0]!, /^pause-run-1-/);
+  controller.stopAllPolling();
+});
+
+test("4B-hydrate drains every event batch when reopening a completed run", async () => {
+  const many = Array.from({ length: 250 }, (_, i) =>
+    event(i + 1, `event-${i + 1}`, i === 249 ? "run_completed" : "run_step"));
+  const client = new FakeAgentServiceClient(snapshot("completed"), many);
+  const controller = new RunController(client, { pollIntervalMs: 1000 });
+  await controller.initialize();
+
+  const view = controller.getState().runs[0];
+  assert.equal(view?.events.length, 250, "completed run's timeline must include events beyond the first batch");
+  assert.ok(client.eventCursors.length >= 3, "hydrate must page readEvents until the stream is drained");
+  assert.deepEqual(client.eventCursors.slice(0, 3), [-1, 100, 200]);
   controller.stopAllPolling();
 });

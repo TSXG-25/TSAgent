@@ -310,7 +310,7 @@ export class RunController {
     const request = locator(snapshot);
     const [artifacts, events] = await Promise.all([
       this.client.listArtifacts(request),
-      this.client.readEvents({ ...request, afterSequence } satisfies EventStreamRequest),
+      this.readAllEvents(request, afterSequence),
     ]);
     const view = toRunView(snapshot, artifacts, events);
     this.projectRuntimeWorkflowIfMissing(view);
@@ -320,6 +320,23 @@ export class RunController {
       eventIds,
     });
     return view;
+  }
+
+  /** Drains the event stream — readEvents returns at most one bounded batch,
+   *  so a completed Run with more events than the batch limit must be paged
+   *  or the reopened timeline is truncated. */
+  private async readAllEvents(request: Omit<EventStreamRequest, "afterSequence">, afterSequence: number): Promise<RunEvent[]> {
+    const pageSize = request.limit ?? 100;
+    const events: RunEvent[] = [];
+    let cursor = afterSequence;
+    for (;;) {
+      const batch = await this.client.readEvents({ ...request, afterSequence: cursor, limit: pageSize });
+      if (batch.length === 0) return events;
+      events.push(...batch);
+      const last = batch[batch.length - 1].sequenceNumber;
+      if (batch.length < pageSize || last <= cursor) return events;
+      cursor = last;
+    }
   }
 
   /** Local snapshots carry no workflow records — the durable stage events

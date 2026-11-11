@@ -14,6 +14,8 @@ const fixture = JSON.parse(
     request_fields: string[];
     response_fields: string[];
     ts_result_fields: string[];
+    // Real dispatcher-serialized output, populated for covered methods.
+    response?: any;
   }>;
 };
 

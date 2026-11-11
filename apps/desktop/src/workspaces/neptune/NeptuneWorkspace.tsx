@@ -32,7 +32,7 @@ export default function NeptuneWorkspace({ ctx }: { ctx: RunCtx }) {
       runId: cur.run.runId,
       artifactId: cur.artifact.artifactId,
     }).then((c) => { if (!staleFlag) setContent({ text: c.text, stale: c.stale, result: c.result }); })
-      .catch((e) => { if (!staleFlag) setContent({ text: String(e instanceof Error ? e.message : e), stale: false, result: "ok" }); });
+      .catch((e) => { if (!staleFlag) setContent({ text: String(e instanceof Error ? e.message : e), stale: false, result: "error" }); });
     return () => { staleFlag = true; };
   }, [service, cur?.artifact.artifactId, cur?.run.runId, isSvg]);
 
@@ -52,7 +52,7 @@ export default function NeptuneWorkspace({ ctx }: { ctx: RunCtx }) {
                     {content?.stale && <p className="omni-empty">file changed since recorded</p>}
                     {content
                       ? content.result !== "ok"
-                        ? <p className="omni-empty">{content.result === "missing" ? "file missing" : "unsupported format"}</p>
+                        ? <p className="omni-empty">{content.result === "missing" ? "file missing" : content.result === "unsupported" ? "unsupported format" : `preview failed: ${content.text}`}</p>
                         : <img alt={cur.artifact.path.split("/").pop()} src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(content.text)}`} />
                       : <p className="omni-empty">…</p>}
                   </div>

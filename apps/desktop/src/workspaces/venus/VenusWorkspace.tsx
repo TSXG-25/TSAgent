@@ -34,7 +34,7 @@ export default function VenusWorkspace({ ctx }: { ctx: RunCtx }) {
       runId: cur.run.runId,
       artifactId: cur.artifact.artifactId,
     }).then((c) => { if (!staleFlag) setContent({ text: c.text, stale: c.stale, result: c.result }); })
-      .catch((e) => { if (!staleFlag) setContent({ text: String(e instanceof Error ? e.message : e), stale: false, result: "ok" }); });
+      .catch((e) => { if (!staleFlag) setContent({ text: String(e instanceof Error ? e.message : e), stale: false, result: "error" }); });
     return () => { staleFlag = true; };
   }, [service, cur?.artifact.artifactId, cur?.run.runId]);
 
@@ -73,7 +73,7 @@ export default function VenusWorkspace({ ctx }: { ctx: RunCtx }) {
                 {content?.stale && <p className="omni-empty">file changed since recorded</p>}
                 {content && content.result !== "ok" && (
                   <p className="omni-empty">
-                    {content.result === "missing" ? "file missing" : "unsupported format"}
+                    {content.result === "missing" ? "file missing" : content.result === "unsupported" ? "unsupported format" : `preview failed: ${content.text}`}
                   </p>
                 )}
                 <pre>{content ? content.text : "…"}</pre>

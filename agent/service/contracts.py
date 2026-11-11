@@ -2227,6 +2227,9 @@ class ArtifactContent:
     reference: str
     text: str
     stale: bool
+    # Defined outcomes: "ok" (text+stale describe one byte read),
+    # "missing" (file gone), "unsupported" (binary/non-UTF8/dir).
+    result: str = "ok"
 
     def to_dict(self) -> dict[str, JSONValue]:
         return {
@@ -2234,6 +2237,7 @@ class ArtifactContent:
             "reference": self.reference,
             "text": self.text,
             "stale": self.stale,
+            "result": self.result,
         }
 
 

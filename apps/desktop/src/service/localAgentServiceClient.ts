@@ -1222,6 +1222,7 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
         reference: requiredString(raw.reference, "artifact.reference"),
         text: typeof raw.text === "string" ? raw.text : "",
         stale: raw.stale === true,
+        result: typeof raw.result === "string" ? raw.result : "ok",
       };
     });
   }

@@ -985,6 +985,7 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
       reference: artifact.reference,
       text: this.artifactText.get(artifact.artifactId) ?? "",
       stale: false,
+      result: "ok",
     };
   }
 

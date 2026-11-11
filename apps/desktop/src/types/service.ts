@@ -195,6 +195,8 @@ export interface ArtifactContent {
   reference: string;
   text: string;
   stale: boolean;
+  /** "ok" | "missing" | "unsupported" — text+stale describe one byte read. */
+  result: string;
 }
 
 export interface RunEvent {

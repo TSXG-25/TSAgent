@@ -21,7 +21,7 @@ export default function NeptuneWorkspace({ ctx }: { ctx: RunCtx }) {
   const visible = media.filter((m) => KINDS[tab].test(m.artifact.path));
   const cur = visible.find((m) => m.artifact.artifactId === sel) ?? visible[0];
   const isSvg = cur?.artifact.path.endsWith(".svg") ?? false;
-  const [content, setContent] = useState<{ text: string; stale: boolean } | null>(null);
+  const [content, setContent] = useState<{ text: string; stale: boolean; result: string } | null>(null);
   useEffect(() => {
     if (!cur || !isSvg) { setContent(null); return; }
     let staleFlag = false;
@@ -31,8 +31,8 @@ export default function NeptuneWorkspace({ ctx }: { ctx: RunCtx }) {
       sessionId: cur.run.sessionId,
       runId: cur.run.runId,
       artifactId: cur.artifact.artifactId,
-    }).then((c) => { if (!staleFlag) setContent({ text: c.text, stale: c.stale }); })
-      .catch((e) => { if (!staleFlag) setContent({ text: String(e instanceof Error ? e.message : e), stale: false }); });
+    }).then((c) => { if (!staleFlag) setContent({ text: c.text, stale: c.stale, result: c.result }); })
+      .catch((e) => { if (!staleFlag) setContent({ text: String(e instanceof Error ? e.message : e), stale: false, result: "ok" }); });
     return () => { staleFlag = true; };
   }, [service, cur?.artifact.artifactId, cur?.run.runId, isSvg]);
 
@@ -51,7 +51,9 @@ export default function NeptuneWorkspace({ ctx }: { ctx: RunCtx }) {
                 ? <div className="media-svg">
                     {content?.stale && <p className="omni-empty">file changed since recorded</p>}
                     {content
-                      ? <img alt={cur.artifact.path.split("/").pop()} src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(content.text)}`} />
+                      ? content.result !== "ok"
+                        ? <p className="omni-empty">{content.result === "missing" ? "file missing" : "unsupported format"}</p>
+                        : <img alt={cur.artifact.path.split("/").pop()} src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(content.text)}`} />
                       : <p className="omni-empty">…</p>}
                   </div>
                 : <div className="empty-state"><p>{cur.artifact.path.split("/").pop()}</p><p className="omni-empty">{cur.artifact.size} — 二进制预览待接入</p></div>

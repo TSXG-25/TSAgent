@@ -2661,7 +2661,6 @@ class AgentService:
         bytes no longer match the committed digest."""
         self._ensure_open()
         import asyncio
-        import hashlib
 
         # The projected ArtifactSummary carries an opaque artifact://
         # reference; the durable fact row holds the real workspace path.
@@ -2710,20 +2709,28 @@ class AgentService:
             )
         workspace = self._scoped_workspace(root)
 
-        def _read() -> tuple[str, bytes]:
-            resolved = workspace.resolve_path(
-                artifact.reference, must_exist=True
-            )
-            return workspace.read_text(artifact.reference), resolved.read_bytes()
+        def _read() -> tuple[str, str, str]:
+            # 一次受保护字节读取 → 正文投影 + digest + stale 必须同源 —
+            # 预览期间文件被替换也不会拼出混合版本。
+            try:
+                projected, digest, _redacted = workspace.read_document(
+                    artifact.reference
+                )
+            except FileNotFoundError:
+                return "", "", "missing"
+            except (ValueError, IsADirectoryError):
+                return "", "", "unsupported"
+            return projected, digest, "ok"
 
-        text, data = await asyncio.to_thread(_read)
+        text, digest, result = await asyncio.to_thread(_read)
         from .contracts import ArtifactContent
 
         return ArtifactContent(
             artifact_id=artifact.artifact_id,
             reference=artifact.reference,
             text=text,
-            stale=hashlib.sha256(data).hexdigest() != artifact.digest,
+            stale=result == "ok" and digest != artifact.digest,
+            result=result,
         )
 
     def stream_events(self, request: EventStreamRequest):

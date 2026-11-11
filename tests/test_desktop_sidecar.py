@@ -2311,3 +2311,148 @@ def test_sidecar_web_tools_registered_before_first_run(tmp_path: Path) -> None:
             _terminate(process)
     finally:
         server.shutdown()
+
+
+def test_read_artifact_body_and_stale_come_from_one_byte_read(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """A27: 预览正文与 stale 校验来自同一次字节读取 — 文件替换
+    注入不得拼出混合版本。缺失、二进制、脱敏各有独立结果。"""
+    import hashlib
+
+    from agent.runtime_store import (
+        ArtifactCommitFact,
+        DurableRuntimeStoreView,
+        SqliteRuntimeStore,
+    )
+    from agent.service.contracts import ReadArtifactRequest, StartRunRequest
+    from agent.service.run_projector import encode_request_reference
+
+    workspace_root = tmp_path / "workspace"
+    (workspace_root / "output").mkdir(parents=True)
+    body_a = "artifact-body-A"
+    target = workspace_root / "output" / "result.txt"
+    target.write_text(body_a, encoding="utf-8")
+    digest_a = hashlib.sha256(target.read_bytes()).hexdigest()
+    binary = workspace_root / "output" / "blob.bin"
+    binary.write_bytes(b"\xff\xfe\x00\x01")
+
+    store = SqliteRuntimeStore.open(tmp_path / "runtime.sqlite")
+    request = StartRunRequest(
+        tenant_id="tenant-1", user_id="user-1",
+        session_id="session-1", request_id="request-art",
+        request_text="write output/result.txt", run_id="run-art",
+    )
+    view = None
+    try:
+        store.reserve_service_start(
+            request.tenant_id, request.session_id,
+            requested_run_id=request.run_id, request_id=request.request_id,
+            request_digest=request.request_digest, writer_id="writer-art",
+            external_reference=encode_request_reference(
+                request, run_id=request.run_id or "",
+                workspace_root=str(workspace_root.resolve()),
+            ),
+        )
+        view = DurableRuntimeStoreView(
+            store, tenant_id=request.tenant_id,
+            session_id=request.session_id, run_id=request.run_id or "",
+            request_id=request.request_id, writer_id="writer-art",
+        )
+        view.transition_run_with_event(
+            run_status="RUNNING", event_id="run-started:art",
+            event_type="run_started", timestamp="2026-08-11T00:00:00Z",
+            payload={"request_id": request.request_id},
+            expected_status="CREATED",
+        )
+        artifacts = (
+            ArtifactCommitFact(
+                artifact_id="artifact-art-result", artifact_type="file",
+                reference="output/result.txt", digest=digest_a,
+                producer_workflow_id="runtime-execution",
+                producer_stage_id="task:art-write",
+                producer_task_id="art-write",
+            ),
+            ArtifactCommitFact(
+                artifact_id="artifact-art-bin", artifact_type="file",
+                reference="output/blob.bin",
+                digest=hashlib.sha256(b"\xff\xfe\x00\x01").hexdigest(),
+                producer_workflow_id="runtime-execution",
+                producer_stage_id="task:art-write",
+                producer_task_id="art-write",
+            ),
+        )
+        view.transition_run_with_event(
+            run_status="COMPLETED", event_id="run-completed:art",
+            event_type="run_completed", timestamp="2026-08-11T00:00:01Z",
+            payload={"request_id": request.request_id},
+            run_output={"text": "written",
+                        "artifact_ids": [a.artifact_id for a in artifacts]},
+            artifacts=artifacts,
+        )
+    finally:
+        if view is not None:
+            view.close()
+        store.close()
+
+    service = _workspace_file_service(tmp_path, workspace_root=workspace_root)
+    lookup = {
+        "tenant_id": "tenant-1", "user_id": "user-1",
+        "session_id": "session-1", "run_id": "run-art",
+    }
+
+    async def _read(artifact_id: str, req: str):
+        from agent.service.contracts import ReadArtifactRequest
+        return await service.read_artifact(
+            ReadArtifactRequest(
+                **lookup, request_id=req, artifact_id=artifact_id
+            )
+        )
+
+    async def scenario() -> None:
+        # 相同字节 — 新鲜视图。
+        content = await _read("artifact-art-result", "ra-1")
+        assert content.result == "ok"
+        assert content.text == body_a
+        assert content.stale is False
+
+        # 替换探针 — 文件在预览时换成另一版本。正文与 digest
+        # 必须来自同一读取：只应读一次字节，视图不能混合版本。
+        body_b = "artifact-body-B"
+        target.write_text(body_b, encoding="utf-8")
+        reads: list[bytes] = []
+        real_read_bytes = Path.read_bytes
+
+        def spy_read_bytes(path, *args, **kwargs):
+            reads.append(real_read_bytes(path, *args, **kwargs))
+            return reads[-1]
+
+        monkeypatch.setattr(Path, "read_bytes", spy_read_bytes)
+        content = await _read("artifact-art-result", "ra-2")
+        assert len(reads) == 1, (
+            f"artifact preview must read bytes once, got {len(reads)}"
+        )
+        assert content.result == "ok"
+        assert content.text == body_b          # 全部是 B — 不混版本
+        assert content.stale is True           # B ≠ 已提交 digest A
+
+        # 脱敏内容 — 正文投影带 [REDACTED]，digest 仍按原始字节。
+        monkeypatch.undo()
+        target.write_text('api_key = "sk-SECRET000111222333"\n')
+        content = await _read("artifact-art-result", "ra-3")
+        assert "sk-SECRET000111222333" not in content.text
+        assert content.stale is True
+
+        # 缺失 — 独立结果，不抛未定义错误。
+        target.unlink()
+        content = await _read("artifact-art-result", "ra-4")
+        assert content.result == "missing"
+        assert content.text == "" and content.stale is False
+
+        # 二进制 — 独立结果。
+        content = await _read("artifact-art-bin", "ra-5")
+        assert content.result == "unsupported"
+        assert content.text == "" and content.stale is False
+
+    import asyncio
+    asyncio.run(scenario())

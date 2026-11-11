@@ -23,7 +23,7 @@ export default function VenusWorkspace({ ctx }: { ctx: RunCtx }) {
   const docs = useMemo(() => runs.flatMap((r) => r.artifacts
     .filter((a) => /\.(md|txt|svg)$/i.test(a.path)).map((a) => ({ run: r, artifact: a }))), [runs]);
   const cur = docs.find((d) => d.artifact.artifactId === sel) ?? docs[0];
-  const [content, setContent] = useState<{ text: string; stale: boolean } | null>(null);
+  const [content, setContent] = useState<{ text: string; stale: boolean; result: string } | null>(null);
   useEffect(() => {
     if (!cur) { setContent(null); return; }
     let staleFlag = false;
@@ -33,8 +33,8 @@ export default function VenusWorkspace({ ctx }: { ctx: RunCtx }) {
       sessionId: cur.run.sessionId,
       runId: cur.run.runId,
       artifactId: cur.artifact.artifactId,
-    }).then((c) => { if (!staleFlag) setContent({ text: c.text, stale: c.stale }); })
-      .catch((e) => { if (!staleFlag) setContent({ text: String(e instanceof Error ? e.message : e), stale: false }); });
+    }).then((c) => { if (!staleFlag) setContent({ text: c.text, stale: c.stale, result: c.result }); })
+      .catch((e) => { if (!staleFlag) setContent({ text: String(e instanceof Error ? e.message : e), stale: false, result: "ok" }); });
     return () => { staleFlag = true; };
   }, [service, cur?.artifact.artifactId, cur?.run.runId]);
 
@@ -71,6 +71,11 @@ export default function VenusWorkspace({ ctx }: { ctx: RunCtx }) {
               <header className="muse-title"><strong>{cur.artifact.path.split("/").pop()}</strong><code>{cur.run.runId}</code>{applied && <span className="muse-applied">{applied} applied</span>}</header>
               <div className="muse-body">
                 {content?.stale && <p className="omni-empty">file changed since recorded</p>}
+                {content && content.result !== "ok" && (
+                  <p className="omni-empty">
+                    {content.result === "missing" ? "file missing" : "unsupported format"}
+                  </p>
+                )}
                 <pre>{content ? content.text : "…"}</pre>
               </div>
             </>

@@ -1,40 +1,20 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useReducer, useState } from "react";
 import type { CapabilitySummary, DesktopAgentServiceClient, ProfileSummary, SettingsSummary, SkillSummary, WorkspaceSummary } from "../types/service";
 import type { RunView } from "../types";
 import { Icon, requestIdForRun } from "./ui";
+import { PROVIDERS, SettingsForm } from "./settingsForm";
 
 /** Global Settings drawer — §4.2. Reachable from every workspace via the
  *  topbar gear; provider/model fields are backed by getSettings/updateSettings,
- *  other sections show their partition contract with a not-installed state. */
-// 后端接受的 provider_mode：deepseek / ollama — 表单只提供
-// 后端能保存并执行的配置。
-const PROVIDERS = [
-  { id: "deepseek", label: "DeepSeek", mode: "deepseek", models: ["deepseek-chat", "deepseek-reasoner"], base: "https://api.deepseek.com/v1" },
-  { id: "ollama", label: "Ollama (本地)", mode: "ollama", models: ["llama3.1", "qwen2.5", "mistral", "phi4"], base: "http://localhost:11434" },
-];
-
-/** 重开设置时恢复已保存的 provider/模型选择 — 非首项模型也回到原值。 */
-export function resolveProviderSelection(s: SettingsSummary) {
-  const savedModel = s.providerMode === "deepseek" ? s.deepseekModel : s.ollamaModel;
-  const p = PROVIDERS.find((x) => x.mode === s.providerMode) ?? PROVIDERS[0];
-  return {
-    providerId: p.id,
-    mode: p.mode,
-    apiBase: p.base,
-    modelSel: p.models.includes(savedModel) ? savedModel : "__custom__",
-  };
-}
-
+ *  other sections show their partition contract with a not-installed state.
+ *  Provider/model state lives in SettingsForm so select/edit events always
+ *  write the field the backend saves. */
 export default function GlobalSettings({ service, onClose, runs = [] }: { service: DesktopAgentServiceClient; onClose: () => void; runs?: RunView[] }) {
   const [settings, setSettings] = useState<SettingsSummary | null>(null);
-  const [mode, setMode] = useState("api");
-  const [deepseek, setDeepseek] = useState("");
-  const [ollama, setOllama] = useState("");
+  const [form] = useState(() => new SettingsForm());
+  const [, bump] = useReducer((x: number) => x + 1, 0);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [providerId, setProviderId] = useState("deepseek");
-  const [modelSel, setModelSel] = useState("deepseek-chat");
-  const [apiBase, setApiBase] = useState("https://api.deepseek.com/v1");
   const [error, setError] = useState<string | null>(null);
   const [profiles, setProfiles] = useState<ProfileSummary[]>([]);
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
@@ -50,11 +30,10 @@ export default function GlobalSettings({ service, onClose, runs = [] }: { servic
       requestId: requestIdForRun(0),
     }).then((s) => {
       if (stale) return;
-      setSettings(s); setMode(s.providerMode); setDeepseek(s.deepseekModel); setOllama(s.ollamaModel);
-      const sel = resolveProviderSelection(s);
-      setProviderId(sel.providerId); setApiBase(sel.apiBase);
+      setSettings(s);
       // 恢复已保存的模型而非首项 — 非首项模型重开不再跳回列表头。
-      setModelSel(sel.modelSel);
+      form.load(s);
+      bump();
     }).catch((e) => setError(String(e)));
     service.listProfiles({
       tenantId: service.identity.tenantId,
@@ -77,7 +56,7 @@ export default function GlobalSettings({ service, onClose, runs = [] }: { servic
       requestId: requestIdForRun(0),
     }).then((w) => { if (!stale) setWorkspaces(w); }).catch(() => {});
     return () => { stale = true; };
-  }, [service]);
+  }, [service, form]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -104,9 +83,7 @@ export default function GlobalSettings({ service, onClose, runs = [] }: { servic
         tenantId: service.identity.tenantId,
         sessionId: service.identity.sessionId,
         requestId: requestIdForRun(0),
-        providerMode: mode,
-        deepseekModel: deepseek,
-        ollamaModel: ollama,
+        ...form.toSaveRequest(),
       });
       setSettings(next); setSaved(true);
     } catch (e) {
@@ -114,7 +91,7 @@ export default function GlobalSettings({ service, onClose, runs = [] }: { servic
     } finally {
       setSaving(false);
     }
-  }, [service, mode, deepseek, ollama]);
+  }, [service, form]);
 
   return (
     <div className="modal-backdrop" onMouseDown={onClose}>
@@ -136,33 +113,23 @@ export default function GlobalSettings({ service, onClose, runs = [] }: { servic
               </div>
               <div className="field">
                 <label>Provider</label>
-                <select value={providerId} onChange={(e) => {
-                  const p = PROVIDERS.find((x) => x.id === e.target.value)!;
-                  setProviderId(p.id); setMode(p.mode); setApiBase(p.base);
-                  const m = p.models[0] ?? "";
-                  setModelSel(p.models.length ? m : "__custom__");
-                  if (p.mode === "api") setDeepseek(m); else setOllama(m);
-                }}>
+                <select value={form.providerId} onChange={(e) => { form.selectProvider(e.target.value); bump(); }}>
                   {PROVIDERS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
                 </select>
               </div>
               <div className="field">
                 <label>Model</label>
-                <select value={modelSel} onChange={(e) => {
-                  const v = e.target.value;
-                  setModelSel(v);
-                  if (v !== "__custom__") { if (mode === "api") setDeepseek(v); else setOllama(v); }
-                }}>
-                  {(PROVIDERS.find((p) => p.id === providerId)?.models ?? []).map((m) => <option key={m} value={m}>{m}</option>)}
+                <select value={form.modelSel} onChange={(e) => { form.selectModel(e.target.value); bump(); }}>
+                  {(PROVIDERS.find((p) => p.id === form.providerId)?.models ?? []).map((m) => <option key={m} value={m}>{m}</option>)}
                   <option value="__custom__">custom…</option>
                 </select>
-                {modelSel === "__custom__" && (
-                  <input value={mode === "api" ? deepseek : ollama} onChange={(e) => { if (mode === "api") setDeepseek(e.target.value); else setOllama(e.target.value); }} placeholder="model name…" />
+                {form.modelSel === "__custom__" && (
+                  <input value={form.mode === "deepseek" ? form.deepseek : form.ollama} onChange={(e) => { form.editCustomModel(e.target.value); bump(); }} placeholder="model name…" />
                 )}
               </div>
               <div className="field">
                 <label>API Base</label>
-                <span className="omni-meta"><code>{apiBase}</code> — 后端尚不支持保存自定义 endpoint。</span>
+                <span className="omni-meta"><code>{form.apiBase}</code> — 后端尚不支持保存自定义 endpoint。</span>
               </div>
             </>
           )}

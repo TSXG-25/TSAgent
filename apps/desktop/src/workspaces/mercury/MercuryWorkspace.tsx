@@ -1,44 +1,54 @@
-import { useCallback, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useState, type FormEvent } from "react";
 import { SCENES } from "../../app/scenes";
 import { WorkspaceFrame } from "../../design-system/WorkspaceFrame";
 import AgentComposer from "../../app/AgentComposer";
 import { requestIdForRun } from "../../app/ui";
 import { CapNotInstalled } from "../../design-system/WorkspaceFrame";
 import type { RunCtx } from "../../app/runCtx";
-import type { WebSearchResult } from "../../types/service";
+import { MercurySearchSession } from "./searchSession";
 
 /** Navigator per hand-drawn spec §3 — BrowserSessionBar | 4-pane viewport
  *  grid (+/- views) | Plan Action + Action Preview + Stop | Composer.
  *  Views carry real webSearch results until a browser adapter lands. */
-type View = { id: number; source: Record<string, unknown> | null; content?: string };
-
 export default function MercuryWorkspace({ ctx }: { ctx: RunCtx }) {
   const { service } = ctx;
   const scene = SCENES[1];
   const [query, setQuery] = useState("");
-  const [views, setViews] = useState<View[]>([{ id: 0, source: null }]);
-  const [nextId, setNextId] = useState(1);
   const [steps, setSteps] = useState<{ plan: string; preview: string }[]>([]);
-  const [running, setRunning] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
+  const [, bump] = useReducer((n: number) => n + 1, 0);
+
+  const search = useMemo(
+    () => new MercurySearchSession((q) =>
+      service.webSearch({
+        tenantId: service.identity.tenantId,
+        sessionId: service.identity.sessionId,
+        requestId: requestIdForRun(0),
+        query: q,
+        maxResults: 4,
+      }),
+    ),
+    [service],
+  );
+  useEffect(() => {
+    search.listener = () => bump();
+    return () => { search.listener = null; };
+  }, [search]);
 
   const doSearch = useCallback(async (e: FormEvent) => {
     e.preventDefault();
     const q = query.trim();
     if (!q) return;
-    setRunning(true); setErr(null);
     setSteps((s) => [...s, { plan: `web_search → "${q}"`, preview: "searching…" }]);
-    try {
-      const res = await service.webSearch({
-        tenantId: service.identity.tenantId, sessionId: service.identity.sessionId,
-        requestId: requestIdForRun(0), query: q, maxResults: 4,
-      });
-      const srcs = res.sources ?? [];
-      setSteps((s) => [...s, { plan: `${srcs.length} sources · ${res.provider}`, preview: srcs[0] ? String(srcs[0].title ?? srcs[0].url ?? "—") : res.content.slice(0, 80) }]);
-      setViews((vs) => vs.map((v, i) => ({ ...v, source: srcs[i] ?? v.source, content: i === 0 ? res.content : v.content })));
-    } catch (e) { setErr(String(e)); setSteps((s) => [...s, { plan: "failed", preview: String(e) }]); }
-    finally { setRunning(false); }
-  }, [query, service]);
+    const applied = await search.run(q);
+    if (!applied) return; // stopped/superseded — no view or log update
+    setSteps((s) => [...s, {
+      plan: search.status === "error" || search.status === "unavailable"
+        ? "failed"
+        : `${search.sourceCount} sources · ${search.provider}`,
+      preview: search.err
+        ?? String(search.panes[0]?.source?.title ?? search.panes[0]?.source?.url ?? "—"),
+    }]);
+  }, [query, search]);
 
   return (
     <WorkspaceFrame scene={scene} ctx={ctx}>
@@ -54,15 +64,16 @@ export default function MercuryWorkspace({ ctx }: { ctx: RunCtx }) {
           <form className="nav-bar" onSubmit={doSearch}>
             <span className="nav-web">web:</span>
             <input onChange={(e) => setQuery(e.target.value)} placeholder="search or navigate…" value={query} />
-            <button className="btn primary" disabled={running} type="submit">{running ? "…" : "Go"}</button>
+            <button className="btn primary" disabled={search.running} type="submit">{search.running ? "…" : "Go"}</button>
           </form>
-          {err && <p className="omni-empty" style={{ color: "var(--st-danger,#ff5a4f)" }}>{err}</p>}
+          {search.err && <p className="omni-empty" style={{ color: "var(--st-danger,#ff5a4f)" }}>{search.err}</p>}
+          {search.status === "empty" && <p className="omni-empty">no results</p>}
 
           {/* ViewportGrid [H] 2×2 */}
           <div className="nav-grid">
-            {views.map((v) => (
-              <section className="nav-view" key={v.id}>
-                <header><span>View {v.id + 1}</span>{v.source && <code>{String(v.source.source ?? v.source.engine ?? "web")}</code>}</header>
+            {search.panes.map((v, i) => (
+              <section className="nav-view" key={i}>
+                <header><span>View {i + 1}</span>{v.source && <code>{String(v.source.source ?? v.source.engine ?? "web")}</code>}</header>
                 <div className="nav-view-body">
                   {v.source ? (
                     <>
@@ -80,8 +91,8 @@ export default function MercuryWorkspace({ ctx }: { ctx: RunCtx }) {
 
           <div className="nav-foot">
             <div className="nav-vctl">
-              <button className="btn secondary" disabled={views.length >= 4} onClick={() => { setViews((v) => [...v, { id: nextId, source: null }]); setNextId((n) => n + 1); }} type="button">+ view</button>
-              <button className="btn secondary" disabled={views.length <= 1} onClick={() => setViews((v) => v.slice(0, -1))} type="button">− view</button>
+              <button className="btn secondary" disabled={search.panes.length >= 4} onClick={() => search.addPane()} type="button">+ view</button>
+              <button className="btn secondary" disabled={search.panes.length <= 1} onClick={() => search.removePane()} type="button">− view</button>
             </div>
             <AgentComposer ctx={ctx} planet="mercury" placeholder="Task for Navigator…" />
           </div>
@@ -102,10 +113,10 @@ export default function MercuryWorkspace({ ctx }: { ctx: RunCtx }) {
             {steps.length === 0 && <p className="omni-empty">Nothing previewed.</p>}
           </section>
           <section className="nav-block">
-            <button className="btn danger" disabled={!running} onClick={() => setRunning(false)} type="button">■ Stop</button>
+            <button className="btn danger" disabled={!search.running} onClick={() => search.stop()} type="button">■ Stop</button>
             <CapNotInstalled what="Browser takeover / screenshots / clicks" />
           </section>
-          <div className="ws-statusbar"><span className="sys-ok">● ONLINE</span><span>{views.length} VIEWS</span><span>{steps.length} ACTIONS</span><span className="right">mercury</span></div>
+          <div className="ws-statusbar"><span className="sys-ok">● ONLINE</span><span>{search.panes.length} VIEWS</span><span>{steps.length} ACTIONS</span><span className="right">mercury</span></div>
         </aside>
       </div>
     </WorkspaceFrame>

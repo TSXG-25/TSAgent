@@ -2178,6 +2178,7 @@ def test_sidecar_graph_run_does_not_block_control(
     asyncio.run(scenario())
 
 
+@pytest.mark.host_integration
 def test_sidecar_web_tools_registered_before_first_run(tmp_path: Path) -> None:
     """A21: 真实 python -m 入口在首个 Run 前完成 Web 注册 —
     假 Provider 断言首轮目录含 web_search/web_fetch；依赖缺失时

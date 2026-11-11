@@ -947,11 +947,11 @@ class LLMRouter:
         return {
             "provider_mode": self._provider_mode,
             "deepseek": {
-                "model": DEEPSEEK_MODEL,
+                "model": self._deepseek_model,
                 "available": self._deepseek_available,
             },
             "ollama": {
-                "model": OLLAMA_MODEL,
+                "model": self._ollama_model,
                 "available": self._ollama_available,
             },
             "fallback_count": self._fallback_count,

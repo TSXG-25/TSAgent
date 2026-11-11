@@ -6,14 +6,24 @@ import { Icon, requestIdForRun } from "./ui";
 /** Global Settings drawer — §4.2. Reachable from every workspace via the
  *  topbar gear; provider/model fields are backed by getSettings/updateSettings,
  *  other sections show their partition contract with a not-installed state. */
+// 后端接受的 provider_mode：deepseek / ollama — 表单只提供
+// 后端能保存并执行的配置。
 const PROVIDERS = [
-  { id: "deepseek", label: "DeepSeek", mode: "api", models: ["deepseek-chat", "deepseek-reasoner"], base: "https://api.deepseek.com/v1" },
-  { id: "openai", label: "OpenAI", mode: "api", models: ["gpt-4o", "gpt-4o-mini", "o3-mini"], base: "https://api.openai.com/v1" },
-  { id: "anthropic", label: "Anthropic", mode: "api", models: ["claude-sonnet-4", "claude-haiku-3.5"], base: "https://api.anthropic.com" },
-  { id: "qwen", label: "通义千问", mode: "api", models: ["qwen-max", "qwen-plus", "qwen-turbo"], base: "https://dashscope.aliyuncs.com/compatible-mode/v1" },
-  { id: "custom", label: "其他 OpenAI 兼容", mode: "api", models: [], base: "" },
-  { id: "ollama", label: "Ollama (本地)", mode: "local", models: ["llama3.1", "qwen2.5", "mistral", "phi4"], base: "http://localhost:11434" },
+  { id: "deepseek", label: "DeepSeek", mode: "deepseek", models: ["deepseek-chat", "deepseek-reasoner"], base: "https://api.deepseek.com/v1" },
+  { id: "ollama", label: "Ollama (本地)", mode: "ollama", models: ["llama3.1", "qwen2.5", "mistral", "phi4"], base: "http://localhost:11434" },
 ];
+
+/** 重开设置时恢复已保存的 provider/模型选择 — 非首项模型也回到原值。 */
+export function resolveProviderSelection(s: SettingsSummary) {
+  const savedModel = s.providerMode === "deepseek" ? s.deepseekModel : s.ollamaModel;
+  const p = PROVIDERS.find((x) => x.mode === s.providerMode) ?? PROVIDERS[0];
+  return {
+    providerId: p.id,
+    mode: p.mode,
+    apiBase: p.base,
+    modelSel: p.models.includes(savedModel) ? savedModel : "__custom__",
+  };
+}
 
 export default function GlobalSettings({ service, onClose, runs = [] }: { service: DesktopAgentServiceClient; onClose: () => void; runs?: RunView[] }) {
   const [settings, setSettings] = useState<SettingsSummary | null>(null);
@@ -41,11 +51,10 @@ export default function GlobalSettings({ service, onClose, runs = [] }: { servic
     }).then((s) => {
       if (stale) return;
       setSettings(s); setMode(s.providerMode); setDeepseek(s.deepseekModel); setOllama(s.ollamaModel);
-      const savedModel = s.providerMode === "api" ? s.deepseekModel : s.ollamaModel;
-      const p = PROVIDERS.find((x) => x.models.includes(savedModel) && x.mode === s.providerMode) ?? PROVIDERS[0];
-      setProviderId(p.id); setApiBase(p.base);
+      const sel = resolveProviderSelection(s);
+      setProviderId(sel.providerId); setApiBase(sel.apiBase);
       // 恢复已保存的模型而非首项 — 非首项模型重开不再跳回列表头。
-      setModelSel(p.models.includes(savedModel) ? savedModel : "__custom__");
+      setModelSel(sel.modelSel);
     }).catch((e) => setError(String(e)));
     service.listProfiles({
       tenantId: service.identity.tenantId,
@@ -153,8 +162,7 @@ export default function GlobalSettings({ service, onClose, runs = [] }: { servic
               </div>
               <div className="field">
                 <label>API Base</label>
-                <input value={apiBase} onChange={(e) => setApiBase(e.target.value)} placeholder="https://api.deepseek.com/v1" />
-                <span className="omni-meta">密钥走安全存储（OPENAI_API_KEY env）；endpoint 持久化需后端 api_base 字段。</span>
+                <span className="omni-meta"><code>{apiBase}</code> — 后端尚不支持保存自定义 endpoint。</span>
               </div>
             </>
           )}

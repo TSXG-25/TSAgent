@@ -322,9 +322,9 @@ export class RunController {
     return view;
   }
 
-  /** Drains the event stream — readEvents returns at most one bounded batch,
-   *  so a completed Run with more events than the batch limit must be paged
-   *  or the reopened timeline is truncated. */
+  /** Drains the event stream — the sidecar may end a batch at a terminal
+   *  event (run_blocked) even when history continues, so a short page is not
+   *  end-of-stream.  Page until an empty batch or no cursor progress. */
   private async readAllEvents(request: Omit<EventStreamRequest, "afterSequence">, afterSequence: number): Promise<RunEvent[]> {
     const pageSize = request.limit ?? 100;
     const events: RunEvent[] = [];
@@ -334,7 +334,7 @@ export class RunController {
       if (batch.length === 0) return events;
       events.push(...batch);
       const last = batch[batch.length - 1].sequenceNumber;
-      if (batch.length < pageSize || last <= cursor) return events;
+      if (last <= cursor) return events;
       cursor = last;
     }
   }

@@ -42,3 +42,24 @@ export async function fetchSessionSnapshot(
   ]);
   return { sessionId, sessions, approvals, participants };
 }
+
+/** Issues a sequence for each refresh — only the most recently issued
+ *  sequence may commit, and close() invalidates everything outstanding.
+ *  The session check alone cannot order A→B→A: the first A's late response
+ *  would otherwise satisfy the same-session comparison. */
+export class RefreshGate {
+  private latest = 0;
+  private closed = false;
+
+  begin(): number {
+    return this.closed ? -1 : ++this.latest;
+  }
+
+  isCurrent(seq: number): boolean {
+    return !this.closed && seq === this.latest;
+  }
+
+  close(): void {
+    this.closed = true;
+  }
+}

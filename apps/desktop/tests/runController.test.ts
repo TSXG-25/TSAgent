@@ -69,6 +69,8 @@ function snapshot(status: RunSnapshot["status"]): RunSnapshot {
   };
 }
 
+const TERMINAL_TYPES = new Set(["run_completed", "run_failed", "run_blocked", "run_cancelled", "run_timed_out"]);
+
 class FakeAgentServiceClient extends UnavailableDesktopAgentServiceClient {
   readonly snapshots = new Map<string, RunSnapshot>();
   readonly events = new Map<string, RunEvent[]>();
@@ -124,9 +126,16 @@ class FakeAgentServiceClient extends UnavailableDesktopAgentServiceClient {
 
   async readEvents(request: EventStreamRequest): Promise<RunEvent[]> {
     this.eventCursors.push(request.afterSequence);
-    return (this.events.get(request.runId) ?? [])
-      .filter((item) => item.sequenceNumber > request.afterSequence)
-      .slice(0, request.limit ?? Number.MAX_SAFE_INTEGER);
+    const rest = (this.events.get(request.runId) ?? []).filter((item) => item.sequenceNumber > request.afterSequence);
+    const limit = request.limit ?? rest.length;
+    const batch: RunEvent[] = [];
+    for (const item of rest) {
+      if (batch.length >= limit) break;
+      batch.push(item);
+      // sidecar 在终态事件处结束批次 — 后续历史要等下一次读取。
+      if (TERMINAL_TYPES.has(item.eventType)) break;
+    }
+    return batch;
   }
 
   // Never resolves — the controller's chained subscription parks here, so
@@ -143,7 +152,7 @@ test("4B01 controller hydrates a Run and advances the exclusive event cursor", a
 
   assert.equal(controller.getState().runs[0]?.status, "active");
   assert.deepEqual(controller.getState().runs[0]?.events.map((item) => item.eventId), ["event-1"]);
-  assert.deepEqual(client.eventCursors, [-1]);
+  assert.deepEqual(client.eventCursors, [-1, 1]);
   controller.stopAllPolling();
 });
 
@@ -155,16 +164,17 @@ test("4B02 controller de-duplicates events and displays authoritative durable Ru
   client.snapshots.set("run-1", snapshot("completed"));
   client.events.set("run-1", [
     event(1, "event-1", "run_created"),
-    event(2, "event-2", "run_completed"),
-    event(2, "event-2", "run_completed"),
+    event(2, "event-2", "run_step"),
+    event(2, "event-2", "run_step"),
+    event(3, "event-3", "run_completed"),
   ]);
   await controller.refreshRun("run-1");
 
   const run = controller.getState().runs[0];
   assert.equal(run?.status, "completed");
   assert.equal(run?.output?.text, "durable answer");
-  assert.deepEqual(run?.events.map((item) => item.eventId), ["event-1", "event-2"]);
-  assert.deepEqual(client.eventCursors, [-1, 1]);
+  assert.deepEqual(run?.events.map((item) => item.eventId), ["event-1", "event-2", "event-3"]);
+  assert.deepEqual(client.eventCursors, [-1, 1, 1]);
   controller.stopAllPolling();
 });
 
@@ -278,5 +288,23 @@ test("4B-hydrate drains every event batch when reopening a completed run", async
   assert.equal(view?.events.length, 250, "completed run's timeline must include events beyond the first batch");
   assert.ok(client.eventCursors.length >= 3, "hydrate must page readEvents until the stream is drained");
   assert.deepEqual(client.eventCursors.slice(0, 3), [-1, 100, 200]);
+  controller.stopAllPolling();
+});
+
+test("4B-hydrate reads past a mid-history terminal batch (blocked then resumed)", async () => {
+  // created → blocked → resumed → completed — the sidecar ends batch one at
+  // run_blocked; a short page must not truncate the resumed history.
+  const client = new FakeAgentServiceClient(snapshot("completed"), [
+    event(1, "event-1", "run_created"),
+    event(2, "event-2", "run_blocked"),
+    event(3, "event-3", "run_resumed"),
+    event(4, "event-4", "run_completed"),
+  ]);
+  const controller = new RunController(client, { pollIntervalMs: 1000 });
+  await controller.initialize();
+
+  const view = controller.getState().runs[0];
+  assert.deepEqual(view?.events.map((item) => item.eventId), ["event-1", "event-2", "event-3", "event-4"]);
+  assert.deepEqual(client.eventCursors, [-1, 2, 4], "drain must continue past the run_blocked batch boundary until an empty page");
   controller.stopAllPolling();
 });

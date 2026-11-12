@@ -7,7 +7,7 @@ import AgentComposer from "../../app/AgentComposer";
 import { requestIdForRun, StatusBadge, Icon, MarkdownText } from "../../app/ui";
 import type { RunCtx } from "../../app/runCtx";
 import type { ApprovalSummary, DirectoryListing, ParticipantSummary, SessionSummary, WorkspaceSummary } from "../../types/service";
-import { fetchSessionSnapshot } from "./sessionSnapshot";
+import { fetchSessionSnapshot, RefreshGate } from "./sessionSnapshot";
 
 /** Omni v3 — task-workbench layout per review:
  *  SessionSidebar (task titles+status+search) | TaskControl bar +
@@ -107,14 +107,17 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
   useEffect(() => { sessionIdRef.current = sessionId; }, [sessionId]);
   const runsRef = useRef(runs);
   useEffect(() => { runsRef.current = runs; }, [runs]);
+  const refreshGate = useRef(new RefreshGate());
+  useEffect(() => () => refreshGate.current.close(), []);
 
   const refresh = useCallback(async () => {
     const sid = sessionId;
+    const seq = refreshGate.current.begin();
     try {
       const snap = await fetchSessionSnapshot(service, sid);
+      // 会话已切换或有更新的刷新 — 统一提交，丢弃迟到的旧响应。
+      if (sessionIdRef.current !== snap.sessionId || !refreshGate.current.isCurrent(seq)) return;
       setSessions(snap.sessions);
-      // 会话已切换 — 丢弃按旧 session 取回的审批/参与者。
-      if (sessionIdRef.current !== snap.sessionId) return;
       if (!pickedSessionRef.current && snap.sessions.length > 0 && !snap.sessions.some((x) => x.sessionId === sid)) {
         const latest = snap.sessions.slice().sort((a, b) => (b.latestUpdatedAt ?? "").localeCompare(a.latestUpdatedAt ?? ""))[0];
         selectSession(latest.sessionId);

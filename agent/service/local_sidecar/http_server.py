@@ -29,11 +29,16 @@ def run_http_sidecar(
     port: int = 8765,
     diagnostics: TextIO,
     allowed_origins: frozenset[str] = frozenset(),
+    loop_ready=None,
 ) -> None:
     """Serve the sidecar dispatcher over HTTP until shutdown."""
     dispatcher = SidecarDispatcher(service, diagnostics=diagnostics)
     loop = asyncio.new_event_loop()
     threading.Thread(target=loop.run_forever, daemon=True).start()
+    if loop_ready is not None:
+        # Hosts that own the Service must shut it down on this loop —
+        # loop_ready publishes it before the scheduler task is created.
+        loop_ready(loop)
     # Same autostart as the stdio path — the Service was built outside a loop.
     loop.call_soon_threadsafe(service._maybe_start_scheduler)
     allowed_hosts = {f"127.0.0.1:{port}", f"localhost:{port}"}

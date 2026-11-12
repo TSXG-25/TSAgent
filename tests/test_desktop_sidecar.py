@@ -1029,6 +1029,8 @@ def test_http_sidecar_enforces_host_and_origin(tmp_path: Path) -> None:
         port = probe.getsockname()[1]
 
     allowed = frozenset({"http://localhost:4173"})
+    # sidecar 为 Service 创建长期 loop — 关闭必须在同一 loop 上执行。
+    sidecar_loops: list = []
     server_thread = threading.Thread(
         target=run_http_sidecar,
         kwargs={
@@ -1036,6 +1038,7 @@ def test_http_sidecar_enforces_host_and_origin(tmp_path: Path) -> None:
             "port": port,
             "diagnostics": open(os.devnull, "w"),
             "allowed_origins": allowed,
+            "loop_ready": sidecar_loops.append,
         },
         daemon=True,
     )
@@ -1081,7 +1084,14 @@ def test_http_sidecar_enforces_host_and_origin(tmp_path: Path) -> None:
         assert status in (200, 400)
         assert acao is None
     finally:
-        _run(service.close())
+        assert sidecar_loops, "sidecar never published its loop"
+        asyncio.run_coroutine_threadsafe(
+            service.close(), sidecar_loops[0]
+        ).result(timeout=10)
+        # 所属 loop 上的关闭收束全部自有任务。
+        if service._scheduler_task is not None:
+            assert service._scheduler_task.done()
+        assert not service._runs
 
 
 def test_workspace_file_document_contract(tmp_path: Path) -> None:
@@ -1347,6 +1357,69 @@ def test_close_releases_paused_run(monkeypatch, tmp_path: Path) -> None:
             await service2.close()
 
     asyncio.run(scenario())
+
+
+def test_close_on_foreign_loop_fails_instead_of_leaking_run(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """close() 必须在所属 loop 上执行 — 对仍活跃的外部 loop 任务
+    直接报错（不产生状态变更），在所属 loop 上关闭则收束全部任务。"""
+    import threading
+
+    import tests.test_ha_r1_harness as harness
+    from agent.runtime_store.sqlite import SqliteRuntimeStore
+    from agent.service.context_factory import ServiceContextFactory
+    from agent.service.contracts import StartRunRequest
+    from agent.service.runtime_launcher import RuntimeExecutionLauncher
+    from agent.service.service import AgentService
+
+    request = "写一个文件"
+    harness.setup_provider(monkeypatch, [
+        (request, harness.intent(
+            request, artifact=True, outcomes=["FILE_MUTATION"])),
+        (request, harness.call_tool(
+            "write_file", path="output/p.txt", content="x")),
+        ("已写入", "完成"),
+    ])
+
+    store = SqliteRuntimeStore.open(tmp_path / "runtime.sqlite")
+    service = AgentService(
+        runtime_store=store,
+        launcher=RuntimeExecutionLauncher(),
+        context_factory=ServiceContextFactory(
+            store, workspace_root=tmp_path
+        ),
+    )
+
+    owner_loop = asyncio.new_event_loop()
+    owner_thread = threading.Thread(
+        target=owner_loop.run_forever, daemon=True
+    )
+    owner_thread.start()
+    try:
+        handle = asyncio.run_coroutine_threadsafe(
+            service.start_run(StartRunRequest(
+                tenant_id="t", user_id="u", session_id="s",
+                request_id="r1", request_text=request)),
+            owner_loop,
+        ).result(timeout=10)
+        managed = service._runs.get(handle.run_id)
+        assert managed is not None
+        # owner loop 仍持有活跃任务时在别的 loop 上关闭 → 明确报错。
+        with pytest.raises(RuntimeError, match="different loop"):
+            asyncio.run(service.close())
+        assert not service.closed
+        # 所属 loop 上执行关闭 → 全部自有任务收束。
+        asyncio.run_coroutine_threadsafe(
+            service.close(), owner_loop
+        ).result(timeout=10)
+        assert managed.task.done()
+        if service._scheduler_task is not None:
+            assert service._scheduler_task.done()
+        assert not service._runs
+    finally:
+        owner_loop.call_soon_threadsafe(owner_loop.stop)
+        owner_thread.join(timeout=5)
 
 
 def test_scheduler_autostarts_and_routes_target_planet(monkeypatch, tmp_path: Path) -> None:

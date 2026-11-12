@@ -2864,21 +2864,33 @@ class AgentService:
 
         if self._closed:
             return
-        self._closed = True
         loop = asyncio.get_running_loop()
-        # 只能收束绑定在当前 loop 上的任务 — 绑定在其他 loop（通常已随其
-        # asyncio.run 退出）的任务既无法取消也无法 await；取消会经
-        # call_soon 打到已关闭的 loop，gather 会附加跨 loop future。
-        if (
-            self._scheduler_task is not None
-            and self._scheduler_task.get_loop() is loop
-        ):
+        owned = [managed.task for managed in self._runs.values()]
+        if self._scheduler_task is not None:
+            owned.append(self._scheduler_task)
+        owned.extend(self._graph_tasks)
+        foreign = [
+            task
+            for task in owned
+            if task.get_loop() is not loop and not task.done()
+        ]
+        if foreign:
+            # 仍活跃的外部 loop 任务无法在此取消或等待 — 属调用方
+            # 生命周期错配，如实报错而非静默遗留。已完成的任务
+            # 不参与等待，在下方收集时跳过。
+            raise RuntimeError(
+                "AgentService.close() must run on the event loop that "
+                f"owns the Service — {len(foreign)} active task(s) are "
+                "bound to a different loop"
+            )
+        self._closed = True
+        if self._scheduler_task is not None:
             self._scheduler_task.cancel()
         tasks = []
         for managed in self._runs.values():
             task = managed.task
             if task.get_loop() is not loop:
-                continue
+                continue  # foreign done tasks — live ones rejected above
             context = managed.run_context
             if getattr(context, "_pause_gate", None) is not None:
                 # 进程内暂停不跨进程存活：关闭时收束本地 gate 等待；不在

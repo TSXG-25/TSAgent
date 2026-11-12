@@ -245,14 +245,20 @@ class AgentService:
                 role="owner",
             )
             task_id = self._resolve_task_id(request)
+            # Allocate the run id before workspace resolution — the recorded
+            # root must be the accepted Run's own directory (per-run roots),
+            # not the session-level fallback an empty run_id resolves to.
+            import uuid
+
+            run_id = str(getattr(request, "run_id", "") or "") or f"run-{uuid.uuid4().hex}"
             explicit_root = str(
                 getattr(request, "workspace_root", "") or ""
             ).strip()
             run_root = (
                 Path(explicit_root).resolve()
                 if explicit_root
-                else self._contexts.session_workspace(
-                    request.tenant_id, request.session_id
+                else self._contexts.run_workspace(
+                    request.tenant_id, request.session_id, run_id
                 )
             )
             context_refs = self._validate_store_refs(
@@ -268,13 +274,13 @@ class AgentService:
                     request.tenant_id,
                     request.session_id,
                     task_id=task_id,
-                    requested_run_id=getattr(request, "run_id", None),
+                    requested_run_id=run_id,
                     request_id=request.request_id,
                     request_digest=request.request_digest,
                     writer_id=self._contexts.writer_id,
                     external_reference=encode_request_reference(
                         request,
-                        run_id=getattr(request, "run_id", None) or "",
+                        run_id=run_id,
                         workspace_root=str(run_root) if run_root else "",
                         context_refs=context_refs,
                     ),

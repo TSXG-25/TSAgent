@@ -16,7 +16,7 @@
 | cancel intent 不等于执行已停止 | agent/interruption、service、runtime_launcher | VERIFIED |
 | Memory proposal 不等于 durable commit | memory service、learning provider、persistence tests | VERIFIED |
 | Checkpoint resume 只在显式 checkpoint_request 下启用 | agent/executor/executors/workflow.py、checkpoint tests | VERIFIED |
-| AgentService.resume_run 已接入 RunResumeCoordinator | 静态 agent 生产调用搜索未找到 | 未证明，不得宣称 |
+| AgentService.resume_run 已接入 RunResumeCoordinator | agent/service/runtime_launcher.py（`_resume_checkpoint` → `RunResumeCoordinator`）、Service 重启离线 E2E | VERIFIED（离线） |
 
 ## 解释边界
 

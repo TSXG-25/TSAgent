@@ -379,9 +379,9 @@ OPENAI_API_KEY= LLM_API_KEY= P2_SECONDARY_API_KEY= TSAGENT_LLM_PROVIDER=ollama \
 (cd apps/desktop && npm test && npm run test:orbits && npm run test:scenes && npm run build)
 ```
 
-### 延期项
+### 交付记录（2026-11-12 同步）
 
-- A16 承接 wire 漂移合同 fixture；A11 承接会话切换、审批等 UI 行为用例。
+- 已交付：A01、A02、A04–A09、A11–A13、A15、A16、A19、A21、A22、A24、A26、A27（19/27）。逐单验收以会话回归记录与对应提交为准。
+- 未开始：A03（RPC 信任边界）、A10（记忆删除范围）、A14（Runtime 状态/动作执行接口）、A17/A18（量测与桌面壳）、A20（文档/风格/权威图）、A23（Earth 裁决语义，需产品裁定）、A25（工作台能力与 UI 承诺）。
 - `host_integration` 在 ubuntu CI 上只实跑 HTTP loopback 用例；两条 Seatbelt 用例保留 macOS 宿主验收。
-- A22（Forge 文档保护）按档案排期为下一单；A23 待 Earth 裁决语义产品裁定。
 - 验证范围为本地离线检查；GitHub Actions 实跑未覆盖。

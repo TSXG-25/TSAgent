@@ -138,16 +138,19 @@ class ServiceContextFactory:
         root = self.workspace_for_run(tenant_id, session_id, "") or self.workspace_root
         return root.resolve() if root is not None else None
 
-    def _run_workspace(
-        self, request: StartRunRequest | ResumeRunRequest, run_id: str
+    def run_workspace(
+        self, tenant_id: str, session_id: str, run_id: str
     ) -> Path | None:
         """Per-run workspace resolution — the registered callable sees the
         real run_id (per-run roots) and returns None when unbound, in which
         case the factory root applies."""
-        root = self.workspace_for_run(
-            request.tenant_id, request.session_id, run_id
-        ) or self.workspace_root
+        root = self.workspace_for_run(tenant_id, session_id, run_id) or self.workspace_root
         return root.resolve() if root is not None else None
+
+    def _run_workspace(
+        self, request: StartRunRequest | ResumeRunRequest, run_id: str
+    ) -> Path | None:
+        return self.run_workspace(request.tenant_id, request.session_id, run_id)
 
     def _recorded_workspace_root(
         self, request: StartRunRequest | ResumeRunRequest, run_id: str

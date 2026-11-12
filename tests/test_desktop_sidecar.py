@@ -1247,7 +1247,7 @@ def test_close_releases_paused_run(monkeypatch, tmp_path: Path) -> None:
     )
 
     request = "写一个文件"
-    harness.setup_provider(monkeypatch, [
+    provider = harness.setup_provider(monkeypatch, [
         (request, harness.intent(
             request, artifact=True, outcomes=["FILE_MUTATION"])),
         (request, harness.call_tool(
@@ -1284,14 +1284,37 @@ def test_close_releases_paused_run(monkeypatch, tmp_path: Path) -> None:
                 store, workspace_root=tmp_path
             ),
         )
+        # 把 Run 停在最后一个脚本回复前 — RUNNING 期间可确定性 pause，
+        # 不再依赖"轮询看到 RUNNING 后暂停仍赶上"的时序窗口。
+        park = asyncio.Event()
+        orig_achat, orig_ainvoke = provider.achat, provider.ainvoke
+
+        async def gated_achat(messages: Any, tools: Any = None, **kwargs: Any) -> Any:
+            if len(provider.replies) == 1:
+                await park.wait()
+            return await orig_achat(messages, tools, **kwargs)
+
+        async def gated_ainvoke(messages: Any, **kwargs: Any) -> Any:
+            if len(provider.replies) == 1:
+                await park.wait()
+            return await orig_ainvoke(messages, **kwargs)
+
+        provider.achat, provider.ainvoke = gated_achat, gated_ainvoke
+
         handle = await service.start_run(StartRunRequest(
             tenant_id="t", user_id="u", session_id="s",
             request_id="r1", request_text=request))
         for _ in range(200):
             head = store.get_run_head("t", handle.run_id, session_id="s")
-            if head is not None and head.run_status == "RUNNING":
+            if (
+                head is not None
+                and head.run_status == "RUNNING"
+                and len(provider.replies) == 1
+            ):
                 break
             await asyncio.sleep(0.05)
+        else:
+            raise AssertionError("run did not reach the parked final reply")
         await service.pause_run(PauseRunRequest(
             tenant_id="t", user_id="u", session_id="s",
             run_id=handle.run_id, request_id="p1"))

@@ -164,6 +164,8 @@ def test_structured_environment_failure_is_not_executed_twice(monkeypatch, tmp_p
 
     monkeypatch.delenv("TSAGENT_ALLOW_LOCAL_EXECUTION", raising=False)
     monkeypatch.setattr(sandbox, "_check_docker", lambda: False)
+    # seatbelt 在本机存在时会先行接管 — 与 docker 一并屏蔽才能达到 local 分支。
+    monkeypatch.setattr(sandbox, "_check_seatbelt", lambda: False)
     run_local = sandbox._run_local
     calls = 0
 

@@ -1427,16 +1427,43 @@ class AgentService:
         return delegation
 
     async def resolve_motif(self, request: Any) -> Any:
-        """Motif resolved — record the reported understanding and write it to
-        long-term memory as a governed fact."""
+        """Motif resolved — the motif and the run reporting it are verified
+        before anything is written, and the motif is marked resolved only
+        after the memory commit returns committed evidence."""
         self._ensure_open()
-        self._store.update_motif(
-            request.tenant_id,
-            request.motif_id,
-            status="resolved",
-            resolution_run_id=request.resolution_run_id,
-            resolution=request.resolution.strip(),
+        motif = next(
+            (
+                m
+                for m in self._store.list_motifs(request.tenant_id)
+                if m.motif_id == request.motif_id
+            ),
+            None,
         )
+        if motif is None:
+            raise AgentServiceError(
+                ServiceErrorCode.INVALID_REQUEST,
+                f"motif not found: {request.motif_id}",
+            )
+        if motif.status == "resolved":
+            if motif.resolution_run_id != request.resolution_run_id:
+                raise AgentServiceError(
+                    ServiceErrorCode.INVALID_REQUEST,
+                    f"motif already resolved by run {motif.resolution_run_id}: {motif.motif_id}",
+                )
+            return self._motif_summaries(request.tenant_id)
+        if motif.status != "exploring" or not motif.assigned_task_id:
+            raise AgentServiceError(
+                ServiceErrorCode.INVALID_REQUEST,
+                f"motif has no assigned exploration task: {motif.motif_id}",
+            )
+        task_runs = self._store.list_runs_for_task(
+            request.tenant_id, motif.assigned_task_id
+        )
+        if not any(r.run_id == request.resolution_run_id for r in task_runs):
+            raise AgentServiceError(
+                ServiceErrorCode.INVALID_REQUEST,
+                f"run {request.resolution_run_id} is not assigned to motif {motif.motif_id}",
+            )
         from agent.memory import MemoryPersistenceBoundary
         from agent.memory.learning import (
             MemoryLearningDecision,
@@ -1461,7 +1488,21 @@ class AgentService:
             namespace=f"{request.tenant_id}:{request.user_id}",
             authorized_source_kinds=frozenset({"motif"}),
         )
-        MemoryPersistenceBoundary.commit(decision, policy)
+        evidence = MemoryPersistenceBoundary.commit(decision, policy)
+        if not evidence.committed:
+            raise AgentServiceError(
+                ServiceErrorCode.INTERNAL_ERROR,
+                "motif resolution was not committed to memory: "
+                + (evidence.error or evidence.reason_code or "commit rejected"),
+                retryable=True,
+            )
+        self._store.update_motif(
+            request.tenant_id,
+            request.motif_id,
+            status="resolved",
+            resolution_run_id=request.resolution_run_id,
+            resolution=request.resolution.strip(),
+        )
         return self._motif_summaries(request.tenant_id)
 
     def _motif_summary(self, record: Any) -> Any:

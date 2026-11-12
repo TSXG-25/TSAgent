@@ -2495,3 +2495,101 @@ def test_provider_settings_non_first_model_persists_for_next_run(
             await service.close()
 
     asyncio.run(scenario())
+
+
+def test_a24_resolve_motif_validates_run_and_surfaces_memory_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A24: resolve_motif rejects before writing — missing motif, unassigned
+    motif, and a run that does not belong to the motif's task — and a failed
+    memory commit is visible while the motif stays explorable."""
+    from agent.memory import MemoryPersistenceBoundary
+    from agent.memory import long_term
+    from agent.memory.persistence import MemoryCommitEvidence
+    from agent.service import AgentService
+    from agent.service.contracts import ResolveMotifRequest
+
+    monkeypatch.setattr(long_term, "FACTS_DB_PATH", tmp_path / "facts.db")
+    long_term._init_facts_db()
+
+    store = SqliteRuntimeStore.open(tmp_path / "runtime.sqlite")
+    service = AgentService(runtime_store=store, launcher=None)  # type: ignore[arg-type]
+
+    store.create_task_head("t", "s", "task-1")
+    store.initialize_run("t", "s", "run-1", "req-1", task_id="task-1")
+    store.initialize_run("t", "s", "run-stray", "req-2", task_id="task-2")
+    store.upsert_motif("t", "m-1", text="探索记忆语义")
+    store.upsert_motif("t", "m-open", text="未委派的母题")
+    store.update_motif("t", "m-1", status="exploring", assigned_task_id="task-1")
+
+    commits: list[str] = []
+
+    def request(motif_id: str, run_id: str, req: str) -> ResolveMotifRequest:
+        return ResolveMotifRequest(
+            tenant_id="t", user_id="u", session_id="s", request_id=req,
+            motif_id=motif_id, resolution_run_id=run_id, resolution="已理解的结论",
+        )
+
+    def spy_commit(decision: Any, policy: Any) -> MemoryCommitEvidence:
+        commits.append(decision.canonical_key)
+        return MemoryCommitEvidence(
+            committed=True, action="STORE", store="facts", scope="user",
+            canonical_key=decision.canonical_key, evidence_id="",
+            reason_code=decision.reason_code,
+        )
+
+    async def scenario() -> None:
+        # 不存在的母题 — 写入前拒绝，不进入记忆提交。
+        monkeypatch.setattr(MemoryPersistenceBoundary, "commit", staticmethod(spy_commit))
+        with pytest.raises(AgentServiceError) as missing:
+            await service.resolve_motif(request("m-nope", "run-1", "r-miss"))
+        assert missing.value.code == ServiceErrorCode.INVALID_REQUEST
+
+        # 未委派（open）的母题没有可核对的 Run — 拒绝。
+        with pytest.raises(AgentServiceError) as unassigned:
+            await service.resolve_motif(request("m-open", "run-1", "r-open"))
+        assert unassigned.value.code == ServiceErrorCode.INVALID_REQUEST
+
+        # 不属于该母题任务的 Run — 拒绝。
+        with pytest.raises(AgentServiceError) as mismatched:
+            await service.resolve_motif(request("m-1", "run-stray", "r-stray"))
+        assert mismatched.value.code == ServiceErrorCode.INVALID_REQUEST
+        assert commits == [], "validation must reject before the memory commit"
+
+        # 记忆提交失败 — 结果可见，母题保持 exploring。
+        def failing_commit(decision: Any, policy: Any) -> MemoryCommitEvidence:
+            return MemoryCommitEvidence(
+                committed=False, action="STORE", store="facts", scope="user",
+                canonical_key=decision.canonical_key, evidence_id="",
+                reason_code="INJECTED", error="injected commit failure",
+            )
+        monkeypatch.setattr(
+            MemoryPersistenceBoundary, "commit", staticmethod(failing_commit)
+        )
+        with pytest.raises(AgentServiceError) as failed:
+            await service.resolve_motif(request("m-1", "run-1", "r-fail"))
+        assert failed.value.code == ServiceErrorCode.INTERNAL_ERROR
+        motif = next(m for m in store.list_motifs("t") if m.motif_id == "m-1")
+        assert motif.status == "exploring", "failed commit must not mark resolved"
+
+        # 恢复后真实提交 — 母题 resolved，证据与状态一致。
+        monkeypatch.undo()
+        monkeypatch.setattr(long_term, "FACTS_DB_PATH", tmp_path / "facts.db")
+        summaries = await service.resolve_motif(request("m-1", "run-1", "r-ok"))
+        resolved = next(s for s in summaries if s.motif_id == "m-1")
+        assert resolved.status == "resolved"
+        assert resolved.resolution_run_id == "run-1"
+
+        # 同一裁决重放 — 幂等，不产生第二次记忆提交。
+        replay = await service.resolve_motif(request("m-1", "run-1", "r-ok2"))
+        assert next(s for s in replay if s.motif_id == "m-1").status == "resolved"
+
+        # 不同 Run 的重放 — 拒绝。
+        with pytest.raises(AgentServiceError) as conflict:
+            await service.resolve_motif(request("m-1", "run-stray", "r-again"))
+        assert conflict.value.code == ServiceErrorCode.INVALID_REQUEST
+
+    try:
+        _run(scenario())
+    finally:
+        _run(service.close())

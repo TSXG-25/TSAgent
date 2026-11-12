@@ -108,15 +108,23 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
   const runsRef = useRef(runs);
   useEffect(() => { runsRef.current = runs; }, [runs]);
   const refreshGate = useRef(new RefreshGate());
-  useEffect(() => () => refreshGate.current.close(), []);
+  // StrictMode 会 setup→cleanup→setup：gate 在每次 setup 新建，cleanup 只
+  // 关闭当次实例 — 第二次 setup 不复用已永久关闭的 gate。须先于下方
+  // refresh interval 的 effect 声明，保证首个 refresh 拿到当前实例。
+  useEffect(() => {
+    const gate = new RefreshGate();
+    refreshGate.current = gate;
+    return () => gate.close();
+  }, []);
 
   const refresh = useCallback(async () => {
     const sid = sessionId;
-    const seq = refreshGate.current.begin();
+    const gate = refreshGate.current;
+    const seq = gate.begin();
     try {
       const snap = await fetchSessionSnapshot(service, sid);
-      // 会话已切换或有更新的刷新 — 统一提交，丢弃迟到的旧响应。
-      if (sessionIdRef.current !== snap.sessionId || !refreshGate.current.isCurrent(seq)) return;
+      // 会话已切换、有更新的刷新或实例已被 cleanup 替换 — 统一提交。
+      if (refreshGate.current !== gate || !gate.isCurrent(seq) || sessionIdRef.current !== snap.sessionId) return;
       setSessions(snap.sessions);
       if (!pickedSessionRef.current && snap.sessions.length > 0 && !snap.sessions.some((x) => x.sessionId === sid)) {
         const latest = snap.sessions.slice().sort((a, b) => (b.latestUpdatedAt ?? "").localeCompare(a.latestUpdatedAt ?? ""))[0];

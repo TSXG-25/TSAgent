@@ -88,3 +88,32 @@ test("A→B→A: the first A response cannot overwrite the second A result", asy
   await pLate;
   assert.deepEqual(applied, ["a2"], "unmounted refresh must never commit");
 });
+
+test("StrictMode setup→cleanup→setup: second generation commits, first drops", async () => {
+  // 组件接线 — 每次 effect setup 新建 gate，refresh 捕获当次实例，
+  // commit 要求实例一致 + 序号最新 + session 匹配。
+  let currentGate = new RefreshGate();          // setup 1
+  let currentSession = "A";
+  const applied: string[] = [];
+  const begin = () => { const gate = currentGate; return { gate, seq: gate.begin() }; };
+  const commit = (r: { gate: RefreshGate; seq: number }, s: { sessionId: string; tag: string }) => {
+    if (currentGate !== r.gate || !r.gate.isCurrent(r.seq) || currentSession !== s.sessionId) return;
+    applied.push(s.tag);
+  };
+
+  const r1 = begin();                            // 第一次 setup 发出的刷新
+  const d1 = deferred<{ sessionId: string; tag: string }>();
+  const p1 = d1.promise.then((s) => commit(r1, s));
+
+  currentGate.close();                           // cleanup 1 — StrictMode 重放
+  currentGate = new RefreshGate();               // setup 2 — 新实例，不复用已关闭 gate
+
+  const r2 = begin();
+  const d2 = deferred<{ sessionId: string; tag: string }>();
+  const p2 = d2.promise.then((s) => commit(r2, s));
+
+  d1.resolve({ sessionId: "A", tag: "gen1-stale" }); // 第一次 setup 的迟到响应
+  d2.resolve({ sessionId: "A", tag: "gen2" });
+  await Promise.all([p1, p2]);
+  assert.deepEqual(applied, ["gen2"], "second setup's refresh must commit; the closed generation's response drops");
+});

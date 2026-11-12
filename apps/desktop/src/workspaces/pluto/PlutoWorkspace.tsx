@@ -8,7 +8,7 @@ import type { MotifSummary } from "../../types/service";
 
 /** Genesis per hand-drawn spec §11 — motif rail (done/发放/current) |
  *  report log (what was done + answer) | 认可/不认可 human judgement. */
-const TAG: Record<string, string> = { open: "待探索", exploring: "探索中", resolved: "已完成" };
+const TAG: Record<string, string> = { open: "待探索", exploring: "探索中", reported: "待裁决", resolved: "已完成" };
 
 export default function PlutoWorkspace({ ctx }: { ctx: RunCtx }) {
   const { service } = ctx;
@@ -36,14 +36,55 @@ export default function PlutoWorkspace({ ctx }: { ctx: RunCtx }) {
     try { await service.createMotif({ ...req(), text: draft.trim(), source: autoSrc ? "auto" : "user" }); setDraft(""); await refresh(); }
     catch (e) { setErr(String(e)); } finally { setBusy(false); }
   }
-  async function judge(m: MotifSummary, ok: boolean) {
-    if (!ok) { setSel(null); return; }
-    // 认可 = resolve with prompt for the real reported understanding
+  async function act(fn: () => Promise<unknown>) {
+    setBusy(true);
+    try { await fn(); await refresh(); } catch (e) { setErr(String(e)); } finally { setBusy(false); }
+  }
+
+  /** 委派入口 — assignMotif 返回授权的子 Run 启动配置，立即启动探索。 */
+  async function assign(m: MotifSummary) {
+    await act(async () => {
+      const parent = ctx.activeRun && ctx.activeRun.sessionId === ctx.sessionId ? ctx.activeRun : null;
+      const r = await service.assignMotif({
+        tenantId: service.identity.tenantId,
+        sessionId: ctx.sessionId,
+        requestId: requestIdForRun(0),
+        motifId: m.motifId,
+        parentRunId: parent?.runId ?? "",
+      });
+      await ctx.controller.startRun({
+        tenantId: service.identity.tenantId,
+        sessionId: ctx.sessionId,
+        requestId: requestIdForRun(0),
+        requestText: r.requestText ?? `[母题探索] ${m.text}`,
+        taskId: r.taskId,
+        workspaceRoot: r.workspaceRoot,
+        metadata: { delegation_depth: 1, agent_profile: r.agentProfile ?? {} },
+      });
+    });
+  }
+
+  /** 汇报 — 探索 Run 报告结论（run 证据），等待人工裁决。 */
+  async function report(m: MotifSummary) {
     const resolution = window.prompt("汇报——这轮探索真正搞明白了什么？", m.resolution || "");
     if (!resolution?.trim()) return;
-    setBusy(true);
-    try { await service.resolveMotif({ ...req(), motifId: m.motifId, resolutionRunId: ctx.activeRun?.runId ?? "", resolution: resolution.trim() }); await refresh(); }
-    catch (e) { setErr(String(e)); } finally { setBusy(false); }
+    await act(() => service.reportMotif({
+      ...req(), motifId: m.motifId,
+      resolutionRunId: ctx.activeRun?.runId ?? "",
+      resolution: resolution.trim(),
+    }));
+  }
+
+  /** 裁决 — 认可把已汇报的结论收进记忆；不认可退回探索，持久可核对。 */
+  async function judge(m: MotifSummary, ok: boolean) {
+    if (!ok) { await act(() => service.rejectMotif({ ...req(), motifId: m.motifId })); return; }
+    const resolution = window.prompt("认可这份汇报——收进记忆的结论：", m.resolution || "");
+    if (!resolution?.trim()) return;
+    await act(() => service.resolveMotif({
+      ...req(), motifId: m.motifId,
+      resolutionRunId: m.resolutionRunId,
+      resolution: resolution.trim(),
+    }));
   }
 
 
@@ -87,14 +128,14 @@ export default function PlutoWorkspace({ ctx }: { ctx: RunCtx }) {
                 {cur.resolution && <div className="gen-answer"><h4>汇报（含做了什么）</h4><p>{cur.resolution}</p></div>}
               </div>
               <div className="gen-judge">
-                {cur.status === "exploring" && (
-                  <button className="btn secondary" disabled={busy} onClick={() => {
-                    const r = window.prompt("汇报——这轮探索真正搞明白了什么？", cur.resolution || "");
-                    if (r?.trim()) void (async () => { setBusy(true); try { await service.resolveMotif({ ...req(), motifId: cur.motifId, resolutionRunId: ctx.activeRun?.runId ?? "", resolution: r.trim() }); await refresh(); } catch (e) { setErr(String(e)); } finally { setBusy(false); } })();
-                  }} type="button">◉ 记录汇报</button>
+                {cur.status === "open" && (
+                  <button className="btn secondary" disabled={busy} onClick={() => void assign(cur)} type="button">◈ 委派探索</button>
                 )}
-                <button className="btn primary" disabled={busy || cur.status === "resolved"} onClick={() => void judge(cur, true)} type="button">认可</button>
-                <button className="btn danger" disabled={busy} onClick={() => void judge(cur, false)} type="button">不认可</button>
+                {cur.status === "exploring" && (
+                  <button className="btn secondary" disabled={busy} onClick={() => void report(cur)} type="button">◉ 记录汇报</button>
+                )}
+                <button className="btn primary" disabled={busy || cur.status !== "reported"} onClick={() => void judge(cur, true)} type="button">认可</button>
+                <button className="btn danger" disabled={busy || cur.status !== "reported"} onClick={() => void judge(cur, false)} type="button">不认可</button>
               </div>
             </>
           ) : <div className="empty-state"><p>Select a motif</p></div>}

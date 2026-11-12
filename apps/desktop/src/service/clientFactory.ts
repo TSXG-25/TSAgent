@@ -251,6 +251,14 @@ export class UnavailableDesktopAgentServiceClient implements DesktopAgentService
     throw this.error;
   }
 
+  async reportMotif(): Promise<MotifSummary[]> {
+    throw this.error;
+  }
+
+  async rejectMotif(): Promise<MotifSummary[]> {
+    throw this.error;
+  }
+
   async listMotifs(): Promise<MotifSummary[]> {
     throw this.error;
   }

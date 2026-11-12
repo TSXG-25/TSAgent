@@ -55,6 +55,8 @@ export const LOCAL_TRANSPORT_METHODS = [
   "create_motif",
   "assign_motif",
   "resolve_motif",
+  "report_motif",
+  "reject_motif",
   "list_motifs",
   "record_evaluation",
   "list_evaluations",

@@ -2669,6 +2669,37 @@ class SqliteRuntimeStore:
                 params,
             )
 
+    def get_motif(self, tenant_id: str, motif_id: str) -> "MotifRecord | None":
+        """Identity lookup — validation must not depend on a paged list."""
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        motif_id = _require_text(motif_id, "motif_id")
+        with self._lock:
+            self._ensure_open()
+            row = self._connection.execute(
+                """
+                SELECT tenant_id, motif_id, text, source, status, assigned_task_id,
+                       resolution_run_id, resolution, created_at, updated_at,
+                       store_generation
+                FROM motifs WHERE tenant_id = ? AND motif_id = ?
+                """,
+                (tenant_id, motif_id),
+            ).fetchone()
+            if row is None or str(row["store_generation"]) != self.store_generation:
+                return None
+            return MotifRecord(
+                tenant_id=str(row["tenant_id"]),
+                motif_id=str(row["motif_id"]),
+                text=str(row["text"]),
+                source=str(row["source"]),
+                status=str(row["status"]),
+                assigned_task_id=str(row["assigned_task_id"]),
+                resolution_run_id=str(row["resolution_run_id"]),
+                resolution=str(row["resolution"]),
+                created_at=str(row["created_at"]),
+                updated_at=str(row["updated_at"]),
+                store_generation=str(row["store_generation"]),
+            )
+
     def list_motifs(
         self, tenant_id: str, *, status: str | None = None, limit: int = 100
     ) -> "list[MotifRecord]":

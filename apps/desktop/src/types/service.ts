@@ -974,6 +974,24 @@ export interface ResolveMotifRequest {
   resolution: string;
 }
 
+/** A run's reported understanding — evidence awaiting verdict. */
+export interface ReportMotifRequest {
+  tenantId: string;
+  sessionId: string;
+  requestId: string;
+  motifId: string;
+  resolutionRunId: string;
+  resolution: string;
+}
+
+/** Human verdict rejecting a report — sends the motif back to exploring. */
+export interface RejectMotifRequest {
+  tenantId: string;
+  sessionId: string;
+  requestId: string;
+  motifId: string;
+}
+
 export interface ListMotifsRequest {
   tenantId: string;
   sessionId: string;
@@ -987,6 +1005,8 @@ export interface MotifClient {
   createMotif(request: CreateMotifRequest): Promise<MotifSummary>;
   assignMotif(request: AssignMotifRequest): Promise<DelegateRunResult>;
   resolveMotif(request: ResolveMotifRequest): Promise<MotifSummary[]>;
+  reportMotif(request: ReportMotifRequest): Promise<MotifSummary[]>;
+  rejectMotif(request: RejectMotifRequest): Promise<MotifSummary[]>;
   listMotifs(request: ListMotifsRequest): Promise<MotifSummary[]>;
 }
 

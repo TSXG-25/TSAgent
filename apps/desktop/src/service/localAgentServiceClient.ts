@@ -69,6 +69,8 @@ import {
   type CreateMotifRequest,
   type AssignMotifRequest,
   type ResolveMotifRequest,
+  type ReportMotifRequest,
+  type RejectMotifRequest,
   type ListMotifsRequest,
   type EvaluationSummary,
   type RecordEvaluationRequest,
@@ -884,6 +886,25 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
       session_id: request.sessionId, request_id: request.requestId,
       motif_id: request.motifId, resolution_run_id: request.resolutionRunId,
       resolution: request.resolution,
+    })) as Array<Record<string, unknown>>;
+    return result.map((v) => mapMotif(v));
+  }
+
+  async reportMotif(request: ReportMotifRequest): Promise<MotifSummary[]> {
+    const result = (await this.call("report_motif", {
+      tenant_id: request.tenantId, user_id: this.identity.userId,
+      session_id: request.sessionId, request_id: request.requestId,
+      motif_id: request.motifId, resolution_run_id: request.resolutionRunId,
+      resolution: request.resolution,
+    })) as Array<Record<string, unknown>>;
+    return result.map((v) => mapMotif(v));
+  }
+
+  async rejectMotif(request: RejectMotifRequest): Promise<MotifSummary[]> {
+    const result = (await this.call("reject_motif", {
+      tenant_id: request.tenantId, user_id: this.identity.userId,
+      session_id: request.sessionId, request_id: request.requestId,
+      motif_id: request.motifId,
     })) as Array<Record<string, unknown>>;
     return result.map((v) => mapMotif(v));
   }

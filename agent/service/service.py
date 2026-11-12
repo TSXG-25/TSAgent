@@ -1392,15 +1392,20 @@ class AgentService:
         return self._motif_summary(record)
 
     async def assign_motif(self, request: Any) -> Any:
-        """Delegate a motif to Pluto — links the motif to the delegated task;
-        the exploration run resolves it when it has real understanding."""
+        """Delegate a motif to Pluto — the delegation key derives from the
+        motif identity, so a repeated assign converges on the same child
+        Task and Handoff instead of provisioning duplicates."""
         self._ensure_open()
-        motifs = self._store.list_motifs(request.tenant_id, status="open")
-        motif = next((m for m in motifs if m.motif_id == request.motif_id), None)
+        motif = self._store.get_motif(request.tenant_id, request.motif_id)
         if motif is None:
             raise AgentServiceError(
                 ServiceErrorCode.INVALID_REQUEST,
-                f"motif not found or already assigned: {request.motif_id}",
+                f"motif not found: {request.motif_id}",
+            )
+        if motif.status == "resolved":
+            raise AgentServiceError(
+                ServiceErrorCode.INVALID_REQUEST,
+                f"motif already resolved: {request.motif_id}",
             )
         from .contracts import DelegateRunRequest
 
@@ -1409,7 +1414,7 @@ class AgentService:
                 tenant_id=request.tenant_id,
                 user_id=request.user_id,
                 session_id=request.session_id,
-                request_id=f"{request.request_id}-assign",
+                request_id=f"motif-assign:{request.motif_id}",
                 parent_run_id=request.parent_run_id,
                 request_text=(
                     f"[母题探索] {motif.text}\n"
@@ -1418,6 +1423,13 @@ class AgentService:
                 target_planet="pluto",
             )
         )
+        if motif.status == "exploring":
+            if motif.assigned_task_id != delegation["task_id"]:
+                raise AgentServiceError(
+                    ServiceErrorCode.INVALID_REQUEST,
+                    f"motif already assigned to another task: {request.motif_id}",
+                )
+            return delegation
         self._store.update_motif(
             request.tenant_id,
             request.motif_id,
@@ -1426,24 +1438,72 @@ class AgentService:
         )
         return delegation
 
+    def _require_motif(self, tenant_id: str, motif_id: str) -> Any:
+        motif = self._store.get_motif(tenant_id, motif_id)
+        if motif is None:
+            raise AgentServiceError(
+                ServiceErrorCode.INVALID_REQUEST,
+                f"motif not found: {motif_id}",
+            )
+        return motif
+
+    def _require_motif_run(self, tenant_id: str, motif: Any, run_id: str) -> None:
+        """The reporting run must be a Run of the motif's assigned task —
+        checked by identity, never by a paged list."""
+        head = self._store.get_run_head(tenant_id, run_id)
+        if head is None or head.task_id != motif.assigned_task_id:
+            raise AgentServiceError(
+                ServiceErrorCode.INVALID_REQUEST,
+                f"run {run_id} is not assigned to motif {motif.motif_id}",
+            )
+
+    async def report_motif(self, request: Any) -> Any:
+        """A delegated run reports its understanding — run-bound evidence,
+        awaiting the human verdict.  Not a resolution yet."""
+        self._ensure_open()
+        motif = self._require_motif(request.tenant_id, request.motif_id)
+        if motif.status != "exploring":
+            raise AgentServiceError(
+                ServiceErrorCode.INVALID_REQUEST,
+                f"motif is not awaiting a report: {request.motif_id}",
+            )
+        self._require_motif_run(
+            request.tenant_id, motif, request.resolution_run_id
+        )
+        self._store.update_motif(
+            request.tenant_id,
+            request.motif_id,
+            status="reported",
+            resolution_run_id=request.resolution_run_id,
+            resolution=request.resolution.strip(),
+        )
+        return self._motif_summaries(request.tenant_id)
+
+    async def reject_motif(self, request: Any) -> Any:
+        """Human verdict rejecting the report — the send-back is durable:
+        the motif returns to exploring and the rejected report is cleared."""
+        self._ensure_open()
+        motif = self._require_motif(request.tenant_id, request.motif_id)
+        if motif.status != "reported":
+            raise AgentServiceError(
+                ServiceErrorCode.INVALID_REQUEST,
+                f"motif has no report to reject: {request.motif_id}",
+            )
+        self._store.update_motif(
+            request.tenant_id,
+            request.motif_id,
+            status="exploring",
+            resolution_run_id="",
+            resolution="",
+        )
+        return self._motif_summaries(request.tenant_id)
+
     async def resolve_motif(self, request: Any) -> Any:
         """Motif resolved — the motif and the run reporting it are verified
         before anything is written, and the motif is marked resolved only
         after the memory commit returns committed evidence."""
         self._ensure_open()
-        motif = next(
-            (
-                m
-                for m in self._store.list_motifs(request.tenant_id)
-                if m.motif_id == request.motif_id
-            ),
-            None,
-        )
-        if motif is None:
-            raise AgentServiceError(
-                ServiceErrorCode.INVALID_REQUEST,
-                f"motif not found: {request.motif_id}",
-            )
+        motif = self._require_motif(request.tenant_id, request.motif_id)
         if motif.status == "resolved":
             if motif.resolution_run_id != request.resolution_run_id:
                 raise AgentServiceError(
@@ -1451,18 +1511,15 @@ class AgentService:
                     f"motif already resolved by run {motif.resolution_run_id}: {motif.motif_id}",
                 )
             return self._motif_summaries(request.tenant_id)
-        if motif.status != "exploring" or not motif.assigned_task_id:
+        if motif.status != "reported":
             raise AgentServiceError(
                 ServiceErrorCode.INVALID_REQUEST,
-                f"motif has no assigned exploration task: {motif.motif_id}",
+                f"motif has no report awaiting verdict: {motif.motif_id}",
             )
-        task_runs = self._store.list_runs_for_task(
-            request.tenant_id, motif.assigned_task_id
-        )
-        if not any(r.run_id == request.resolution_run_id for r in task_runs):
+        if motif.resolution_run_id != request.resolution_run_id:
             raise AgentServiceError(
                 ServiceErrorCode.INVALID_REQUEST,
-                f"run {request.resolution_run_id} is not assigned to motif {motif.motif_id}",
+                f"run {request.resolution_run_id} did not report motif {motif.motif_id}",
             )
         from agent.memory import MemoryPersistenceBoundary
         from agent.memory.learning import (
@@ -1477,7 +1534,11 @@ class AgentService:
             canonical_key=f"motif.{request.motif_id}",
             value=request.resolution.strip(),
             provenance={
-                "evidence_id": request.request_id,
+                # 同一裁决的稳定提交身份 — 记忆已写、母题更新失败后，
+                # 任意 request_id 的重试都在同一证据上收敛。
+                "evidence_id": (
+                    f"motif-resolution:{request.motif_id}:{request.resolution_run_id}"
+                ),
                 "source_kind": "motif",
                 "source_ref": request.motif_id,
             },

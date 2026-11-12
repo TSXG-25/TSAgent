@@ -71,6 +71,8 @@ class SidecarDispatcher:
             LocalTransportMethod.CREATE_MOTIF: self._create_motif,
             LocalTransportMethod.ASSIGN_MOTIF: self._assign_motif,
             LocalTransportMethod.RESOLVE_MOTIF: self._resolve_motif,
+            LocalTransportMethod.REPORT_MOTIF: self._report_motif,
+            LocalTransportMethod.REJECT_MOTIF: self._reject_motif,
             LocalTransportMethod.LIST_MOTIFS: self._list_motifs,
             LocalTransportMethod.RECORD_EVALUATION: self._record_evaluation,
             LocalTransportMethod.LIST_EVALUATIONS: self._list_evaluations,
@@ -480,6 +482,18 @@ class SidecarDispatcher:
 
         request = self._from_dto(ResolveMotifRequest.from_dict, params)
         return await self._service.resolve_motif(request)
+
+    async def _report_motif(self, params: Mapping[str, Any]) -> Any:
+        from ..contracts import ReportMotifRequest
+
+        request = self._from_dto(ReportMotifRequest.from_dict, params)
+        return await self._service.report_motif(request)
+
+    async def _reject_motif(self, params: Mapping[str, Any]) -> Any:
+        from ..contracts import RejectMotifRequest
+
+        request = self._from_dto(RejectMotifRequest.from_dict, params)
+        return await self._service.reject_motif(request)
 
     async def _list_motifs(self, params: Mapping[str, Any]) -> Any:
         from ..contracts import ListMotifsRequest

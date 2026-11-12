@@ -1837,6 +1837,69 @@ class ResolveMotifRequest:
 
 
 @dataclass(frozen=True)
+class ReportMotifRequest:
+    """A run reports its understanding — run-bound evidence, not a verdict."""
+
+    tenant_id: str
+    user_id: str
+    session_id: str
+    request_id: str
+    motif_id: str
+    resolution_run_id: str
+    resolution: str
+
+    def __post_init__(self) -> None:
+        _required_identifier(self.tenant_id, "tenant_id")
+        _required_identifier(self.user_id, "user_id")
+        _required_identifier(self.session_id, "session_id")
+        _required_identifier(self.request_id, "request_id")
+        _required_identifier(self.motif_id, "motif_id")
+        _required_identifier(self.resolution_run_id, "resolution_run_id")
+        if not self.resolution.strip():
+            raise ValueError("resolution must be non-empty")
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "ReportMotifRequest":
+        return cls(
+            tenant_id=str(value.get("tenant_id", "")),
+            user_id=str(value.get("user_id", "")),
+            session_id=str(value.get("session_id", "")),
+            request_id=str(value.get("request_id", "")),
+            motif_id=str(value.get("motif_id", "")),
+            resolution_run_id=str(value.get("resolution_run_id", "")),
+            resolution=str(value.get("resolution", "")),
+        )
+
+
+@dataclass(frozen=True)
+class RejectMotifRequest:
+    """Human verdict rejecting a report — sends the motif back to exploring."""
+
+    tenant_id: str
+    user_id: str
+    session_id: str
+    request_id: str
+    motif_id: str
+
+    def __post_init__(self) -> None:
+        _required_identifier(self.tenant_id, "tenant_id")
+        _required_identifier(self.user_id, "user_id")
+        _required_identifier(self.session_id, "session_id")
+        _required_identifier(self.request_id, "request_id")
+        _required_identifier(self.motif_id, "motif_id")
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "RejectMotifRequest":
+        return cls(
+            tenant_id=str(value.get("tenant_id", "")),
+            user_id=str(value.get("user_id", "")),
+            session_id=str(value.get("session_id", "")),
+            request_id=str(value.get("request_id", "")),
+            motif_id=str(value.get("motif_id", "")),
+        )
+
+
+@dataclass(frozen=True)
 class ListMotifsRequest:
     tenant_id: str
     user_id: str

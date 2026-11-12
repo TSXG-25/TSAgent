@@ -66,6 +66,8 @@ class LocalTransportMethod(str, Enum):
     CREATE_MOTIF = "create_motif"
     ASSIGN_MOTIF = "assign_motif"
     RESOLVE_MOTIF = "resolve_motif"
+    REPORT_MOTIF = "report_motif"
+    REJECT_MOTIF = "reject_motif"
     LIST_MOTIFS = "list_motifs"
     RECORD_EVALUATION = "record_evaluation"
     LIST_EVALUATIONS = "list_evaluations"

@@ -550,6 +550,14 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
     return [];
   }
 
+  async reportMotif(): Promise<MotifSummary[]> {
+    return [];
+  }
+
+  async rejectMotif(): Promise<MotifSummary[]> {
+    return [];
+  }
+
   async listMotifs(): Promise<MotifSummary[]> {
     return [];
   }

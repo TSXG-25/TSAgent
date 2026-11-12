@@ -7,6 +7,7 @@ from typing import Any, cast
 import pytest
 
 from agent.runtime_store import SqliteRuntimeStore
+from agent.service.context_factory import ServiceContextFactory
 from agent.service import (
     AgentService,
     AgentServiceError,
@@ -157,6 +158,53 @@ def test_concurrent_services_reserve_one_run_for_same_request(tmp_path) -> None:
         finally:
             await service_a.close()
             await service_b.close()
+
+    _run(scenario())
+
+
+def test_start_run_replay_reuses_admitted_record_without_new_workspace(
+    tmp_path,
+) -> None:
+    """已接纳请求的重放复用原 Run 记录 — 不再分配 run_id，
+    也不触发 workspace resolver 的建目录副作用。"""
+
+    async def scenario() -> None:
+        store = SqliteRuntimeStore.open(tmp_path / "replay.sqlite")
+        base = tmp_path / "workspaces"
+        resolved: list = []
+
+        def per_run(tenant_id: str, session_id: str, run_id: str):
+            root = base / tenant_id / session_id / run_id
+            root.mkdir(parents=True, exist_ok=True)
+            resolved.append(root)
+            return root
+
+        service = AgentService(
+            runtime_store=store,
+            launcher=ImmediateLauncher(),
+            context_factory=ServiceContextFactory(
+                store,
+                workspace_root=base,
+                workspace_for_run=per_run,
+            ),
+        )
+        try:
+            request = _start()
+            first = await service.start_run(request)
+            await asyncio.sleep(0)
+            second = await service.start_run(request)
+            assert second.run_id == first.run_id
+            # resolver 只在首次接纳时执行一次 — 磁盘上只有原 Run 的目录。
+            assert resolved == [
+                base / "tenant-a" / "session-a" / first.run_id
+            ]
+            assert {p for p in base.rglob("*") if p.is_dir()} == {
+                base / "tenant-a",
+                base / "tenant-a" / "session-a",
+                base / "tenant-a" / "session-a" / first.run_id,
+            }
+        finally:
+            await service.close()
 
     _run(scenario())
 

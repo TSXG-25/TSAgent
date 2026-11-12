@@ -245,45 +245,62 @@ class AgentService:
                 role="owner",
             )
             task_id = self._resolve_task_id(request)
-            # Allocate the run id before workspace resolution — the recorded
-            # root must be the accepted Run's own directory (per-run roots),
-            # not the session-level fallback an empty run_id resolves to.
-            import uuid
+            # Already-admitted requests reuse the original Run identity —
+            # replay must not allocate a new run id or invoke the workspace
+            # resolver (which may create a directory as a side effect).
+            admitted = self._store.find_idempotency(
+                request.tenant_id, request.request_id
+            )
+            if admitted is not None:
+                requested_run_id = str(admitted.run_id)
+                external_reference = ""
+            else:
+                # Allocate the run id before workspace resolution — the
+                # recorded root must be the accepted Run's own directory
+                # (per-run roots), not the session-level fallback an empty
+                # run_id resolves to.
+                import uuid
 
-            run_id = str(getattr(request, "run_id", "") or "") or f"run-{uuid.uuid4().hex}"
-            explicit_root = str(
-                getattr(request, "workspace_root", "") or ""
-            ).strip()
-            run_root = (
-                Path(explicit_root).resolve()
-                if explicit_root
-                else self._contexts.run_workspace(
-                    request.tenant_id, request.session_id, run_id
+                requested_run_id = (
+                    str(getattr(request, "run_id", "") or "")
+                    or f"run-{uuid.uuid4().hex}"
                 )
-            )
-            context_refs = self._validate_store_refs(
-                request.tenant_id,
-                request.session_id,
-                "",
-                getattr(request, "context_refs", ()),
-                root=run_root,
-                allow_artifact=False,
-            )
+                explicit_root = str(
+                    getattr(request, "workspace_root", "") or ""
+                ).strip()
+                run_root = (
+                    Path(explicit_root).resolve()
+                    if explicit_root
+                    else self._contexts.run_workspace(
+                        request.tenant_id,
+                        request.session_id,
+                        requested_run_id,
+                    )
+                )
+                context_refs = self._validate_store_refs(
+                    request.tenant_id,
+                    request.session_id,
+                    "",
+                    getattr(request, "context_refs", ()),
+                    root=run_root,
+                    allow_artifact=False,
+                )
+                external_reference = encode_request_reference(
+                    request,
+                    run_id=requested_run_id,
+                    workspace_root=str(run_root) if run_root else "",
+                    context_refs=context_refs,
+                )
             try:
                 reservation = self._store.reserve_service_start(
                     request.tenant_id,
                     request.session_id,
                     task_id=task_id,
-                    requested_run_id=run_id,
+                    requested_run_id=requested_run_id,
                     request_id=request.request_id,
                     request_digest=request.request_digest,
                     writer_id=self._contexts.writer_id,
-                    external_reference=encode_request_reference(
-                        request,
-                        run_id=run_id,
-                        workspace_root=str(run_root) if run_root else "",
-                        context_refs=context_refs,
-                    ),
+                    external_reference=external_reference,
                 )
             except DurableStoreError as error:
                 raise self._store_error(error, request_id=request.request_id) from error
@@ -2848,19 +2865,34 @@ class AgentService:
         if self._closed:
             return
         self._closed = True
-        if self._scheduler_task is not None:
+        loop = asyncio.get_running_loop()
+        # 只能收束绑定在当前 loop 上的任务 — 绑定在其他 loop（通常已随其
+        # asyncio.run 退出）的任务既无法取消也无法 await；取消会经
+        # call_soon 打到已关闭的 loop，gather 会附加跨 loop future。
+        if (
+            self._scheduler_task is not None
+            and self._scheduler_task.get_loop() is loop
+        ):
             self._scheduler_task.cancel()
         tasks = []
         for managed in self._runs.values():
+            task = managed.task
+            if task.get_loop() is not loop:
+                continue
             context = managed.run_context
             if getattr(context, "_pause_gate", None) is not None:
                 # 进程内暂停不跨进程存活：关闭时收束本地 gate 等待；不在
                 # durable 上落隐式用户取消 — Run 保持 SUSPENDED。
-                managed.task.cancel()
-            tasks.append(managed.task)
-        if self._scheduler_task is not None:
+                task.cancel()
+            tasks.append(task)
+        if (
+            self._scheduler_task is not None
+            and self._scheduler_task.get_loop() is loop
+        ):
             tasks.append(self._scheduler_task)
         for task in tuple(self._graph_tasks):
+            if task.get_loop() is not loop:
+                continue
             task.cancel()
             tasks.append(task)
         if tasks:

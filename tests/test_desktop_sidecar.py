@@ -1284,18 +1284,19 @@ def test_close_releases_paused_run(monkeypatch, tmp_path: Path) -> None:
                 store, workspace_root=tmp_path
             ),
         )
-        # 把 Run 停在最后一个脚本回复前 — RUNNING 期间可确定性 pause，
-        # 不再依赖"轮询看到 RUNNING 后暂停仍赶上"的时序窗口。
+        # 把 Run 停在工具调用回复交付前（replies 剩 2 条）— pause 后释放，
+        # 让任务继续推进并在工具边界上真正进入 _pause_gate，而不是取消一个
+        # 仍堵在 Provider 里的任务。
         park = asyncio.Event()
         orig_achat, orig_ainvoke = provider.achat, provider.ainvoke
 
         async def gated_achat(messages: Any, tools: Any = None, **kwargs: Any) -> Any:
-            if len(provider.replies) == 1:
+            if len(provider.replies) == 2:
                 await park.wait()
             return await orig_achat(messages, tools, **kwargs)
 
         async def gated_ainvoke(messages: Any, **kwargs: Any) -> Any:
-            if len(provider.replies) == 1:
+            if len(provider.replies) == 2:
                 await park.wait()
             return await orig_ainvoke(messages, **kwargs)
 
@@ -1309,15 +1310,28 @@ def test_close_releases_paused_run(monkeypatch, tmp_path: Path) -> None:
             if (
                 head is not None
                 and head.run_status == "RUNNING"
-                and len(provider.replies) == 1
+                and len(provider.replies) == 2
             ):
                 break
             await asyncio.sleep(0.05)
         else:
-            raise AssertionError("run did not reach the parked final reply")
+            raise AssertionError("run did not reach the parked tool-call reply")
         await service.pause_run(PauseRunRequest(
             tenant_id="t", user_id="u", session_id="s",
             run_id=handle.run_id, request_id="p1"))
+        park.set()
+        managed = service._runs.get(handle.run_id)
+        assert managed is not None
+        gate = getattr(managed.run_context, "_pause_gate", None)
+        assert gate is not None
+        for _ in range(200):
+            if gate._waiters:
+                break
+            await asyncio.sleep(0.05)
+        else:
+            raise AssertionError("run did not park on the pause gate")
+        # 工具边界在 write_file 之前 — gate 停住后工件不得已写出。
+        assert not (tmp_path / "output" / "p.txt").exists()
         await asyncio.wait_for(service.close(), timeout=10)
         # 取消必须传到 worker-lease 子任务 — 不得留在 pause gate 上挂起。
         assert spy.launch_task is not None

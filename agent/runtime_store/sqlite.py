@@ -5859,6 +5859,38 @@ class SqliteRuntimeStore:
             )
         return result
 
+    def find_idempotency(
+        self, tenant_id: str, idempotency_key: str
+    ) -> PreparedOperation | None:
+        """Request-scoped lookup — resolves a reserved operation by its
+        idempotency key without knowing the run_id.  Admission uses this to
+        reuse an already-admitted request's Run identity before any
+        allocation or filesystem side effect."""
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        idempotency_key = _require_text(idempotency_key, "idempotency_key")
+        with self._lock:
+            self._ensure_open()
+            row = self._connection.execute(
+                """
+                SELECT tenant_id, session_id, run_id, operation_id,
+                       idempotency_key, operation_type, request_digest,
+                       expected_effect_digest, effect_state, fence_token,
+                       external_reference,
+                       result_json, result_digest, prepared_revision,
+                       committed_revision, request_id, created_at, updated_at
+                FROM idempotency_ledger
+                WHERE tenant_id = ? AND idempotency_key = ?
+                ORDER BY prepared_revision ASC
+                LIMIT 1
+                """,
+                (tenant_id, idempotency_key),
+            ).fetchone()
+            if row is None:
+                return None
+            return self._prepared_contract(
+                row, store_generation=self.store_generation
+            )
+
     def get_idempotency(
         self,
         tenant_id: str,

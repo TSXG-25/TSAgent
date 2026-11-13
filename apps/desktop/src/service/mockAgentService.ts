@@ -487,10 +487,13 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
     ["lib/util.py", "def clamp(v, lo, hi):\n    return max(lo, min(hi, v))\n"],
   ]);
 
-  private evals: EvaluationSummary[] = [{
-    evalId: "eval-mock-1", name: "baseline A vs candidate B", runId: "run-2048",
-    baselineRef: "artifact-a", candidateRef: "artifact-b",
-    score: 0.62, verdict: "pass", notes: "mock seed", createdAt: new Date().toISOString(),
+  private evals: Array<{ summary: EvaluationSummary; tenantId: string; sessionId: string }> = [{
+    summary: {
+      evalId: "eval-mock-1", name: "baseline A vs candidate B", runId: "run-2048",
+      baselineRef: "artifact-a", candidateRef: "artifact-b",
+      score: 0.62, verdict: "pass", notes: "mock seed", createdAt: new Date().toISOString(),
+    },
+    tenantId: LOCAL_TENANT_ID, sessionId: DEFAULT_IDENTITY.sessionId,
   }];
 
   async recordEvaluation(request: RecordEvaluationRequest): Promise<EvaluationSummary> {
@@ -508,13 +511,14 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
       score: request.score ?? 0, verdict,
       notes: request.notes ?? "", createdAt: new Date().toISOString(),
     };
-    this.evals = [ev, ...this.evals];
+    this.evals = [{ summary: ev, tenantId: request.tenantId, sessionId: request.sessionId }, ...this.evals];
     return ev;
   }
 
   async listEvaluations(request: ListEvaluationsRequest): Promise<EvaluationSummary[]> {
-    void request;
-    return this.evals;
+    return this.evals
+      .filter((e) => e.tenantId === request.tenantId && (request.allSessions || e.sessionId === request.sessionId))
+      .map((e) => e.summary);
   }
 
   async listWorkspaceFiles(): Promise<WorkspaceFileSummary[]> {

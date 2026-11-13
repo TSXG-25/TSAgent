@@ -35,15 +35,33 @@ export function evalCandidateRef(vals: ParamValues): string {
   return `candidate:${paramSnapshot(vals)}`;
 }
 
+/** The params a run was actually submitted with, recovered from its own
+ *  request text — the composer embeds `composerContext` as the first line.
+ *  A run not launched through this composer carries no prefix, so its
+ *  params are unknown and must not be fabricated from live slider state. */
+export function parseRunParams(request: string): ParamValues | null {
+  const m = request.match(/^\[bio-proxy params: ([^\]]+)\]/m);
+  if (!m) return null;
+  const out: ParamValues = {};
+  for (const pair of m[1].split(",")) {
+    const [k, v] = pair.split("=");
+    const n = Number(v);
+    if (!k || !Number.isFinite(n)) return null;
+    out[k] = n;
+  }
+  return out;
+}
+
 export function buildEvalRequest(input: {
   tenantId: string;
   sessionId: string;
   requestId: string;
   runId: string;
   verdict: EvaluationVerdict;
-  vals: ParamValues;
+  vals: ParamValues | null;
   notes: string;
 }): RecordEvaluationRequest {
+  const snapshot = input.vals ? `params: ${JSON.stringify(input.vals)}` : "";
   return {
     tenantId: input.tenantId,
     sessionId: input.sessionId,
@@ -51,8 +69,10 @@ export function buildEvalRequest(input: {
     name: `bio-sim-${Date.now().toString(36)}`,
     runId: input.runId,
     baselineRef: "baseline:defaults",
-    candidateRef: evalCandidateRef(input.vals),
+    candidateRef: input.vals
+      ? evalCandidateRef(input.vals)
+      : `candidate:${input.runId || "unknown"}`,
     verdict: input.verdict,
-    notes: input.notes || `params: ${JSON.stringify(input.vals)}`,
+    notes: [snapshot, input.notes].filter(Boolean).join(" — "),
   };
 }

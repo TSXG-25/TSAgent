@@ -5,7 +5,7 @@ import AgentComposer from "../../app/AgentComposer";
 import { requestIdForRun } from "../../app/ui";
 import type { RunCtx } from "../../app/runCtx";
 import type { EvaluationSummary, EvaluationVerdict } from "../../types/service";
-import { EARTH_PARAMS, EARTH_VERDICTS, buildEvalRequest, composerContext, defaultParamValues } from "./earthEvalForm";
+import { EARTH_PARAMS, EARTH_VERDICTS, buildEvalRequest, composerContext, defaultParamValues, parseRunParams } from "./earthEvalForm";
 
 /** Organic Intelligence Lab per hand-drawn spec §5 — bio-proxy sliders |
  *  interactive brain/cognitive model | extra params | simulation composer.
@@ -28,10 +28,12 @@ export default function EarthWorkspace({ ctx }: { ctx: RunCtx }) {
   async function record() {
     setBusy(true); setError(null);
     try {
+      // 裁决绑定该 Run 实际提交时的参数快照——从 Run 自己的请求文本解析，
+      // 而不是当前滑块值；非本 Composer 发起的 Run 参数未知，不伪造。
       await ctx.service.recordEvaluation(buildEvalRequest({
         tenantId: ctx.service.identity.tenantId, sessionId: ctx.service.identity.sessionId,
         requestId: requestIdForRun(0), runId: ctx.activeRun?.runId ?? "",
-        verdict, vals, notes: notes.trim(),
+        verdict, vals: parseRunParams(ctx.activeRun?.request ?? ""), notes: notes.trim(),
       }));
       setNotes(""); await refreshEvals();
     } catch (err) {

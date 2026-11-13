@@ -23,6 +23,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from agent.runtime_store.sqlite import SqliteRuntimeStore  # noqa: E402
+from agent.runtime_store.errors import (  # noqa: E402
+    DurableStoreError,
+    StoreErrorCode,
+)
 
 RUNS = 20
 EVENTS_PER_RUN = 25
@@ -83,6 +87,23 @@ def main() -> None:
             lambda: store.get_run_head("tenant-m", run_0, session_id=session_0),
             SAMPLES,
         )
+        # 控制请求路径 — list_runs 类 RPC 落到 list_run_heads。
+        control_base = _timed(
+            lambda: store.list_run_heads("tenant-m", session_0),
+            SAMPLES,
+        )
+        # worker lease — 运行中的 Run 周期性 renew，锁争用决定心跳延迟。
+        fence = store.get_current_fence(
+            "tenant-m", run_0, session_id=session_0
+        )
+
+        def lease_once() -> None:
+            store.renew_worker_lease(
+                "tenant-m", session_0, run_0,
+                fence.writer_id, fence.fence_token,
+            )
+
+        lease_base = _timed(lease_once, SAMPLES)
         seq = [EVENTS_PER_RUN]
 
         def write_once() -> None:
@@ -90,6 +111,16 @@ def main() -> None:
             _append(store, session_0, run_0, seq[0])
 
         write_base = _timed(write_once, SAMPLES)
+
+        def timed_expect_busy() -> float:
+            t0 = time.perf_counter()
+            try:
+                write_once()
+            except DurableStoreError as exc:
+                if exc.code is not StoreErrorCode.STORE_BUSY:
+                    raise
+                return time.perf_counter() - t0
+            raise AssertionError("write under held lock did not raise STORE_BUSY")
 
         # --- contended: a raw second connection holds BEGIN IMMEDIATE ---
         released = threading.Event()
@@ -114,6 +145,11 @@ def main() -> None:
             lambda: store.get_run_head("tenant-m", run_0, session_id=session_0),
             3,
         )
+        control_lock = _timed(
+            lambda: store.list_run_heads("tenant-m", session_0),
+            3,
+        )
+        lease_lock = _timed(lease_once, 3)
         write_lock = _timed(write_once, 3)
 
         t.join(timeout=10)
@@ -124,13 +160,8 @@ def main() -> None:
         t2 = threading.Thread(target=hold_writer, args=(6.0,))
         t2.start()
         time.sleep(0.05)
-        busy_start = time.perf_counter()
-        busy_error = None
-        try:
-            write_once()
-        except Exception as exc:  # DurableStoreError STORE_BUSY
-            busy_error = type(exc).__name__ + ":" + str(getattr(exc, "code", exc))
-        busy_wait = time.perf_counter() - busy_start
+        busy_wait = timed_expect_busy()
+        busy_error = "STORE_BUSY"
         t2.join(timeout=15)
         assert released.is_set()
 
@@ -147,6 +178,10 @@ def main() -> None:
     print(f"lock hold: {HOLD_SECONDS * 1000:.0f} ms (raw second connection, BEGIN IMMEDIATE)")
     print(f"read  baseline min/max: {read_base[0] * 1e3:.1f}/{read_base[1] * 1e3:.1f} ms")
     print(f"read  under-lock min/max: {read_lock[0] * 1e3:.1f}/{read_lock[1] * 1e3:.1f} ms")
+    print(f"control(list_run_heads) baseline min/max: {control_base[0] * 1e3:.1f}/{control_base[1] * 1e3:.1f} ms")
+    print(f"control(list_run_heads) under-lock min/max: {control_lock[0] * 1e3:.1f}/{control_lock[1] * 1e3:.1f} ms")
+    print(f"lease(renew_worker_lease) baseline min/max: {lease_base[0] * 1e3:.1f}/{lease_base[1] * 1e3:.1f} ms")
+    print(f"lease(renew_worker_lease) under-lock min/max: {lease_lock[0] * 1e3:.1f}/{lease_lock[1] * 1e3:.1f} ms")
     print(f"write baseline min/max: {write_base[0] * 1e3:.1f}/{write_base[1] * 1e3:.1f} ms")
     print(f"write under-lock min/max: {write_lock[0] * 1e3:.1f}/{write_lock[1] * 1e3:.1f} ms")
     print(f"hold > busy_timeout: write failed after {busy_wait:.1f}s as {busy_error}")

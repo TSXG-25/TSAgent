@@ -2923,3 +2923,60 @@ def test_a23_eval_verdict_contract_round_trip(tmp_path: Path) -> None:
     finally:
         _run(service2.close())
 
+
+
+def test_a10_forget_scoped_to_displayed_fact_and_not_reme(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A10: Forget deletes the governed Durable Fact in the displayed scope.
+    Same (category, key) under another scope survives; the ReMe long-term
+    layer is a separate owner — forgetting a fact never reaches it."""
+    from agent.memory import long_term
+    from agent.mcp import reme
+    from agent.service.contracts import ForgetFactRequest
+
+    service, _store = _a24_service(tmp_path, monkeypatch)
+    user = "t:u"
+    for scope in ("tenant", "session:s-1"):
+        long_term._persist_fact(
+            user, "preference", "theme", "dark",
+            scope=scope, action="INSERT",
+            evidence_id=f"ev-{scope}", source_kind="manual",
+            source_ref="test",
+        )
+    calls: list[str] = []
+
+    async def reme_spy(*args: Any, **kwargs: Any) -> str:
+        calls.append(str(args))
+        raise AssertionError("forget_fact must not call ReMe")
+
+    monkeypatch.setattr(reme, "call_reme_tool", reme_spy)
+
+    def req(scope: str) -> ForgetFactRequest:
+        return ForgetFactRequest(
+            tenant_id="t", user_id="u", session_id="s-1",
+            request_id=f"req-{scope or 'all'}", category="preference",
+            key="theme", scope=scope,
+        )
+
+    async def scenario() -> None:
+        # 指定作用域 — 只删该作用域的记录。
+        result = await service.forget_fact(req("session:s-1"))
+        assert result.removed is True
+        rows = long_term.list_fact_records(user)
+        assert [(r["scope"]) for r in rows] == ["tenant"]
+
+        # 未指定作用域 — 删除该 (category, key) 的其余记录（服务层合同）。
+        result = await service.forget_fact(req(""))
+        assert result.removed is True
+        assert long_term.list_fact_records(user) == []
+
+        # 已删除 — removed=False，不报错。
+        result = await service.forget_fact(req("tenant"))
+        assert result.removed is False
+
+    try:
+        _run(scenario())
+    finally:
+        _run(service.close())
+    assert calls == []

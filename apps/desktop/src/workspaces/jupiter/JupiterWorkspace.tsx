@@ -60,10 +60,11 @@ export default function JupiterWorkspace({ ctx }: { ctx: RunCtx }) {
                 {!cloud && facts.filter((f) => !q || `${f.category}${f.key}`.includes(q)).map((f) => (
                   <span className={`jup-row ${sel === f ? "on" : ""}`} key={f.category + ":" + f.key} onClick={() => setSel(f)}>
                     <strong>{f.category}:{f.key}</strong><small>{f.value.slice(0, 40)}</small>
-                    <i className="jup-forget" onClick={(e) => { e.stopPropagation(); void service.forgetFact({ ...req(), category: f.category, key: f.key }).then(() => service.listFacts(req()).then(setFacts)).catch((x) => setErr(String(x))); }}>✕</i>
+                    <i className="jup-forget" title={`forget ${f.category}:${f.key} in scope ${f.scope} — removes this governed fact only; ReMe long-term memory is unaffected`} onClick={(e) => { e.stopPropagation(); void service.forgetFact({ ...req(), category: f.category, key: f.key, scope: f.scope }).then(() => service.listFacts(req()).then(setFacts)).catch((x) => setErr(String(x))); }}>✕</i>
                   </span>
                 ))}
                 {!cloud && facts.length === 0 && <p className="omni-empty">No governed facts.</p>}
+                {!cloud && facts.length > 0 && <p className="omni-empty" style={{ opacity: 0.6 }}>✕ forgets one governed fact in its scope — ReMe long-term memory is governed by its own service.</p>}
               </>
             ) : tab === "history" ? (
               <>

@@ -1,15 +1,30 @@
 import type { ConversationMessageView, RunEventView } from "../../types";
+import { t } from "../../app/i18n";
 
 /** Thinking chain — folds durable run events and intermediate assistant
- *  narration into work segments: each stage becomes a "Worked for Ns"
- *  collapsible containing Thoughts blocks (model narration) and Ran lines
- *  (tool invocations). The reply stream and final output are NOT here —
- *  they render as regular message bubbles. Real data only: no invented
- *  reasoning. */
+ *  narration into work segments: each stage becomes a collapsible containing
+ *  Thoughts blocks (model narration) and tool cards (invocations). The reply
+ *  stream and final output are NOT here — they render as regular message
+ *  bubbles. Real data only: no invented reasoning.
+ *  Collapse rules: completed stages collapsed by default; live, failed and
+ *  approval-waiting segments stay expanded. */
 
-interface RanItem { kind: "ran"; key: string; label: string; detail: string; done: boolean }
+type ToolKind = "file" | "search" | "command" | "other";
+const TOOL_ICON: Record<ToolKind, string> = { file: "📄", search: "🔍", command: "⌨", other: "◆" };
+
+/** Tool-name → card kind, from the tool field the events already carry.
+ *  Unknown tools stay "other" and render their raw label. */
+export function toolKind(tool: string): ToolKind {
+  const s = tool.toLowerCase();
+  if (/file|read|write|edit|patch|apply/.test(s)) return "file";
+  if (/search|grep|find|web|fetch|lookup/.test(s)) return "search";
+  if (/run|exec|shell|bash|command|terminal|npm|python/.test(s)) return "command";
+  return "other";
+}
+
+interface RanItem { kind: "ran"; key: string; tool: ToolKind; label: string; detail: string; done: boolean }
 interface ThoughtItem { kind: "thought"; key: string; role: string; text: string }
-interface RowItem { kind: "row"; key: string; label: string; done: boolean }
+interface RowItem { kind: "row"; key: string; label: string; done: boolean; attention: boolean; failed: boolean }
 type SegItem = RanItem | ThoughtItem | RowItem;
 
 interface Seg {
@@ -18,6 +33,7 @@ interface Seg {
   phase: string;
   seconds: number | null;
   live: boolean;
+  attention: boolean;
   items: SegItem[];
 }
 
@@ -29,12 +45,18 @@ function secsBetween(start: string | undefined, end: string | undefined): number
   return Number.isFinite(ms) && ms >= 0 ? Math.round(ms / 100) / 10 : null;
 }
 
+const row = (e: RunEventView, label: string, done = true, attention = false, failed = false): RowItem =>
+  ({ kind: "row", key: e.eventId, label, done, attention, failed });
+
 function buildItems(events: RunEventView[] | undefined, messages: ConversationMessageView[]): Item[] {
   const items: Item[] = [];
   const openSegs = new Map<string, Seg>();
   const openRuns = new Map<string, RanItem>();
   let cur: Seg | null = null;
-  const sink = (item: SegItem) => (cur ? cur.items.push(item) : items.push(item));
+  const sink = (item: SegItem) => {
+    if (item.kind === "row" && item.attention && cur) cur.attention = true;
+    if (cur) cur.items.push(item); else items.push(item);
+  };
 
   const timeline = [
     ...(events ?? []).map((e) => ({ kind: "ev" as const, at: e.timestamp ?? "", seq: e.sequenceNumber ?? 0, ev: e })),
@@ -51,20 +73,20 @@ function buildItems(events: RunEventView[] | undefined, messages: ConversationMe
     const p = (e.payload ?? {}) as Record<string, unknown>;
     switch (et) {
       case "run_created":
-        sink({ kind: "row", key: e.eventId, label: "任务创建", done: true });
+        sink(row(e, t("think.task-created")));
         break;
       case "run_started":
-        sink({ kind: "row", key: e.eventId, label: "开始执行", done: true });
+        sink(row(e, t("think.task-started")));
         break;
       case "run_completed":
-        sink({ kind: "row", key: e.eventId, label: "完成", done: true });
+        sink(row(e, t("think.task-completed")));
         break;
       case "run_failed":
-        sink({ kind: "row", key: e.eventId, label: "失败", done: true });
+        sink(row(e, t("think.task-failed"), true, true, true));
         break;
       case "run_cancelled":
       case "run_cancelling":
-        sink({ kind: "row", key: e.eventId, label: "已取消", done: true });
+        sink(row(e, t("think.task-cancelled")));
         break;
       case "stage_started": {
         const seg: Seg = {
@@ -73,6 +95,7 @@ function buildItems(events: RunEventView[] | undefined, messages: ConversationMe
           phase: String(p.phase ?? p.stage_id ?? "stage"),
           seconds: null,
           live: true,
+          attention: false,
           items: [],
         };
         items.push(seg);
@@ -97,12 +120,13 @@ function buildItems(events: RunEventView[] | undefined, messages: ConversationMe
         break;
       }
       case "task_started": {
-        const target = String(p.target ?? "");
         const tool = String(p.tool ?? "");
+        const target = String(p.target ?? "");
         const ran: RanItem = {
           kind: "ran",
           key: e.eventId,
-          label: `Ran ${tool || String(p.verb ?? "task")}${target ? ` ${target}` : ""}`,
+          tool: toolKind(tool),
+          label: t("think.ran", { cmd: `${tool || String(p.verb ?? "task")}${target ? ` ${target}` : ""}` }),
           detail: String(p.task_id ?? ""),
           done: false,
         };
@@ -116,14 +140,14 @@ function buildItems(events: RunEventView[] | undefined, messages: ConversationMe
         break;
       }
       case "approval.requested":
-        sink({ kind: "row", key: e.eventId, label: `审批 · ${String(p.action ?? p.risk_level ?? "")}`, done: false });
+        sink(row(e, t("think.approval-requested", { action: String(p.action ?? p.risk_level ?? "") }), false, true));
         break;
       case "approval.decided":
-        sink({ kind: "row", key: e.eventId, label: `审批已决定 · ${String(p.decision ?? "")}`, done: true });
+        sink(row(e, t("think.approval-decided", { decision: String(p.decision ?? "") })));
         break;
       case "run_waiting_user":
       case "run_blocked":
-        sink({ kind: "row", key: e.eventId, label: "等待用户", done: false });
+        sink(row(e, t("think.waiting-user"), false, true));
         break;
     }
   }
@@ -140,9 +164,10 @@ function countSteps(items: Item[]): number {
 }
 
 function SegView({ seg }: { seg: Seg }) {
-  const title = seg.live ? `Working… · ${seg.phase}` : `Worked for ${seg.seconds ?? "?"}s · ${seg.phase}`;
+  const title = seg.live ? t("think.working", { phase: seg.phase }) : t("think.worked", { s: seg.seconds ?? "?", phase: seg.phase });
+  // completed stages collapse; live / failed / approval-waiting stay open
   return (
-    <details className={`think-seg ${seg.live ? "live" : ""}`} open={seg.live}>
+    <details className={`think-seg ${seg.live ? "live" : ""} ${seg.attention ? "attention" : ""}`} open={seg.live || seg.attention}>
       <summary>{title}</summary>
       <div className="think-seg-body">
         {seg.items.map((item) => (
@@ -157,21 +182,22 @@ function ItemView({ item }: { item: SegItem }) {
   if (item.kind === "thought") {
     return (
       <details className="think-thought">
-        <summary>Thoughts</summary>
+        <summary>{t("think.thoughts")}</summary>
         <p>{item.text}</p>
       </details>
     );
   }
   if (item.kind === "ran") {
     return (
-      <div className={`think-ran ${item.done ? "done" : "live"}`}>
+      <div className={`think-ran tool-${item.tool} ${item.done ? "done" : "live"}`}>
         <span className="think-dot">{item.done ? "✓" : "◐"}</span>
+        <span className="think-kind">{TOOL_ICON[item.tool]}</span>
         <span className="think-cmd">{item.label}</span>
       </div>
     );
   }
   return (
-    <div className={`think-row ${item.done ? "done" : "live"}`}>
+    <div className={`think-row ${item.done ? "done" : "live"} ${item.attention ? "attention" : ""}`}>
       <span className="think-dot">{item.done ? "✓" : "◐"}</span>
       <span>{item.label}</span>
     </div>
@@ -181,31 +207,33 @@ function ItemView({ item }: { item: SegItem }) {
 export function ThinkingChain({
   events,
   messages = [],
+  canResume = false,
+  onResume,
 }: {
   events: RunEventView[] | undefined;
   messages?: ConversationMessageView[];
+  canResume?: boolean;
+  onResume?: () => void;
 }) {
   const items = buildItems(events, messages);
   if (items.length === 0) return null;
   const live = items.some((i) => (i.kind === "seg" ? i.live : i.kind !== "thought" && !i.done));
   const total = countSteps(items);
+  const failed = items.some((i) => i.kind === "row" && i.failed);
   return (
-    <details className="msg3 thinking" open={live}>
+    <details className="msg3 thinking" open={live || failed}>
       <summary>
-        <span className="think-glyph">◈</span> 思考过程
-        <em>{total ? `${total} 条` : ""}</em>
+        <span className="think-glyph">◈</span> {t("think.title")}
+        <em>{total ? t("think.items", { n: total }) : ""}</em>
       </summary>
       <div className="think-list">
-        {items.map((item) =>
-          item.kind === "seg" ? (
-            <SegView seg={item} key={item.key} />
-          ) : item.kind === "thought" ? (
-            <ItemView item={item} key={item.key} />
-          ) : (
-            <ItemView item={item} key={item.key} />
-          ),
-        )}
+        {items.map((item) => (
+          item.kind === "seg" ? <SegView key={item.key} seg={item} /> : <ItemView item={item} key={item.key} />
+        ))}
       </div>
+      {failed && canResume && onResume && (
+        <button className="btn secondary think-resume" onClick={onResume} type="button">{t("think.resume")}</button>
+      )}
     </details>
   );
 }

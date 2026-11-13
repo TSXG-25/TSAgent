@@ -25,9 +25,29 @@
 - 浏览器/WebView 输入法、键盘、语言切换的实际操作 → 需真实环境验收。
 - Mock 环境下 `draftStore` 行为已测，HTTP/Tauri 宿主为同一代码路径。
 
+## FE-02 — 统一消息阅读与执行反馈 · 已交付
+
+### 范围
+
+- **共享 Markdown**：`MarkdownText` 升级为共享渲染器（原已支持标题/GFM 表格/链接/列表/围栏代码）——新增 `highlightCode` 轻量 token 高亮（注释/字符串/数字/共享关键字集，非逐语言语法）与 `MdCodeBlock` 复制按钮（copied 反馈 1.4s）。全部经 React 文本节点渲染，模型输出中的 HTML 永不执行（有回归）。复用点：Sun 请求/流式/终态输出、GlobalChat 消息与输出、Venus `.md` 预览（`.txt` 仍纯文本）。
+- **滚动跟随**：新增 `useScrollFollow(viewKey)`——距底 ≤80px 才跟随新内容；向上阅读保持位置并显示「有新内容 · 回到底部」pill；`viewKey` 切换时按 Run 保存/恢复 scrollTop。接入 Sun `omni-thread3`（键 = `viewRun.runId`）与 GlobalChat `chat-thread`（键 = `activeRun.runId`）。
+- **任务顶部条**：Sun 线程顶部 `.task-head3` 显示 StatusBadge + runId + 当前运行中的工作流阶段（`wfSteps` 中 `running` 项的真实名）+ 耗时（createdAt → output/最新事件/now，无虚构百分比）+ `blocked` 时待处理审批数。
+- **ThinkingChain 保留并强化**：完成阶段默认折叠；live/含失败/含待审批行的 seg 保持展开（`attention` 标记）；`task_started` 工具调用按 `p.tool` 归类为文件 📄/搜索 🔍/命令 ⌨ 卡片，未知工具 `other` 原样显示（无假 diff）；`run_failed` 行带 attention 样式，链尾在 `canResume` 时给出真实 `resumeRun` 恢复按钮（resume 是 Service 同 Run 操作，非"重跑"包装）。
+- **GlobalChat**：消息与输出改 `MarkdownText` 渲染；保留纯文本原貌（代码块仍 `<pre>` 等宽）。
+
+### 证据
+
+- `tests/frontendMarkdown.test.ts`（5 项）：token 分类、HTML 不执行（`<script>`/`<b>` 原样成文本）、代码块组件存在、GFM 表格、`toolKind` 归类含 other。
+- `npm test`：89 项 subtest 全绿（含 FE-01 的 6 项）。
+- `test:orbits` / `test:scenes` / `npm run build`：通过。
+
+### 未覆盖（外部验证）
+
+- 滚动跟随/恢复、`MdCodeBlock` 复制、sticky pill 的实际布局与手感 → 浏览器/WebView 实测。
+- `useScrollFollow` 依赖 DOM 测量，Node 回归无法覆盖 → 已有同键草稿测试模式证明 store 正确，滚动属 UI 实测项。
+
 ## 后续批次占位
 
-- FE-02 统一消息阅读与执行反馈 — 未开始
 - FE-03 审批、产物与可发现性 — 未开始
 - FE-05 工作台内容与视觉整合 — 未开始
 - FE-04A/B code-server IDE — 未开始（先做嵌入链路验证）

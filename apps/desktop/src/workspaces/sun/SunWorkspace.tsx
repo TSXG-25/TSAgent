@@ -6,6 +6,7 @@ import { WorkspaceFrame } from "../../design-system/WorkspaceFrame";
 import AgentComposer from "../../app/AgentComposer";
 import { requestIdForRun, StatusBadge, Icon, MarkdownText, statusLabel, stageLabel } from "../../app/ui";
 import { t, tk } from "../../app/i18n";
+import { useScrollFollow } from "../../app/useScrollFollow";
 import type { RunCtx } from "../../app/runCtx";
 import type { ApprovalSummary, DirectoryListing, ParticipantSummary, SessionSummary, WorkspaceSummary } from "../../types/service";
 import { fetchSessionSnapshot, RefreshGate } from "./sessionSnapshot";
@@ -23,6 +24,16 @@ const rel = (iso: string) => {
   if (!iso || Number.isNaN(d)) return "";
   const m = Math.floor(d / 60000);
   return m < 1 ? "刚刚" : m < 60 ? `${m}分钟前` : m < 1440 ? `${Math.floor(m / 60)}小时前` : `${Math.floor(m / 1440)}天前`;
+};
+
+/** task duration — createdAt → durable terminal mark when one exists,
+ *  else latest event timestamp, else now. Event-evidenced only. */
+const dur = (r: { createdAt?: string; output?: { createdAt?: string }; events?: { timestamp?: string }[] }) => {
+  const start = Date.parse(r.createdAt ?? "");
+  if (Number.isNaN(start)) return "";
+  const end = Date.parse(r.output?.createdAt ?? "") || Date.parse(r.events?.slice(-1)[0]?.timestamp ?? "") || Date.now();
+  const s = Math.max(0, Math.round((end - start) / 1000));
+  return s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m${String(s % 60).padStart(2, "0")}s` : `${Math.floor(s / 3600)}h${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}m`;
 };
 
 export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
@@ -209,6 +220,10 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
   const wfSteps = useMemo(() => (viewRun?.workflows ?? []).flatMap((w) => w.stages.map((st) => ({ stage: st.name, wf: w.name, status: st.status, duration: st.duration }))), [viewRun]);
   const activeCount = runs.filter((r) => r.status === "active").length;
   const isBlocked = viewRun?.status === "blocked";
+  const curPhase = wfSteps.find((s) => s.status === "running")?.stage ?? "";
+  // thread scroll-follow keyed by the viewed run — restores its position
+  const thread = useScrollFollow(viewRun?.runId ?? "landing");
+  useEffect(() => { thread.onContentGrow(); });
   const filtered = sessions
     .slice()
     .sort((a, b) => (b.latestUpdatedAt ?? "").localeCompare(a.latestUpdatedAt ?? ""))
@@ -427,7 +442,18 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
           )}
 
           {/* Chat column — request bubble + streamed/final reply */}
-          <div className="omni-thread3">
+          <div className="omni-thread3" onScroll={thread.onScroll} ref={thread.ref}>
+            {/* task head — status / phase / duration / pending action, all
+                sourced from real run + event fields */}
+            {viewRun && (
+              <div className="task-head3">
+                <StatusBadge status={viewRun.status} />
+                <code className="task-run">{viewRun.runId.replace("run-", "#")}</code>
+                {curPhase && <span className="task-phase">{curPhase}</span>}
+                <em className="task-dur">{dur(viewRun)}</em>
+                {isBlocked && approvals.length > 0 && <span className="task-awaiting">{t("task.awaiting", { n: approvals.length })}</span>}
+              </div>
+            )}
             {!viewRun && <OmniLanding />}
             {/* whole-session history — every run contributes its messages,
                 chronological (hydrated runs arrive unordered) */}
@@ -455,7 +481,7 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
                     )}
                   </article>
                 )}
-                <ThinkingChain events={r.events} messages={thinkingMsgs} />
+                <ThinkingChain canResume={r === viewRun && ctx.canResume} events={r.events} messages={thinkingMsgs} onResume={r === viewRun ? ctx.resumeActiveRun : undefined} />
                 {showLive && (
                   <article className="msg3 assistant">
                     <div className="msg3-head"><span>⬡ T.S.A</span><time></time></div>
@@ -508,6 +534,9 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
               </article>
             )}
             {viewRun?.failure && !isBlocked && <article className="msg3 error"><div className="msg3-body">{viewRun.failure.message}</div></article>}
+            {thread.hasNew && (
+              <button className="scroll-pill" onClick={thread.toBottom} type="button">{t("thread.new-content")} ↓</button>
+            )}
           </div>
 
           {workspaceOf(sessionId) && <div className="ws-bound" title={workspaceOf(sessionId)}>📁 {t("sun.bound-to")}: {workspaceOf(sessionId).split("/").pop()}<i onClick={() => setFolder(sessionId, "")}>✕</i></div>}<AgentComposer ctx={{ ...ctx, workspacePath: workspaceOf(sessionId) }} planet="sun" placeholder={t("sun.composer-placeholder")} />

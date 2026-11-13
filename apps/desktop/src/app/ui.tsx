@@ -1,4 +1,4 @@
-import type { ReactElement, ReactNode, SVGProps } from "react";
+import { useState, type ReactElement, type ReactNode, type SVGProps } from "react";
 import type { EventTone, RunStatus, StageStatus } from "../types";
 import { AgentServiceClientError, type ServiceErrorDTO } from "../types/service";
 import { t, type I18nKey } from "./i18n";
@@ -118,6 +118,51 @@ export function stageIcon(status: StageStatus): IconName {
 
 /** Markdown-lite renderer — headings/lists/quote/hr/bold/italic/inline-code/
  *  code-block/links/para, no deps. */
+/** Shared Markdown renderer — lists, GFM tables, links, highlighted code
+ *  blocks with copy feedback. Everything renders as React text nodes so
+ *  model-output HTML is never executed. */
+
+/** Lightweight token highlighter — comments, strings, numbers and a shared
+ *  keyword set (js/ts/py/sh/json). Honest scope: no per-language grammar. */
+const MD_TOK = /(\/\/[^\n]*|#[^\n]*|\/\*[\s\S]*?\*\/)|("(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\.)*`)|(\b\d[\d_]*(?:\.\d+)?\b)|([A-Za-z_$][\w$]*)/g;
+const MD_KW = new Set(
+  ("const let var function return if else for while class new import export from async await try catch finally throw typeof instanceof " +
+   "switch case default break continue extends implements this self null none nil undefined true false " +
+   "def lambda print yield raise with as pass elif is not and or in of do done then fi esac echo eval " +
+   "public private protected static readonly interface type enum struct fn mut pub use mod impl match")
+    .split(" "),
+);
+
+export function highlightCode(code: string): ReactNode[] {
+  const out: ReactNode[] = [];
+  let k = 0; let last = 0;
+  for (const m of code.matchAll(MD_TOK)) {
+    const i = m.index ?? 0;
+    if (i > last) out.push(code.slice(last, i));
+    const cls = m[1] ? "md-tok-com" : m[2] ? "md-tok-str" : m[3] ? "md-tok-num" : MD_KW.has(m[4]) ? "md-tok-kw" : null;
+    out.push(cls ? <span className={cls} key={k++}>{m[0]}</span> : m[0]);
+    last = i + m[0].length;
+  }
+  if (last < code.length) out.push(code.slice(last));
+  return out;
+}
+
+function MdCodeBlock({ lang, code }: { lang: string; code: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <pre className="md-code">
+      {lang && <span className="md-lang">{lang}</span>}
+      <button className="md-copy" onClick={() => {
+        void navigator.clipboard.writeText(code).then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1400);
+        });
+      }} type="button">{copied ? t("common.copied") : t("common.copy")}</button>
+      <code>{highlightCode(code)}</code>
+    </pre>
+  );
+}
+
 export function MarkdownText({ text }: { text: string }) {
   const blocks: ReactNode[] = [];
   const parts = text.split(/```(\w*)\n?([\s\S]*?)```/g);
@@ -125,12 +170,7 @@ export function MarkdownText({ text }: { text: string }) {
     const prose = parts[i];
     if (prose.trim()) blocks.push(<div className="md-body" key={i}>{renderProse(prose)}</div>);
     if (parts[i + 1] !== undefined && parts[i + 2] !== undefined) {
-      blocks.push(
-        <pre className="md-code" key={`c${i}`}>
-          {parts[i + 1] && <span className="md-lang">{parts[i + 1]}</span>}
-          <code>{parts[i + 2]}</code>
-        </pre>
-      );
+      blocks.push(<MdCodeBlock code={parts[i + 2]} key={`c${i}`} lang={parts[i + 1] ?? ""} />);
     }
   }
   return <>{blocks}</>;

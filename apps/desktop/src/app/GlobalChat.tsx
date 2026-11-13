@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { RunCtx } from "./runCtx";
-import { Icon } from "./ui";
+import { Icon, MarkdownText } from "./ui";
+import { useScrollFollow } from "./useScrollFollow";
 import { delegateToPlanet } from "./delegate";
 import { draftKey, useDraft, clearDraft } from "./draftStore";
 import { t } from "./i18n";
@@ -21,7 +22,7 @@ export default function GlobalChat({ ctx, onClose, embedded = false, instant = f
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [delegateTo, setDelegateTo] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
-  const threadRef = useRef<HTMLDivElement>(null);
+  const thread = useScrollFollow(activeRun?.runId ?? "none");
   const composingRef = useRef(false);
   // Draft keyed by the selected target — @direct shares the Sun workspace
   // draft (same tenant/session/target key), @planet gets its own.
@@ -61,9 +62,7 @@ export default function GlobalChat({ ctx, onClose, embedded = false, instant = f
   }, [service]);
 
   useEffect(() => { void refreshSessions(); }, [refreshSessions]);
-  useEffect(() => {
-    threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight });
-  }, [activeRun?.conversation.length]);
+  useEffect(() => { thread.onContentGrow(); }, [activeRun?.conversation.length, activeRun?.output]);
   useEffect(() => {
     if (!pickerOpen) return;
     const onDown = (e: MouseEvent) => { if (!pickerRef.current?.contains(e.target as Node)) setPickerOpen(false); };
@@ -147,18 +146,21 @@ export default function GlobalChat({ ctx, onClose, embedded = false, instant = f
         {!embedded && <button className="modal-close" onClick={() => onClose?.()} type="button"><Icon name="x" size={15} /></button>}
       </header>
 
-      <div className="chat-thread" ref={threadRef}>
+      <div className="chat-thread" onScroll={thread.onScroll} ref={thread.ref}>
         {(activeRun?.conversation ?? []).map((m) => (
           <article className={`mc-msg ${m.role}`} key={m.messageId}>
             <div className="mc-msg-head"><span>{m.role === "user" ? t("chat.you") : "T.S.A"}</span><time>{m.at}</time></div>
-            <div className="mc-msg-body">{m.content}</div>
+            <div className="mc-msg-body"><MarkdownText text={m.content} /></div>
           </article>
         ))}
         {activeRun?.output && (
           <article className="mc-msg assistant out">
             <div className="mc-msg-head"><span>T.S.A · {t("chat.output")}</span><time>{activeRun.output.createdAt}</time></div>
-            <div className="mc-msg-body">{activeRun?.output.text}</div>
+            <div className="mc-msg-body"><MarkdownText text={activeRun.output.text} /></div>
           </article>
+        )}
+        {thread.hasNew && (
+          <button className="scroll-pill" onClick={thread.toBottom} type="button">{t("thread.new-content")} ↓</button>
         )}
       </div>
 

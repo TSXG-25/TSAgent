@@ -4192,6 +4192,28 @@ ol.md-list li::marker { color: var(--planet-accent); font-family: var(--font-mon
 .ac-approval { flex: 0 0 auto; font-family: var(--font-mono); font-size: 10px; letter-spacing: .08em; color: #ffb454; }
 .ac-approval::before { content: "●"; margin-right: 5px; animation: pulse-dot 1.4s ease-in-out infinite; }
 
+/* FE-02 — shared markdown: token colours + copy affordance */
+.md-tok-kw { color: #c792ea; }
+.md-tok-str { color: #9ece6a; }
+.md-tok-num { color: #ff9e64; }
+.md-tok-com { color: var(--text-faint); font-style: italic; }
+.md-copy { position: absolute; top: 6px; right: 6px; padding: 2px 8px; background: rgba(255,255,255,.08); border: 0.5px solid rgba(255,255,255,.14); border-radius: 4px; color: var(--text-muted); font-size: 10px; cursor: pointer; opacity: 0; transition: opacity .15s; }
+.md-code { position: relative; }
+.md-code:hover .md-copy { opacity: 1; }
+
+/* scroll-follow pill — sits at the foot of a scrolled thread */
+.scroll-pill { position: sticky; bottom: 10px; display: block; margin: 6px auto 2px; padding: 5px 14px; background: rgba(22,28,40,.94); border: 0.5px solid var(--planet-accent); border-radius: 999px; color: var(--planet-accent); font-size: 11px; cursor: pointer; box-shadow: 0 6px 18px rgba(0,0,0,.4); z-index: 5; }
+
+/* task head strip — real status / phase / duration / pending-action */
+.task-head3 { display: flex; align-items: center; gap: 10px; padding: 7px 10px; margin-bottom: 6px; border: 0.5px solid var(--border-base); border-radius: 8px; background: var(--surface-1, rgba(255,255,255,.03)); position: sticky; top: 0; z-index: 4; }
+.task-head3 .task-run { font-size: 11px; color: var(--text-faint); }
+.task-head3 .task-phase { font-size: 11px; color: var(--text-muted); }
+.task-head3 .task-dur { margin-left: auto; font-style: normal; font-family: var(--font-mono); font-size: 11px; color: var(--text-faint); }
+.task-head3 .task-awaiting { font-size: 10.5px; color: #ffb454; font-family: var(--font-mono); }
+.think-seg.attention > summary, .think-row.attention { color: #ffb454; }
+.think-kind { flex: 0 0 auto; font-size: 11px; opacity: .85; }
+.think-resume { margin-top: 6px; }
+
 /* text-only composer controls — no pills; + anchored far left */
 .ac-tools { gap: 14px; }
 .ac-attach {

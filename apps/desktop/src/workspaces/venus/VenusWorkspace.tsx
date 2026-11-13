@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { SCENES } from "../../app/scenes";
 import { WorkspaceFrame } from "../../design-system/WorkspaceFrame";
 import AgentComposer from "../../app/AgentComposer";
+import { MarkdownText } from "../../app/ui";
 import type { RunCtx } from "../../app/runCtx";
 
 /** Muse per hand-drawn spec §4 — File rail + style.md prefs | work preview +
@@ -72,7 +73,11 @@ export default function VenusWorkspace({ ctx }: { ctx: RunCtx }) {
                     {content.result === "missing" ? "file missing" : content.result === "unsupported" ? "unsupported format" : `preview failed: ${content.text}`}
                   </p>
                 )}
-                <pre>{content ? content.text : "…"}</pre>
+                {content
+                  ? (/\.md$/i.test(cur.artifact.path)
+                    ? <div className="muse-md"><MarkdownText text={content.text} /></div>
+                    : <pre>{content.text}</pre>)
+                  : <pre>…</pre>}
               </div>
             </>
           ) : <div className="empty-state"><p>Select a work</p></div>}

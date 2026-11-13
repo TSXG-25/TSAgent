@@ -3,6 +3,7 @@ import { SCENES } from "../../app/scenes";
 import { WorkspaceFrame } from "../../design-system/WorkspaceFrame";
 import AgentComposer from "../../app/AgentComposer";
 import { requestIdForRun } from "../../app/ui";
+import { t } from "../../app/i18n";
 import type { RunCtx } from "../../app/runCtx";
 import type { ScheduleSummary } from "../../types/service";
 
@@ -10,7 +11,7 @@ import type { ScheduleSummary } from "../../types/service";
  *  today's report | AgentComposer. */
 export default function SaturnWorkspace({ ctx }: { ctx: RunCtx }) {
   const { service } = ctx;
-  const scene = SCENES[6];
+    const scene = SCENES[6];
   const [schedules, setSchedules] = useState<ScheduleSummary[]>([]);
   const [sel, setSel] = useState<ScheduleSummary | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -78,12 +79,18 @@ export default function SaturnWorkspace({ ctx }: { ctx: RunCtx }) {
               <div className="ven-meta"><span>task</span><code>{sel.requestText}</code></div>
               <div className="ven-meta"><span>周期</span><code>{sel.intervalSeconds}s</code></div>
               <div className="ven-meta"><span>目标</span><code>@{sel.targetPlanet}</code></div>
+              <div className="ven-meta"><span>{t("saturn.next-fire")}</span><code>{sel.nextFireAt ? sel.nextFireAt.slice(0, 19).replace("T", " ") : "—"}</code></div>
+              {sel.lastRunId && (
+                <div className="ven-meta"><span>{t("saturn.last-run")}</span>
+                  <button className="ven-link" onClick={() => void ctx.controller.refreshRun(sel.lastRunId, ctx.sessionId).then(() => ctx.openRun(sel.lastRunId)).catch((e) => setErr(String(e)))} type="button">{sel.lastRunId}</button>
+                </div>
+              )}
               <button className="btn secondary" onClick={() => void toggle(sel)} type="button">{sel.status === "ACTIVE" ? "暂停" : "恢复"}</button>
             </div>
           ) : <p className="omni-empty">点卡片设置任务（周期/目标）</p>}
           {err && <p className="omni-empty" style={{ color: "var(--st-danger,#ff5a4f)" }}>{err}</p>}
           <AgentComposer ctx={ctx} planet="saturn" placeholder="新计划 — 描述周期任务…" />
-          <div className="ws-statusbar"><span className="sys-ok">● ONLINE</span><span>{schedules.filter((x) => x.status === "ACTIVE").length} ACTIVE</span><span>{schedules.length} SCHEDULES</span><span className="right">saturn</span></div>
+          <div className="ws-statusbar"><span>{schedules.filter((x) => x.status === "ACTIVE").length} ACTIVE</span><span>{schedules.length} SCHEDULES</span><span className="right">saturn</span></div>
         </aside>
       </div>
     </WorkspaceFrame>

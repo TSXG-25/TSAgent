@@ -72,6 +72,28 @@
 - TaskTray/审批卡/产物预览/Switcher 搜索的真实交互与布局 → 浏览器实测。
 - `readArtifact`/`revealPath` 在 HTTP/Tauri 宿主下的实际行为已沿用既有合同，未改 wire。
 
-## 后续批次占位
+## FE-05 — 工作台内容与视觉整合 · 已交付
 
-- FE-05 工作台内容与视觉整合 — 未开始
+### 范围
+
+- **去除假状态**：移除全部 10 处固定 `● ONLINE`/`● SYSTEM ONLINE`（earth/jupiter/mars/mercury/neptune/pluto/saturn/sun/uranus/venus），保留真实计数；`.sys-ok` 样式不再被任何工作台引用。
+- **Mercury**：搜索结果来源 URL 恢复真实导航（`target="_blank" rel="noreferrer"`），原先 `preventDefault` 使来源链接是死链。
+- **Earth**：裁决表单上方新增「已提交参数（被评价 Run）」与「当前滑块」两行——前者由 `parseRunParams(activeRun.request)` 反解（单一事实源，A23 修正的同一口径），后者为当前滑块值；两组参数的可区分性可视化。
+- **Jupiter**：forget 成功后显示反馈文案并清除失效选中项；选中 artifact 时提供「预览」按钮走 `readArtifact`（sessionId/runId/artifactId 取自记录自身），切换选中项时清空预览。
+- **Saturn**：任务详情新增「下次触发」（`nextFireAt`）与「最近执行」（`lastRunId` → 刷新并跳转所属 Run）；暂停态沿用 `chron-card.paused` 真实状态类。
+- **Uranus**：节点执行状态的 `runId` 改为可点击链接——`refreshRun`（使用 step 自带的 `sessionId`，支持跨会话子 Run）后 `openRun`；`SKIPPED`/`FAILED_*` 状态文本照旧原样显示（合同即失败/跳过原因）。
+- **Neptune**：画布底部新增产物元信息行（`kind`·`size` + Run 跳转链接）；空态/二进制提示本地化。
+- **Pluto**：已裁决母题显示「已收录进记忆」+ `resolutionRunId` 跳转链接（收录证据）。
+- **弹层行为**：Sun 三类弹层（文件夹浏览/工作区编辑/通用对话框）统一 Escape 关闭 + 关闭后焦点还原到触发控件（原先仅 mask 点击/输入框内 Escape）。
+- **可访问性**：新增 `.ven-link`（按钮式链接，`:focus-visible` 有焦点环）；新交互均为原生 button。
+
+### 证据
+
+- `npm run typecheck` 通过；`npm test` 91 项 subtest 全绿（无新增回归——改动为展示层与既有合同消费）。
+- `test:orbits`/`test:scenes`/`npm run build` 通过。
+
+### 未覆盖（外部验证）
+
+- 十个工作台在浏览器/WebView 的实际布局、焦点可见性、Escape 交互与 zh/en 切换覆盖 → 浏览器实测。
+- Mercury `target="_blank"` 在 Tauri WKWebView 下打开外部浏览器的行为 → macOS 实测。
+- Mars 工作台维持现有 textarea 编辑器（FE-04 未进行，见阻塞记录）。

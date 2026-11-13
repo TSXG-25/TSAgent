@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { SCENES } from "../../app/scenes";
 import { WorkspaceFrame, CapNotInstalled } from "../../design-system/WorkspaceFrame";
 import { requestIdForRun } from "../../app/ui";
+import { t } from "../../app/i18n";
 import { accessRows } from "./jupiterAccess";
 import type { RunCtx } from "../../app/runCtx";
 import type { FactRecordSummary, HistoryEntry, JupiterArtifactSummary } from "../../types/service";
@@ -10,7 +11,7 @@ import type { FactRecordSummary, HistoryEntry, JupiterArtifactSummary } from "..
  *  inspector + knowledge graph toggle. Real listFacts/searchArtifacts. */
 export default function JupiterWorkspace({ ctx }: { ctx: RunCtx }) {
   const { service } = ctx;
-  const scene = SCENES[5];
+    const scene = SCENES[5];
   const [tab, setTab] = useState<"memory" | "file" | "history">("memory");
   const [cloud, setCloud] = useState(true);
   const [facts, setFacts] = useState<FactRecordSummary[]>([]);
@@ -19,8 +20,11 @@ export default function JupiterWorkspace({ ctx }: { ctx: RunCtx }) {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [q, setQ] = useState("");
   const [err, setErr] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
 
   const req = useCallback(() => ({ tenantId: service.identity.tenantId, sessionId: service.identity.sessionId, requestId: requestIdForRun(0) }), [service]);
+  useEffect(() => setPreview(null), [sel]);
   useEffect(() => {
     service.listFacts(req()).then(setFacts).catch(() => setFacts([]));
     service.searchArtifacts({ ...req(), query: "", allSessions: true }).then(setFiles).catch((e) => setErr(String(e)));
@@ -60,7 +64,7 @@ export default function JupiterWorkspace({ ctx }: { ctx: RunCtx }) {
                 {!cloud && facts.filter((f) => !q || `${f.category}${f.key}`.includes(q)).map((f) => (
                   <span className={`jup-row ${sel === f ? "on" : ""}`} key={f.category + ":" + f.key} onClick={() => setSel(f)}>
                     <strong>{f.category}:{f.key}</strong><small>{f.value.slice(0, 40)}</small>
-                    <i className="jup-forget" title={`forget ${f.category}:${f.key} in scope ${f.scope} — removes this governed fact only; ReMe long-term memory is unaffected`} onClick={(e) => { e.stopPropagation(); void service.forgetFact({ ...req(), category: f.category, key: f.key, scope: f.scope }).then(() => service.listFacts(req()).then(setFacts)).catch((x) => setErr(String(x))); }}>✕</i>
+                    <i className="jup-forget" title={`forget ${f.category}:${f.key} in scope ${f.scope} — removes this governed fact only; ReMe long-term memory is unaffected`} onClick={(e) => { e.stopPropagation(); void service.forgetFact({ ...req(), category: f.category, key: f.key, scope: f.scope }).then(() => service.listFacts(req()).then(setFacts)).then(() => { setNotice(t("jupiter.forgot")); if (sel === f) setSel(null); }).catch((x) => setErr(String(x))); }}>✕</i>
                   </span>
                 ))}
                 {!cloud && facts.length === 0 && <p className="omni-empty">No governed facts.</p>}
@@ -98,13 +102,24 @@ export default function JupiterWorkspace({ ctx }: { ctx: RunCtx }) {
                   <div className="jup-perm" key={row.label}><span>{row.label}</span><code>{row.value}</code></div>
                 ))}
                 <pre className="jup-detail">{JSON.stringify(sel, null, 2).slice(0, 900)}</pre>
+                {"artifactId" in sel && (
+                  <>
+                    <button className="btn secondary" onClick={() => {
+                      const a = sel as JupiterArtifactSummary;
+                      void service.readArtifact({ tenantId: service.identity.tenantId, sessionId: a.sessionId, runId: a.runId, artifactId: a.artifactId })
+                        .then((c) => setPreview(c.result === "ok" ? c.text.slice(0, 1200) : c.result)).catch((e) => setPreview(String(e instanceof Error ? e.message : e)));
+                    }} type="button">预览</button>
+                    {preview && <pre className="jup-detail">{preview}</pre>}
+                  </>
+                )}
               </>
             ) : <p className="omni-empty">Select an item</p>}
             <CapNotInstalled what="Knowledge graph toggle" />
+            {notice && <p className="omni-empty">{notice}</p>}
             {err && <p className="omni-empty" style={{ color: "var(--st-danger,#ff5a4f)" }}>{err}</p>}
           </aside>
         </div>
-        <div className="ws-statusbar"><span className="sys-ok">● ONLINE</span><span>{facts.length} FACTS</span><span>{files.length} ARTIFACTS</span><span className="right">jupiter</span></div>
+        <div className="ws-statusbar"><span>{facts.length} FACTS</span><span>{files.length} ARTIFACTS</span><span className="right">jupiter</span></div>
       </div>
     </WorkspaceFrame>
   );

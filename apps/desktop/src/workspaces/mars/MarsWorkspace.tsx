@@ -119,7 +119,7 @@ export default function MarsWorkspace({ ctx }: { ctx: RunCtx }) {
           {activeRun && <div className="forge-status"><StatusBadge status={activeRun.status} /><code>{activeRun.runId}</code></div>}
           <div className="forge-ctl-hint">Controls / Agent Actions</div>
           <AgentComposer ctx={ctx} planet="mars" placeholder="Task for Forge…" />
-          <div className="ws-statusbar"><span className="sys-ok">● ONLINE</span><span>{files.length} FILES</span><span>{mode.toUpperCase()}</span><span className="right">mars</span></div>
+          <div className="ws-statusbar"><span>{files.length} FILES</span><span>{mode.toUpperCase()}</span><span className="right">mars</span></div>
         </aside>
       </div>
     </WorkspaceFrame>

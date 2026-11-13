@@ -3,6 +3,7 @@ import { SCENES } from "../../app/scenes";
 import { WorkspaceFrame } from "../../design-system/WorkspaceFrame";
 import { requestIdForRun } from "../../app/ui";
 import AgentComposer from "../../app/AgentComposer";
+import { t } from "../../app/i18n";
 import type { RunCtx } from "../../app/runCtx";
 import type { MotifSummary } from "../../types/service";
 
@@ -12,7 +13,7 @@ const TAG: Record<string, string> = { open: "待探索", exploring: "探索中",
 
 export default function PlutoWorkspace({ ctx }: { ctx: RunCtx }) {
   const { service } = ctx;
-  const scene = SCENES[9];
+    const scene = SCENES[9];
   const [motifs, setMotifs] = useState<MotifSummary[]>([]);
   const [sel, setSel] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
@@ -126,6 +127,12 @@ export default function PlutoWorkspace({ ctx }: { ctx: RunCtx }) {
                 <div className="ven-meta"><span>status</span><code>{TAG[cur.status]}</code></div>
                 {cur.assignedTaskId && <div className="ven-meta"><span>task</span><code>{cur.assignedTaskId}</code></div>}
                 {cur.resolution && <div className="gen-answer"><h4>汇报（含做了什么）</h4><p>{cur.resolution}</p></div>}
+                {cur.status === "resolved" && (
+                  <div className="gen-ingested">
+                    <span>{t("pluto.ingested")}</span>
+                    {cur.resolutionRunId && <button className="ven-link" onClick={() => ctx.openRun(cur.resolutionRunId)} title={t("pluto.resolution-run")} type="button">{cur.resolutionRunId}</button>}
+                  </div>
+                )}
               </div>
               <div className="gen-judge">
                 {cur.status === "open" && (
@@ -141,7 +148,7 @@ export default function PlutoWorkspace({ ctx }: { ctx: RunCtx }) {
           ) : <div className="empty-state"><p>Select a motif</p></div>}
           {err && <p className="omni-empty" style={{ color: "var(--st-danger,#ff5a4f)" }}>{err}</p>}
           <AgentComposer ctx={ctx} planet="pluto" placeholder="对当前母题补充指令…" />
-          <div className="ws-statusbar"><span className="sys-ok">● ONLINE</span><span>{motifs.length} MOTIFS</span><span>{motifs.filter((m) => m.status === "resolved").length} RESOLVED</span><span className="right">pluto</span></div>
+          <div className="ws-statusbar"><span>{motifs.length} MOTIFS</span><span>{motifs.filter((m) => m.status === "resolved").length} RESOLVED</span><span className="right">pluto</span></div>
         </main>
       </div>
     </WorkspaceFrame>

@@ -3,6 +3,7 @@ import { SCENES } from "../../app/scenes";
 import { WorkspaceFrame } from "../../design-system/WorkspaceFrame";
 import AgentComposer from "../../app/AgentComposer";
 import { requestIdForRun } from "../../app/ui";
+import { t } from "../../app/i18n";
 import type { RunCtx } from "../../app/runCtx";
 import type { GraphRunStepSummary, ProfileSummary, SkillSummary, WorkflowGraphSummary } from "../../types/service";
 
@@ -12,7 +13,7 @@ const ELEMS = ["read_file", "web_search", "llm", "write_file", "approval", "cond
 
 export default function UranusWorkspace({ ctx }: { ctx: RunCtx }) {
   const { service } = ctx;
-  const scene = SCENES[7];
+    const scene = SCENES[7];
   const [profiles, setProfiles] = useState<ProfileSummary[]>([]);
   const [skills, setSkills] = useState<SkillSummary[]>([]);
   const [graphs, setGraphs] = useState<WorkflowGraphSummary[]>([]);
@@ -91,7 +92,10 @@ export default function UranusWorkspace({ ctx }: { ctx: RunCtx }) {
               {lastSteps.map((s) => (
                 <div className="lab-graph-row" key={s.nodeId}>
                   <strong>{s.nodeId}</strong>
-                  <small>{s.status || "PENDING"}{s.runId ? ` · ${s.runId}` : ""}</small>
+                  <small>{s.status || "PENDING"}</small>
+                  {s.runId && (
+                    <button className="ven-link" onClick={() => void ctx.controller.refreshRun(s.runId, s.sessionId || ctx.sessionId).then(() => ctx.openRun(s.runId)).catch((e) => setErr(String(e)))} title={t("uranus.goto-run")} type="button">→ {s.runId}</button>
+                  )}
                 </div>
               ))}
             </div>
@@ -102,7 +106,7 @@ export default function UranusWorkspace({ ctx }: { ctx: RunCtx }) {
           <h4 className="ws-mod">profiles</h4>
           {profiles.map((p) => <div className="lab-graph-row" key={p.profileId}><strong>{p.displayName || p.profileId}</strong><small>@{p.planetAffinity} · {p.skillRefs.length} skills</small></div>)}
           <AgentComposer ctx={ctx} planet="uranus" placeholder="Task for Lab…" />
-          <div className="ws-statusbar"><span className="sys-ok">● ONLINE</span><span>{graphs.length} GRAPHS</span><span>{profiles.length} PROFILES</span><span className="right">uranus</span></div>
+          <div className="ws-statusbar"><span>{graphs.length} GRAPHS</span><span>{profiles.length} PROFILES</span><span className="right">uranus</span></div>
         </aside>
       </div>
     </WorkspaceFrame>

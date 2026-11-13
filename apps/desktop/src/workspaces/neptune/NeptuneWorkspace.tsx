@@ -5,6 +5,7 @@ import AgentComposer from "../../app/AgentComposer";
 import { delegateToPlanet } from "../../app/delegate";
 import { mediaDelegationRequest } from "./neptuneOps";
 import { CapNotInstalled } from "../../design-system/WorkspaceFrame";
+import { t } from "../../app/i18n";
 import type { RunCtx } from "../../app/runCtx";
 
 /** Media Studio per hand-drawn spec §10 — type tabs (图像/视频/3D/预览) |
@@ -14,7 +15,7 @@ const KINDS = { "图像": /\.(svg|png|jpe?g|gif)$/i, "视频": /\.(mp4|webm)$/i,
 
 export default function NeptuneWorkspace({ ctx }: { ctx: RunCtx }) {
   const { runs, service } = ctx;
-  const scene = SCENES[8];
+    const scene = SCENES[8];
   const [tab, setTab] = useState<keyof typeof KINDS>("图像");
   const [sel, setSel] = useState<string | null>(null);
   const [op, setOp] = useState<{ ok: boolean; text: string } | null>(null);
@@ -58,8 +59,13 @@ export default function NeptuneWorkspace({ ctx }: { ctx: RunCtx }) {
                         : <img alt={cur.artifact.path.split("/").pop()} src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(content.text)}`} />
                       : <p className="omni-empty">…</p>}
                   </div>
-                : <div className="empty-state"><p>{cur.artifact.path.split("/").pop()}</p><p className="omni-empty">{cur.artifact.size} — 二进制预览待接入</p></div>
-            ) : <div className="empty-state"><p>还没有 {tab} 产物</p></div>}
+                : <div className="empty-state"><p>{cur.artifact.path.split("/").pop()}</p><p className="omni-empty">{cur.artifact.size} — {t("nep.binary-pending")}</p></div>
+            ) : <div className="empty-state"><p>{t("nep.no-artifacts", { type: tab })}</p></div>}
+            {cur && (
+              <div className="ven-meta media-meta"><span>{cur.artifact.kind} · {cur.artifact.size}</span>
+                <button className="ven-link" onClick={() => ctx.openRun(cur.run.runId)} title={t("uranus.goto-run")} type="button">{cur.run.runId}</button>
+              </div>
+            )}
           </div>
           <AgentComposer ctx={ctx} planet="neptune" placeholder="生成指令 — @neptune 出图…" />
         </div>
@@ -83,7 +89,7 @@ export default function NeptuneWorkspace({ ctx }: { ctx: RunCtx }) {
             </>
           )}
           <CapNotInstalled what="生成/编辑能力" />
-          <div className="ws-statusbar"><span className="sys-ok">● ONLINE</span><span>{visible.length} ITEMS</span><span>{tab}</span><span className="right">neptune</span></div>
+          <div className="ws-statusbar"><span>{visible.length} ITEMS</span><span>{tab}</span><span className="right">neptune</span></div>
         </aside>
       </div>
     </WorkspaceFrame>

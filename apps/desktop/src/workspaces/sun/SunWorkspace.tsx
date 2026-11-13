@@ -121,6 +121,18 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
   const [showReason, setShowReason] = useState(false);
   const [artPreview, setArtPreview] = useState<{ id: string; text: string; stale: boolean; result: string } | null>(null);
 
+  // 弹层统一行为 — Escape 关闭任意弹层，关闭后焦点还原到触发控件。
+  const anyDlg = browse !== null || editWs !== null || dlg !== null;
+  useEffect(() => {
+    if (!anyDlg) return;
+    const prev = document.activeElement as HTMLElement | null;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { setBrowse(null); setEditWs(null); setDlg(null); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => { window.removeEventListener("keydown", onKey); prev?.focus?.(); };
+  }, [anyDlg]);
+
   const sessionIdRef = useRef(sessionId);
   useEffect(() => { sessionIdRef.current = sessionId; }, [sessionId]);
   const runsRef = useRef(runs);
@@ -587,7 +599,6 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
 
           {/* status footer — real counts */}
           <footer className="omni-statusbar">
-            <span className="sys-ok">● SYSTEM ONLINE</span>
             <span>{t("footer.running", { n: activeCount })} · {t("footer.waiting", { n: runs.filter((r) => r.status === "blocked").length })}</span>
             <span>{t("footer.pending-approval", { n: approvals.length })}</span>
             <span className="omni-status-right" title={participants.map((x) => `${x.role}:${x.participantId}`).join(" ") + (participants.length ? " · " : "") + sessionId}>{participants.length > 0 ? `👥 ${participants.map((x) => `${x.role}:${x.participantId.slice(0,12)}`).join(" ")} · ` : ""}{sessionId}</span>

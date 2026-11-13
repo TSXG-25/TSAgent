@@ -84,7 +84,7 @@ export default function MercuryWorkspace({ ctx }: { ctx: RunCtx }) {
                   {v.source ? (
                     <>
                       <strong>{String(v.source.title ?? "Source")}</strong>
-                      <a href={String(v.source.url ?? "#")} onClick={(e) => e.preventDefault()}>{String(v.source.url ?? "")}</a>
+                      <a href={String(v.source.url ?? "#")} rel="noreferrer" target="_blank">{String(v.source.url ?? "")}</a>
                       <p>{String(v.source.snippet ?? v.content?.slice(0, 240) ?? "")}</p>
                     </>
                   ) : (
@@ -122,7 +122,7 @@ export default function MercuryWorkspace({ ctx }: { ctx: RunCtx }) {
             <button className="btn danger" disabled={!search.running} onClick={() => search.stop()} type="button">■ Stop</button>
             <CapNotInstalled what="Browser takeover / screenshots / clicks" />
           </section>
-          <div className="ws-statusbar"><span className="sys-ok">● ONLINE</span><span>{search.panes.length} VIEWS</span><span>{steps.length} ACTIONS</span><span className="right">mercury</span></div>
+          <div className="ws-statusbar"><span>{search.panes.length} VIEWS</span><span>{steps.length} ACTIONS</span><span className="right">mercury</span></div>
         </aside>
       </div>
     </WorkspaceFrame>

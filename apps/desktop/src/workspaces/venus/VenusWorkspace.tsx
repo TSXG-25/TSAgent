@@ -101,7 +101,7 @@ export default function VenusWorkspace({ ctx }: { ctx: RunCtx }) {
               ? `Preset ${VENUS_PRESETS.find((p) => p.id === applied)?.name} and style.md ride the next generation request.`
               : "style.md rides the next generation request; pick a preset to include it."}</p>
           </div>
-          <div className="ws-statusbar"><span className="sys-ok">● ONLINE</span><span>{docs.length} FILES</span><span>{applied ? `STYLE: ${applied.toUpperCase()}` : "NO STYLE"}</span><span className="right">venus</span></div>
+          <div className="ws-statusbar"><span>{docs.length} FILES</span><span>{applied ? `STYLE: ${applied.toUpperCase()}` : "NO STYLE"}</span><span className="right">venus</span></div>
         </aside>
       </div>
     </WorkspaceFrame>

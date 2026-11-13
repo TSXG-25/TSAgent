@@ -3,6 +3,7 @@ import { SCENES } from "../../app/scenes";
 import { WorkspaceFrame } from "../../design-system/WorkspaceFrame";
 import AgentComposer from "../../app/AgentComposer";
 import { requestIdForRun } from "../../app/ui";
+import { t } from "../../app/i18n";
 import type { RunCtx } from "../../app/runCtx";
 import type { EvaluationSummary, EvaluationVerdict } from "../../types/service";
 import { EARTH_PARAMS, EARTH_VERDICTS, buildEvalRequest, composerContext, defaultParamValues, parseRunParams } from "./earthEvalForm";
@@ -12,7 +13,7 @@ import { EARTH_PARAMS, EARTH_VERDICTS, buildEvalRequest, composerContext, defaul
  *  Computational analogy — not real physiology. */
 
 export default function EarthWorkspace({ ctx }: { ctx: RunCtx }) {
-  const scene = SCENES[3];
+    const scene = SCENES[3];
   const [vals, setVals] = useState<Record<string, number>>(defaultParamValues);
   const [evals, setEvals] = useState<EvaluationSummary[]>([]);
   const [verdict, setVerdict] = useState<EvaluationVerdict>("keep_candidate");
@@ -74,6 +75,17 @@ export default function EarthWorkspace({ ctx }: { ctx: RunCtx }) {
           <AgentComposer ctx={ctx} planet="earth" placeholder="模拟场景 — 调整参数后描述实验…" contextPrefix={composerContext(vals)} />
           <section className="lab-eval">
             <div className="ws-mod">实验记录 <em>{evals.length} 次裁决</em></div>
+            {(() => {
+              const snap = parseRunParams(ctx.activeRun?.request ?? "") ?? {};
+              const keys = Object.keys(snap);
+              return keys.length > 0 ? (
+                <div className="lab-snapshot">
+                  <span>{t("earth.submitted-params")}</span>
+                  <code>{keys.map((k) => `${k}=${snap[k]}`).join(" ")}</code>
+                </div>
+              ) : null;
+            })()}
+            <div className="lab-snapshot lab-snapshot-cur"><span>{t("earth.current-params")}</span><code>{Object.keys(vals).map((k) => `${k}=${vals[k]}`).join(" ")}</code></div>
             <div className="lab-eval-form">
               <select onChange={(e) => setVerdict(e.target.value as EvaluationVerdict)} value={verdict}>
                 {EARTH_VERDICTS.map((v) => <option key={v} value={v}>{v}</option>)}
@@ -88,7 +100,7 @@ export default function EarthWorkspace({ ctx }: { ctx: RunCtx }) {
               </div>
             ))}
           </section>
-          <div className="ws-statusbar"><span className="sys-ok">● ONLINE</span><span>{EARTH_PARAMS.length} PARAMS</span><span>{evals.length} EVALS</span><span className="right">earth</span></div>
+          <div className="ws-statusbar"><span>{EARTH_PARAMS.length} PARAMS</span><span>{evals.length} EVALS</span><span className="right">earth</span></div>
         </main>
         <aside className="lab-rail">{right.map(slider)}</aside>
       </div>

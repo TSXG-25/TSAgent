@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { SCENES } from "../../app/scenes";
 import { WorkspaceFrame, CapNotInstalled } from "../../design-system/WorkspaceFrame";
 import { requestIdForRun } from "../../app/ui";
+import { accessRows } from "./jupiterAccess";
 import type { RunCtx } from "../../app/runCtx";
 import type { FactRecordSummary, HistoryEntry, JupiterArtifactSummary } from "../../types/service";
 
@@ -92,9 +93,9 @@ export default function JupiterWorkspace({ ctx }: { ctx: RunCtx }) {
             <h4 className="ws-mod">Access <em>grouping</em></h4>
             {sel ? (
               <>
-                <div className="jup-perm"><span>read</span><code>✓</code></div>
-                <div className="jup-perm"><span>write</span><code>✓</code></div>
-                <div className="jup-perm"><span>execute</span><code>—</code></div>
+                {accessRows(sel).map((row) => (
+                  <div className="jup-perm" key={row.label}><span>{row.label}</span><code>{row.value}</code></div>
+                ))}
                 <pre className="jup-detail">{JSON.stringify(sel, null, 2).slice(0, 900)}</pre>
               </>
             ) : <p className="omni-empty">Select an item</p>}

@@ -3,6 +3,7 @@ import { SCENES } from "../../app/scenes";
 import { WorkspaceFrame } from "../../design-system/WorkspaceFrame";
 import AgentComposer from "../../app/AgentComposer";
 import { delegateToPlanet } from "../../app/delegate";
+import { mediaDelegationRequest } from "./neptuneOps";
 import { CapNotInstalled } from "../../design-system/WorkspaceFrame";
 import type { RunCtx } from "../../app/runCtx";
 
@@ -16,6 +17,7 @@ export default function NeptuneWorkspace({ ctx }: { ctx: RunCtx }) {
   const scene = SCENES[8];
   const [tab, setTab] = useState<keyof typeof KINDS>("图像");
   const [sel, setSel] = useState<string | null>(null);
+  const [op, setOp] = useState<{ ok: boolean; text: string } | null>(null);
 
   const media = useMemo(() => runs.flatMap((r) => r.artifacts.filter((a) => MEDIA.test(a.path)).map((a) => ({ run: r, artifact: a }))), [runs]);
   const visible = media.filter((m) => KINDS[tab].test(m.artifact.path));
@@ -70,7 +72,15 @@ export default function NeptuneWorkspace({ ctx }: { ctx: RunCtx }) {
           ))}
           <h4 className="ws-mod">偏好</h4>
           {cur && (
-            <button className="btn secondary" onClick={() => void delegateToPlanet(ctx, "neptune", `将 ${cur.artifact.path} 渲染为 MP4 视频并保存到 output/`)} type="button">▶ 渲染 MP4</button>
+            <>
+              <button className="btn secondary" onClick={() => {
+                setOp(null);
+                void delegateToPlanet(ctx, "neptune", mediaDelegationRequest(cur.artifact.path, cur.run.runId))
+                  .then(() => setOp({ ok: true, text: "委派已发送 — 结果见运行记录" }))
+                  .catch((e) => setOp({ ok: false, text: String(e instanceof Error ? e.message : e) }));
+              }} type="button">▶ 委派渲染 MP4</button>
+              {op && <p className="omni-empty">{op.text}</p>}
+            </>
           )}
           <CapNotInstalled what="生成/编辑能力" />
           <div className="ws-statusbar"><span className="sys-ok">● ONLINE</span><span>{visible.length} ITEMS</span><span>{tab}</span><span className="right">neptune</span></div>

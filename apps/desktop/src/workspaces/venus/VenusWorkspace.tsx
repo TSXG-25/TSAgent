@@ -5,13 +5,9 @@ import AgentComposer from "../../app/AgentComposer";
 import type { RunCtx } from "../../app/runCtx";
 
 /** Muse per hand-drawn spec §4 — File rail + style.md prefs | work preview +
- *  composer | style preset gallery + recommendation. */
-const PRESETS = [
-  { id: "brutalist", name: "Brutalist", swatch: "#4a4f57" },
-  { id: "editorial", name: "Editorial", swatch: "#d1b57c" },
-  { id: "tech-doc", name: "Tech Doc", swatch: "#3a6ae0" },
-  { id: "minimal", name: "Minimal", swatch: "#8a8f98" },
-];
+ *  composer | style preset gallery.  Style + preset ride the real
+ *  generation request via AgentComposer contextPrefix. */
+import { VENUS_PRESETS, styleContext } from "./venusStyle";
 
 export default function VenusWorkspace({ ctx }: { ctx: RunCtx }) {
   const { runs, service } = ctx;
@@ -80,14 +76,14 @@ export default function VenusWorkspace({ ctx }: { ctx: RunCtx }) {
               </div>
             </>
           ) : <div className="empty-state"><p>Select a work</p></div>}
-          <AgentComposer ctx={ctx} planet="venus" placeholder="创作指令 — @venus 生成版本…" />
+          <AgentComposer ctx={ctx} planet="venus" placeholder="创作指令 — @venus 生成版本…" contextPrefix={styleContext(style, applied)} />
         </main>
 
-        {/* Style gallery + recommendation */}
+        {/* Style gallery + applied state */}
         <aside className="muse-right">
           <h4 className="ws-mod">Presets</h4>
           <div className="muse-presets">
-            {PRESETS.map((p) => (
+            {VENUS_PRESETS.map((p) => (
               <button className={`muse-preset ${applied === p.id ? "on" : ""}`} key={p.id} onClick={() => setApplied(applied === p.id ? null : p.id)} type="button">
                 <span className="muse-swatch" style={{ background: p.swatch }} />
                 <strong>{p.name}</strong>
@@ -95,8 +91,10 @@ export default function VenusWorkspace({ ctx }: { ctx: RunCtx }) {
             ))}
           </div>
           <div className="muse-reco">
-            <h4 className="ws-mod">recommendation</h4>
-            <p>Editorial — matches the current document's structure and the style.md tone.</p>
+            <h4 className="ws-mod">next composition</h4>
+            <p>{applied
+              ? `Preset ${VENUS_PRESETS.find((p) => p.id === applied)?.name} and style.md ride the next generation request.`
+              : "style.md rides the next generation request; pick a preset to include it."}</p>
           </div>
           <div className="ws-statusbar"><span className="sys-ok">● ONLINE</span><span>{docs.length} FILES</span><span>{applied ? `STYLE: ${applied.toUpperCase()}` : "NO STYLE"}</span><span className="right">venus</span></div>
         </aside>

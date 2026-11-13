@@ -167,6 +167,7 @@ class AgentService:
             StoreErrorCode.RUN_ALREADY_CANCELLED: ServiceErrorCode.ALREADY_CANCELLED,
             StoreErrorCode.RUN_ALREADY_TIMED_OUT: ServiceErrorCode.ALREADY_TIMED_OUT,
             StoreErrorCode.RUN_NOT_CANCELLABLE: ServiceErrorCode.RUN_NOT_CANCELLABLE,
+            StoreErrorCode.INVALID_ARGUMENT: ServiceErrorCode.INVALID_REQUEST,
         }
         code = code_map.get(error.code, getattr(
             ServiceErrorCode, "INTERNAL_ERROR", ServiceErrorCode.INVALID_REQUEST
@@ -176,6 +177,8 @@ class AgentService:
             (
                 "another Run is already active in this session"
                 if error.code is StoreErrorCode.SESSION_RUN_ACTIVE
+                else str(error)
+                if error.code is StoreErrorCode.INVALID_ARGUMENT
                 else "durable Runtime operation failed"
             ),
             details={
@@ -1364,6 +1367,17 @@ class AgentService:
         self._ensure_open()
         import uuid
 
+        # 人工实验裁决入口 — Saturn 的执行裁决经内部路径直接写库；
+        # 此处只接受 Earth 的人工裁决词汇表。
+        from agent.runtime_store.sqlite import HUMAN_EVALUATION_VERDICTS
+
+        if request.verdict not in HUMAN_EVALUATION_VERDICTS:
+            raise AgentServiceError(
+                ServiceErrorCode.INVALID_REQUEST,
+                "verdict must be one of "
+                + ", ".join(HUMAN_EVALUATION_VERDICTS),
+                details={"verdict": request.verdict},
+            )
         record = self._store.record_evaluation(
             request.tenant_id,
             request.session_id,

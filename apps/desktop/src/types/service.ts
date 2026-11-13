@@ -858,6 +858,19 @@ export interface WorkspaceFilesClient {
   writeWorkspaceFile(request: WorkspaceFileRequest): Promise<WorkspaceFileContent>;
 }
 
+/** evaluations.verdict — two explicit categories share the column:
+ *  scheduled execution outcomes (Saturn) and human A/B verdicts (Earth).
+ *  Mirrors EVALUATION_VERDICTS in agent/runtime_store/sqlite.py. */
+export const EVALUATION_VERDICTS = [
+  "pass", "fail", "neutral",
+  "keep_candidate", "keep_baseline", "inconclusive",
+] as const;
+export type EvaluationVerdict = typeof EVALUATION_VERDICTS[number];
+/** The human-facing vocabulary — record_evaluation accepts only these. */
+export const HUMAN_EVALUATION_VERDICTS = [
+  "keep_candidate", "keep_baseline", "inconclusive",
+] as const;
+
 export interface EvaluationSummary {
   evalId: string;
   name: string;
@@ -879,7 +892,7 @@ export interface RecordEvaluationRequest {
   baselineRef?: string;
   candidateRef?: string;
   score?: number;
-  verdict?: string;
+  verdict?: EvaluationVerdict;
   notes?: string;
   evalId?: string;
 }

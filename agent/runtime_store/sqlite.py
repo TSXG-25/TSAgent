@@ -59,6 +59,13 @@ _MIGRATABLE_SCHEMA_VERSIONS = frozenset({
     "v2.3D-2",
     "v2.3H3",
 })
+# evaluations.verdict — two explicit categories share the column: scheduled
+# execution outcomes (Saturn writes pass/fail/neutral internally) and human
+# experiment verdicts (Earth submits keep_*/inconclusive via record_evaluation).
+EXECUTION_EVALUATION_VERDICTS = ("pass", "fail", "neutral")
+HUMAN_EVALUATION_VERDICTS = ("keep_candidate", "keep_baseline", "inconclusive")
+EVALUATION_VERDICTS = EXECUTION_EVALUATION_VERDICTS + HUMAN_EVALUATION_VERDICTS
+
 DEFAULT_BUSY_TIMEOUT_MS = 5_000
 DEFAULT_WAL_AUTOCHECKPOINT = 1_000
 WORKER_LEASE_SECONDS = 45
@@ -2529,10 +2536,10 @@ class SqliteRuntimeStore:
         tenant_id = _require_text(tenant_id, "tenant_id")
         session_id = _require_text(session_id, "session_id")
         eval_id = _require_text(eval_id, "eval_id")
-        if verdict not in ("pass", "fail", "neutral"):
+        if verdict not in EVALUATION_VERDICTS:
             raise DurableStoreError(
                 StoreErrorCode.INVALID_ARGUMENT,
-                "verdict must be pass, fail or neutral",
+                f"verdict must be one of {', '.join(EVALUATION_VERDICTS)}",
             )
         with self._write_transaction() as connection:
             connection.execute(

@@ -19,7 +19,7 @@ const PERMISSIONS = [
   { id: "Bypass", icon: "⏩", desc: "Auto-approve everything (local pref)" },
 ] as const;
 
-export default function AgentComposer({ ctx, planet, placeholder }: { ctx: RunCtx; planet?: string; placeholder?: string }) {
+export default function AgentComposer({ ctx, planet, placeholder, contextPrefix }: { ctx: RunCtx; planet?: string; placeholder?: string; contextPrefix?: string }) {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -85,7 +85,8 @@ export default function AgentComposer({ ctx, planet, placeholder }: { ctx: RunCt
     setBusy(true); setNotice(null);
     try {
       const target = m ? m[1].toLowerCase() : (planet ?? "sun");
-      await delegateToPlanet(ctx, target, m ? m[2] : t, files, {
+      const body = contextPrefix ? `${contextPrefix}\n${m ? m[2] : t}` : (m ? m[2] : t);
+      await delegateToPlanet(ctx, target, body, files, {
         ...(model !== "default" ? { model } : {}),
       });
       if (files.length && ctx.activeRun) {

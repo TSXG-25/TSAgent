@@ -2829,3 +2829,97 @@ def test_a24_assign_motif_idempotent_delegation(
         _run(scenario())
     finally:
         _run(service.close())
+
+
+def test_a23_eval_verdict_contract_round_trip(tmp_path: Path) -> None:
+    """A23: 人工裁决词表由单一合同约束 — 每个公开裁决经真实 dispatcher
+    提交后按会话归属重读同值；非法值与执行词汇表返回可诊断的
+    INVALID_REQUEST（不再是 INTERNAL_ERROR）；Saturn 的执行裁决仍可读。"""
+    from agent.service.local_sidecar.dispatcher import SidecarDispatcher
+
+    service = _workspace_file_service(tmp_path)
+    dispatcher = SidecarDispatcher(service, diagnostics=sys.stderr)
+    base = {"tenant_id": "tenant-1", "user_id": "user-1", "session_id": "session-1"}
+
+    async def scenario() -> None:
+        for verdict in ("keep_candidate", "keep_baseline", "inconclusive"):
+            resp = await dispatcher.dispatch(LocalRpcRequest(
+                f"a23-{verdict}",
+                LocalTransportMethod.RECORD_EVALUATION,
+                {
+                    **base, "request_id": f"req-{verdict}",
+                    "name": f"bio-{verdict}", "run_id": "run-1",
+                    "baseline_ref": "baseline:defaults",
+                    "candidate_ref": "candidate:p=1",
+                    "verdict": verdict, "notes": "n",
+                },
+            ))
+            assert isinstance(resp, LocalRpcSuccess)
+            assert resp.to_dict()["result"]["verdict"] == verdict
+
+        listed = await dispatcher.dispatch(LocalRpcRequest(
+            "a23-list", LocalTransportMethod.LIST_EVALUATIONS,
+            {**base, "request_id": "req-list"}))
+        rows = listed.to_dict()["result"]
+        verdicts = {row["verdict"] for row in rows}
+        assert {"keep_candidate", "keep_baseline", "inconclusive"} <= verdicts
+        names = {row["name"] for row in rows}
+        assert {"bio-keep_candidate", "bio-keep_baseline", "bio-inconclusive"} <= names
+
+        # 非法裁决 — 可诊断输入错误，不是 INTERNAL_ERROR。
+        bad = await dispatcher.dispatch(LocalRpcRequest(
+            "a23-bad", LocalTransportMethod.RECORD_EVALUATION,
+            {**base, "request_id": "req-bad", "verdict": "bogus"}))
+        assert isinstance(bad, LocalRpcFailure)
+        assert bad.error.code == "INVALID_REQUEST"
+
+        # 执行词汇表不属于人工裁决入口。
+        machine = await dispatcher.dispatch(LocalRpcRequest(
+            "a23-exec", LocalTransportMethod.RECORD_EVALUATION,
+            {**base, "request_id": "req-exec", "verdict": "pass"}))
+        assert isinstance(machine, LocalRpcFailure)
+        assert machine.error.code == "INVALID_REQUEST"
+
+        # Saturn 的执行裁决经内部路径写库 — 现有记录仍可读取。
+        service._store.record_evaluation(
+            "tenant-1", "session-1", "eval-sched-1",
+            name="schedule:s-1", run_id="run-9",
+            score=1.0, verdict="pass", notes="schedule outcome",
+        )
+        listed2 = await dispatcher.dispatch(LocalRpcRequest(
+            "a23-list2", LocalTransportMethod.LIST_EVALUATIONS,
+            {**base, "request_id": "req-list2"}))
+        assert "pass" in {row["verdict"] for row in listed2.to_dict()["result"]}
+
+    try:
+        _run(scenario())
+    finally:
+        _run(service.close())
+
+    # 重开 — 持久值与会话归属不变。
+    service2 = _workspace_file_service(tmp_path)
+    dispatcher2 = SidecarDispatcher(service2, diagnostics=sys.stderr)
+
+    async def reopened() -> None:
+        listed = await dispatcher2.dispatch(LocalRpcRequest(
+            "a23-reopen", LocalTransportMethod.LIST_EVALUATIONS,
+            {**base, "request_id": "req-reopen"}))
+        rows = listed.to_dict()["result"]
+        assert {
+            "keep_candidate", "keep_baseline", "inconclusive", "pass",
+        } <= {row["verdict"] for row in rows}
+        # 会话范围 — 别的会话列表不含这些记录。
+        other = await dispatcher2.dispatch(LocalRpcRequest(
+            "a23-other", LocalTransportMethod.LIST_EVALUATIONS,
+            {**base, "session_id": "session-2", "request_id": "req-other"}))
+        other_names = {row["name"] for row in other.to_dict()["result"]}
+        assert not {
+            "bio-keep_candidate", "bio-keep_baseline", "bio-inconclusive",
+            "schedule:s-1",
+        } & other_names
+
+    try:
+        _run(reopened())
+    finally:
+        _run(service2.close())
+

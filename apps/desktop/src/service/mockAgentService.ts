@@ -2,6 +2,7 @@ import { artifactTextFor, createMockRuns, createNewRun } from "../mocks/runData"
 import type { RunView } from "../types";
 import {
   AgentServiceClientError,
+  HUMAN_EVALUATION_VERDICTS,
   type ArtifactSummary,
   type CancelRunRequest,
   type DesktopAgentServiceClient,
@@ -42,6 +43,7 @@ import {
   type WorkspaceFileRequest,
   type WorkspaceFileContent,
   type EvaluationSummary,
+  type ListEvaluationsRequest,
   type RecordEvaluationRequest,
   type UpsertWorkspaceRequest,
   type AssignSessionWorkspaceRequest,
@@ -492,18 +494,26 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
   }];
 
   async recordEvaluation(request: RecordEvaluationRequest): Promise<EvaluationSummary> {
+    const verdict = request.verdict ?? "neutral";
+    if (!(HUMAN_EVALUATION_VERDICTS as readonly string[]).includes(verdict)) {
+      throw clientError(
+        "INVALID_REQUEST",
+        `verdict must be one of ${HUMAN_EVALUATION_VERDICTS.join(", ")}`,
+      );
+    }
     const ev: EvaluationSummary = {
       evalId: request.evalId || `eval-${Math.random().toString(16).slice(2, 10)}`,
       name: request.name ?? "", runId: request.runId ?? "",
       baselineRef: request.baselineRef ?? "", candidateRef: request.candidateRef ?? "",
-      score: request.score ?? 0, verdict: request.verdict ?? "neutral",
+      score: request.score ?? 0, verdict,
       notes: request.notes ?? "", createdAt: new Date().toISOString(),
     };
     this.evals = [ev, ...this.evals];
     return ev;
   }
 
-  async listEvaluations(): Promise<EvaluationSummary[]> {
+  async listEvaluations(request: ListEvaluationsRequest): Promise<EvaluationSummary[]> {
+    void request;
     return this.evals;
   }
 

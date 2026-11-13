@@ -7,6 +7,7 @@ import AgentComposer from "../../app/AgentComposer";
 import { requestIdForRun, StatusBadge, Icon, MarkdownText, statusLabel, stageLabel } from "../../app/ui";
 import { t, tk } from "../../app/i18n";
 import { useScrollFollow } from "../../app/useScrollFollow";
+import { decideSessionApproval, useSessionApprovals } from "../../app/approvals";
 import type { RunCtx } from "../../app/runCtx";
 import type { ApprovalSummary, DirectoryListing, ParticipantSummary, SessionSummary, WorkspaceSummary } from "../../types/service";
 import { fetchSessionSnapshot, RefreshGate } from "./sessionSnapshot";
@@ -42,7 +43,10 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
   const { activeRun, runs, sessionId, selectSession } = ctx;
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [query, setQuery] = useState("");
-  const [approvals, setApprovals] = useState<ApprovalSummary[]>([]);
+  // single shared approval store — same state + decide entrypoint as TaskTray
+  const approvals = useSessionApprovals(service, sessionId);
+  const [apprErr, setApprErr] = useState<Record<string, string>>({});
+  const [apprBusy, setApprBusy] = useState<string | null>(null);
   const [participants, setParticipants] = useState<ParticipantSummary[]>([]);
   const [wsList, setWsList] = useState<WorkspaceSummary[]>([]);
   const refreshWs = () => {
@@ -115,6 +119,7 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
   ];
   const byFolder = (name: string) => filtered.filter((s) => folderOf(s.sessionId) === name);
   const [showReason, setShowReason] = useState(false);
+  const [artPreview, setArtPreview] = useState<{ id: string; text: string; stale: boolean; result: string } | null>(null);
 
   const sessionIdRef = useRef(sessionId);
   useEffect(() => { sessionIdRef.current = sessionId; }, [sessionId]);
@@ -143,7 +148,7 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
         const latest = snap.sessions.slice().sort((a, b) => (b.latestUpdatedAt ?? "").localeCompare(a.latestUpdatedAt ?? ""))[0];
         selectSession(latest.sessionId);
       }
-      pickedSessionRef.current = true; setApprovals(snap.approvals); setParticipants(snap.participants);
+      pickedSessionRef.current = true; setParticipants(snap.participants);
       snap.sessions.slice(0, 20).forEach((x) => {
         if (x.latestRunId && !runsRef.current.find((r) => r.runId === x.latestRunId)) {
           void ctx.controller.refreshRun(x.latestRunId, x.sessionId);
@@ -428,18 +433,35 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
 
         {/* ── Main column ── */}
         <main className="omni-col">
-          {/* pending approval — only chrome that still earns its place */}
-          {isBlocked && approvals.length > 0 && (
-            <section className="omni-taskbar blocked">
+          {/* pending approvals — cards inside the current task; action,
+              scope, risk and params shown; a failed decide stays on the
+              card instead of vanishing */}
+          {approvals.length > 0 && approvals.map((a) => (
+            <section className="omni-taskbar blocked" key={a.approvalId}>
               <div className="appr-detail">
-                <span className="omni-warn">⚠ {approvals[0].action} — {String(approvals[0].params?.path ?? approvals[0].scope)}</span>
-                <code className="appr-params">{JSON.stringify(approvals[0].params ?? {}, null, 1).slice(0, 400)}</code>
-                {approvals[0].riskLevel && <span className="appr-risk">{t("sun.risk")} {String(approvals[0].riskLevel)}</span>}
+                <span className="omni-warn">⚠ {a.action} — {String(a.params?.path ?? a.scope)}</span>
+                <code className="appr-params">{JSON.stringify(a.params ?? {}, null, 1).slice(0, 400)}</code>
+                {a.riskLevel && <span className="appr-risk">{t("sun.risk")} {String(a.riskLevel)}</span>}
+                {apprErr[a.approvalId] && <p className="appr-error">{apprErr[a.approvalId]}</p>}
               </div>
-              <button className="btn primary" onClick={() => void service.decideApproval({ tenantId: service.identity.tenantId, sessionId: service.identity.sessionId, requestId: requestIdForRun(0), runId: approvals[0].runId, approvalId: approvals[0].approvalId, decision: "approve", decidedBy: service.identity.userId }).then(refresh)} type="button">{t("sun.approve")}</button>
-              <button className="btn danger" onClick={() => void service.decideApproval({ tenantId: service.identity.tenantId, sessionId: service.identity.sessionId, requestId: requestIdForRun(0), runId: approvals[0].runId, approvalId: approvals[0].approvalId, decision: "deny", decidedBy: service.identity.userId }).then(refresh)} type="button">{t("sun.deny")}</button>
+              <button className="btn primary" disabled={apprBusy === a.approvalId} onClick={async () => {
+                setApprBusy(a.approvalId);
+                try {
+                  await decideSessionApproval(service, sessionId, a, "approve");
+                  setApprErr((m) => { const n = { ...m }; delete n[a.approvalId]; return n; });
+                } catch (err) { setApprErr((m) => ({ ...m, [a.approvalId]: String(err instanceof Error ? err.message : err) })); }
+                finally { setApprBusy(null); }
+              }} type="button">{t("sun.approve")}</button>
+              <button className="btn danger" disabled={apprBusy === a.approvalId} onClick={async () => {
+                setApprBusy(a.approvalId);
+                try {
+                  await decideSessionApproval(service, sessionId, a, "deny");
+                  setApprErr((m) => { const n = { ...m }; delete n[a.approvalId]; return n; });
+                } catch (err) { setApprErr((m) => ({ ...m, [a.approvalId]: String(err instanceof Error ? err.message : err) })); }
+                finally { setApprBusy(null); }
+              }} type="button">{t("sun.deny")}</button>
             </section>
-          )}
+          ))}
 
           {/* Chat column — request bubble + streamed/final reply */}
           <div className="omni-thread3" onScroll={thread.onScroll} ref={thread.ref}>
@@ -517,18 +539,40 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
               </article>
             )}
 
-            {/* TASK OUTPUTS — generated vs pending, hover shows preview affordance */}
+            {/* TASK OUTPUTS — shown for completed/failed/cancelled alike;
+                preview rides the existing readArtifact contract; references
+                stay opaque (artifactId copied, paths never concatenated) */}
             {(viewRun?.artifacts ?? []).length > 0 && (
               <article className="msg3 artifacts mech">
                 <div className="msg3-head"><span className="mod-title">{t("sun.task-outputs")}</span><em></em></div>
                 <div className="artifact-rows">
                   {viewRun!.artifacts.map((a) => (
-                    <button className={`artifact-row ${a.status}`} key={a.artifactId} title={a.path} type="button">
-                      <strong>📄 {a.path.split("/").pop()}</strong>
-                      <small>{a.path.split(".").pop()?.toUpperCase()}</small>
-                      <em className={a.status === "generated" ? "" : "pending"}>{a.status}</em>
-                      <span className="artifact-acts">{t("sun.preview-forge")}</span>
-                    </button>
+                    <div className="artifact-item" key={a.artifactId}>
+                      <div className={`artifact-row ${a.status}`} title={a.path}>
+                        <strong>📄 {a.path.split("/").pop() ?? a.artifactId}</strong>
+                        <small>{a.path.split(".").pop()?.toUpperCase()}</small>
+                        <em className={a.status === "generated" ? "" : "pending"}>{a.status}</em>
+                        <span className="artifact-acts">
+                          <button className="artifact-act" onClick={() => {
+                            if (artPreview?.id === a.artifactId) { setArtPreview(null); return; }
+                            void service.readArtifact({
+                              tenantId: service.identity.tenantId, sessionId: viewRun!.sessionId,
+                              runId: viewRun!.runId, artifactId: a.artifactId,
+                            }).then((c) => setArtPreview({ id: a.artifactId, text: c.text, stale: c.stale, result: c.result }))
+                              .catch((e) => setArtPreview({ id: a.artifactId, text: String(e instanceof Error ? e.message : e), stale: false, result: "error" }));
+                          }} type="button">{t("artifact.preview")}</button>
+                          <button className="artifact-act" onClick={() => void navigator.clipboard.writeText(a.artifactId)} type="button">{t("artifact.copy-ref")}</button>
+                          {a.path && <button className="artifact-act" onClick={() => void service.revealPath(a.path)} type="button">{t("artifact.reveal")}</button>}
+                        </span>
+                      </div>
+                      {artPreview?.id === a.artifactId && (
+                        <div className="artifact-preview">
+                          {artPreview.result !== "ok" && <p className="omni-empty">{artPreview.result}: {artPreview.text.slice(0, 200)}</p>}
+                          {artPreview.stale && <p className="omni-empty">file changed since recorded</p>}
+                          <pre className="artifact-preview-body">{artPreview.text.slice(0, 4000)}</pre>
+                        </div>
+                      )}
+                    </div>
                   ))}
                 </div>
               </article>

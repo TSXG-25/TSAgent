@@ -135,6 +135,7 @@ export default function AgentComposer({ ctx, planet, placeholder, contextPrefix 
           {files.map((f, i) => (
             <span className="ac-chip" key={i} title={f}>
               {refLabel(f)}
+              <small className="ac-chip-type">{f.split(".").pop()?.toUpperCase()}</small>
               <i onClick={() => setFiles((x) => x.filter((_, j) => j !== i))}>✕</i>
             </span>
           ))}

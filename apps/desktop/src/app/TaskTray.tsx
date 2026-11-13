@@ -1,84 +1,81 @@
 import { useCallback, useEffect, useState } from "react";
 import type { RunCtx } from "./runCtx";
-import { Icon, requestIdForRun } from "./ui";
+import { Icon } from "./ui";
+import { decideSessionApproval, useSessionApprovals } from "./approvals";
+import { t } from "./i18n";
 import type { ApprovalSummary, TaskRecord } from "../types/service";
 
-/** Global task/approval tray — §4.3. Pending approvals reachable from every
- *  surface; Approve Once / Deny write through decideApproval. */
+/** Global task/approval tray — §4.3. Pending approvals share the single
+ *  session approval store with workspace approval cards (same poll, same
+ *  decide entrypoint); each card links to its owning run. */
 export default function TaskTray({ ctx }: { ctx: RunCtx }) {
-  const { service } = ctx;
+  const { service, sessionId, openRun } = ctx;
   const [open, setOpen] = useState(false);
-  const [approvals, setApprovals] = useState<ApprovalSummary[]>([]);
+  const approvals = useSessionApprovals(service, sessionId);
   const [tasks, setTasks] = useState<TaskRecord[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
+  const [cardError, setCardError] = useState<Record<string, string>>({});
 
-  const refresh = useCallback(async () => {
+  const refreshTasks = useCallback(async () => {
     try {
-      const [a, t] = await Promise.all([
-        service.listApprovals({
-          tenantId: service.identity.tenantId,
-          sessionId: service.identity.sessionId,
-          requestId: requestIdForRun(0),
-          status: "PENDING",
-        }),
-        service.listTasks(),
-      ]);
-      setApprovals(a);
-      setTasks(t.filter((x) => ["queued", "planning", "active"].includes(x.status)));
+      const all = await service.listTasks();
+      setTasks(all.filter((x) => ["queued", "planning", "active"].includes(x.status)));
     } catch { /* keep last snapshot */ }
   }, [service]);
 
   useEffect(() => {
-    void refresh();
-    const t = window.setInterval(() => void refresh(), 8_000);
+    void refreshTasks();
+    const t = window.setInterval(() => void refreshTasks(), 8_000);
     return () => window.clearInterval(t);
-  }, [refresh]);
+  }, [refreshTasks]);
 
   async function decide(a: ApprovalSummary, decision: "approve" | "deny") {
     setBusy(a.approvalId);
     try {
-      await service.decideApproval({
-        tenantId: service.identity.tenantId,
-        sessionId: service.identity.sessionId,
-        requestId: requestIdForRun(0),
-        runId: a.runId,
-        approvalId: a.approvalId,
-        decision,
-        decidedBy: service.identity.userId,
-      });
-      await refresh();
+      await decideSessionApproval(service, sessionId, a, decision);
+      setCardError((m) => { const n = { ...m }; delete n[a.approvalId]; return n; });
+    } catch (err) {
+      // the failure stays on the originating card — result comes from service
+      setCardError((m) => ({ ...m, [a.approvalId]: String(err instanceof Error ? err.message : err) }));
     } finally { setBusy(null); }
   }
 
   return (
     <div className="task-tray">
       <button className={`topbar-button tray-btn ${approvals.length ? "hot" : ""}`} onClick={() => setOpen((v) => !v)}
-        title="Pending approvals" type="button">
+        title={t("tray.title")} type="button">
         <Icon name="shield" size={15} />
         {approvals.length > 0 && <span className="tray-badge">{approvals.length}</span>}
       </button>
       {open && (
         <div className="tray-pop">
-          <header className="tray-head">PENDING APPROVALS <code>{approvals.length}</code></header>
+          <header className="tray-head">{t("tray.pending")} <code>{approvals.length}</code></header>
           {tasks.length > 0 && (
             <>
-              <header className="tray-head">LIVE TASKS <code>{tasks.length}</code></header>
-              {tasks.slice(0, 4).map((t) => (
-                <div className="tray-card" key={t.taskId}>
-                  <div className="tray-card-head"><code>{t.originPlanet || "sun"}</code><strong>{t.status}</strong></div>
-                  <p>{t.taskId} · {t.runIds.length} runs</p>
+              <header className="tray-head">{t("tray.live-tasks")} <code>{tasks.length}</code></header>
+              {tasks.slice(0, 4).map((tk) => (
+                <div className="tray-card" key={tk.taskId}>
+                  <div className="tray-card-head"><code>{tk.originPlanet || "sun"}</code><strong>{tk.status}</strong></div>
+                  <p>{tk.taskId} · {t("chat.runs", { n: tk.runIds.length })}</p>
+                  {tk.runIds[0] && (
+                    <div className="tray-actions">
+                      <button onClick={() => { openRun(tk.runIds[0]); setOpen(false); }} type="button">→ {tk.runIds[0].replace("run-", "#")}</button>
+                    </div>
+                  )}
                 </div>
               ))}
             </>
           )}
-          {approvals.length === 0 && <p className="omni-empty">Nothing waiting.</p>}
+          {approvals.length === 0 && <p className="omni-empty">{t("tray.nothing")}</p>}
           {approvals.map((a) => (
             <div className="tray-card" key={a.approvalId}>
               <div className="tray-card-head"><code>{a.riskLevel}</code><strong>{a.action}</strong></div>
               <p>{a.scope} · {a.runId}</p>
+              {cardError[a.approvalId] && <p className="tray-error">{cardError[a.approvalId]}</p>}
               <div className="tray-actions">
-                <button disabled={busy === a.approvalId} onClick={() => void decide(a, "approve")} type="button">Approve once</button>
-                <button className="danger" disabled={busy === a.approvalId} onClick={() => void decide(a, "deny")} type="button">Deny</button>
+                <button disabled={busy === a.approvalId} onClick={() => void decide(a, "approve")} type="button">{t("tray.approve-once")}</button>
+                <button className="danger" disabled={busy === a.approvalId} onClick={() => void decide(a, "deny")} type="button">{t("tray.deny")}</button>
+                <button onClick={() => { openRun(a.runId); setOpen(false); }} title={t("tray.goto-run")} type="button">→ {t("tray.goto-run")}</button>
               </div>
             </div>
           ))}

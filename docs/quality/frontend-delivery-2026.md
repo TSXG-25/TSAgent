@@ -46,8 +46,32 @@
 - 滚动跟随/恢复、`MdCodeBlock` 复制、sticky pill 的实际布局与手感 → 浏览器/WebView 实测。
 - `useScrollFollow` 依赖 DOM 测量，Node 回归无法覆盖 → 已有同键草稿测试模式证明 store 正确，滚动属 UI 实测项。
 
+## FE-04A — 嵌入链路验证 · 阻塞（待前置条件）
+
+- 本机未安装 `code-server`（`which`/`mdfind`/`brew list` 均无二进制，仅 Homebrew formula 存在）。计划约定"用户安装 code-server"，故验证链路的第一步不可进行。
+- Tauri 宿主现状：仅 `sidecar_spawn`/`sidecar_write`/`sidecar_close`（stdio JSONL 专用），尚无 `ide_start/status/stop`。宿主适配器属 FE-04B，按计划在链路验证通过后实施。
+- **解除条件**：用户安装 code-server 后可执行探针 `code-server --bind-addr 127.0.0.1:0 --auth none <workspace>`，验证 Tauri host 启停 + WebView 加载/终端/快捷键/剪贴板。
+
+## FE-03 — 审批、产物与可发现性 · 已交付
+
+### 范围
+
+- **单一审批状态**：新增 `src/app/approvals.ts`——按 `tenantId:sessionId` 一份轮询存储（8s）+ 一个 `decideSessionApproval` 入口。TaskTray 与 Sun 内联审批卡片共享同一状态与操作路径，原有各自身份的重复维护删除。TaskTray 审批卡与任务卡均可跳转所属 Run（`ctx.openRun`）。
+- **审批卡片**：当前任务内每条 pending 审批一张卡（原先仅显示首条），含动作、目标范围、风险等级与参数详情；decide 失败留在原卡片（`apprErr`/`cardError`），成功才清除。TaskTray 同构。
+- **产物交付**：完成/失败/取消后的任务均显示 artifacts（原条件已覆盖 terminal 态，保留）；每项含名称、类型、验证状态（`a.status` 原样）+ 三个真实操作——预览走 `readArtifact` 合同（含 stale/missing/unsupported 提示）、「复制引用」复制 opaque `artifactId`、仅 `a.path` 存在时提供「在访达中显示」（复用 `revealPath`，不拼接本地路径）。移除原无操作的假「预览 · Forge」文本。
+- **可发现性**：PlanetSwitcher 增加关键词搜索（id/name/workspace/desc/mvp 命中）+ 最近访问组（localStorage 前 4 项），保留星图项与 ⌘0–9；`@`/`/` 菜单维持只列真实星球目标、选择仅预填不发送；附件 chip 增加类型后缀。
+- **会话列表**：沿用 `titleOf` 标题推导 + 相对时间 + 本地化状态标签；搜索仍为已加载会话客户端过滤（无新增后端搜索）。
+
+### 证据
+
+- `tests/frontendApprovals.test.ts`（2 项）：同会话双订阅者收到同一存储的同步发射；decide 经 Mock service 写回后共享状态刷新。
+- `npm test`：91 项 subtest 全绿；`test:orbits`/`test:scenes`/`npm run build` 通过。
+
+### 未覆盖（外部验证）
+
+- TaskTray/审批卡/产物预览/Switcher 搜索的真实交互与布局 → 浏览器实测。
+- `readArtifact`/`revealPath` 在 HTTP/Tauri 宿主下的实际行为已沿用既有合同，未改 wire。
+
 ## 后续批次占位
 
-- FE-03 审批、产物与可发现性 — 未开始
 - FE-05 工作台内容与视觉整合 — 未开始
-- FE-04A/B code-server IDE — 未开始（先做嵌入链路验证）

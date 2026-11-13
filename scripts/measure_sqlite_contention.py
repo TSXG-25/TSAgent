@@ -2,16 +2,22 @@
 """A17 measurement: SQLite lock contention + history growth.
 
 Two-connection probe — a raw sqlite3 writer holds BEGIN IMMEDIATE on the
-same file while the store serves a control read (get_run_head) and a write
-(append_event).  WAL mode is expected to keep reads unblocked; writes must
-wait for the writer to release or hit busy_timeout.  History growth is
-measured by seeding representative runs/events and diffing the file size.
+same file while the store serves reads, a control query, a lease renew and
+a write.  Each op is measured under its own hold window (the first waiter
+consumes the hold, so sequential samples inside one window are not actually
+contended).  WAL keeps reads unblocked; writes wait for the writer to
+release or hit busy_timeout.  A same-loop scenario measures how long a
+queued control request waits when a synchronous store call — the way the
+Service invokes the store from async entry points — blocks the event loop
+on the external lock.  History growth is measured by seeding representative
+runs/events and diffing the file size.
 
 Reproducible:  python scripts/measure_sqlite_contention.py
 Prints sample sizes, lock hold time, per-op latencies, and bytes/event.
 """
 from __future__ import annotations
 
+import asyncio
 import os
 import sqlite3
 import sys
@@ -137,22 +143,57 @@ def main() -> None:
                 contender.close()
             released.set()
 
-        t = threading.Thread(target=hold_writer, args=(HOLD_SECONDS,))
-        t.start()
-        time.sleep(0.05)  # let the writer acquire the lock
+        def under_lock(fn, samples: int = 2) -> tuple[float, float]:
+            """每个样本独立持锁——同一窗口内只有首个等待者真正竞争，其后
+            样本运行在锁已释放的状态，不是 under-lock 数据。"""
+            best, worst = float("inf"), 0.0
+            for _ in range(samples):
+                released.clear()
+                t = threading.Thread(target=hold_writer, args=(HOLD_SECONDS,))
+                t.start()
+                time.sleep(0.05)  # writer acquired the WAL write lock
+                t0 = time.perf_counter()
+                fn()
+                dt = time.perf_counter() - t0
+                t.join(timeout=10)
+                assert released.is_set(), "contending writer never released"
+                best, worst = min(best, dt), max(worst, dt)
+            return best, worst
 
-        read_lock = _timed(
-            lambda: store.get_run_head("tenant-m", run_0, session_id=session_0),
-            3,
+        read_lock = under_lock(
+            lambda: store.get_run_head("tenant-m", run_0, session_id=session_0)
         )
-        control_lock = _timed(
-            lambda: store.list_run_heads("tenant-m", session_0),
-            3,
+        control_lock = under_lock(
+            lambda: store.list_run_heads("tenant-m", session_0)
         )
-        lease_lock = _timed(lease_once, 3)
-        write_lock = _timed(write_once, 3)
+        lease_lock = under_lock(lease_once)
+        write_lock = under_lock(write_once)
 
-        t.join(timeout=10)
+        # --- same-loop scenario: a synchronous store call waiting on the
+        # external lock holds the loop thread — a control request queued
+        # meanwhile can only start after the write returns.  Measures
+        # schedule→completion, i.e. the starvation Service callers see. ---
+        def control_queued_during(blocking_call) -> float:
+            async def scenario() -> float:
+                async def control() -> None:
+                    store.get_run_head(
+                        "tenant-m", run_0, session_id=session_0
+                    )
+                task = asyncio.create_task(control())
+                t0 = time.perf_counter()
+                blocking_call()  # Service calls the store synchronously
+                await task
+                return time.perf_counter() - t0
+            return asyncio.run(scenario())
+
+        loop_idle = control_queued_during(lease_once)
+
+        released.clear()
+        t_hold = threading.Thread(target=hold_writer, args=(HOLD_SECONDS,))
+        t_hold.start()
+        time.sleep(0.05)
+        loop_blocked = control_queued_during(lease_once)
+        t_hold.join(timeout=10)
         assert released.is_set(), "contending writer never released"
 
         # --- hold beyond busy_timeout: the store surfaces STORE_BUSY ---
@@ -184,6 +225,7 @@ def main() -> None:
     print(f"lease(renew_worker_lease) under-lock min/max: {lease_lock[0] * 1e3:.1f}/{lease_lock[1] * 1e3:.1f} ms")
     print(f"write baseline min/max: {write_base[0] * 1e3:.1f}/{write_base[1] * 1e3:.1f} ms")
     print(f"write under-lock min/max: {write_lock[0] * 1e3:.1f}/{write_lock[1] * 1e3:.1f} ms")
+    print(f"loop-blocked control request: idle {loop_idle * 1e3:.1f} ms -> while lease waits on external lock {loop_blocked * 1e3:.1f} ms")
     print(f"hold > busy_timeout: write failed after {busy_wait:.1f}s as {busy_error}")
     print(f"db file: {size_before} -> {size_after} bytes (+{size_after - size_before})")
     print(f"wal size at close: {wal_size} bytes")

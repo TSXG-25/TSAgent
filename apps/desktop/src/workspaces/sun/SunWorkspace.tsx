@@ -4,10 +4,12 @@ import { ThinkingChain } from "./ThinkingChain";
 import { pickFolder, setSidecarPicker } from "../../service/tauriBridge";
 import { WorkspaceFrame } from "../../design-system/WorkspaceFrame";
 import AgentComposer from "../../app/AgentComposer";
-import { requestIdForRun, StatusBadge, Icon, MarkdownText } from "../../app/ui";
+import { requestIdForRun, StatusBadge, Icon, MarkdownText, statusLabel, stageLabel } from "../../app/ui";
+import { t, tk } from "../../app/i18n";
 import type { RunCtx } from "../../app/runCtx";
 import type { ApprovalSummary, DirectoryListing, ParticipantSummary, SessionSummary, WorkspaceSummary } from "../../types/service";
 import { fetchSessionSnapshot, RefreshGate } from "./sessionSnapshot";
+import OmniLanding from "./OmniLanding";
 
 /** Omni v3 — task-workbench layout per review:
  *  SessionSidebar (task titles+status+search) | TaskControl bar +
@@ -219,9 +221,9 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
         <aside className="omni-rail">
           <div className="omni-rail-top">
             <div className="omni-rail-head">
-              <span className="omni-eyebrow">◈ 会话</span>
+              <span className="omni-eyebrow">{t("sun.sessions")}</span>
               <div className="omni-rail-icons">
-                <button className={`rail-ico ${searchOpen ? "on" : ""}`} onClick={() => setSearchOpen((o) => !o)} title="搜索" type="button"><Icon name="search" size={13} /></button>
+                <button className={`rail-ico ${searchOpen ? "on" : ""}`} onClick={() => setSearchOpen((o) => !o)} title={t("sun.search")} type="button"><Icon name="search" size={13} /></button>
                 <button className="rail-ico" onClick={() => void pickFolder().then(async (picked) => {
                   if (!picked) return;
                   await service.upsertWorkspace({
@@ -230,34 +232,35 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
                     workspaceId: picked.path, displayName: picked.name, path: picked.path,
                   });
                   setFolder(sessionId, picked.path);   // assign session to the workspace
-                })} title="选择工作区" type="button"><Icon name="folder" size={13} /></button>
-                <button className="rail-ico accent" onClick={() => void newSession()} title="新建任务" type="button"><Icon name="plus" size={13} /></button>
+                })} title={t("sun.pick-workspace")} type="button"><Icon name="folder" size={13} /></button>
+                <button className="rail-ico accent" onClick={() => void newSession()} title={t("sun.new-task")} type="button"><Icon name="plus" size={13} /></button>
               </div>
             </div>
-            {searchOpen && <div className="omni-search"><Icon name="search" size={12} /><input autoFocus onChange={(e) => setQuery(e.target.value)} placeholder="搜索会话" value={query} /></div>}
+            {searchOpen && <div className="omni-search"><Icon name="search" size={12} /><input autoFocus onChange={(e) => setQuery(e.target.value)} placeholder={t("sun.search-sessions")} value={query} /></div>}
           </div>
           <div className="omni-sess-scroll">
             {(() => {
               const allSids = [service.identity.sessionId, ...filtered.map((s) => s.sessionId)].filter((v, i, a) => a.indexOf(v) === i);
               const row = (sid: string) => {
                 const s = sessions.find((x) => x.sessionId === sid);
-                const st = s?.latestStatus?.toUpperCase() ?? "";
+                const stRaw = s?.latestStatus ?? "";
+                const st = tk(`status.${stRaw}`) ?? stRaw.toUpperCase();
                 return (
                   <button className={`omni-sess3 ${sid === sessionId ? "on" : ""}`} key={sid} onClick={() => {
                     selectSession(sid);
                     const rid = s?.latestRunId;
                     if (rid && !runs.find((r) => r.runId === rid)) void ctx.controller.refreshRun(rid, sid);
-                  }} onContextMenu={(e) => { e.preventDefault(); setDlgInput(folderOf(sid)); setDlg({ mode: "prompt", title: "文件夹（留空移出）", value: folderOf(sid), onOk: (n) => setFolder(sid, n) }); }}
+                  }} onContextMenu={(e) => { e.preventDefault(); setDlgInput(folderOf(sid)); setDlg({ mode: "prompt", title: t("sun.folder-hint"), value: folderOf(sid), onOk: (n) => setFolder(sid, n) }); }}
                     draggable onDragStart={(e) => { setDragSid(sid); e.dataTransfer.effectAllowed = "move"; }} onDragEnd={() => setDragSid(null)}
                     type="button">
-                    <span className={`omni-sess-dot ${st === "BLOCKED" || st === "FAILED" ? "blocked" : st === "ACTIVE" ? "active" : ""}`} />
+                    <span className={`omni-sess-dot ${stRaw === "blocked" || stRaw === "failed" ? "blocked" : stRaw === "active" ? "active" : ""}`} />
                     <span className="omni-sess-info">
                       <strong>{titleOf(sid, s?.latestRunId)}</strong>
-                      <small>{st && <em className={`sess-st ${st.toLowerCase()}`}>{st}</em>} {rel(s?.latestUpdatedAt ?? "")}</small>
+                      <small>{st && <em className={`sess-st ${stRaw.toLowerCase()}`}>{st}</em>} {rel(s?.latestUpdatedAt ?? "")}</small>
                     </span>
                     <span className="omni-sess-del" onClick={(e) => {
                       e.stopPropagation();
-                      setDlg({ mode: "confirm", title: `删除会话「${titleOf(sid, s?.latestRunId)}」？`, onOk: () => {
+                      setDlg({ mode: "confirm", title: t("sun.delete-session-q", { title: titleOf(sid, s?.latestRunId) }), onOk: () => {
                         void service.deleteSession({ tenantId: service.identity.tenantId, userId: service.identity.userId, sessionId: sid, requestId: `req-${Date.now()}` })
                           .then(() => {
                             const next = sessions.find((x) => x.sessionId !== sid);
@@ -266,7 +269,7 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
                           })
                           .catch(() => {});
                       } });
-                    }} title="删除会话">✕</span>
+                    }} title={t("sun.delete-session")}>✕</span>
                   </button>
                 );
               };
@@ -284,8 +287,8 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
                         <span className="omni-group-label folder-head" onClick={() => setCollapsed((c) => { const n = new Set(c); n.has(name) ? n.delete(name) : n.add(name); return n; })}>
                           {collapsed.has(name) ? "▸" : "▾"} {label}
                           <span className="folder-acts" onClick={(e) => e.stopPropagation()}>
-                            <i title="在此文件夹新建会话" onClick={() => void newSession().then((ns) => { if (ns?.sessionId) setFolder(ns.sessionId, name); })}>＋</i>
-                            <i title="选项" onClick={() => setWsMenu(wsMenu === name ? null : name)}>···</i>
+                            <i title={t("sun.new-in-folder")} onClick={() => void newSession().then((ns) => { if (ns?.sessionId) setFolder(ns.sessionId, name); })}>＋</i>
+                            <i title={t("sun.options")} onClick={() => setWsMenu(wsMenu === name ? null : name)}>···</i>
                           </span>
                         </span>
                         {wsMenu === name && (
@@ -293,34 +296,34 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
                             <div className="ws-menu-mask" onClick={() => setWsMenu(null)} />
                             <div className="ws-menu">
                               <button onClick={() => { togglePin(name); setWsMenu(null); }} type="button">
-                                {pinned.includes(name) ? "Unpin" : "Pin"}
+                                {pinned.includes(name) ? t("sun.unpin") : t("sun.pin")}
                               </button>
-                              <button onClick={() => { openEditWs(name); setWsMenu(null); }} type="button">Edit</button>
-                              <button onClick={() => { if (ws?.path) void service.revealPath(ws.path); setWsMenu(null); }} type="button">Reveal in Finder</button>
-                              <button className="danger" onClick={() => { setWsMenu(null); removeWorkspace(name, label); }} type="button">Remove project</button>
+                              <button onClick={() => { openEditWs(name); setWsMenu(null); }} type="button">{t("sun.edit")}</button>
+                              <button onClick={() => { if (ws?.path) void service.revealPath(ws.path); setWsMenu(null); }} type="button">{t("sun.reveal")}</button>
+                              <button className="danger" onClick={() => { setWsMenu(null); removeWorkspace(name, label); }} type="button">{t("sun.remove-project")}</button>
                             </div>
                           </>
                         )}
                         {!collapsed.has(name) && inside.map(row)}
-                        {!collapsed.has(name) && inside.length === 0 && <span className="omni-folder-empty">拖会话到此处</span>}
+                        {!collapsed.has(name) && inside.length === 0 && <span className="omni-folder-empty">{t("sun.drag-here")}</span>}
                       </div>
                     );
                   })}
                   <span className="omni-group-label"
                     onDragOver={(e) => e.preventDefault()}
-                    onDrop={(e) => { e.preventDefault(); if (dragSid) setFolder(dragSid, ""); setDragSid(null); }}>最近</span>
+                    onDrop={(e) => { e.preventDefault(); if (dragSid) setFolder(dragSid, ""); setDragSid(null); }}>{t("sun.recent")}</span>
                   {unfiled.map(row)}
                 </>
               );
             })()}
-            {filtered.length === 0 && query && <p className="omni-empty">无匹配会话</p>}
+            {filtered.length === 0 && query && <p className="omni-empty">{t("sun.no-matching")}</p>}
           </div>
         </aside>
 
         {browse && (
           <div className="omni-dlg-mask" onClick={() => setBrowse(null)}>
             <div className="omni-dlg omni-browse" onClick={(e) => e.stopPropagation()}>
-              <p className="omni-dlg-title">选择工作区目录</p>
+              <p className="omni-dlg-title">{t("sun.pick-dir")}</p>
               <div className="browse-path" title={browse.path}>{browse.path}</div>
               <div className="browse-list">
                 {browse.parent !== browse.path && (
@@ -329,17 +332,17 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
                 {browse.dirs.map((d) => (
                   <button className="browse-row" key={d} onClick={() => openBrowse(browse.path + "/" + d.slice(0, -1))} type="button">📁 {d}</button>
                 ))}
-                {browse.dirs.length === 0 && <span className="browse-empty">（无子目录）</span>}
+                {browse.dirs.length === 0 && <span className="browse-empty">{t("sun.no-subdir")}</span>}
               </div>
               <div className="omni-dlg-btns">
-                <button className="omni-dlg-cancel" onClick={() => setBrowse(null)} type="button">取消</button>
+                <button className="omni-dlg-cancel" onClick={() => setBrowse(null)} type="button">{t("common.cancel")}</button>
                 <button className="omni-dlg-ok" onClick={() => {
                   void service.upsertWorkspace({
                     tenantId: service.identity.tenantId,
                     sessionId: service.identity.sessionId, requestId: `ws-${Date.now()}`,
                     workspaceId: browse.path, displayName: browse.path.split("/").filter(Boolean).pop() ?? browse.path, path: browse.path,
                   }).then(() => { setFolder(sessionId, browse.path); setBrowse(null); });
-                }} type="button">选择此目录</button>
+                }} type="button">{t("sun.pick-this")}</button>
               </div>
             </div>
           </div>
@@ -347,15 +350,15 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
         {editWs && (
           <div className="omni-dlg-mask" onClick={() => setEditWs(null)}>
             <div className="omni-dlg omni-wsedit" onClick={(e) => e.stopPropagation()}>
-              <p className="omni-dlg-title">Edit project</p>
+              <p className="omni-dlg-title">{t("sun.edit-project")}</p>
               <input className="omni-dlg-input" onChange={(e) => setEditWs({ ...editWs, name: e.target.value })} value={editWs.name} />
               <div className="ws-src-title">Source folders</div>
               <div className="ws-src-list">
                 {editWs.paths.map((p) => (
-                  <div className="ws-src-row" key={p} onClick={() => setEditWs({ ...editWs, primary: p })} title="点击设为 Primary">
+                  <div className="ws-src-row" key={p} onClick={() => setEditWs({ ...editWs, primary: p })} title={t("sun.set-primary")}>
                     <Icon name="folder" size={12} />
                     <span className="ws-src-path" title={p}>{p.split("/").filter(Boolean).pop() ?? p}</span>
-                    {p === editWs.primary && <em className="ws-src-primary">Primary</em>}
+                    {p === editWs.primary && <em className="ws-src-primary">{t("sun.primary")}</em>}
                     <i className="ws-src-del" onClick={(e) => {
                       e.stopPropagation();
                       const rest = editWs.paths.filter((x) => x !== p);
@@ -367,7 +370,7 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
                   if (picked && !editWs.paths.includes(picked.path)) {
                     setEditWs({ ...editWs, paths: [...editWs.paths, picked.path], primary: editWs.primary || picked.path });
                   }
-                })} type="button">＋ Add folder</button>
+                })} type="button">{t("sun.add-folder")}</button>
               </div>
               <div className="omni-dlg-btns ws-edit-btns">
                 <button className="ws-remove" onClick={() => {
@@ -375,8 +378,8 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
                   const wsId = editWs.wsId;
                   setEditWs(null);
                   removeWorkspace(wsId, label);
-                }} type="button">Remove local project</button>
-                <button className="omni-dlg-cancel" onClick={() => setEditWs(null)} type="button">Cancel</button>
+                }} type="button">{t("sun.remove-local")}</button>
+                <button className="omni-dlg-cancel" onClick={() => setEditWs(null)} type="button">{t("common.cancel")}</button>
                 <button className="omni-dlg-ok" onClick={() => {
                   void service.upsertWorkspace({
                     tenantId: service.identity.tenantId,
@@ -384,7 +387,7 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
                     workspaceId: editWs.wsId, displayName: editWs.name.trim(),
                     path: editWs.primary, paths: editWs.paths,
                   }).then(() => { refreshWs(); setEditWs(null); });
-                }} type="button">Save</button>
+                }} type="button">{t("common.save")}</button>
               </div>
             </div>
           </div>
@@ -399,9 +402,9 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
                   value={dlgInput} />
               )}
               <div className="omni-dlg-btns">
-                <button className="omni-dlg-cancel" onClick={() => setDlg(null)} type="button">取消</button>
+                <button className="omni-dlg-cancel" onClick={() => setDlg(null)} type="button">{t("common.cancel")}</button>
                 <button className="omni-dlg-ok" onClick={() => { dlg.onOk(dlgInput); setDlg(null); }} type="button">
-                  {dlg.mode === "confirm" ? "删除" : "确定"}
+                  {dlg.mode === "confirm" ? t("common.delete") : t("common.confirm")}
                 </button>
               </div>
             </div>
@@ -416,16 +419,16 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
               <div className="appr-detail">
                 <span className="omni-warn">⚠ {approvals[0].action} — {String(approvals[0].params?.path ?? approvals[0].scope)}</span>
                 <code className="appr-params">{JSON.stringify(approvals[0].params ?? {}, null, 1).slice(0, 400)}</code>
-                {approvals[0].riskLevel && <span className="appr-risk">风险 {String(approvals[0].riskLevel)}</span>}
+                {approvals[0].riskLevel && <span className="appr-risk">{t("sun.risk")} {String(approvals[0].riskLevel)}</span>}
               </div>
-              <button className="btn primary" onClick={() => void service.decideApproval({ tenantId: service.identity.tenantId, sessionId: service.identity.sessionId, requestId: requestIdForRun(0), runId: approvals[0].runId, approvalId: approvals[0].approvalId, decision: "approve", decidedBy: service.identity.userId }).then(refresh)} type="button">批准</button>
-              <button className="btn danger" onClick={() => void service.decideApproval({ tenantId: service.identity.tenantId, sessionId: service.identity.sessionId, requestId: requestIdForRun(0), runId: approvals[0].runId, approvalId: approvals[0].approvalId, decision: "deny", decidedBy: service.identity.userId }).then(refresh)} type="button">拒绝</button>
+              <button className="btn primary" onClick={() => void service.decideApproval({ tenantId: service.identity.tenantId, sessionId: service.identity.sessionId, requestId: requestIdForRun(0), runId: approvals[0].runId, approvalId: approvals[0].approvalId, decision: "approve", decidedBy: service.identity.userId }).then(refresh)} type="button">{t("sun.approve")}</button>
+              <button className="btn danger" onClick={() => void service.decideApproval({ tenantId: service.identity.tenantId, sessionId: service.identity.sessionId, requestId: requestIdForRun(0), runId: approvals[0].runId, approvalId: approvals[0].approvalId, decision: "deny", decidedBy: service.identity.userId }).then(refresh)} type="button">{t("sun.deny")}</button>
             </section>
           )}
 
           {/* Chat column — request bubble + streamed/final reply */}
           <div className="omni-thread3">
-            {!viewRun && <div className="empty-state"><p>选择或新建任务开始</p></div>}
+            {!viewRun && <OmniLanding />}
             {/* whole-session history — every run contributes its messages,
                 chronological (hydrated runs arrive unordered) */}
             {runs.filter((r) => r.sessionId === sessionId)
@@ -438,10 +441,10 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
               const showLive = liveReply !== undefined && !(r.output && r.output.text);
               return (
               <div className="sess-run" key={r.runId}>
-                {r !== viewRun && <div className="sess-run-sep"><code>{r.runId.replace("run-", "#")}</code><em>{r.status}</em></div>}
+                {r !== viewRun && <div className="sess-run-sep"><code>{r.runId.replace("run-", "#")}</code><em>{statusLabel(r.status)}</em></div>}
                 {r.request && (
                   <article className="msg3 user">
-                    <div className="msg3-head"><span>You</span><time>{rel(r.createdAt)}</time></div>
+                    <div className="msg3-head"><span>{t("chat.you")}</span><time>{rel(r.createdAt)}</time></div>
                     <div className="msg3-body"><MarkdownText text={r.request} /></div>
                     {(attachMap.get(r.runId) ?? []).length > 0 && (
                       <div className="attach-row">
@@ -457,7 +460,7 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
                   <article className="msg3 assistant">
                     <div className="msg3-head"><span>⬡ T.S.A</span><time></time></div>
                     <div className="msg3-body"><MarkdownText text={liveReply.content} /><span className="msg-caret" /></div>
-                    <button className="msg-copy" onClick={() => void navigator.clipboard.writeText(liveReply.content)} title="复制">复制</button>
+                    <button className="msg-copy" onClick={() => void navigator.clipboard.writeText(liveReply.content)} title={t("common.copy")}>{t("common.copy")}</button>
                   </article>
                 )}
                 {r.output && (
@@ -473,14 +476,14 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
                 their step record inside the collapsed thinking box instead */}
             {wfSteps.length > 0 && viewRun && !["completed", "failed", "cancelled", "timed_out"].includes(viewRun.status) && (
               <article className="msg3 exec mech">
-                <div className="msg3-head"><span className="mod-title">⬡ CURRENT EXECUTION</span><em>{viewRun!.status.toUpperCase()}</em></div>
+                <div className="msg3-head"><span className="mod-title">{t("sun.current-execution")}</span><em>{statusLabel(viewRun!.status)}</em></div>
                 <div className="exec-steps plan">
-                  {wfSteps.map((t, i) => (
-                    <div className={`plan-step ${t.status} ${t.status === "running" ? "current" : ""}`} key={i}>
-                      <span className="plan-num">{t.status === "completed" || t.status === "verified" ? "✓" : i + 1}</span>
+                  {wfSteps.map((st, i) => (
+                    <div className={`plan-step ${st.status} ${st.status === "running" ? "current" : ""}`} key={i}>
+                      <span className="plan-num">{st.status === "completed" || st.status === "verified" ? "✓" : i + 1}</span>
                       <div className="plan-body">
-                        <strong>{t.stage}</strong>
-                        <em>{t.wf} · {t.status === "interrupted" && isBlocked ? "waiting approval" : t.status}{t.duration ? ` · ${t.duration}` : ""}</em>
+                        <strong>{st.stage}</strong>
+                        <em>{st.wf} · {st.status === "interrupted" && isBlocked ? t("sun.waiting-approval") : stageLabel(st.status)}{st.duration ? ` · ${st.duration}` : ""}</em>
                       </div>
                     </div>
                   ))}
@@ -491,14 +494,14 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
             {/* TASK OUTPUTS — generated vs pending, hover shows preview affordance */}
             {(viewRun?.artifacts ?? []).length > 0 && (
               <article className="msg3 artifacts mech">
-                <div className="msg3-head"><span className="mod-title">◈ TASK OUTPUTS</span><em></em></div>
+                <div className="msg3-head"><span className="mod-title">{t("sun.task-outputs")}</span><em></em></div>
                 <div className="artifact-rows">
                   {viewRun!.artifacts.map((a) => (
                     <button className={`artifact-row ${a.status}`} key={a.artifactId} title={a.path} type="button">
                       <strong>📄 {a.path.split("/").pop()}</strong>
                       <small>{a.path.split(".").pop()?.toUpperCase()}</small>
                       <em className={a.status === "generated" ? "" : "pending"}>{a.status}</em>
-                      <span className="artifact-acts">预览 · Forge</span>
+                      <span className="artifact-acts">{t("sun.preview-forge")}</span>
                     </button>
                   ))}
                 </div>
@@ -507,13 +510,13 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
             {viewRun?.failure && !isBlocked && <article className="msg3 error"><div className="msg3-body">{viewRun.failure.message}</div></article>}
           </div>
 
-          {workspaceOf(sessionId) && <div className="ws-bound" title={workspaceOf(sessionId)}>📁 工作区: {workspaceOf(sessionId).split("/").pop()}<i onClick={() => setFolder(sessionId, "")}>✕</i></div>}<AgentComposer ctx={{ ...ctx, workspacePath: workspaceOf(sessionId) }} planet="sun" placeholder="发送消息 / 创建任务，@提及 · /命令…" />
+          {workspaceOf(sessionId) && <div className="ws-bound" title={workspaceOf(sessionId)}>📁 {t("sun.bound-to")}: {workspaceOf(sessionId).split("/").pop()}<i onClick={() => setFolder(sessionId, "")}>✕</i></div>}<AgentComposer ctx={{ ...ctx, workspacePath: workspaceOf(sessionId) }} planet="sun" placeholder={t("sun.composer-placeholder")} />
 
           {/* status footer — real counts */}
           <footer className="omni-statusbar">
             <span className="sys-ok">● SYSTEM ONLINE</span>
-            <span>{activeCount} RUNNING · {runs.filter((r) => r.status === "blocked").length} WAITING</span>
-            <span>{approvals.length} PENDING APPROVAL</span>
+            <span>{t("footer.running", { n: activeCount })} · {t("footer.waiting", { n: runs.filter((r) => r.status === "blocked").length })}</span>
+            <span>{t("footer.pending-approval", { n: approvals.length })}</span>
             <span className="omni-status-right" title={participants.map((x) => `${x.role}:${x.participantId}`).join(" ") + (participants.length ? " · " : "") + sessionId}>{participants.length > 0 ? `👥 ${participants.map((x) => `${x.role}:${x.participantId.slice(0,12)}`).join(" ")} · ` : ""}{sessionId}</span>
           </footer>
         </main>

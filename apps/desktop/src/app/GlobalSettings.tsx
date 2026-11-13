@@ -3,6 +3,7 @@ import type { CapabilitySummary, DesktopAgentServiceClient, ProfileSummary, Sett
 import type { RunView } from "../types";
 import { Icon, requestIdForRun } from "./ui";
 import { PROVIDERS, SettingsForm } from "./settingsForm";
+import { t, useLang, setLang, type Lang } from "./i18n";
 
 /** Global Settings drawer — §4.2. Reachable from every workspace via the
  *  topbar gear; provider/model fields are backed by getSettings/updateSettings,
@@ -10,6 +11,7 @@ import { PROVIDERS, SettingsForm } from "./settingsForm";
  *  Provider/model state lives in SettingsForm so select/edit events always
  *  write the field the backend saves. */
 export default function GlobalSettings({ service, onClose, runs = [] }: { service: DesktopAgentServiceClient; onClose: () => void; runs?: RunView[] }) {
+  const lang = useLang();
   const [settings, setSettings] = useState<SettingsSummary | null>(null);
   const [form] = useState(() => new SettingsForm());
   const [, bump] = useReducer((x: number) => x + 1, 0);
@@ -97,28 +99,40 @@ export default function GlobalSettings({ service, onClose, runs = [] }: { servic
     <div className="modal-backdrop" onMouseDown={onClose}>
       <aside className="settings-drawer" onMouseDown={(e) => e.stopPropagation()}>
         <header className="modal-heading">
-          <div><span className="panel-eyebrow">GLOBAL</span><h2>Settings</h2></div>
-          <button className="modal-close" onClick={onClose} type="button"><Icon name="x" size={16} /></button>
+          <div><span className="panel-eyebrow">GLOBAL</span><h2>{t("settings.title")}</h2></div>
+          <button aria-label={t("settings.close")} className="modal-close" onClick={onClose} type="button"><Icon name="x" size={16} /></button>
         </header>
 
         <section className="set-section">
-          <h3>Models & Providers</h3>
-          {!settings && !error && <p className="omni-empty">Loading…</p>}
+          <h3>{t("settings.interface")}</h3>
+          <div className="field">
+            <label>{t("settings.language")}</label>
+            <select value={lang} onChange={(e) => setLang(e.target.value as Lang)}>
+              <option value="zh">中文</option>
+              <option value="en">English</option>
+            </select>
+            <span className="omni-meta">{t("settings.lang-follow")}</span>
+          </div>
+        </section>
+
+        <section className="set-section">
+          <h3>{t("settings.models-providers")}</h3>
+          {!settings && !error && <p className="omni-empty">{t("settings.loading")}</p>}
           {settings && (
             <>
               <div className="set-active">
                 <span className="st-dot live" />
                 <strong>{settings.activeProvider} · {settings.activeModel}</strong>
-                <span className="omni-meta">当前生效</span>
+                <span className="omni-meta">{t("settings.active")}</span>
               </div>
               <div className="field">
-                <label>Provider</label>
+                <label>{t("settings.provider")}</label>
                 <select value={form.providerId} onChange={(e) => { form.selectProvider(e.target.value); bump(); }}>
                   {PROVIDERS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
                 </select>
               </div>
               <div className="field">
-                <label>Model</label>
+                <label>{t("settings.model")}</label>
                 <select value={form.modelSel} onChange={(e) => { form.selectModel(e.target.value); bump(); }}>
                   {(PROVIDERS.find((p) => p.id === form.providerId)?.models ?? []).map((m) => <option key={m} value={m}>{m}</option>)}
                   <option value="__custom__">custom…</option>
@@ -129,21 +143,21 @@ export default function GlobalSettings({ service, onClose, runs = [] }: { servic
               </div>
               <div className="field">
                 <label>API Base</label>
-                <span className="omni-meta"><code>{form.apiBase}</code> — 后端尚不支持保存自定义 endpoint。</span>
+                <span className="omni-meta"><code>{form.apiBase}</code> — {t("settings.apibase-note")}</span>
               </div>
             </>
           )}
           {error && <p className="omni-empty" style={{ color: "var(--st-danger,#ff5a4f)" }}>{error}</p>}
-          {saved && <p className="omni-empty" style={{ color: "var(--st-ok,#4cc38a)" }}>Saved.</p>}
+          {saved && <p className="omni-empty" style={{ color: "var(--st-ok,#4cc38a)" }}>{t("settings.saved")}</p>}
           <button className="btn primary" disabled={saving || !settings} onClick={() => void save()} type="button">
-            {saving ? "Saving…" : "Save"}
+            {saving ? t("settings.saving") : t("settings.save")}
           </button>
-          <p className="demo-note">API keys live in secure storage — this surface shows masked status only, never secrets.</p>
+          <p className="demo-note">{t("settings.keys-note")}</p>
         </section>
 
         <section className="set-section">
-          <h3>Usage</h3>
-          {usage.length === 0 && <p className="omni-empty">还没有 token 用量记录——run 结束时写入。</p>}
+          <h3>{t("settings.usage")}</h3>
+          {usage.length === 0 && <p className="omni-empty">{t("settings.usage-empty")}</p>}
           {usage.length > 0 && (
             <>
               <table className="rec-table usage-table">
@@ -159,7 +173,7 @@ export default function GlobalSettings({ service, onClose, runs = [] }: { servic
                   ))}
                 </tbody>
               </table>
-              <div className="metric-row"><span>合计</span><strong>
+              <div className="metric-row"><span>{t("settings.usage-total")}</span><strong>
                 {usage.reduce((a, u) => a + (u.tokens.total_tokens ?? Object.values(u.tokens).reduce((x, b) => x + b, 0)), 0).toLocaleString()} tokens
               </strong></div>
             </>
@@ -167,16 +181,16 @@ export default function GlobalSettings({ service, onClose, runs = [] }: { servic
         </section>
 
         <section className="set-section">
-          <h3>平台凭据</h3>
+          <h3>{t("settings.creds")}</h3>
           <div className="field"><label>Bilibili SESSDATA</label>
             <input defaultValue={localStorage.getItem("tsa.env.BILI_SESSDATA") ?? ""}
               onBlur={(e) => localStorage.setItem("tsa.env.BILI_SESSDATA", e.target.value)}
               placeholder="SESSDATA cookie — 供 UI 本地持有；后端 sidecar 读 BILI_SESSDATA env，真正生效需写入 .env" type="password" /></div>
-          <p className="omni-empty">凭据保存在本机存储（不上传）。后端生效路径仍是 .env / sidecar env。</p>
+          <p className="omni-empty">{t("settings.creds-note")}</p>
         </section>
 
         <section className="set-section">
-          <h3>More sections</h3>
+          <h3>{t("settings.more")}</h3>
           {profiles.map((p) => (
             <div className="cap-empty" key={p.profileId}><span className="cap-dot live" /><div><strong>{p.displayName || p.profileId}</strong><small>@{p.planetAffinity} · {p.modelRef} · {p.skillRefs.length} skills</small></div></div>
           ))}

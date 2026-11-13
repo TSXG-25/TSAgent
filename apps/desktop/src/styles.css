@@ -2727,6 +2727,27 @@ input[type="checkbox"].styled:checked::after { content: "✓"; position: absolut
 .empty-state .empty-motif { width: 64px; height: 64px; opacity: .4; }
 .empty-state p { margin: 0; font-size: 12px; max-width: 34ch; line-height: 1.5; }
 
+/* omni empty-conversation landing — centered DeepSeek-style entry */
+.omni-landing { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; flex: 1; padding: 48px 24px; text-align: center; }
+@media (prefers-reduced-motion: no-preference) {
+  .omni-landing { animation: omni-landing-in .35s ease-out; }
+  @keyframes omni-landing-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+}
+.omni-landing-mark { font-size: 30px; color: var(--planet-accent); line-height: 1; }
+.omni-landing-title { margin: 0; font-size: 20px; font-weight: 600; color: var(--text-main); letter-spacing: .02em; }
+.omni-landing-sub { margin: 0; font-size: 12px; color: var(--text-faint); }
+.omni-landing-sub code, .omni-landing-foot code { color: var(--planet-accent); background: none; font-family: inherit; }
+.omni-landing-grid { display: grid; grid-template-columns: repeat(2, minmax(200px, 240px)); gap: 8px; margin-top: 12px; }
+.omni-landing-chip { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; background: var(--surface-1); border: 1px solid var(--border-base); border-radius: 4px; color: var(--text-main); text-align: left; cursor: pointer; }
+.omni-landing-chip:hover, .omni-landing-chip:focus-visible { border-color: var(--planet-accent); outline: none; }
+.landing-chip-head { display: flex; align-items: center; gap: 7px; }
+.landing-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+.landing-chip-head strong { font-size: 12px; font-weight: 600; }
+.landing-chip-head em { margin-left: auto; font-size: 10px; font-style: normal; color: var(--text-faint); }
+.omni-landing-chip small { font-size: 10px; color: var(--text-faint); }
+.omni-landing-foot { margin: 8px 0 0; font-size: 10px; color: var(--text-faint); }
+@media (max-width: 620px) { .omni-landing-grid { grid-template-columns: 1fr; } }
+
 /* not installed: one inline line, not a dashed box */
 .not-installed { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-faint); padding: 6px 0; }
 .not-installed::before { content: "○"; color: var(--text-faint); }
@@ -4163,36 +4184,27 @@ ol.md-list li::marker { color: var(--planet-accent); font-family: var(--font-mon
 .omni-sess3 { border-width: 0.5px; }
 
 .ac-spacer { flex: 1; }
-.ac-perm { height: 24px; padding: 0 11px; border-radius: 999px; background: rgba(255,255,255,.07); border: 0.5px solid rgba(255,255,255,.1); color: var(--text-muted); font-size: 10.5px; cursor: pointer; }
-.ac-perm.ro { color: #7dd3fc; }
-.ac-perm.auto { color: #4ade80; border-color: rgba(74,222,128,.35); }
 .ac-ctxring { display: inline-flex; align-items: center; gap: 5px; }
 .ac-ctxring em { font-style: normal; font-size: 9.5px; color: var(--text-faint); font-family: var(--font-mono); }
 
-.ac-permwrap { position: relative; }
-.ac-permmenu { position: absolute; bottom: calc(100% + 8px); left: 0; width: 240px; display: flex; flex-direction: column; background: rgba(16,20,27,.88); border: 0.5px solid rgba(160,190,255,.2); border-radius: 12px; backdrop-filter: blur(18px); padding: 5px; z-index: 60; box-shadow: 0 12px 40px rgba(0,0,0,.5); }
-.ac-perm-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: none; border: none; border-radius: 8px; text-align: left; cursor: pointer; }
-.ac-perm-item:hover { background: rgba(255,255,255,.06); }
-.ac-perm-item .pi { width: 20px; text-align: center; color: var(--planet-accent); font-size: 12px; }
-.ac-perm-item .pt { display: flex; flex-direction: column; gap: 1px; }
-.ac-perm-item .pt strong { font-size: 12px; color: var(--text-base); font-weight: 600; }
-.ac-perm-item .pt em { font-style: normal; font-size: 10px; color: var(--text-faint); }
-.ac-perm-item .pc { margin-left: auto; color: var(--planet-accent); font-size: 11px; }
-.ac-perm { height: 24px; padding: 0 11px; border-radius: 999px; background: rgba(255,255,255,.07); border: 0.5px solid rgba(255,255,255,.1); color: var(--text-muted); font-size: 10.5px; cursor: pointer; }
+/* real approval state shown where the local-only permission picker used to
+ *  sit — blocked run ⇒ amber pulse chip, nothing otherwise */
+.ac-approval { flex: 0 0 auto; font-family: var(--font-mono); font-size: 10px; letter-spacing: .08em; color: #ffb454; }
+.ac-approval::before { content: "●"; margin-right: 5px; animation: pulse-dot 1.4s ease-in-out infinite; }
 
-/* text-only composer controls — no pills; + & permission anchored far left */
+/* text-only composer controls — no pills; + anchored far left */
 .ac-tools { gap: 14px; }
-.ac-attach, .ac-perm {
+.ac-attach {
   background: none; border: none; border-radius: 0; padding: 0;
   height: auto; color: var(--text-faint); font-size: 12px; cursor: pointer;
 }
 .ac-attach { font-size: 15px; line-height: 1; }
-.ac-attach:hover, .ac-perm:hover { color: var(--planet-accent); }
+.ac-attach:hover { color: var(--planet-accent); }
 .ac-planet { background: none; border: none; border-radius: 0; padding: 0; height: auto; color: var(--text-faint); font-size: 12px; }
 .ac-modelpill { background: none; border: none; border-radius: 0; padding: 0; height: auto; }
 .ac-modelpill select { color: var(--text-faint); font-size: 12px; }
 
-/* force left/right split — +, permission, @planet pinned LEFT */
+/* force left/right split — +, @planet pinned LEFT */
 .ac-tools { display: flex; justify-content: flex-start; align-items: center; }
 .ac-tools .ac-ctxring { margin-left: auto; }
 

@@ -1,6 +1,7 @@
 import type { ReactElement, ReactNode, SVGProps } from "react";
 import type { EventTone, RunStatus, StageStatus } from "../types";
 import { AgentServiceClientError, type ServiceErrorDTO } from "../types/service";
+import { t, type I18nKey } from "./i18n";
 
 export type InspectorTab = "files" | "events";
 
@@ -53,25 +54,15 @@ export const iconPaths: Record<IconName, string> = {
   x: "m6 6 12 12M18 6 6 18",
 };
 
-export const statusLabels: Record<RunStatus, string> = {
-  pending: "PENDING",
-  active: "ACTIVE",
-  cancelling: "CANCELLING",
-  cancelled: "CANCELLED",
-  timed_out: "TIMED OUT",
-  completed: "COMPLETED",
-  failed: "FAILED",
-  blocked: "BLOCKED",
-};
+/** Localized status labels — one vocabulary across timeline, buttons and
+ *  summaries so cancelling / cancelled / waiting-approval / failed never blur. */
+export function statusLabel(status: RunStatus): string {
+  return t(`status.${status}` as I18nKey);
+}
 
-export const stageLabels: Record<StageStatus, string> = {
-  queued: "QUEUED",
-  running: "RUNNING",
-  completed: "COMPLETED",
-  interrupted: "INTERRUPTED",
-  verified: "VERIFIED",
-  failed: "FAILED",
-};
+export function stageLabel(status: StageStatus): string {
+  return t(`stage.${status}` as I18nKey);
+}
 
 export const eventIcons: Record<EventTone, IconName> = {
   info: "activity",
@@ -113,7 +104,7 @@ export function Icon({ name, size = 16, className = "", ...props }: { name: Icon
 
 /** §S3 status ping — one expanding ring on each status change. */
 export function StatusBadge({ status }: { status: RunStatus }) {
-  return <span className={`status-badge ${status} st-ping`}>{statusLabels[status]}</span>;
+  return <span className={`status-badge ${status} st-ping`}>{statusLabel(status)}</span>;
 }
 
 export function stageIcon(status: StageStatus): IconName {

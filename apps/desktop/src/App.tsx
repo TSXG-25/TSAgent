@@ -11,6 +11,8 @@ import GlobalChat from "./app/GlobalChat";
 import PlanetSwitcher from "./app/PlanetSwitcher";
 import { SCENES, PLANET_GLYPH, type SceneDef } from "./app/scenes";
 import { motionTier } from "./app/motionTier";
+import { draftKey, useDraft } from "./app/draftStore";
+import { t, tk } from "./app/i18n";
 /** §3 route-jump — planet glyph sweep on every workspace entry (starmap,
  *  switcher or keyboard). 620ms, skipped on first mount and reduced-motion. */
 function SceneJump({ path }: { path: string }) {
@@ -87,7 +89,11 @@ function App() {
   }, [location.pathname]);
   const activeRunId = controllerState.activeRunId;
   const [sessionId, setSessionId] = useState(service.identity.sessionId);
-  const [requestDraft, setRequestDraft] = useState("");
+  // The new-task draft is the "sun" target draft — shared with the Sun
+  // workspace composer and GlobalChat's direct path per the draft contract.
+  const [requestDraftState, setRequestDraftState] = useDraft(draftKey(service.identity.tenantId, sessionId, "sun"));
+  const requestDraft = requestDraftState.text;
+  const setRequestDraft = (value: string) => setRequestDraftState({ ...requestDraftState, text: value });
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
@@ -255,7 +261,7 @@ function App() {
         {scene && <Link className="topbar-button" to="/" title="星图视图" type="button"><Icon name="layers" size={15} /></Link>}
       </header>
 
-      {visibleServiceError && <div className="service-error-banner" role="alert"><span className="service-error-icon"><Icon name="x" size={13} /></span><div><strong>{visibleServiceError.code}</strong><span>{visibleServiceError.message}</span></div><button onClick={() => { setServiceError(null); controller.dismissError(); }} title="Dismiss error" type="button"><Icon name="x" size={13} /></button></div>}
+      {visibleServiceError && <div className="service-error-banner" role="alert"><span className="service-error-icon"><Icon name="x" size={13} /></span><div><strong>{tk(`err.${visibleServiceError.code}`) ?? visibleServiceError.code}</strong><span>{visibleServiceError.code}: {visibleServiceError.message}</span></div><button onClick={() => { setServiceError(null); controller.dismissError(); }} title={t("err.dismiss")} type="button"><Icon name="x" size={13} /></button></div>}
 
       <main className="route-host">
         <Routes>

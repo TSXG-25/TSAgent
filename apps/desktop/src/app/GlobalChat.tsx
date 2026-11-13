@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { RunCtx } from "./runCtx";
 import { Icon } from "./ui";
 import { delegateToPlanet } from "./delegate";
+import { draftKey, useDraft, clearDraft } from "./draftStore";
+import { t } from "./i18n";
 import type { SessionSummary } from "../types/service";
 
 /** Global Chat — §4.1 honest subset: sessions are real (list/create), a sent
@@ -15,11 +17,16 @@ const MAP_KEY = "tsa.session-folder-map";
 const loadJson = <T,>(k: string, d: T): T => { try { return JSON.parse(localStorage.getItem(k) ?? "") ?? d; } catch { return d; } };
 
 export default function GlobalChat({ ctx, onClose, embedded = false, instant = false }: { ctx: RunCtx; onClose?: () => void; embedded?: boolean; instant?: boolean }) {
-  const { service, sessionId, selectSession, activeRun, requestDraft, setRequestDraft, createRun } = ctx;
+  const { service, sessionId, selectSession, activeRun, createRun } = ctx;
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [delegateTo, setDelegateTo] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const threadRef = useRef<HTMLDivElement>(null);
+  const composingRef = useRef(false);
+  // Draft keyed by the selected target — @direct shares the Sun workspace
+  // draft (same tenant/session/target key), @planet gets its own.
+  const dkey = draftKey(service.identity.tenantId, sessionId, delegateTo || "sun");
+  const [draft, setDraft] = useDraft(dkey);
 
   const [creating, setCreating] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -32,7 +39,7 @@ export default function GlobalChat({ ctx, onClose, embedded = false, instant = f
     localStorage.setItem(MAP_KEY, JSON.stringify(m));
   };
   const addFolder = () => {
-    const name = window.prompt("文件夹名称");
+    const name = window.prompt(t("chat.folder-name"));
     if (!name?.trim()) return;
     saveFolders({ ...folders, [`f-${Date.now().toString(36)}`]: name.trim() }, folderOf);
   };
@@ -78,7 +85,7 @@ export default function GlobalChat({ ctx, onClose, embedded = false, instant = f
   return (
     <div className={`chat-host ${embedded ? "embed" : "dock"} ${instant && !embedded ? "instant" : ""}`}>
       <header className="chat-head">
-        <div><span className="panel-eyebrow">AGENT DOCK</span><strong>{activeRun?.runId ?? "no-run"}</strong></div>
+        <div><span className="panel-eyebrow">{t("chat.dock")}</span><strong>{activeRun?.runId ?? t("chat.no-run")}</strong></div>
         <div className="sess-picker" ref={pickerRef}>
           <button className="sess-pick-btn" onClick={() => setPickerOpen((v) => !v)} type="button">
             {folderOf[sessionId] ? `${folders[folderOf[sessionId]] ?? ""} / ` : ""}{sessionId} ▾
@@ -96,8 +103,8 @@ export default function GlobalChat({ ctx, onClose, embedded = false, instant = f
                     });
                     await refreshSessions(); selectSession(s.sessionId); setPickerOpen(false);
                   } catch (err) { setNotice(String(err)); } finally { setCreating(false); }
-                }} disabled={creating} type="button">{creating ? "…" : "+ session"}</button>
-                <button className="btn secondary" onClick={addFolder} type="button">+ 文件夹</button>
+                }} disabled={creating} type="button">{creating ? "…" : t("chat.new-session")}</button>
+                <button className="btn secondary" onClick={addFolder} type="button">{t("chat.new-folder")}</button>
               </div>
               {Object.entries(folders).map(([fid, name]) => (
                 <div className="sess-folder" key={fid}
@@ -123,7 +130,7 @@ export default function GlobalChat({ ctx, onClose, embedded = false, instant = f
                   const sid = e.dataTransfer.getData("text/session");
                   if (sid) { const m = { ...folderOf }; delete m[sid]; saveFolders(folders, m); }
                 }}>
-                <div className="sess-folder-head"><span>未分组</span></div>
+                <div className="sess-folder-head"><span>{t("chat.ungrouped")}</span></div>
                 {allSessions.filter((s) => !folderOf[s.sessionId]).map((s) => (
                   <SessionRow key={s.sessionId} s={s} cur={sessionId} onPick={(id) => { selectSession(id); setPickerOpen(false); }} />
                 ))}
@@ -131,8 +138,8 @@ export default function GlobalChat({ ctx, onClose, embedded = false, instant = f
             </div>
           )}
         </div>
-        <select className="chat-target" value={delegateTo} onChange={(e) => setDelegateTo(e.target.value)} title="Delegate to @planet">
-          <option value="">@direct</option>
+        <select className="chat-target" value={delegateTo} onChange={(e) => setDelegateTo(e.target.value)} title={t("chat.target")}>
+          <option value="">{t("chat.direct")}</option>
           {["mercury","venus","earth","mars","jupiter","saturn","uranus","neptune","pluto"].map((p) => (
             <option key={p} value={p}>@{p}</option>
           ))}
@@ -143,13 +150,13 @@ export default function GlobalChat({ ctx, onClose, embedded = false, instant = f
       <div className="chat-thread" ref={threadRef}>
         {(activeRun?.conversation ?? []).map((m) => (
           <article className={`mc-msg ${m.role}`} key={m.messageId}>
-            <div className="mc-msg-head"><span>{m.role === "user" ? "YOU" : "T.S.A"}</span><time>{m.at}</time></div>
+            <div className="mc-msg-head"><span>{m.role === "user" ? t("chat.you") : "T.S.A"}</span><time>{m.at}</time></div>
             <div className="mc-msg-body">{m.content}</div>
           </article>
         ))}
         {activeRun?.output && (
           <article className="mc-msg assistant out">
-            <div className="mc-msg-head"><span>T.S.A · OUTPUT</span><time>{activeRun.output.createdAt}</time></div>
+            <div className="mc-msg-head"><span>T.S.A · {t("chat.output")}</span><time>{activeRun.output.createdAt}</time></div>
             <div className="mc-msg-body">{activeRun?.output.text}</div>
           </article>
         )}
@@ -157,13 +164,13 @@ export default function GlobalChat({ ctx, onClose, embedded = false, instant = f
 
       <form className="console-composer" onSubmit={async (e) => {
         e.preventDefault();
+        const text = draft.text.trim();
+        if (!text) return;
         if (delegateTo) {
-          const text = requestDraft.trim();
-          if (!text) return;
           try {
             await delegateToPlanet(ctx, delegateTo, text);
-            setRequestDraft("");
-            setNotice(`delegated → ${delegateTo}`);
+            clearDraft(dkey);
+            setNotice(t("composer.delegated", { target: delegateTo }));
           } catch (err) { setNotice(String(err)); }
         } else {
           createRun(e);
@@ -171,12 +178,20 @@ export default function GlobalChat({ ctx, onClose, embedded = false, instant = f
         }
       }}>
         <span className="dock-glyph"><Icon name="terminal" size={13} /></span>
-        <textarea autoFocus onChange={(e) => setRequestDraft(e.target.value)}
-          placeholder="Message — starts a Run in this session…" rows={2} value={requestDraft} />
-        <button className="mc-send" title="Send (start run)" type="submit"><Icon name="send" size={14} /></button>
+        <textarea autoFocus onChange={(e) => setDraft({ ...draft, text: e.target.value })}
+          onCompositionStart={() => { composingRef.current = true; }}
+          onCompositionEnd={() => { composingRef.current = false; }}
+          onKeyDown={(e) => {
+            if (e.key !== "Enter" || e.shiftKey) return;
+            if (e.nativeEvent.isComposing || composingRef.current) return;
+            e.preventDefault();
+            (e.currentTarget.form as HTMLFormElement).requestSubmit();
+          }}
+          placeholder={t("chat.placeholder")} rows={2} value={draft.text} />
+        <button className="mc-send" title={t("chat.send-title")} type="submit"><Icon name="send" size={14} /></button>
       </form>
       {notice && <p className="chat-foot" style={{ color: "#5fe0b1" }}>{notice}</p>}
-      <p className="chat-foot">Messages start Runs in <code>{sessionId}</code> · @planet delegates a child Task+Run · ⌘L to reopen</p>
+      <p className="chat-foot">{t("chat.foot", { session: sessionId })}</p>
     </div>
   );
 }
@@ -187,7 +202,7 @@ function SessionRow({ s, cur, onPick }: { s: { sessionId: string; runCount: numb
       onDragStart={(e) => e.dataTransfer.setData("text/session", s.sessionId)}
       onClick={() => onPick(s.sessionId)} type="button">
       <span className="sess-id">{s.sessionId}</span>
-      {s.runCount >= 0 && <span className="sess-n">{s.runCount} runs</span>}
+      {s.runCount >= 0 && <span className="sess-n">{t("chat.runs", { n: s.runCount })}</span>}
     </button>
   );
 }

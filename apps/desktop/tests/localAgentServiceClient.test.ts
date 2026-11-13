@@ -449,6 +449,41 @@ test("LC14 sidecar failure never falls back to Mock", async () => {
   await transport.close();
 });
 
+test("LC14b concurrent requests share one spawn — no duplicate connect", async () => {
+  const bridge = new FakeBridge();
+  const transport = new TauriSidecarTransport(bridge, {
+    requestIdFactory: (sequence, method) => `${method}-${sequence}`,
+  });
+  const first = transport.request("health", {});
+  const second = transport.request("health", {});
+  const third = transport.request("get_run", {});
+  await new Promise((resolve) => setImmediate(resolve));
+  // 重复连接去重 — 三个并发请求共用一次 spawn。
+  assert.equal(bridge.spawnCount, 1);
+  bridge.process.emit(response("health-1", {}));
+  bridge.process.emit(response("health-2", {}));
+  bridge.process.emit(response("get_run-3", {}));
+  await first; await second; await third;
+  await transport.close();
+});
+
+test("LC14c spawn failure surfaces the bridge's own error, not a mask", async () => {
+  const bridge: TauriSidecarBridge = {
+    async spawn(): Promise<TauriSidecarProcess> {
+      // 配置缺失（如 VITE_TSAGENT_SIDECAR_CWD 未设置）以原始错误码上抛。
+      throw new AgentServiceClientError({ code: "INVALID_REQUEST", message: "sidecar cwd not configured", retryable: false });
+    },
+  };
+  const transport = new TauriSidecarTransport(bridge, {
+    requestIdFactory: (sequence, method) => `${method}-${sequence}`,
+  });
+  await assert.rejects(
+    transport.request("health", {}),
+    (error: unknown) => error instanceof AgentServiceClientError && error.code === "INVALID_REQUEST",
+  );
+  await transport.close();
+});
+
 test("LC15 shutdown closes the transport without creating cancellation", async () => {
   const transport = new StubTransport();
   transport.enqueue("shutdown", { status: "shutting_down" });

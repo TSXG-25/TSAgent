@@ -17,6 +17,8 @@
 | Memory proposal 不等于 durable commit | memory service、learning provider、persistence tests | VERIFIED |
 | Checkpoint resume 只在显式 checkpoint_request 下启用 | agent/executor/executors/workflow.py、checkpoint tests | VERIFIED |
 | AgentService.resume_run 已接入 RunResumeCoordinator | agent/service/runtime_launcher.py（`_resume_checkpoint` → `RunResumeCoordinator`）、Service 重启离线 E2E | VERIFIED（离线） |
+| 本地 RPC 信任边界为可信单机同用户客户端；发行形态走 stdio，HTTP 仅 loopback 开发模式 + Host/Origin 白名单，无调用方身份层 | agent/service/local_sidecar/__main__.py、http_server.py、tests/test_desktop_sidecar.py::test_http_sidecar_enforces_host_and_origin | VERIFIED（离线） |
+| Forget 只删 Durable Facts（指定 scope 时仅该 scope 记录）；ReMe 为独立属主，无已验证删除契约 | agent/memory/long_term.py::forget_fact、tests/test_desktop_sidecar.py::test_a10_forget_scoped_to_displayed_fact_and_not_reme | VERIFIED（离线） |
 
 ## 解释边界
 

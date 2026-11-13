@@ -74,6 +74,12 @@ P0 指执行授权或公开执行事实可能错误。P1 指已发生或可复�
 
 **验收。** 核对发行配置与实际启动参数。开发 HTTP 和打包 Desktop 的启用条件可分别验证。
 
+**当前合同（2026-11-12 核对）。** 信任边界为**可信单机、同用户客户端**：
+
+- **发行形态走 stdio。** 打包 Desktop 经 `TauriSidecarTransport` → `TauriSidecarBridge.spawn()` → Tauri/Rust host（`src-tauri/src/main.rs`）拉起 `python -m agent.service.local_sidecar`，走 stdin/stdout JSONL，无任何网络监听面。启动前校验 `VITE_TSAGENT_SIDECAR_CWD`，缺失报稳定 `INVALID_REQUEST`。
+- **HTTP 仅限开发。** `python -m agent.service.local_sidecar --http <port>` 供浏览器 dev mode（浏览器无法 spawn stdio）。只绑定 `127.0.0.1`；Host 头强制 `127.0.0.1:port`/`localhost:port`（挡 DNS rebinding），Origin 走白名单（默认 dev server `http://localhost:4173`/`http://127.0.0.1:4173`，可 `--allow-origin` 覆盖）。`tests/test_desktop_sidecar.py::test_http_sidecar_enforces_host_and_origin` 为离线证据。
+- **无调用方身份。** HTTP 无认证，DTO 中的 tenant/user/session 由调用方自报——仅足以做可信单机客户端的数据分区，不构成授权。共享设备或远程使用所需的调用方身份与 workspace 授权**未实现也未承诺**；如产品需要，须另行立项设计。
+
 ### A04 · 接纳后启动失败与暂停退出
 
 **问题和影响。** start reservation 先落库，deferred context 构造或 Launcher 出错时，`_run_start` 仅写进程内 `_task_errors`，公开查询仍读 durable snapshot。暂停依赖当前实例的 `asyncio.Event`，进程消失后同一恢复入口转向 Workflow checkpoint，普通 Loop 没有这种 checkpoint。Service close 等待当前 Run，未在本处统一收束 scheduler 和辅助任务。现有 orphan sweeper 可收敛部分异常，延迟错误与本地暂停仍需要明确语义。[Start](../../agent/service/service.py#L280) · [后台错误](../../agent/service/service.py#L310) · [暂停](../../agent/service/service.py#L2054) · [恢复](../../agent/service/service.py#L2102) · [关闭](../../agent/service/service.py#L2346) · [无 checkpoint](../../agent/service/runtime_launcher.py#L88)
@@ -169,6 +175,14 @@ P0 指执行授权或公开执行事实可能错误。P1 指已发生或可复�
 **修复范围。** 先保留为待证据项。若同一动作在两条执行路径出现不同的授权、取消或结果判定，沿已存在的 `ActionResult` 和效果证据合同收拢该用例的调用。记录私有接口访问与重复结果解释的位置。
 
 **验收。** 出现具体失败后，用一条入口级用例锁定差异，据此验收局部修复。
+
+**证据记录（2026-11-12）。** 已定位两处结构性接口债务，均不构成当前可复现的分歧：
+
+- 私有接口访问：`agent/loop/runner.py` 的工具执行分支调用 `self._orch._executor.execute_action(...)`（`_orch` 为 ExecutionOrchestrator 容器，`_executor` 为 ExecutionStage），是 Loop 越过容器边界的唯一私有访问点。
+- 多形态结果解释：同一分支内联解释三种返回形态——`action_result`（ok/content/error_code）、裸 `result.success` 文本、`result.error`/`metadata.error_code`——成功/失败/错误码的权威判定未收拢到 `ActionResult` 单一合同。
+- 授权/取消分路径核对（未发现当前分歧）：executor 路径在 `execute_action` 前执行 `EffectAuthorization.validate_tool_action` + `_approval_gate`；builtin 分支中 `browser_*`（可达 R2）显式过 `_approval_gate`，`mcp_*` 按 `expose_tools` 白名单授权（spec 不携带 risk 元数据，LoopTool 默认 R0，gate 恒为空操作），`load_skill`/`reme_search` 只读，`run_workflow`/`spawn_subtask` 为 R1。取消两条路径均有覆盖（`await_interruptibly` / `cancellation_view.raise_if_requested`）。潜在缺口：若 MCP spec 未来携带可变工具的 risk 声明，builtin 分支不会经过 approval gate——待具体失败再立项。
+
+**结论。** 无当前可复现的授权/取消/结果分歧；按「不投机重构」原则不改生产代码，证据位置已记录备查。
 
 ### A15 · 复用接纳时记录的 workspace
 
@@ -382,6 +396,16 @@ OPENAI_API_KEY= LLM_API_KEY= P2_SECONDARY_API_KEY= TSAGENT_LLM_PROVIDER=ollama \
 ### 交付记录（2026-11-12 同步）
 
 - 已交付：A01、A02、A04–A09、A11–A13、A15、A16、A19、A21、A22、A24、A26、A27（19/27）。逐单验收以会话回归记录与对应提交为准。
-- 未开始：A03（RPC 信任边界）、A10（记忆删除范围）、A14（Runtime 状态/动作执行接口）、A17/A18（量测与桌面壳）、A20（文档/风格/权威图）、A23（Earth 裁决语义，需产品裁定）、A25（工作台能力与 UI 承诺）。
+
+### 交付记录（2026-11-12 收尾批次，27/27 闭环）
+
+- **A03 已核对。** 信任边界为可信单机同用户客户端：发行形态 stdio（Tauri host spawn，无网络面），HTTP 仅 `--http` 开发模式（loopback + Host/Origin 白名单）。无调用方身份/授权层——共享设备或远程使用未承诺，须另行立项。当前合同写入上方 A03 节。
+- **A10 已交付。** Forget 语义确定：删除指定 scope 的 Durable Fact 记录（`facts` 表 `user_id+scope+category+key`）；不传 scope 时删除该 (category,key) 的全部 scope 记录（服务层合同）。ReMe 为独立记忆属主，仅暴露 `search`/`auto_memory`，无可验证的删除契约——TSAgent 不实现 ReMe 删除。Jupiter ✕ 现按显示 scope 删除并注明边界。回归：`tests/test_desktop_sidecar.py::test_a10_forget_scoped_to_displayed_fact_and_not_reme`（双 scope 替代 + ReMe 间谍替身）。
+- **A14 已定位并记录，无生产改动。** 私有访问单点 `runner.py` `_orch._executor.execute_action`；三形态结果内联解释；授权/取消分路径核对无当前分歧。证据见上方 A14 节。潜在缺口（MCP spec 携带 risk 时不经 gate）已记录为待证据项。
+- **A17 已测量。** `scripts/measure_sqlite_contention.py` 可复跑：20 Runs × 25 events（512B 载荷）；200ms 原始写锁下读延迟无变化（WAL 读者不阻塞，min/max 0.0/0.1ms），写延迟升至 155.6ms max；超 `busy_timeout` 的写 5.2s 后报 `STORE_BUSY`（有界）；库增长 708,608→770,048B（≈1,501B/event），关闭时 WAL 归零。作为容量/运维证据，未据此改 store 策略。
+- **A18 已覆盖。** `TauriSidecarTransport` 生命周期离线回归补齐：重复 connect 去重、spawn/config 失败映射（`PROVIDER_UNAVAILABLE`/`INVALID_REQUEST`）、进程退出、畸形输出、超时、并发关联、未知/重复响应、关闭。**发行形态仍为源码开发形态**（bridge 默认系统 `python3` + 构建时 `VITE_TSAGENT_SIDECAR_CWD`），安装包干净机器验收属发行方外部验证范围。
+- **A20 已同步。** `known-debt.md` #6/#7 推翻更新（TSAgent 已是 Service 门面；Tauri host 已入库）；本档案各节按实际交付修订；入口/所有权图（下文）保留为交接索引。
+- **A23 已交付。** Earth 人工裁决与 Saturn 执行结果为同一语义类别，权威枚举收拢于 store `EVALUATION_VERDICTS` + TS `HUMAN_EVALUATION_VERDICTS`（`pass/fail/neutral/keep_candidate/keep_baseline/inconclusive`）。Service 入口校验 + `INVALID_ARGUMENT`→`INVALID_REQUEST` 稳定映射；滑块参数裁定为**运行输入**——快照以 `[bio-proxy params: …]` 前缀随 Composer 请求进入 Run（`earthEvalForm.composerContext`），同一份快照也写入裁决 notes 便于对照。回归覆盖全枚举 wire 往返、非法值、会话隔离、重开一致。
+- **A25 已交付。** Venus 风格控件显式标记 unsupported（不再暗示 Composer 消费）；Neptune 区分 SVG 预览（已接）与生成/编辑/二进制（不支持）；Jupiter 权限栏改为显式能力/授权表示；Uranus 节点结果展示为已接通（原档案行过期）。`scenes.ts` 的 `desc`/`mvp` 按已接通操作改写。回归：`apps/desktop/tests/workspaceCapability.test.ts`。
 - `host_integration` 在 ubuntu CI 上只实跑 HTTP loopback 用例；两条 Seatbelt 用例保留 macOS 宿主验收。
-- 验证范围为本地离线检查；GitHub Actions 实跑未覆盖。
+- 验证范围为本地离线检查；GitHub Actions 实跑、安装包体验、真实 ReMe 实例行为均未覆盖。

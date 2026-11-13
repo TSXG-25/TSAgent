@@ -30,17 +30,17 @@ MemoryRuntime.reset 已可限定 facts namespace 与 scope；当前离线回归�
 
 agent/conversation/state.py 的 ConversationState 是 session 对话状态；agent/cognition/cognitive_context.py 的 ConversationState 是 resolution timeline cache。两者语义不同但名称相同，影响是维护者容易把 intent cache 当成 recent_goal/last_answer 的权威。
 
-## 6. Direct API 绕过 Service
+## 6. ~~Direct API 绕过 Service~~（已修复，2026-11-12）
 
-TSAgent 和 SessionRuntime 仍可直接构造 UniversalAgent。它们不会自动获得 AgentService 的 reservation、公共 event stream、projector 和 Service resume 语义。影响是“Runtime 可用”与“Service 可恢复”不是同一保证。
+`TSAgent`（agent/api.py）现在是 `AgentService` 的薄门面：通过 `create_default_agent_service` 构造，所有 Run 经 Service reservation、公共 event stream 与 projector。生产代码中不存在直接构造 `UniversalAgent` 的公开入口，原条目失效。
 
-## 7. Desktop local host 不在仓库内
+## 7. ~~Desktop local host 不在仓库内~~（已修复，2026-11-12）
 
-Desktop clientFactory 默认 mock；local mode 需要注入 TauriSidecarBridge。仓库没有 Tauri/Rust host，真实桌面进程生命周期、身份注入和 sidecar 协作仍需外部验证。
+Tauri/Rust host 已入库（`apps/desktop/src-tauri/src/main.rs`）。`clientFactory` 的 local mode 通过 `TauriSidecarTransport`（注入 `TauriSidecarBridge`，stdio JSONL）或 `HttpLocalTransport`（loopback 开发模式）连接 sidecar；`TauriSidecarBridge` 在 spawn 前校验 `VITE_TSAGENT_SIDECAR_CWD` 配置，缺失时报稳定 `INVALID_REQUEST`。真实安装包进程生命周期仍需发行方在干净机器验收（A18 外部验证范围）。
 
-## 8. 历史文档状态滞后
+## 8. 历史文档状态滞后（2026-11-12 复核）
 
-ADR-0023 的开头仍保留早期“Service cancel 未实现”的时间层次，当前代码已经有 AgentService.cancel_run、timeout watchdog 和 convergence。ADR-0018 对 resume integration 的表述也比当前主路径更强。应通过新 ADR 或明确 revision 记录校正，不在本次审计中直接重写历史决策。
+ADR-0023 的开头仍保留早期“Service cancel 未实现”的时间层次，当前代码已经有 AgentService.cancel_run、timeout watchdog 和 convergence。ADR-0018 对 resume integration 的表述也比当前主路径更强。这些 ADR 保留历史决策原文，以本文件和 architecture-invariants.md 的现状行作为当前合同，不在审计中重写历史决策。
 
 ## 处理优先级
 

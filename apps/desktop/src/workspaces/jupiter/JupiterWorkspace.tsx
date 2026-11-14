@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { SCENES } from "../../app/scenes";
 import { WorkspaceFrame, CapNotInstalled } from "../../design-system/WorkspaceFrame";
 import { requestIdForRun } from "../../app/ui";
@@ -24,7 +24,9 @@ export default function JupiterWorkspace({ ctx }: { ctx: RunCtx }) {
   const [preview, setPreview] = useState<string | null>(null);
 
   const req = useCallback(() => ({ tenantId: service.identity.tenantId, sessionId: service.identity.sessionId, requestId: requestIdForRun(0) }), [service]);
-  useEffect(() => setPreview(null), [sel]);
+  // 预览归属 — 只接受对当前选中项发出的响应；选中变化即作废在途请求。
+  const previewFor = useRef<JupiterArtifactSummary | null>(null);
+  useEffect(() => { previewFor.current = null; setPreview(null); }, [sel]);
   useEffect(() => {
     service.listFacts(req()).then(setFacts).catch(() => setFacts([]));
     service.searchArtifacts({ ...req(), query: "", allSessions: true }).then(setFiles).catch((e) => setErr(String(e)));
@@ -34,16 +36,16 @@ export default function JupiterWorkspace({ ctx }: { ctx: RunCtx }) {
     <WorkspaceFrame scene={scene} ctx={ctx}>
       <div className="jup">
         <div className="jup-tabs">
-          <button className={tab === "memory" ? "on" : ""} onClick={() => setTab("memory")} type="button">Memory</button>
-          <button className={tab === "file" ? "on" : ""} onClick={() => setTab("file")} type="button">File Δ</button>
-          <button className={tab === "history" ? "on" : ""} onClick={() => { setTab("history"); service.listHistory(req()).then(setHistory).catch((e) => setErr(String(e))); }} type="button">History</button>
-          <input className="jup-q" onChange={(e) => setQ(e.target.value)} placeholder="filter…" value={q} />
+          <button className={tab === "memory" ? "on" : ""} onClick={() => setTab("memory")} type="button">{t("jup.tab-memory")}</button>
+          <button className={tab === "file" ? "on" : ""} onClick={() => setTab("file")} type="button">{t("jup.tab-file")}</button>
+          <button className={tab === "history" ? "on" : ""} onClick={() => { setTab("history"); service.listHistory(req()).then(setHistory).catch((e) => setErr(String(e))); }} type="button">{t("jup.tab-history")}</button>
+          <input className="jup-q" onChange={(e) => setQ(e.target.value)} placeholder={t("jup.filter")} value={q} />
         </div>
         <div className="jup-split">
           <section className="jup-list">
             {tab === "memory" ? (
               <>
-                <h4 className="ws-mod">Facts <button className="jup-cloud-toggle" onClick={() => setCloud((v) => !v)} type="button">{cloud ? "list" : "星系"}</button></h4>
+                <h4 className="ws-mod">{t("jup.facts")} <button className="jup-cloud-toggle" onClick={() => setCloud((v) => !v)} type="button">{cloud ? t("jup.view-list") : t("jup.view-cloud")}</button></h4>
                 {cloud && (
                   <div className="jup-cloud">
                     {facts.map((f) => {
@@ -58,34 +60,34 @@ export default function JupiterWorkspace({ ctx }: { ctx: RunCtx }) {
                           title={`${f.category}:${f.key}`} type="button" />
                       );
                     })}
-                    <span className="jup-cloud-note">{facts.length} memories · 点击星点查看</span>
+                    <span className="jup-cloud-note">{t("jup.cloud-note", { n: facts.length })}</span>
                   </div>
                 )}
                 {!cloud && facts.filter((f) => !q || `${f.category}${f.key}`.includes(q)).map((f) => (
                   <span className={`jup-row ${sel === f ? "on" : ""}`} key={f.category + ":" + f.key} onClick={() => setSel(f)}>
                     <strong>{f.category}:{f.key}</strong><small>{f.value.slice(0, 40)}</small>
-                    <i className="jup-forget" title={`forget ${f.category}:${f.key} in scope ${f.scope} — removes this governed fact only; ReMe long-term memory is unaffected`} onClick={(e) => { e.stopPropagation(); void service.forgetFact({ ...req(), category: f.category, key: f.key, scope: f.scope }).then(() => service.listFacts(req()).then(setFacts)).then(() => { setNotice(t("jupiter.forgot")); if (sel === f) setSel(null); }).catch((x) => setErr(String(x))); }}>✕</i>
+                    <i className="jup-forget" title={t("jup.forget-title", { scope: f.scope, key: `${f.category}:${f.key}` })} onClick={(e) => { e.stopPropagation(); void service.forgetFact({ ...req(), category: f.category, key: f.key, scope: f.scope }).then(() => service.listFacts(req()).then(setFacts)).then(() => { setNotice(t("jupiter.forgot")); if (sel === f) setSel(null); }).catch((x) => setErr(String(x))); }}>✕</i>
                   </span>
                 ))}
-                {!cloud && facts.length === 0 && <p className="omni-empty">No governed facts.</p>}
-                {!cloud && facts.length > 0 && <p className="omni-empty" style={{ opacity: 0.6 }}>✕ forgets one governed fact in its scope — ReMe long-term memory is governed by its own service.</p>}
+                {!cloud && facts.length === 0 && <p className="omni-empty">{t("jup.no-facts")}</p>}
+                {!cloud && facts.length > 0 && <p className="omni-empty" style={{ opacity: 0.6 }}>{t("jup.forget-note")}</p>}
               </>
             ) : tab === "history" ? (
               <>
-                <h4 className="ws-mod">History <em>本 session 的 run 记录</em></h4>
+                <h4 className="ws-mod">{t("jup.tab-history")} <em>{t("jup.history-note")}</em></h4>
                 {history.filter((h) => !q || h.requestText.includes(q)).map((h) => (
                   <button className="jup-row" key={h.runId}
-                    onClick={() => void ctx.controller.refreshRun(h.runId, ctx.sessionId).then(() => ctx.openRun(h.runId)).catch((e) => setErr(String(e)))} type="button">
+                    onClick={() => ctx.openRun(h.runId, ctx.sessionId)} type="button">
                     <strong>{h.requestText.slice(0, 42)}</strong>
                     <small>{h.status} · {h.updatedAt.slice(0, 19)}</small>
                     <small>{h.answerText.slice(0, 60)}</small>
                   </button>
                 ))}
-                {history.length === 0 && <p className="omni-empty">No history.</p>}
+                {history.length === 0 && <p className="omni-empty">{t("jup.no-history")}</p>}
               </>
             ) : (
               <>
-                <h4 className="ws-mod">Artifacts <em>all sessions</em></h4>
+                <h4 className="ws-mod">{t("jup.artifacts")} <em>{t("jup.all-sessions")}</em></h4>
                 {files.filter((f) => !q || f.reference.includes(q)).map((f) => (
                   <button className={`jup-row ${sel === f ? "on" : ""}`} key={f.artifactId} onClick={() => setSel(f)} type="button">
                     <strong>{f.reference}</strong><small>{f.runId} · {f.artifactType}</small>
@@ -95,7 +97,7 @@ export default function JupiterWorkspace({ ctx }: { ctx: RunCtx }) {
             )}
           </section>
           <aside className="jup-inspect">
-            <h4 className="ws-mod">Access <em>grouping</em></h4>
+            <h4 className="ws-mod">{t("jup.access")} <em>{t("jup.grouping")}</em></h4>
             {sel ? (
               <>
                 {accessRows(sel).map((row) => (
@@ -106,15 +108,17 @@ export default function JupiterWorkspace({ ctx }: { ctx: RunCtx }) {
                   <>
                     <button className="btn secondary" onClick={() => {
                       const a = sel as JupiterArtifactSummary;
+                      previewFor.current = a;
                       void service.readArtifact({ tenantId: service.identity.tenantId, sessionId: a.sessionId, runId: a.runId, artifactId: a.artifactId })
-                        .then((c) => setPreview(c.result === "ok" ? c.text.slice(0, 1200) : c.result)).catch((e) => setPreview(String(e instanceof Error ? e.message : e)));
-                    }} type="button">预览</button>
+                        .then((c) => { if (previewFor.current === a) setPreview(c.result === "ok" ? c.text.slice(0, 1200) : c.result); })
+                        .catch((e) => { if (previewFor.current === a) setPreview(String(e instanceof Error ? e.message : e)); });
+                    }} type="button">{t("artifact.preview")}</button>
                     {preview && <pre className="jup-detail">{preview}</pre>}
                   </>
                 )}
               </>
-            ) : <p className="omni-empty">Select an item</p>}
-            <CapNotInstalled what="Knowledge graph toggle" />
+            ) : <p className="omni-empty">{t("jup.select-item")}</p>}
+            <CapNotInstalled what={t("jup.cap-graph")} />
             {notice && <p className="omni-empty">{notice}</p>}
             {err && <p className="omni-empty" style={{ color: "var(--st-danger,#ff5a4f)" }}>{err}</p>}
           </aside>

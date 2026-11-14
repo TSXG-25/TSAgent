@@ -33,7 +33,7 @@ export default function SaturnWorkspace({ ctx }: { ctx: RunCtx }) {
 
   async function create() {
     const seconds = Math.round(Number(mins) * 60);
-    if (!text.trim() || !(seconds > 0)) { setErr("request text + 正数分钟数"); return; }
+    if (!text.trim() || !(seconds > 0)) { setErr(t("sat.err-input")); return; }
     setCreating(true); setErr(null);
     try {
       await service.createSchedule({ ...req(), sessionId: ctx.sessionId, requestText: text.trim(), intervalSeconds: seconds, ...(planet ? { targetPlanet: planet } : {}) });
@@ -45,13 +45,13 @@ export default function SaturnWorkspace({ ctx }: { ctx: RunCtx }) {
     <WorkspaceFrame scene={scene} ctx={ctx}>
       <div className="chron">
         <div className="chron-create">
-          <input className="chron-in" onChange={(e) => setText(e.target.value)} placeholder="定时任务内容…" value={text} />
-          <input className="chron-in chron-min" onChange={(e) => setMins(e.target.value)} placeholder="分钟" title="间隔（分钟）" type="number" value={mins} />
+          <input className="chron-in" onChange={(e) => setText(e.target.value)} placeholder={t("sat.ph-task")} value={text} />
+          <input className="chron-in chron-min" onChange={(e) => setMins(e.target.value)} placeholder={t("sat.ph-mins")} title={t("sat.mins-title")} type="number" value={mins} />
           <select className="chron-in chron-pl" onChange={(e) => setPlanet(e.target.value)} value={planet}>
-            <option value="">planet…</option>
+            <option value="">{t("sat.ph-planet")}</option>
             {["sun","mercury","venus","earth","mars","jupiter","saturn","uranus","neptune","pluto"].map((w) => <option key={w} value={w}>{w}</option>)}
           </select>
-          <button className="lab-run" disabled={creating} onClick={() => void create()} type="button">+ 创建</button>
+          <button className="lab-run" disabled={creating} onClick={() => void create()} type="button">{t("sat.create")}</button>
         </div>
         {err && <p className="chron-err">{err}</p>}
         <div className="chron-board">
@@ -60,11 +60,11 @@ export default function SaturnWorkspace({ ctx }: { ctx: RunCtx }) {
               onClick={() => setSel(s)} type="button">
               <span className={`chron-dot ${s.status.toLowerCase()}`} />
               <strong>{s.requestText.slice(0, 30)}{s.requestText.length > 30 ? "…" : ""}</strong>
-              <small>{s.intervalSeconds >= 86400 ? `每 ${Math.round(s.intervalSeconds / 86400)} 天` : `每 ${Math.round(s.intervalSeconds / 3600)} 小时`} · {s.targetPlanet}</small>
+              <small>{s.intervalSeconds >= 86400 ? t("sat.every-days", { n: Math.round(s.intervalSeconds / 86400) }) : s.intervalSeconds >= 3600 ? t("sat.every-hours", { n: Math.round(s.intervalSeconds / 3600) }) : t("sat.every-minutes", { n: Math.max(1, Math.round(s.intervalSeconds / 60)) })} · {s.targetPlanet}</small>
               <em>{s.status}</em>
             </button>
           ))}
-          {schedules.length === 0 && <div className="empty-state"><p>No scheduled tasks</p></div>}
+          {schedules.length === 0 && <div className="empty-state"><p>{t("sat.empty")}</p></div>}
         </div>
         <aside className="chron-side">
           {ctx.activeRun && (
@@ -73,23 +73,23 @@ export default function SaturnWorkspace({ ctx }: { ctx: RunCtx }) {
                 <small><code>{ctx.activeRun.runId}</code> · {ctx.activeRun.status}</small></div>
             </div>
           )}
-          <h4 className="ws-mod">当日汇报</h4>
+          <h4 className="ws-mod">{t("sat.report")}</h4>
           {sel ? (
             <div className="chron-detail">
-              <div className="ven-meta"><span>task</span><code>{sel.requestText}</code></div>
-              <div className="ven-meta"><span>周期</span><code>{sel.intervalSeconds}s</code></div>
-              <div className="ven-meta"><span>目标</span><code>@{sel.targetPlanet}</code></div>
+              <div className="ven-meta"><span>{t("sat.label-task")}</span><code>{sel.requestText}</code></div>
+              <div className="ven-meta"><span>{t("sat.label-interval")}</span><code>{sel.intervalSeconds}s</code></div>
+              <div className="ven-meta"><span>{t("sat.label-target")}</span><code>@{sel.targetPlanet}</code></div>
               <div className="ven-meta"><span>{t("saturn.next-fire")}</span><code>{sel.nextFireAt ? sel.nextFireAt.slice(0, 19).replace("T", " ") : "—"}</code></div>
               {sel.lastRunId && (
                 <div className="ven-meta"><span>{t("saturn.last-run")}</span>
-                  <button className="ven-link" onClick={() => void ctx.controller.refreshRun(sel.lastRunId, ctx.sessionId).then(() => ctx.openRun(sel.lastRunId)).catch((e) => setErr(String(e)))} type="button">{sel.lastRunId}</button>
+                  <button className="ven-link" onClick={() => ctx.openRun(sel.lastRunId, sel.sessionId)} type="button">{sel.lastRunId}</button>
                 </div>
               )}
-              <button className="btn secondary" onClick={() => void toggle(sel)} type="button">{sel.status === "ACTIVE" ? "暂停" : "恢复"}</button>
+              <button className="btn secondary" onClick={() => void toggle(sel)} type="button">{sel.status === "ACTIVE" ? t("sat.pause") : t("sat.resume")}</button>
             </div>
-          ) : <p className="omni-empty">点卡片设置任务（周期/目标）</p>}
+          ) : <p className="omni-empty">{t("sat.pick")}</p>}
           {err && <p className="omni-empty" style={{ color: "var(--st-danger,#ff5a4f)" }}>{err}</p>}
-          <AgentComposer ctx={ctx} planet="saturn" placeholder="新计划 — 描述周期任务…" />
+          <AgentComposer ctx={ctx} planet="saturn" placeholder={t("sat.composer-ph")} />
           <div className="ws-statusbar"><span>{schedules.filter((x) => x.status === "ACTIVE").length} ACTIVE</span><span>{schedules.length} SCHEDULES</span><span className="right">saturn</span></div>
         </aside>
       </div>

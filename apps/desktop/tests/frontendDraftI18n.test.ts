@@ -12,7 +12,7 @@ const makeStorage = () => {
 (globalThis as Record<string, unknown>).sessionStorage = makeStorage();
 (globalThis as Record<string, unknown>).localStorage = makeStorage();
 
-const { draftKey, loadDraft, saveDraft, clearDraft } = await import("../src/app/draftStore");
+const { draftKey, loadDraft, saveDraft, clearDraft, clearDraftIfUnchanged } = await import("../src/app/draftStore");
 const { getLang, setLang, t, tk } = await import("../src/app/i18n");
 
 test("draftKey scopes by tenant, session and target", () => {
@@ -36,6 +36,29 @@ test("clearDraft removes the stored draft — the post-accept path", () => {
   clearDraft(key);
   assert.equal(loadDraft(key).text, "");
   assert.equal(sessionStorage.getItem(`tsagent:draft:${key}`), null);
+});
+
+test("clearDraftIfUnchanged keeps text typed while the request was in flight", async () => {
+  const key = draftKey("t1", "s-d", "venus");
+  const submitted = { text: "A — sent", files: ["file:/tmp/x.md"] };
+  saveDraft(key, submitted);
+  // submit snapshot taken → request in flight (deferred) → user keeps typing
+  let release: () => void = () => {};
+  const request = new Promise<void>((resolve) => { release = resolve; });
+  saveDraft(key, { text: "A — sent …and B", files: submitted.files });
+  release();
+  await request;
+  clearDraftIfUnchanged(key, submitted);          // B must survive
+  assert.equal(loadDraft(key).text, "A — sent …and B");
+  assert.deepEqual(loadDraft(key).files, submitted.files);
+});
+
+test("clearDraftIfUnchanged clears an untouched draft after accept", () => {
+  const key = draftKey("t1", "s-e", "sun");
+  const submitted = { text: "done", files: [] };
+  saveDraft(key, submitted);
+  clearDraftIfUnchanged(key, submitted);
+  assert.equal(loadDraft(key).text, "");
 });
 
 test("drafts of different targets stay isolated", () => {

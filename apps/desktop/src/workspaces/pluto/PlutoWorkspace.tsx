@@ -3,13 +3,13 @@ import { SCENES } from "../../app/scenes";
 import { WorkspaceFrame } from "../../design-system/WorkspaceFrame";
 import { requestIdForRun } from "../../app/ui";
 import AgentComposer from "../../app/AgentComposer";
-import { t } from "../../app/i18n";
+import { t, type I18nKey } from "../../app/i18n";
 import type { RunCtx } from "../../app/runCtx";
 import type { MotifSummary } from "../../types/service";
 
 /** Genesis per hand-drawn spec §11 — motif rail (done/发放/current) |
  *  report log (what was done + answer) | 认可/不认可 human judgement. */
-const TAG: Record<string, string> = { open: "待探索", exploring: "探索中", reported: "待裁决", resolved: "已完成" };
+const TAG: Record<string, I18nKey> = { open: "plu.tag-open", exploring: "plu.tag-exploring", reported: "plu.tag-reported", resolved: "plu.tag-resolved" };
 
 export default function PlutoWorkspace({ ctx }: { ctx: RunCtx }) {
   const { service } = ctx;
@@ -67,7 +67,7 @@ export default function PlutoWorkspace({ ctx }: { ctx: RunCtx }) {
 
   /** 汇报 — 探索 Run 报告结论（run 证据），等待人工裁决。 */
   async function report(m: MotifSummary) {
-    const resolution = window.prompt("汇报——这轮探索真正搞明白了什么？", m.resolution || "");
+    const resolution = window.prompt(t("plu.prompt-report"), m.resolution || "");
     if (!resolution?.trim()) return;
     await act(() => service.reportMotif({
       ...req(), motifId: m.motifId,
@@ -79,7 +79,7 @@ export default function PlutoWorkspace({ ctx }: { ctx: RunCtx }) {
   /** 裁决 — 认可把已汇报的结论收进记忆；不认可退回探索，持久可核对。 */
   async function judge(m: MotifSummary, ok: boolean) {
     if (!ok) { await act(() => service.rejectMotif({ ...req(), motifId: m.motifId })); return; }
-    const resolution = window.prompt("认可这份汇报——收进记忆的结论：", m.resolution || "");
+    const resolution = window.prompt(t("plu.prompt-resolve"), m.resolution || "");
     if (!resolution?.trim()) return;
     await act(() => service.resolveMotif({
       ...req(), motifId: m.motifId,
@@ -94,39 +94,39 @@ export default function PlutoWorkspace({ ctx }: { ctx: RunCtx }) {
       <div className="gen">
         <aside className="gen-motifs">
           <section className="gen-block">
-            <h4 className="ws-mod">已完成母题</h4>
+            <h4 className="ws-mod">{t("plu.done")}</h4>
             {done.map((m) => <button className="gen-row" key={m.motifId} onClick={() => setSel(m.motifId)} type="button">✓ {m.text.slice(0, 24)}</button>)}
             {done.length === 0 && <p className="omni-empty">—</p>}
           </section>
           <section className="gen-block">
-            <h4 className="ws-mod">此刻母题</h4>
+            <h4 className="ws-mod">{t("plu.now")}</h4>
             {motifs.filter((m) => m.status !== "resolved").map((m) => (
               <button className={`gen-row ${cur?.motifId === m.motifId ? "on" : ""}`} key={m.motifId} onClick={() => setSel(m.motifId)} type="button">
-                {TAG[m.status]} · {m.text.slice(0, 24)}
+                {t(TAG[m.status] ?? "plu.tag-open")} · {m.text.slice(0, 24)}
               </button>
             ))}
           </section>
           <form className="gen-issue" onSubmit={create}>
-            <textarea onChange={(e) => setDraft(e.target.value)} placeholder="发放母题——想让它去搞明白什么？" rows={3} value={draft} />
+            <textarea onChange={(e) => setDraft(e.target.value)} placeholder={t("plu.issue-ph")} rows={3} value={draft} />
             <div className="gen-issue-row">
-              <button className="btn primary" disabled={busy || !draft.trim()} type="submit">◈ 发放</button>
-              <label className="gen-auto"><input checked={autoSrc} onChange={(e) => setAutoSrc(e.target.checked)} type="checkbox" />自动</label>
+              <button className="btn primary" disabled={busy || !draft.trim()} type="submit">{t("plu.issue")}</button>
+              <label className="gen-auto"><input checked={autoSrc} onChange={(e) => setAutoSrc(e.target.checked)} type="checkbox" />{t("plu.auto")}</label>
             </div>
           </form>
         </aside>
 
         <main className="gen-report">
           <div className="ws-hud"><span className="hud-mark">◈</span>
-            <div className="ws-hud-info"><strong>汇报日志</strong>
-              <small>{cur ? `${cur.motifId} · ${TAG[cur.status]}` : "no motif"}</small></div>
+            <div className="ws-hud-info"><strong>{t("plu.report-log")}</strong>
+              <small>{cur ? `${cur.motifId} · ${t(TAG[cur.status] ?? "plu.tag-open")}` : t("plu.no-motif")}</small></div>
           </div>
           {cur ? (
             <>
               <div className="gen-report-body">
-                <div className="ven-meta"><span>motif</span><code>{cur.text}</code></div>
-                <div className="ven-meta"><span>status</span><code>{TAG[cur.status]}</code></div>
-                {cur.assignedTaskId && <div className="ven-meta"><span>task</span><code>{cur.assignedTaskId}</code></div>}
-                {cur.resolution && <div className="gen-answer"><h4>汇报（含做了什么）</h4><p>{cur.resolution}</p></div>}
+                <div className="ven-meta"><span>{t("plu.label-motif")}</span><code>{cur.text}</code></div>
+                <div className="ven-meta"><span>{t("plu.label-status")}</span><code>{t(TAG[cur.status] ?? "plu.tag-open")}</code></div>
+                {cur.assignedTaskId && <div className="ven-meta"><span>{t("plu.label-task")}</span><code>{cur.assignedTaskId}</code></div>}
+                {cur.resolution && <div className="gen-answer"><h4>{t("plu.answer-head")}</h4><p>{cur.resolution}</p></div>}
                 {cur.status === "resolved" && (
                   <div className="gen-ingested">
                     <span>{t("pluto.ingested")}</span>
@@ -136,18 +136,18 @@ export default function PlutoWorkspace({ ctx }: { ctx: RunCtx }) {
               </div>
               <div className="gen-judge">
                 {cur.status === "open" && (
-                  <button className="btn secondary" disabled={busy} onClick={() => void assign(cur)} type="button">◈ 委派探索</button>
+                  <button className="btn secondary" disabled={busy} onClick={() => void assign(cur)} type="button">{t("plu.assign")}</button>
                 )}
                 {cur.status === "exploring" && (
-                  <button className="btn secondary" disabled={busy} onClick={() => void report(cur)} type="button">◉ 记录汇报</button>
+                  <button className="btn secondary" disabled={busy} onClick={() => void report(cur)} type="button">{t("plu.report-btn")}</button>
                 )}
-                <button className="btn primary" disabled={busy || cur.status !== "reported"} onClick={() => void judge(cur, true)} type="button">认可</button>
-                <button className="btn danger" disabled={busy || cur.status !== "reported"} onClick={() => void judge(cur, false)} type="button">不认可</button>
+                <button className="btn primary" disabled={busy || cur.status !== "reported"} onClick={() => void judge(cur, true)} type="button">{t("plu.approve")}</button>
+                <button className="btn danger" disabled={busy || cur.status !== "reported"} onClick={() => void judge(cur, false)} type="button">{t("plu.reject")}</button>
               </div>
             </>
-          ) : <div className="empty-state"><p>Select a motif</p></div>}
+          ) : <div className="empty-state"><p>{t("plu.select")}</p></div>}
           {err && <p className="omni-empty" style={{ color: "var(--st-danger,#ff5a4f)" }}>{err}</p>}
-          <AgentComposer ctx={ctx} planet="pluto" placeholder="对当前母题补充指令…" />
+          <AgentComposer ctx={ctx} planet="pluto" placeholder={t("plu.composer-ph")} />
           <div className="ws-statusbar"><span>{motifs.length} MOTIFS</span><span>{motifs.filter((m) => m.status === "resolved").length} RESOLVED</span><span className="right">pluto</span></div>
         </main>
       </div>

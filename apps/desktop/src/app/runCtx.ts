@@ -22,7 +22,9 @@ export interface RunCtx {
   setRequestDraft: (value: string) => void;
   createRun: (event?: FormEvent<HTMLFormElement>) => void;
   selectRun: (runId: string) => void;
-  openRun: (runId: string) => void;
+  /** Loads the run, switches to its owning session, selects it, navigates to
+   *  the Sun thread — the single entry point for "go to this run". */
+  openRun: (runId: string, sessionId?: string) => void;
   openNewTask: () => void;
   refreshActiveRun: () => void;
   cancelActiveRun: () => void;

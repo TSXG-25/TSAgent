@@ -3,6 +3,7 @@ import { SCENES } from "../../app/scenes";
 import { WorkspaceFrame } from "../../design-system/WorkspaceFrame";
 import AgentComposer from "../../app/AgentComposer";
 import { requestIdForRun } from "../../app/ui";
+import { t } from "../../app/i18n";
 import { CapNotInstalled } from "../../design-system/WorkspaceFrame";
 import type { RunCtx } from "../../app/runCtx";
 import { MercurySearchSession } from "./searchSession";
@@ -44,12 +45,12 @@ export default function MercuryWorkspace({ ctx }: { ctx: RunCtx }) {
     e.preventDefault();
     const q = query.trim();
     if (!q) return;
-    setSteps((s) => [...s, { plan: `web_search → "${q}"`, preview: "searching…" }]);
+    setSteps((s) => [...s, { plan: `web_search → "${q}"`, preview: t("mer.searching") }]);
     const applied = await search.run(q);
     if (!applied) return; // stopped/superseded — no view or log update
     setSteps((s) => [...s, {
       plan: search.status === "error" || search.status === "unavailable"
-        ? "failed"
+        ? t("status.failed")
         : `${search.sourceCount} sources · ${search.provider}`,
       preview: search.err
         ?? String(search.panes[0]?.source?.title ?? search.panes[0]?.source?.url ?? "—"),
@@ -69,17 +70,17 @@ export default function MercuryWorkspace({ ctx }: { ctx: RunCtx }) {
           {/* BrowserSessionBar [H] */}
           <form className="nav-bar" onSubmit={doSearch}>
             <span className="nav-web">web:</span>
-            <input onChange={(e) => setQuery(e.target.value)} placeholder="search or navigate…" value={query} />
-            <button className="btn primary" disabled={search.running} type="submit">{search.running ? "…" : "Go"}</button>
+            <input onChange={(e) => setQuery(e.target.value)} placeholder={t("mer.placeholder")} value={query} />
+            <button className="btn primary" disabled={search.running} type="submit">{search.running ? "…" : t("mer.go")}</button>
           </form>
           {search.err && <p className="omni-empty" style={{ color: "var(--st-danger,#ff5a4f)" }}>{search.err}</p>}
-          {search.status === "empty" && <p className="omni-empty">no results</p>}
+          {search.status === "empty" && <p className="omni-empty">{t("mer.no-results")}</p>}
 
           {/* ViewportGrid [H] 2×2 */}
           <div className="nav-grid">
             {search.panes.map((v, i) => (
               <section className="nav-view" key={i}>
-                <header><span>View {i + 1}</span>{v.source && <code>{String(v.source.source ?? v.source.engine ?? "web")}</code>}</header>
+                <header><span>{t("mer.view-n", { n: i + 1 })}</span>{v.source && <code>{String(v.source.source ?? v.source.engine ?? "web")}</code>}</header>
                 <div className="nav-view-body">
                   {v.source ? (
                     <>
@@ -88,7 +89,7 @@ export default function MercuryWorkspace({ ctx }: { ctx: RunCtx }) {
                       <p>{String(v.source.snippet ?? v.content?.slice(0, 240) ?? "")}</p>
                     </>
                   ) : (
-                    <div className="empty-state"><p>empty view</p><p className="omni-empty">Search fills this pane</p></div>
+                    <div className="empty-state"><p>{t("mer.empty-view")}</p><p className="omni-empty">{t("mer.empty-hint")}</p></div>
                   )}
                 </div>
               </section>
@@ -97,30 +98,30 @@ export default function MercuryWorkspace({ ctx }: { ctx: RunCtx }) {
 
           <div className="nav-foot">
             <div className="nav-vctl">
-              <button className="btn secondary" disabled={search.panes.length >= 4} onClick={() => search.addPane()} type="button">+ view</button>
-              <button className="btn secondary" disabled={search.panes.length <= 1} onClick={() => search.removePane()} type="button">− view</button>
+              <button className="btn secondary" disabled={search.panes.length >= 4} onClick={() => search.addPane()} type="button">{t("mer.add-view")}</button>
+              <button className="btn secondary" disabled={search.panes.length <= 1} onClick={() => search.removePane()} type="button">{t("mer.remove-view")}</button>
             </div>
-            <AgentComposer ctx={ctx} planet="mercury" placeholder="Task for Navigator…" />
+            <AgentComposer ctx={ctx} planet="mercury" placeholder={t("mer.composer-ph")} />
           </div>
         </div>
 
         {/* right rail: Plan Action + Action Preview + Stop */}
         <aside className="nav-side">
           <section className="nav-block">
-            <h4 className="ws-mod">Plan Action</h4>
+            <h4 className="ws-mod">{t("mer.plan")}</h4>
             <div className="step-line">
               {steps.filter((s) => s.plan).map((s, i) => <div className="nav-step" key={i}><code>{i + 1}.</code><span>{s.plan}</span></div>)}
-              {steps.length === 0 && <p className="omni-empty">No actions planned.</p>}
+              {steps.length === 0 && <p className="omni-empty">{t("mer.no-actions")}</p>}
             </div>
           </section>
           <section className="nav-block">
-            <h4 className="ws-mod">Action Preview</h4>
+            <h4 className="ws-mod">{t("mer.preview")}</h4>
             {steps.filter((s) => s.preview).slice(-4).map((s, i) => <div className="nav-step" key={i}><code>→</code><span>{s.preview}</span></div>)}
-            {steps.length === 0 && <p className="omni-empty">Nothing previewed.</p>}
+            {steps.length === 0 && <p className="omni-empty">{t("mer.nothing-previewed")}</p>}
           </section>
           <section className="nav-block">
-            <button className="btn danger" disabled={!search.running} onClick={() => search.stop()} type="button">■ Stop</button>
-            <CapNotInstalled what="Browser takeover / screenshots / clicks" />
+            <button className="btn danger" disabled={!search.running} onClick={() => search.stop()} type="button">{t("mer.stop")}</button>
+            <CapNotInstalled what={t("mer.cap-browser")} />
           </section>
           <div className="ws-statusbar"><span>{search.panes.length} VIEWS</span><span>{steps.length} ACTIONS</span><span className="right">mercury</span></div>
         </aside>

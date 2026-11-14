@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { delegateToPlanet } from "./delegate";
 import { Icon, requestIdForRun } from "./ui";
 import type { RunCtx } from "./runCtx";
-import { draftKey, useDraft, clearDraft } from "./draftStore";
+import { draftKey, useDraft, clearDraftIfUnchanged } from "./draftStore";
 import { t } from "./i18n";
 
 const BUSY = new Set(["active", "pending"]);
@@ -97,6 +97,7 @@ export default function AgentComposer({ ctx, planet, placeholder, contextPrefix 
       return;
     }
     setBusy(true); setNotice(null);
+    const submitted = { text, files };
     try {
       const to = m ? m[1].toLowerCase() : target;
       const body = contextPrefix ? `${contextPrefix}\n${m ? m[2] : body0}` : (m ? m[2] : body0);
@@ -106,7 +107,9 @@ export default function AgentComposer({ ctx, planet, placeholder, contextPrefix 
       if (files.length && ctx.activeRun) {
         window.dispatchEvent(new CustomEvent("tsagent:run-attachments", { detail: { runId: ctx.activeRun.runId, files } }));
       }
-      clearDraft(key);
+      // Only the submitted-and-unmodified draft is cleared — anything typed
+      // while the request was in flight stays.
+      clearDraftIfUnchanged(key, submitted);
       setNotice(t("composer.delegated", { target: to }));
     } catch (err) {
       // failed submits keep the draft — it lives in the store, untouched here

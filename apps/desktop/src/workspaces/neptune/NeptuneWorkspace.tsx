@@ -5,18 +5,19 @@ import AgentComposer from "../../app/AgentComposer";
 import { delegateToPlanet } from "../../app/delegate";
 import { mediaDelegationRequest } from "./neptuneOps";
 import { CapNotInstalled } from "../../design-system/WorkspaceFrame";
-import { t } from "../../app/i18n";
+import { t, type I18nKey } from "../../app/i18n";
 import type { RunCtx } from "../../app/runCtx";
 
 /** Media Studio per hand-drawn spec §10 — type tabs (图像/视频/3D/预览) |
  *  media canvas | right ops | composer. */
 const MEDIA = /\.(svg|png|jpe?g|gif|mp4|webm|wav|mp3|glb)$/i;
-const KINDS = { "图像": /\.(svg|png|jpe?g|gif)$/i, "视频": /\.(mp4|webm)$/i, "3D": /\.glb$/i, "预览": /.*/ } as const;
+const KINDS = { image: /\.(svg|png|jpe?g|gif)$/i, video: /\.(mp4|webm)$/i, "3d": /\.glb$/i, all: /.*/ } as const;
+const TABS: Record<keyof typeof KINDS, I18nKey> = { image: "nep.tab-image", video: "nep.tab-video", "3d": "nep.tab-3d", all: "nep.tab-all" };
 
 export default function NeptuneWorkspace({ ctx }: { ctx: RunCtx }) {
   const { runs, service } = ctx;
     const scene = SCENES[8];
-  const [tab, setTab] = useState<keyof typeof KINDS>("图像");
+  const [tab, setTab] = useState<keyof typeof KINDS>("image");
   const [sel, setSel] = useState<string | null>(null);
   const [op, setOp] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -44,52 +45,52 @@ export default function NeptuneWorkspace({ ctx }: { ctx: RunCtx }) {
       <div className="media">
         <div className="media-main">
           <div className="seg-tabs media-tabs">
-            {(Object.keys(KINDS) as (keyof typeof KINDS)[]).map((t) => (
-              <button className={tab === t ? "on" : ""} key={t} onClick={() => { setTab(t); setSel(null); }} type="button">{t}</button>
+            {(Object.keys(KINDS) as (keyof typeof KINDS)[]).map((k) => (
+              <button className={tab === k ? "on" : ""} key={k} onClick={() => { setTab(k); setSel(null); }} type="button">{t(TABS[k])}</button>
             ))}
           </div>
           <div className="media-canvas">
             {cur ? (
               isSvg
                 ? <div className="media-svg">
-                    {content?.stale && <p className="omni-empty">file changed since recorded</p>}
+                    {content?.stale && <p className="omni-empty">{t("art.stale")}</p>}
                     {content
                       ? content.result !== "ok"
-                        ? <p className="omni-empty">{content.result === "missing" ? "file missing" : content.result === "unsupported" ? "unsupported format" : `preview failed: ${content.text}`}</p>
+                        ? <p className="omni-empty">{content.result === "missing" ? t("art.missing") : content.result === "unsupported" ? t("art.unsupported") : t("art.preview-failed", { msg: content.text })}</p>
                         : <img alt={cur.artifact.path.split("/").pop()} src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(content.text)}`} />
                       : <p className="omni-empty">…</p>}
                   </div>
                 : <div className="empty-state"><p>{cur.artifact.path.split("/").pop()}</p><p className="omni-empty">{cur.artifact.size} — {t("nep.binary-pending")}</p></div>
-            ) : <div className="empty-state"><p>{t("nep.no-artifacts", { type: tab })}</p></div>}
+            ) : <div className="empty-state"><p>{t("nep.no-artifacts", { type: t(TABS[tab]) })}</p></div>}
             {cur && (
               <div className="ven-meta media-meta"><span>{cur.artifact.kind} · {cur.artifact.size}</span>
-                <button className="ven-link" onClick={() => ctx.openRun(cur.run.runId)} title={t("uranus.goto-run")} type="button">{cur.run.runId}</button>
+                <button className="ven-link" onClick={() => ctx.openRun(cur.run.runId, cur.run.sessionId)} title={t("uranus.goto-run")} type="button">{cur.run.runId}</button>
               </div>
             )}
           </div>
-          <AgentComposer ctx={ctx} planet="neptune" placeholder="生成指令 — @neptune 出图…" />
+          <AgentComposer ctx={ctx} planet="neptune" placeholder={t("nep.composer-ph")} />
         </div>
         <aside className="media-side">
-          <h4 className="ws-mod">工作</h4>
+          <h4 className="ws-mod">{t("nep.works")}</h4>
           {visible.map(({ artifact: a }) => (
             <button className={`nep-thumb ${cur?.artifact.artifactId === a.artifactId ? "on" : ""}`} key={a.artifactId} onClick={() => setSel(a.artifactId)} type="button">
               <span className="nep-thumb-kind">{a.path.split(".").pop()?.toUpperCase()}</span>
             </button>
           ))}
-          <h4 className="ws-mod">偏好</h4>
+          <h4 className="ws-mod">{t("nep.prefs")}</h4>
           {cur && (
             <>
               <button className="btn secondary" onClick={() => {
                 setOp(null);
                 void delegateToPlanet(ctx, "neptune", mediaDelegationRequest(cur.artifact.path, cur.run.runId))
-                  .then(() => setOp({ ok: true, text: "委派已发送 — 结果见运行记录" }))
+                  .then(() => setOp({ ok: true, text: t("nep.delegated") }))
                   .catch((e) => setOp({ ok: false, text: String(e instanceof Error ? e.message : e) }));
-              }} type="button">▶ 委派渲染 MP4</button>
+              }} type="button">{t("nep.render-mp4")}</button>
               {op && <p className="omni-empty">{op.text}</p>}
             </>
           )}
-          <CapNotInstalled what="生成/编辑能力" />
-          <div className="ws-statusbar"><span>{visible.length} ITEMS</span><span>{tab}</span><span className="right">neptune</span></div>
+          <CapNotInstalled what={t("nep.cap-gen")} />
+          <div className="ws-statusbar"><span>{visible.length} ITEMS</span><span>{t(TABS[tab])}</span><span className="right">neptune</span></div>
         </aside>
       </div>
     </WorkspaceFrame>

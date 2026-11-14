@@ -3,6 +3,7 @@ import { SCENES } from "../../app/scenes";
 import { WorkspaceFrame } from "../../design-system/WorkspaceFrame";
 import AgentComposer from "../../app/AgentComposer";
 import { MarkdownText } from "../../app/ui";
+import { t } from "../../app/i18n";
 import type { RunCtx } from "../../app/runCtx";
 
 /** Muse per hand-drawn spec §4 — File rail + style.md prefs | work preview +
@@ -41,16 +42,16 @@ export default function VenusWorkspace({ ctx }: { ctx: RunCtx }) {
         {/* Files + stylistic preferences */}
         <aside className="muse-left">
           <section className="muse-block">
-            <h4 className="ws-mod">Files</h4>
+            <h4 className="ws-mod">{t("ven.files")}</h4>
             {docs.map(({ artifact: a }) => (
               <button className={`muse-file ${cur?.artifact.artifactId === a.artifactId ? "on" : ""}`} key={a.artifactId} onClick={() => setSel(a.artifactId)} type="button">
                 📄 {a.path.split("/").pop()}
               </button>
             ))}
-            {docs.length === 0 && <p className="omni-empty">No files yet.</p>}
+            {docs.length === 0 && <p className="omni-empty">{t("ven.no-files")}</p>}
           </section>
           <section className="muse-block muse-style">
-            <h4 className="ws-mod">Stylistic <em>style.md</em></h4>
+            <h4 className="ws-mod">{t("ven.stylistic")} <em>style.md</em></h4>
             <textarea value={style} onChange={(e) => setStyle(e.target.value)} rows={6} />
           </section>
         </aside>
@@ -65,12 +66,12 @@ export default function VenusWorkspace({ ctx }: { ctx: RunCtx }) {
           )}
           {cur ? (
             <>
-              <header className="muse-title"><strong>{cur.artifact.path.split("/").pop()}</strong><code>{cur.run.runId}</code>{applied && <span className="muse-applied">{applied} applied</span>}</header>
+              <header className="muse-title"><strong>{cur.artifact.path.split("/").pop()}</strong><code>{cur.run.runId}</code>{applied && <span className="muse-applied">{t("ven.applied", { name: applied })}</span>}</header>
               <div className="muse-body">
-                {content?.stale && <p className="omni-empty">file changed since recorded</p>}
+                {content?.stale && <p className="omni-empty">{t("art.stale")}</p>}
                 {content && content.result !== "ok" && (
                   <p className="omni-empty">
-                    {content.result === "missing" ? "file missing" : content.result === "unsupported" ? "unsupported format" : `preview failed: ${content.text}`}
+                    {content.result === "missing" ? t("art.missing") : content.result === "unsupported" ? t("art.unsupported") : t("art.preview-failed", { msg: content.text })}
                   </p>
                 )}
                 {content
@@ -80,13 +81,13 @@ export default function VenusWorkspace({ ctx }: { ctx: RunCtx }) {
                   : <pre>…</pre>}
               </div>
             </>
-          ) : <div className="empty-state"><p>Select a work</p></div>}
-          <AgentComposer ctx={ctx} planet="venus" placeholder="创作指令 — @venus 生成版本…" contextPrefix={styleContext(style, applied)} />
+          ) : <div className="empty-state"><p>{t("ven.select-work")}</p></div>}
+          <AgentComposer ctx={ctx} planet="venus" placeholder={t("ven.composer-ph")} contextPrefix={styleContext(style, applied)} />
         </main>
 
         {/* Style gallery + applied state */}
         <aside className="muse-right">
-          <h4 className="ws-mod">Presets</h4>
+          <h4 className="ws-mod">{t("ven.presets")}</h4>
           <div className="muse-presets">
             {VENUS_PRESETS.map((p) => (
               <button className={`muse-preset ${applied === p.id ? "on" : ""}`} key={p.id} onClick={() => setApplied(applied === p.id ? null : p.id)} type="button">
@@ -96,10 +97,10 @@ export default function VenusWorkspace({ ctx }: { ctx: RunCtx }) {
             ))}
           </div>
           <div className="muse-reco">
-            <h4 className="ws-mod">next composition</h4>
+            <h4 className="ws-mod">{t("ven.next")}</h4>
             <p>{applied
-              ? `Preset ${VENUS_PRESETS.find((p) => p.id === applied)?.name} and style.md ride the next generation request.`
-              : "style.md rides the next generation request; pick a preset to include it."}</p>
+              ? t("ven.reco-applied", { name: VENUS_PRESETS.find((p) => p.id === applied)?.name ?? applied })
+              : t("ven.reco-none")}</p>
           </div>
           <div className="ws-statusbar"><span>{docs.length} FILES</span><span>{applied ? `STYLE: ${applied.toUpperCase()}` : "NO STYLE"}</span><span className="right">venus</span></div>
         </aside>

@@ -308,3 +308,23 @@ test("4B-hydrate reads past a mid-history terminal batch (blocked then resumed)"
   assert.deepEqual(client.eventCursors, [-1, 2, 4], "drain must continue past the run_blocked batch boundary until an empty page");
   controller.stopAllPolling();
 });
+
+test("openRun path: refreshRun loads a foreign-session run, then selectRun accepts it", async () => {
+  const client = new FakeAgentServiceClient(snapshot("active"), []);
+  const controller = new RunController(client, { pollIntervalMs: 1000 });
+  await controller.initialize();
+
+  // A run owned by another session — not in the initialized list.
+  const foreign: RunSnapshot = { ...snapshot("completed"), sessionId: "session-2", runId: "run-2" };
+  client.snapshots.set("run-2", foreign);
+  assert.equal(controller.getState().runs.find((r) => r.runId === "run-2"), undefined);
+  // Stale-closure guard — selectRun must not be called before the load lands.
+  controller.selectRun("run-2");
+  assert.notEqual(controller.getState().activeRunId, "run-2");
+
+  const view = await controller.refreshRun("run-2", "session-2");
+  assert.equal(view?.sessionId, "session-2");
+  controller.selectRun("run-2");
+  assert.equal(controller.getState().activeRunId, "run-2");
+  controller.stopAllPolling();
+});

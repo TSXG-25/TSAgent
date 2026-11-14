@@ -70,11 +70,11 @@ export default function EarthWorkspace({ ctx }: { ctx: RunCtx }) {
               <circle cx="118" cy="88" r="4" fill="var(--planet-accent)" opacity=".7" />
               <circle cx="126" cy="54" r="3" fill="var(--planet-accent)" opacity=".5" />
             </svg>
-            <p className="lab-disclaimer">what simulation? — 计算模拟，非真实生理预测</p>
+            <p className="lab-disclaimer">{t("ear.disclaimer")}</p>
           </div>
-          <AgentComposer ctx={ctx} planet="earth" placeholder="模拟场景 — 调整参数后描述实验…" contextPrefix={composerContext(vals)} />
+          <AgentComposer ctx={ctx} planet="earth" placeholder={t("ear.composer-ph")} contextPrefix={composerContext(vals)} />
           <section className="lab-eval">
-            <div className="ws-mod">实验记录 <em>{evals.length} 次裁决</em></div>
+            <div className="ws-mod">{t("ear.records")} <em>{t("ear.verdicts", { n: evals.length })}</em></div>
             {(() => {
               const snap = parseRunParams(ctx.activeRun?.request ?? "") ?? {};
               const keys = Object.keys(snap);
@@ -90,8 +90,8 @@ export default function EarthWorkspace({ ctx }: { ctx: RunCtx }) {
               <select onChange={(e) => setVerdict(e.target.value as EvaluationVerdict)} value={verdict}>
                 {EARTH_VERDICTS.map((v) => <option key={v} value={v}>{v}</option>)}
               </select>
-              <input onChange={(e) => setNotes(e.target.value)} placeholder="结论备注…" value={notes} />
-              <button className="btn primary" disabled={busy} onClick={() => void record()} type="button">记录裁决</button>
+              <input onChange={(e) => setNotes(e.target.value)} placeholder={t("ear.notes-ph")} value={notes} />
+              <button className="btn primary" disabled={busy} onClick={() => void record()} type="button">{t("ear.record")}</button>
             </div>
             {error && <p className="omni-empty">{error}</p>}
             {evals.slice(0, 6).map((ev) => (

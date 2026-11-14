@@ -41,6 +41,18 @@ export function clearDraft(key: string): void {
   saveDraft(key, EMPTY);
 }
 
+/** Clear only when the stored draft still equals what was submitted — text
+ *  typed into the same draft while the request was in flight is user content
+ *  and must survive the request completing. */
+export function clearDraftIfUnchanged(key: string, submitted: InputDraft): void {
+  const cur = loadDraft(key);
+  if (cur.text === submitted.text
+    && cur.files.length === submitted.files.length
+    && cur.files.every((f, i) => f === submitted.files[i])) {
+    clearDraft(key);
+  }
+}
+
 /** Reactive draft binding — every mounted composer sharing `key` stays in
  *  sync because writes notify all listeners. */
 export function useDraft(key: string): [InputDraft, (d: InputDraft) => void] {

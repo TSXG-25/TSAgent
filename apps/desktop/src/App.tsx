@@ -11,8 +11,8 @@ import GlobalChat from "./app/GlobalChat";
 import PlanetSwitcher from "./app/PlanetSwitcher";
 import { SCENES, PLANET_GLYPH, type SceneDef } from "./app/scenes";
 import { motionTier } from "./app/motionTier";
-import { draftKey, useDraft } from "./app/draftStore";
-import { t, tk } from "./app/i18n";
+import { draftKey, useDraft, clearDraftIfUnchanged } from "./app/draftStore";
+import { t, tk, useLang } from "./app/i18n";
 /** §3 route-jump — planet glyph sweep on every workspace entry (starmap,
  *  switcher or keyboard). 620ms, skipped on first mount and reduced-motion. */
 function SceneJump({ path }: { path: string }) {
@@ -89,9 +89,13 @@ function App() {
   }, [location.pathname]);
   const activeRunId = controllerState.activeRunId;
   const [sessionId, setSessionId] = useState(service.identity.sessionId);
+  // One subscription at the root — language changes re-render the whole
+  // tree so every t() call site sees the new locale.
+  useLang();
   // The new-task draft is the "sun" target draft — shared with the Sun
   // workspace composer and GlobalChat's direct path per the draft contract.
-  const [requestDraftState, setRequestDraftState] = useDraft(draftKey(service.identity.tenantId, sessionId, "sun"));
+  const requestDraftKey = draftKey(service.identity.tenantId, sessionId, "sun");
+  const [requestDraftState, setRequestDraftState] = useDraft(requestDraftKey);
   const requestDraft = requestDraftState.text;
   const setRequestDraft = (value: string) => setRequestDraftState({ ...requestDraftState, text: value });
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -150,9 +154,19 @@ function App() {
     controller.selectRun(runId);
   }
 
-  function openRun(runId: string) {
-    selectRun(runId);
-    navigate("/w/sun");
+  function openRun(runId: string, runSessionId?: string) {
+    // Load target → switch to its owning session → select → navigate. The
+    // refresh must settle before selectRun because controller.selectRun
+    // only accepts runs already in its store (a stale `runs` closure would
+    // silently drop first-load selections).
+    void controller.refreshRun(runId, runSessionId)
+      .then((view) => {
+        const sid = view?.sessionId ?? runSessionId;
+        if (sid && sid !== sessionId) selectSession(sid);
+        if (view) controller.selectRun(runId);
+        navigate("/w/sun");
+      })
+      .catch((error) => setServiceError(toServiceError(error)));
   }
 
   async function refreshActiveRun() {
@@ -175,6 +189,7 @@ function App() {
 
   async function createRun(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
+    const submitted = requestDraftState;
     const request = requestDraft.trim() || "生成一个 Python 程序，计算 9 的平方并保存";
     const requestId = requestIdForRun(runs.length + 1);
     try {
@@ -184,8 +199,9 @@ function App() {
         sessionId,
         requestId,
         requestText: request,
+        contextRefs: submitted.files,
       });
-      setRequestDraft("");
+      clearDraftIfUnchanged(requestDraftKey, submitted);
       setIsCreateOpen(false);
       navigate("/w/sun");
     } catch (error) {

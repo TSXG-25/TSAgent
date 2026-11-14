@@ -87,9 +87,18 @@
 - **弹层行为**：Sun 三类弹层（文件夹浏览/工作区编辑/通用对话框）统一 Escape 关闭 + 关闭后焦点还原到触发控件（原先仅 mask 点击/输入框内 Escape）。
 - **可访问性**：新增 `.ven-link`（按钮式链接，`:focus-visible` 有焦点环）；新交互均为原生 button。
 
+### 审核修正（170f21e…3209b2 代码核对，五项；横跨 FE-01/03/05 缺口）
+
+- **[P1] 跨会话 Run 导航**：`openRun(runId, sessionId?)` 收拢为单一入口——`refreshRun` 加载目标 → `selectSession` 切到所属会话 → `selectRun` → 导航。原先仅 `selectRun`+路由，不加载、不切会话，且 App 闭包中的旧 `runs` 列表会挡住首载 Run；Pluto 历史证据链接甚至未先加载。Uranus/Saturn/Jupiter/Neptune/Pluto/TaskTray 全部走同一入口。
+- **[P1] GlobalChat 附件丢失**：委派分支传 `draft.files`（`contextRefs`），直发分支 `createRun` 传 `contextRefs: requestDraftState.files`；原先附件在共享草稿中存在却从不进入请求，成功后还被一并清空。
+- **[P2] 在途输入被吞**：新增 `clearDraftIfUnchanged(key, submitted)`——仅当存储草稿仍等于提交快照时清除；提交等待期间输入的新内容（含共享草稿另一输入框）保留。AgentComposer/GlobalChat/createRun 三处统一。
+- **[P2] Jupiter 预览串扰**：`previewFor` ref 绑定请求归属，响应提交前校验仍是当前选中项；选中变化作废在途请求（覆盖成功与失败两条回调）。
+- **[P2] 中英切换**：App 根 `useLang()` 订阅——语言变更即整树重渲染（原先仅 GlobalSettings 订阅，其余组件靠偶遇状态更新零散切换）。九个工作台正文文案接入字典：Mercury/Saturn/Uranus/Earth/Jupiter/Mars/Neptune/Pluto/Venus 的标题、按钮、空态、提示、placeholder、prompt/confirm；领域术语（参数名、字段名、Run/ID）与状态计数保留原文。Neptune 页签由中文键改为 id 键 + `TABS` 映射。
+
 ### 证据
 
-- `npm run typecheck` 通过；`npm test` 91 项 subtest 全绿（无新增回归——改动为展示层与既有合同消费）。
+- `npm run typecheck` 通过；`npm test` 94 项 subtest 全绿。
+- 新增回归：`frontendDraftI18n` 延迟 Promise 用例（在途输入不被清除 + 未变草稿正常清除）；`runController` 跨会话用例（`refreshRun` 带 sessionId 加载 foreign run → `selectRun` 接受；加载前 `selectRun` 拒绝）。
 - `test:orbits`/`test:scenes`/`npm run build` 通过。
 
 ### 未覆盖（外部验证）

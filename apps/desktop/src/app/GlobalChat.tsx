@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { RunCtx } from "./runCtx";
 import { Icon, MarkdownText } from "./ui";
 import { useScrollFollow } from "./useScrollFollow";
-import { delegateToPlanet } from "./delegate";
+import { submitToPlanet } from "./delegate";
+import { selectWorkspaceRun } from "./workspaceSelection";
 import { draftKey, useDraft, clearDraftIfUnchanged } from "./draftStore";
 import { t } from "./i18n";
 import type { SessionSummary } from "../types/service";
@@ -171,7 +172,8 @@ export default function GlobalChat({ ctx, onClose, embedded = false, instant = f
         const submitted = draft;
         if (delegateTo) {
           try {
-            await delegateToPlanet(ctx, delegateTo, text, draft.files);
+            const runId = await submitToPlanet(ctx, delegateTo, text, draft.files);
+            selectWorkspaceRun(ctx.service.identity.tenantId, ctx.sessionId, delegateTo, runId);
             clearDraftIfUnchanged(dkey, submitted);
             setNotice(t("composer.delegated", { target: delegateTo }));
           } catch (err) { setNotice(String(err)); }

@@ -299,6 +299,7 @@ class RunReadSnapshot:
     terminal_event: DurableEventRecord | None = None
     output: RunOutputRecord | None = None
     artifacts: tuple[ArtifactCommitFact, ...] = ()
+    origin_planet: str = ""
 
 
 @dataclass(frozen=True)

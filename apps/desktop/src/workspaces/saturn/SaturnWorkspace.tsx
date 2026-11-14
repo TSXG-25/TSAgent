@@ -5,6 +5,7 @@ import AgentComposer from "../../app/AgentComposer";
 import { requestIdForRun } from "../../app/ui";
 import { t } from "../../app/i18n";
 import type { RunCtx } from "../../app/runCtx";
+import { WorkspaceTasks } from "../../app/WorkspaceTasks";
 import type { ScheduleSummary } from "../../types/service";
 
 /** Chronos per hand-drawn spec §8 — task kanban (click card → config) |
@@ -90,6 +91,7 @@ export default function SaturnWorkspace({ ctx }: { ctx: RunCtx }) {
           ) : <p className="omni-empty">{t("sat.pick")}</p>}
           {err && <p className="omni-empty" style={{ color: "var(--st-danger,#ff5a4f)" }}>{err}</p>}
           <AgentComposer ctx={ctx} planet="saturn" placeholder={t("sat.composer-ph")} />
+                    <WorkspaceTasks ctx={ctx} planet="saturn" />
           <div className="ws-statusbar"><span>{schedules.filter((x) => x.status === "ACTIVE").length} ACTIVE</span><span>{schedules.length} SCHEDULES</span><span className="right">saturn</span></div>
         </aside>
       </div>

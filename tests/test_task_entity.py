@@ -129,3 +129,36 @@ def test_start_run_auto_creates_task() -> None:
                 await service.close()
 
     asyncio.run(scenario())
+
+
+def test_run_snapshot_projects_task_id_and_origin_planet() -> None:
+    """WS-01: workstation ownership is a durable fact on the Run snapshot —
+    task_id + origin_planet must ride the projection, not the route."""
+    import tests.test_ha_r1_harness as harness
+
+    async def scenario() -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            service, _store = harness.service_at(Path(tmp))
+            try:
+                run = await service.start_run(harness.StartRunRequest(
+                    tenant_id="ha-tenant", user_id="ha-user",
+                    session_id="sess",
+                    request_id="req-run-origin",
+                    request_text="ping",
+                    origin_planet="mercury",
+                ))
+                snap = await service.get_run(harness.RunLookupRequest(
+                    tenant_id="ha-tenant", user_id="ha-user",
+                    session_id="sess", request_id="req-lookup",
+                    run_id=run.run_id,
+                ))
+                assert snap.task_id == run.task_id
+                assert snap.origin_planet == "mercury"
+                # wire serialization must carry both fields
+                wire = snap.to_dict()
+                assert wire["task_id"] == run.task_id
+                assert wire["origin_planet"] == "mercury"
+            finally:
+                await service.close()
+
+    asyncio.run(scenario())

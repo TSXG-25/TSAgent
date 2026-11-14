@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { delegateToPlanet } from "./delegate";
+import { submitToPlanet } from "./delegate";
+import { selectWorkspaceRun } from "./workspaceSelection";
 import { Icon, requestIdForRun } from "./ui";
 import type { RunCtx } from "./runCtx";
 import { draftKey, useDraft, clearDraftIfUnchanged } from "./draftStore";
@@ -8,7 +9,7 @@ import { t } from "./i18n";
 const BUSY = new Set(["active", "pending"]);
 
 /** Shared AgentComposer — "same as Omni input". Planet-bound task dispatch
- *  via delegateToPlanet. Supports @planet delegation and /slash shortcuts
+ *  via submitToPlanet. Supports @planet delegation and /slash shortcuts
  *  (/mars x → @mars x, /model <m> → local hint, /help). The model pick rides
  *  the run's metadata.agent_profile.model_ref — a real per-run override.
  *  Drafts live in the app-level draft store keyed by tenant/session/target so
@@ -101,11 +102,14 @@ export default function AgentComposer({ ctx, planet, placeholder, contextPrefix 
     try {
       const to = m ? m[1].toLowerCase() : target;
       const body = contextPrefix ? `${contextPrefix}\n${m ? m[2] : body0}` : (m ? m[2] : body0);
-      await delegateToPlanet(ctx, to, body, files, {
+      const runId = await submitToPlanet(ctx, to, body, files, {
         ...(model !== "default" ? { model } : {}),
       });
-      if (files.length && ctx.activeRun) {
-        window.dispatchEvent(new CustomEvent("tsagent:run-attachments", { detail: { runId: ctx.activeRun.runId, files } }));
+      // The workstation the send targeted now owns this task — its rail
+      // selects it without navigating away from where the user is.
+      selectWorkspaceRun(ctx.service.identity.tenantId, ctx.sessionId, to, runId);
+      if (files.length) {
+        window.dispatchEvent(new CustomEvent("tsagent:run-attachments", { detail: { runId, files } }));
       }
       // Only the submitted-and-unmodified draft is cleared — anything typed
       // while the request was in flight stays.

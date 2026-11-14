@@ -5,6 +5,7 @@ import AgentComposer from "../../app/AgentComposer";
 import { requestIdForRun } from "../../app/ui";
 import { t } from "../../app/i18n";
 import type { RunCtx } from "../../app/runCtx";
+import { WorkspaceTasks } from "../../app/WorkspaceTasks";
 import type { GraphRunStepSummary, ProfileSummary, SkillSummary, WorkflowGraphSummary } from "../../types/service";
 
 /** Laboratory per hand-drawn spec §9 — element palette | workflow canvas
@@ -106,6 +107,7 @@ export default function UranusWorkspace({ ctx }: { ctx: RunCtx }) {
           <h4 className="ws-mod">{t("ura.profiles")}</h4>
           {profiles.map((p) => <div className="lab-graph-row" key={p.profileId}><strong>{p.displayName || p.profileId}</strong><small>@{p.planetAffinity} · {t("ura.n-skills", { n: p.skillRefs.length })}</small></div>)}
           <AgentComposer ctx={ctx} planet="uranus" placeholder={t("ura.composer-ph")} />
+                    <WorkspaceTasks ctx={ctx} planet="uranus" />
           <div className="ws-statusbar"><span>{graphs.length} GRAPHS</span><span>{profiles.length} PROFILES</span><span className="right">uranus</span></div>
         </aside>
       </div>

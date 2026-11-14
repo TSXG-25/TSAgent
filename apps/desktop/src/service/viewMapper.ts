@@ -149,6 +149,8 @@ export function toRunView(
     updatedAt: snapshot.updatedAt,
     duration: snapshot.duration ?? "—",
     sessionId: snapshot.sessionId,
+    taskId: snapshot.taskId,
+    originPlanet: snapshot.originPlanet,
     workflows: snapshot.workflows.map(mapWorkflow),
     artifacts: artifacts.map((artifact) => ({
       artifactId: artifact.artifactId,

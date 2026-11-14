@@ -131,6 +131,8 @@ export interface RunView {
   updatedAt: string;
   duration: string;
   sessionId: string;
+  taskId?: string;
+  originPlanet?: string;
   workflows: WorkflowView[];
   artifacts: ArtifactView[];
   events: RunEventView[];

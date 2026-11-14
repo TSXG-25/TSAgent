@@ -6,6 +6,7 @@ import { requestIdForRun } from "../../app/ui";
 import { t } from "../../app/i18n";
 import { CapNotInstalled } from "../../design-system/WorkspaceFrame";
 import type { RunCtx } from "../../app/runCtx";
+import { WorkspaceTasks } from "../../app/WorkspaceTasks";
 import { MercurySearchSession } from "./searchSession";
 
 /** Navigator per hand-drawn spec §3 — BrowserSessionBar | 4-pane viewport
@@ -123,6 +124,7 @@ export default function MercuryWorkspace({ ctx }: { ctx: RunCtx }) {
             <button className="btn danger" disabled={!search.running} onClick={() => search.stop()} type="button">{t("mer.stop")}</button>
             <CapNotInstalled what={t("mer.cap-browser")} />
           </section>
+                    <WorkspaceTasks ctx={ctx} planet="mercury" />
           <div className="ws-statusbar"><span>{search.panes.length} VIEWS</span><span>{steps.length} ACTIONS</span><span className="right">mercury</span></div>
         </aside>
       </div>

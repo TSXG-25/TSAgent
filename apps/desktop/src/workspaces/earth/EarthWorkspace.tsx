@@ -5,6 +5,7 @@ import AgentComposer from "../../app/AgentComposer";
 import { requestIdForRun } from "../../app/ui";
 import { t } from "../../app/i18n";
 import type { RunCtx } from "../../app/runCtx";
+import { WorkspaceTasks } from "../../app/WorkspaceTasks";
 import type { EvaluationSummary, EvaluationVerdict } from "../../types/service";
 import { EARTH_PARAMS, EARTH_VERDICTS, buildEvalRequest, composerContext, defaultParamValues, parseRunParams } from "./earthEvalForm";
 
@@ -102,7 +103,10 @@ export default function EarthWorkspace({ ctx }: { ctx: RunCtx }) {
           </section>
           <div className="ws-statusbar"><span>{EARTH_PARAMS.length} PARAMS</span><span>{evals.length} EVALS</span><span className="right">earth</span></div>
         </main>
-        <aside className="lab-rail">{right.map(slider)}</aside>
+        <aside className="lab-rail">
+          <WorkspaceTasks ctx={ctx} planet="earth" />
+          {right.map(slider)}
+        </aside>
       </div>
     </WorkspaceFrame>
   );

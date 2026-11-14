@@ -7,6 +7,7 @@ import { mediaDelegationRequest } from "./neptuneOps";
 import { CapNotInstalled } from "../../design-system/WorkspaceFrame";
 import { t, type I18nKey } from "../../app/i18n";
 import type { RunCtx } from "../../app/runCtx";
+import { WorkspaceTasks } from "../../app/WorkspaceTasks";
 
 /** Media Studio per hand-drawn spec §10 — type tabs (图像/视频/3D/预览) |
  *  media canvas | right ops | composer. */
@@ -82,7 +83,7 @@ export default function NeptuneWorkspace({ ctx }: { ctx: RunCtx }) {
             <>
               <button className="btn secondary" onClick={() => {
                 setOp(null);
-                void delegateToPlanet(ctx, "neptune", mediaDelegationRequest(cur.artifact.path, cur.run.runId))
+                void delegateToPlanet(ctx, cur.run, "neptune", mediaDelegationRequest(cur.artifact.path, cur.run.runId))
                   .then(() => setOp({ ok: true, text: t("nep.delegated") }))
                   .catch((e) => setOp({ ok: false, text: String(e instanceof Error ? e.message : e) }));
               }} type="button">{t("nep.render-mp4")}</button>
@@ -90,6 +91,7 @@ export default function NeptuneWorkspace({ ctx }: { ctx: RunCtx }) {
             </>
           )}
           <CapNotInstalled what={t("nep.cap-gen")} />
+                    <WorkspaceTasks ctx={ctx} planet="neptune" />
           <div className="ws-statusbar"><span>{visible.length} ITEMS</span><span>{t(TABS[tab])}</span><span className="right">neptune</span></div>
         </aside>
       </div>

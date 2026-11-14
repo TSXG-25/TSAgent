@@ -5,6 +5,7 @@ import AgentComposer from "../../app/AgentComposer";
 import { MarkdownText } from "../../app/ui";
 import { t } from "../../app/i18n";
 import type { RunCtx } from "../../app/runCtx";
+import { WorkspaceTasks } from "../../app/WorkspaceTasks";
 
 /** Muse per hand-drawn spec §4 — File rail + style.md prefs | work preview +
  *  composer | style preset gallery.  Style + preset ride the real
@@ -102,6 +103,7 @@ export default function VenusWorkspace({ ctx }: { ctx: RunCtx }) {
               ? t("ven.reco-applied", { name: VENUS_PRESETS.find((p) => p.id === applied)?.name ?? applied })
               : t("ven.reco-none")}</p>
           </div>
+                    <WorkspaceTasks ctx={ctx} planet="venus" />
           <div className="ws-statusbar"><span>{docs.length} FILES</span><span>{applied ? `STYLE: ${applied.toUpperCase()}` : "NO STYLE"}</span><span className="right">venus</span></div>
         </aside>
       </div>

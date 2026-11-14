@@ -5,6 +5,7 @@ import { requestIdForRun } from "../../app/ui";
 import AgentComposer from "../../app/AgentComposer";
 import { t, type I18nKey } from "../../app/i18n";
 import type { RunCtx } from "../../app/runCtx";
+import { WorkspaceTasks } from "../../app/WorkspaceTasks";
 import type { MotifSummary } from "../../types/service";
 
 /** Genesis per hand-drawn spec §11 — motif rail (done/发放/current) |
@@ -148,6 +149,7 @@ export default function PlutoWorkspace({ ctx }: { ctx: RunCtx }) {
           ) : <div className="empty-state"><p>{t("plu.select")}</p></div>}
           {err && <p className="omni-empty" style={{ color: "var(--st-danger,#ff5a4f)" }}>{err}</p>}
           <AgentComposer ctx={ctx} planet="pluto" placeholder={t("plu.composer-ph")} />
+                    <WorkspaceTasks ctx={ctx} planet="pluto" />
           <div className="ws-statusbar"><span>{motifs.length} MOTIFS</span><span>{motifs.filter((m) => m.status === "resolved").length} RESOLVED</span><span className="right">pluto</span></div>
         </main>
       </div>

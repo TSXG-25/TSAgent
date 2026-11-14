@@ -5,6 +5,7 @@ import AgentComposer from "../../app/AgentComposer";
 import { requestIdForRun, StatusBadge, Icon } from "../../app/ui";
 import { t } from "../../app/i18n";
 import type { RunCtx } from "../../app/runCtx";
+import { WorkspaceTasks } from "../../app/WorkspaceTasks";
 import type { WorkspaceFileSummary } from "../../types/service";
 import { ForgeDocumentSession } from "./documentSession";
 
@@ -120,6 +121,7 @@ export default function MarsWorkspace({ ctx }: { ctx: RunCtx }) {
           {activeRun && <div className="forge-status"><StatusBadge status={activeRun.status} /><code>{activeRun.runId}</code></div>}
           <div className="forge-ctl-hint">{t("mar.controls")}</div>
           <AgentComposer ctx={ctx} planet="mars" placeholder={t("mar.composer-ph")} />
+                    <WorkspaceTasks ctx={ctx} planet="mars" />
           <div className="ws-statusbar"><span>{files.length} FILES</span><span>{mode.toUpperCase()}</span><span className="right">mars</span></div>
         </aside>
       </div>

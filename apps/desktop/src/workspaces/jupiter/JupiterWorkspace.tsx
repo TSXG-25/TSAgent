@@ -5,6 +5,7 @@ import { requestIdForRun } from "../../app/ui";
 import { t } from "../../app/i18n";
 import { accessRows, createPreviewGate } from "./jupiterAccess";
 import type { RunCtx } from "../../app/runCtx";
+import { WorkspaceTasks } from "../../app/WorkspaceTasks";
 import type { FactRecordSummary, HistoryEntry, JupiterArtifactSummary } from "../../types/service";
 
 /** Archive per hand-drawn spec §7 — Memory / File tabs + access/permission
@@ -98,6 +99,7 @@ export default function JupiterWorkspace({ ctx }: { ctx: RunCtx }) {
             )}
           </section>
           <aside className="jup-inspect">
+            <WorkspaceTasks ctx={ctx} planet="jupiter" />
             <h4 className="ws-mod">{t("jup.access")} <em>{t("jup.grouping")}</em></h4>
             {sel ? (
               <>

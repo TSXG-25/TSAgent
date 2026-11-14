@@ -2518,6 +2518,7 @@ class RunSnapshot:
     output: RunOutput | None = None
     revision: int = 0
     task_id: str = ""
+    origin_planet: str = ""
 
     def __post_init__(self) -> None:
         _required_identifier(self.tenant_id, "tenant_id")
@@ -2583,6 +2584,8 @@ class RunSnapshot:
             ),
             "output": self.output.to_dict() if self.output else None,
             "revision": self.revision,
+            "task_id": self.task_id,
+            "origin_planet": self.origin_planet,
         }
 
     @classmethod
@@ -2638,6 +2641,8 @@ class RunSnapshot:
                 else RunOutput.from_dict(cast(Mapping[str, Any], value["output"]))
             ),
             revision=int(value.get("revision", 0)),
+            task_id=str(value.get("task_id", "")),
+            origin_planet=str(value.get("origin_planet", "")),
         )
 
 

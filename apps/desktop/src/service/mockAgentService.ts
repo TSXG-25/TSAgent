@@ -222,9 +222,9 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
     return [...this.tasks, ...[...this.snapshots.values()].map((run) => ({
       tenantId: run.tenantId,
       sessionId: run.sessionId,
-      taskId: `task-${run.runId}`,
+      taskId: run.taskId ?? `task-${run.runId}`,
       parentTaskId: "",
-      originPlanet: "sun",
+      originPlanet: run.originPlanet ?? "",
       ownerProfileId: "",
       createdAt: run.createdAt,
       status: run.status,
@@ -768,6 +768,8 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
       revision: 1,
     });
     snapshot.sessionId = request.sessionId;
+    snapshot.taskId = request.taskId || `task-${snapshot.runId}`;
+    snapshot.originPlanet = request.originPlanet ?? "";
     snapshot.updatedAt = "刚刚";
     snapshot.createdAt = "刚刚";
     const serviceEvents = run.events.map((item, index) => toServiceEvent(item, snapshot, snapshot.revision, index + 1));

@@ -75,6 +75,7 @@
         "completed_workflow_ids",
         "created_at",
         "failure_summary",
+        "origin_planet",
         "output",
         "pending_workflow_ids",
         "request_id",

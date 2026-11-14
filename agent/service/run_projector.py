@@ -260,6 +260,7 @@ class RunProjector:
             "run_id": request.run_id,
             "session_id": request.session_id,
             "task_id": read.head.task_id,
+            "origin_planet": read.origin_planet,
             "status": status,
             "request_text": str(record.get("request_text", "")),
             "active_workflow_id": active_id or None,

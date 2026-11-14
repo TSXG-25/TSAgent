@@ -6070,6 +6070,11 @@ class SqliteRuntimeStore:
                     )
                     for row in artifact_rows
                 )
+                origin_row = self._connection.execute(
+                    "SELECT origin_planet FROM task_heads "
+                    "WHERE tenant_id = ? AND task_id = ?",
+                    (tenant_id, head.task_id),
+                ).fetchone()
                 self._connection.execute("COMMIT")
                 return RunReadSnapshot(
                     head=head,
@@ -6078,6 +6083,9 @@ class SqliteRuntimeStore:
                     terminal_event=terminal_event,
                     output=output,
                     artifacts=artifacts,
+                    origin_planet=(
+                        str(origin_row["origin_planet"]) if origin_row else ""
+                    ),
                 )
             except Exception:
                 if self._connection.in_transaction:

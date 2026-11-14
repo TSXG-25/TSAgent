@@ -489,6 +489,8 @@ function mapSnapshot(value: unknown): RunSnapshot {
     requestText: typeof raw.request_text === "string" ? raw.request_text : "",
     status,
     revision: numberValue(raw.revision ?? 0, "revision"),
+    taskId: optionalString(raw.task_id) ?? "",
+    originPlanet: optionalString(raw.origin_planet) ?? "",
     createdAt: requiredString(raw.created_at, "created_at"),
     updatedAt: requiredString(raw.updated_at, "updated_at"),
     ...(optionalString(raw.active_workflow_id)

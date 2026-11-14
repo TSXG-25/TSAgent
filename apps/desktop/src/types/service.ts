@@ -221,6 +221,9 @@ export interface RunSnapshot {
   requestId: string;
   requestText: string;
   status: RunStatus;
+  /** Owning task + workstation route — durable facts, never route-derived. */
+  taskId?: string;
+  originPlanet?: string;
   revision: number;
   createdAt: string;
   updatedAt: string;

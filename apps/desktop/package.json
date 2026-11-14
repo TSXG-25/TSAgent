@@ -17,7 +17,7 @@
     "test:scenes": "node scripts/test-scenes.mjs",
     "test:sidecar-e2e": "node scripts/test-sidecar-e2e.mjs",
     "typecheck": "tsc -p tsconfig.json && tsc -p tests/tsconfig.json",
-    "test": "npm run typecheck && node scripts/run-ts-test.mjs tests/localAgentServiceClient.test.ts tests/clientFactory.test.ts tests/runController.test.ts tests/runControllerOperations.test.ts tests/documentSession.test.ts tests/wireContract.test.ts tests/mercurySearch.test.ts tests/globalSettings.test.ts tests/sunSession.test.ts tests/earthEvalForm.test.ts tests/workspaceCapability.test.ts tests/frontendDraftI18n.test.ts tests/frontendMarkdown.test.ts tests/frontendApprovals.test.ts"
+    "test": "npm run typecheck && node scripts/run-ts-test.mjs tests/localAgentServiceClient.test.ts tests/clientFactory.test.ts tests/runController.test.ts tests/runControllerOperations.test.ts tests/documentSession.test.ts tests/wireContract.test.ts tests/mercurySearch.test.ts tests/globalSettings.test.ts tests/sunSession.test.ts tests/earthEvalForm.test.ts tests/workspaceCapability.test.ts tests/frontendDraftI18n.test.ts tests/frontendMarkdown.test.ts tests/frontendApprovals.test.ts tests/ws01Admission.test.ts"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.12.4",

@@ -72,7 +72,12 @@ export class RunController {
   private activeRunId = "";
   private loading = true;
   private currentError: ServiceErrorDTO | null = null;
-  private operationState: RunControllerState["operationState"] = "idle";
+  private readonly controlOps = new Map<string, "resuming" | "cancelling" | "pausing">();
+  private startingCount = 0;
+  private get operationState(): RunControllerState["operationState"] {
+    if (this.startingCount > 0) return "starting";
+    return this.controlOps.get(this.activeRunId) ?? "idle";
+  }
   private initialization: Promise<void> | null = null;
 
   constructor(
@@ -108,11 +113,10 @@ export class RunController {
   }
 
   async startRun(request: StartRunRequest): Promise<RunView> {
-    if (this.operationState !== "idle") {
-      const current = this.runs.get(this.activeRunId);
-      if (current) return current;
-    }
-    this.operationState = "starting";
+    // Parallel acceptance: every submission is independently admitted; the
+    // returned view is always the Run this request created, never an
+    // unrelated in-flight Run.
+    this.startingCount += 1;
     this.emit();
     this.dismissError();
     try {
@@ -129,7 +133,7 @@ export class RunController {
       this.setError(error);
       throw error;
     } finally {
-      this.operationState = "idle";
+      this.startingCount -= 1;
       this.emit();
     }
   }
@@ -137,7 +141,7 @@ export class RunController {
   async resumeRun(runId: string): Promise<RunView | undefined> {
     const current = this.runs.get(runId);
     if (!current || !current.resume || current.resume.action === null) return current;
-    if (this.operationState !== "idle") return current;
+    if (this.controlOps.has(runId)) return current;
 
     const request: ResumeRunRequest = {
       tenantId: current.tenantId ?? this.client.identity.tenantId,
@@ -147,7 +151,7 @@ export class RunController {
       checkpointId: current.resume.checkpointId,
       action: current.resume.action,
     };
-    this.operationState = "resuming";
+    this.controlOps.set(runId, "resuming");
     this.dismissError();
     this.emit();
     try {
@@ -157,16 +161,16 @@ export class RunController {
       this.setError(error);
       throw error;
     } finally {
-      this.operationState = "idle";
+      this.controlOps.delete(runId);
       this.emit();
     }
   }
 
   async cancelRun(runId: string): Promise<RunView | undefined> {
     const current = this.runs.get(runId);
-    if (!current || current.status !== "active" || this.operationState !== "idle") return current;
+    if (!current || current.status !== "active" || this.controlOps.has(runId)) return current;
 
-    this.operationState = "cancelling";
+    this.controlOps.set(runId, "cancelling");
     this.dismissError();
     this.emit();
     try {
@@ -182,15 +186,15 @@ export class RunController {
       this.setError(error);
       throw error;
     } finally {
-      this.operationState = "idle";
+      this.controlOps.delete(runId);
       this.emit();
     }
   }
 
   async pauseRun(runId: string): Promise<RunView | undefined> {
     const current = this.runs.get(runId);
-    if (!current || current.status !== "active" || this.operationState !== "idle") return current;
-    this.operationState = "pausing";
+    if (!current || current.status !== "active" || this.controlOps.has(runId)) return current;
+    this.controlOps.set(runId, "pausing");
     this.dismissError();
     this.emit();
     try {
@@ -207,7 +211,7 @@ export class RunController {
       this.setError(error);
       throw error;
     } finally {
-      this.operationState = "idle";
+      this.controlOps.delete(runId);
       this.emit();
     }
   }

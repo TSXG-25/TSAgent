@@ -4283,3 +4283,13 @@ ol.md-list li::marker { color: var(--planet-accent); font-family: var(--font-mon
 .jup-row { position: relative; }
 .jup-forget { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font-style: normal; font-size: 11px; color: var(--text-faint); cursor: pointer; }
 .jup-forget:hover { color: #f0b0ba; }
+
+/* Per-workstation task rail (WS-01) — owns its scope's runs. */
+.ws-tasks { margin: 0 0 10px; display: flex; flex-direction: column; gap: 6px; }
+.ws-task { border: 0.5px solid var(--border-base, rgba(160,190,255,.16)); border-radius: 9px; padding: 7px 9px; display: flex; flex-direction: column; gap: 5px; background: rgba(255,255,255,.02); }
+.ws-task.sel { border-color: var(--planet-accent); }
+.ws-task-title { background: none; border: none; padding: 0; text-align: left; font-size: 12px; color: var(--text-base); cursor: pointer; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.ws-task-title:focus-visible { outline: 1px solid var(--planet-accent); outline-offset: 2px; }
+.ws-task-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ws-task-op { padding: 2px 8px; font-size: 10.5px; }
+.ws-task-fail { margin: 0; font-size: 10.5px; color: #f0b0ba; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

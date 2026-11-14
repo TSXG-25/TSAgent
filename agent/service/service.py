@@ -280,6 +280,26 @@ class AgentService:
                         requested_run_id,
                     )
                 )
+                if run_root is None:
+                    # Deterministic root at admission: an unbound session
+                    # gets an app-managed workspace, registered + bound so
+                    # it is visible and later runs share it — never cwd.
+                    run_root = self._default_session_workspace(
+                        request.tenant_id, request.session_id,
+                    )
+                elif (
+                    not explicit_root
+                    and self._contexts.uses_default_resolver
+                    and not self._store.session_workspace_id(
+                        request.tenant_id, request.session_id
+                    )
+                ):
+                    # Resolved from the process-level root with no durable
+                    # binding — register the session binding so the source
+                    # is a visible fact rather than an implicit fallback.
+                    self._bind_session_workspace(
+                        request.tenant_id, request.session_id, run_root
+                    )
                 context_refs = self._validate_store_refs(
                     request.tenant_id,
                     request.session_id,
@@ -518,6 +538,41 @@ class AgentService:
             )
             snapshots.append(self._run_projector().project(read, lookup))
         return snapshots
+
+    def _default_session_workspace(
+        self, tenant_id: str, session_id: str
+    ) -> Path:
+        """Admission-time fallback for unbound sessions: an app-managed
+        directory next to the runtime store, registered in the workspace
+        registry and bound to the session — the binding is visible in the
+        UI and subsequent runs of the session reuse the same root."""
+        if str(self._store.path) == ":memory:":
+            import tempfile
+
+            base = Path(tempfile.gettempdir())
+        else:
+            base = Path(self._store.path).resolve().parent
+        root = base / "workspaces" / tenant_id / session_id
+        root.mkdir(parents=True, exist_ok=True)
+        self._bind_session_workspace(tenant_id, session_id, root)
+        return root
+
+    def _bind_session_workspace(
+        self, tenant_id: str, session_id: str, root: Path
+    ) -> None:
+        import json as _json
+
+        workspace_id = f"ws-auto-{session_id}"
+        self._store.upsert_workspace(
+            tenant_id,
+            workspace_id,
+            display_name=f"session {session_id} workspace",
+            path=str(root),
+            paths_json=_json.dumps([str(root)]),
+        )
+        self._store.assign_session_workspace(
+            tenant_id, session_id, workspace_id
+        )
 
     def _resolve_task_id(self, request: StartRunRequest) -> str:
         """Every Run belongs to a Task; absent an explicit id one is

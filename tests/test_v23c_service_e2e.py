@@ -246,14 +246,15 @@ def test_service_lease_prevents_second_process_takeover_of_active_run(
                 runtime_store=store_b,
                 launcher=RuntimeExecutionLauncher(runtime_factory=SuccessfulRuntime),
             )
-            with pytest.raises(AgentServiceError) as session_active:
-                await service_b.start_run(_start("second-active-session-run"))
-            assert session_active.value.code is ServiceErrorCode.RUN_ALREADY_ACTIVE
-            assert session_active.value.details["active_run_id"] == handle.run_id
+            # WS-01: parallel admission — a second start in the same session
+            # is admitted even while another service instance holds a live
+            # worker lease on the first Run.
+            second = await service_b.start_run(_start("second-active-session-run"))
+            assert second.run_id != handle.run_id
             assert store_b._connection.execute(
                 "SELECT COUNT(*) FROM run_heads WHERE tenant_id = ? AND session_id = ?",
                 ("tenant-a", "session-a"),
-            ).fetchone()[0] == 1
+            ).fetchone()[0] == 2
 
             with pytest.raises(AgentServiceError) as active:
                 await service_b.resume_run(ResumeRunRequest(

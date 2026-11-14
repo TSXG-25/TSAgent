@@ -30,6 +30,10 @@ class ServiceContextFactory:
         # default so every construction path (sidecar, CLI, in-process)
         # resolves a bound session's workspace instead of silently falling
         # back to the process-level root.
+        # True when resolution is the built-in session-binding lookup —
+        # a custom per-run resolver owns its own semantics and the Service
+        # must not auto-bind its results to the session.
+        self.uses_default_resolver = workspace_for_run is None
         self.workspace_for_run = workspace_for_run or (
             lambda tenant, session, _run: (
                 (p := store.session_workspace_path(tenant, session)) and Path(p)

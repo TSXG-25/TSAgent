@@ -4267,36 +4267,18 @@ class SqliteRuntimeStore:
                 """,
                 (tenant_id, run_id),
             ).fetchone()
+            # Sessions admit parallel Runs — a legitimately-active sibling
+            # no longer blocks admission; only dead-lease orphans are
+            # converged here.
             if not self._active_run_is_orphan(
                 None if lease is None else str(lease["expires_at"]),
                 str(row["updated_at"]),
                 now,
                 lease_grace,
             ):
-                raise DurableStoreError(
-                    StoreErrorCode.SESSION_RUN_ACTIVE,
-                    f"Run {run_id} is already active in this session",
-                    details={"active_run_id": run_id},
-                )
+                continue
             self._converge_orphaned_run_tx(
                 connection, tenant_id, session_id, row, now
-            )
-        active_lease = connection.execute(
-            """
-            SELECT run_id FROM run_worker_leases
-            WHERE tenant_id = ? AND session_id = ? AND run_id <> ?
-              AND expires_at > ?
-            ORDER BY expires_at DESC, run_id
-            LIMIT 1
-            """,
-            (tenant_id, session_id, current_run_id, now),
-        ).fetchone()
-        if active_lease is not None:
-            run_id = str(active_lease["run_id"])
-            raise DurableStoreError(
-                StoreErrorCode.SESSION_RUN_ACTIVE,
-                f"Run {run_id} is already active in this session",
-                details={"active_run_id": run_id},
             )
 
     @staticmethod

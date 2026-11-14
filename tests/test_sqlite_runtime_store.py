@@ -447,9 +447,11 @@ def test_revision_cas_with_two_independent_connections_has_one_winner(
         check.close()
 
 
-def test_concurrent_service_starts_serialize_one_tenant_session(
+def test_concurrent_service_starts_admit_parallel_session_runs(
     tmp_path: Path,
 ) -> None:
+    """WS-01: one session admits parallel Runs — every reservation is
+    independently committed; the session lane is no longer exclusive."""
     path = tmp_path / "session-starts.sqlite"
 
     def reserve(index: int) -> tuple[str, str]:
@@ -474,10 +476,7 @@ def test_concurrent_service_starts_serialize_one_tenant_session(
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
         results = list(pool.map(reserve, (1, 2)))
 
-    assert [result[0] for result in results].count("reserved") == 1
-    assert [result[1] for result in results].count(
-        StoreErrorCode.SESSION_RUN_ACTIVE.value
-    ) == 1
+    assert [result[0] for result in results].count("reserved") == 2
 
     other_tenant = _store(path)
     try:
@@ -495,9 +494,11 @@ def test_concurrent_service_starts_serialize_one_tenant_session(
         other_tenant.close()
 
 
-def test_resume_fence_cannot_overlap_another_run_in_the_session(
+def test_resume_fence_proceeds_alongside_another_run_in_the_session(
     tmp_path: Path,
 ) -> None:
+    """WS-01: a sibling Run's activity no longer blocks this run's fence
+    takeover — parallel Runs share the session by contract."""
     store = _store(tmp_path / "session-resume.sqlite")
     try:
         blocked = store.reserve_service_start(
@@ -554,18 +555,17 @@ def test_resume_fence_cannot_overlap_another_run_in_the_session(
             writer_id="writer-active",
             external_reference="service-start:run-active",
         )
-        with pytest.raises(DurableStoreError) as conflict:
-            store.takeover_fence(
-                "tenant-a",
-                "session-a",
-                "run-blocked",
-                "writer-resume",
-                expected_fence_token=blocked.head.current_fence_token,
-                request_id="request-resume",
-                worker_lease=True,
-            )
-        assert conflict.value.code is StoreErrorCode.SESSION_RUN_ACTIVE
-        assert conflict.value.details["active_run_id"] == active.head.run_id
+        takeover = store.takeover_fence(
+            "tenant-a",
+            "session-a",
+            "run-blocked",
+            "writer-resume",
+            expected_fence_token=blocked.head.current_fence_token,
+            request_id="request-resume",
+            worker_lease=True,
+        )
+        assert takeover.run_id == "run-blocked"
+        assert active.head.run_id == "run-active"
     finally:
         store.close()
 
@@ -635,10 +635,11 @@ def test_orphaned_running_run_is_converged_on_next_session_start(
         store.close()
 
 
-def test_live_worker_lease_still_blocks_new_run_in_session(
+def test_live_session_run_does_not_block_or_get_converged(
     tmp_path: Path,
 ) -> None:
-    """The orphan sweep must not touch a run whose lease is still alive."""
+    """The orphan sweep must not touch a run whose lease is still alive —
+    and its presence no longer blocks a new Run in the session."""
     store = _store(tmp_path / "live-lease.sqlite")
     try:
         live = store.reserve_service_start(
@@ -664,17 +665,16 @@ def test_live_worker_lease_still_blocks_new_run_in_session(
             request_id="request-live",
             expected_status="CREATED",
         )
-        with pytest.raises(DurableStoreError) as conflict:
-            store.reserve_service_start(
-                "tenant-a",
-                "session-a",
-                requested_run_id="run-new",
-                request_id="request-new",
-                request_digest="digest-new",
-                writer_id="writer-new",
-                external_reference="service-start:run-new",
-            )
-        assert conflict.value.code is StoreErrorCode.SESSION_RUN_ACTIVE
+        admitted = store.reserve_service_start(
+            "tenant-a",
+            "session-a",
+            requested_run_id="run-new",
+            request_id="request-new",
+            request_digest="digest-new",
+            writer_id="writer-new",
+            external_reference="service-start:run-new",
+        )
+        assert admitted.head.run_id == "run-new"
         head = store.get_run_head(
             "tenant-a", "run-live", session_id="session-a"
         )

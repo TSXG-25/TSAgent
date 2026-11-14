@@ -2678,6 +2678,8 @@ def test_a24_motif_lifecycle_report_verdict_and_reject(
         resolved = next(s for s in summaries if s.motif_id == "m-1")
         assert resolved.status == "resolved"
         assert resolved.resolution == "已理解的结论"
+        # 证据 Run 所属会话随摘要投影 — 跨会话链接由此定位。
+        assert resolved.resolution_session_id == "s"
 
         # 同一裁决重放 — 幂等。
         replay = await service.resolve_motif(resolve("m-1", "run-1", "r-verdict2"))
@@ -2702,6 +2704,48 @@ def test_a24_motif_lifecycle_report_verdict_and_reject(
         with pytest.raises(AgentServiceError) as unassigned:
             await service.report_motif(report("m-open", "run-1", "r-open"))
         assert unassigned.value.code == ServiceErrorCode.INVALID_REQUEST
+
+    try:
+        _run(scenario())
+    finally:
+        _run(service.close())
+
+
+def test_motif_summary_projects_resolution_session(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The resolution run's owning session rides the summary — list_motifs is
+    tenant-scoped, so a caller in another session must still learn where the
+    evidence run lives."""
+    from agent.service.contracts import (
+        ListMotifsRequest, ReportMotifRequest, ResolveMotifRequest,
+    )
+
+    service, store = _a24_service(tmp_path, monkeypatch)
+    # 母题租户级共享；证据 Run 属于会话 s-a，调用方在 s-b。
+    store.create_task_head("t", "s-a", "task-1")
+    store.initialize_run("t", "s-a", "run-1", "req-1", task_id="task-1")
+    store.upsert_motif("t", "m-1", text="跨会话母题")
+    store.update_motif("t", "m-1", status="exploring", assigned_task_id="task-1")
+
+    async def scenario() -> None:
+        await service.report_motif(ReportMotifRequest(
+            tenant_id="t", user_id="u", session_id="s-b",
+            request_id="r-report", motif_id="m-1",
+            resolution_run_id="run-1", resolution="结论",
+        ))
+        await service.resolve_motif(ResolveMotifRequest(
+            tenant_id="t", user_id="u", session_id="s-b",
+            request_id="r-verdict", motif_id="m-1",
+            resolution_run_id="run-1", resolution="结论",
+        ))
+        listed = await service.list_motifs(ListMotifsRequest(
+            tenant_id="t", user_id="u", session_id="s-b",
+            request_id="r-list",
+        ))
+        summary = next(s for s in listed if s.motif_id == "m-1")
+        assert summary.resolution_run_id == "run-1"
+        assert summary.resolution_session_id == "s-a"
 
     try:
         _run(scenario())

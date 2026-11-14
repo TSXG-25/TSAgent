@@ -956,6 +956,9 @@ export interface MotifSummary {
   status: string;
   assignedTaskId: string;
   resolutionRunId: string;
+  /** Session owning resolutionRunId — motifs are tenant-scoped, so the
+   *  service projects this from the run head for cross-session links. */
+  resolutionSessionId: string;
   resolution: string;
   createdAt: string;
   updatedAt: string;

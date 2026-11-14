@@ -1725,6 +1725,10 @@ class MotifSummary:
     status: str
     assigned_task_id: str
     resolution_run_id: str
+    # The session that owns resolution_run_id — projected from the run head so
+    # a cross-session evidence link can address the right session. Empty when
+    # there is no resolution run.
+    resolution_session_id: str
     resolution: str
     created_at: str
     updated_at: str
@@ -1737,6 +1741,7 @@ class MotifSummary:
             "status": self.status,
             "assigned_task_id": self.assigned_task_id,
             "resolution_run_id": self.resolution_run_id,
+            "resolution_session_id": self.resolution_session_id,
             "resolution": self.resolution,
             "created_at": self.created_at,
             "updated_at": self.updated_at,

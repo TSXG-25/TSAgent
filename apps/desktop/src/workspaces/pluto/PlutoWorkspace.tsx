@@ -130,7 +130,7 @@ export default function PlutoWorkspace({ ctx }: { ctx: RunCtx }) {
                 {cur.status === "resolved" && (
                   <div className="gen-ingested">
                     <span>{t("pluto.ingested")}</span>
-                    {cur.resolutionRunId && <button className="ven-link" onClick={() => ctx.openRun(cur.resolutionRunId)} title={t("pluto.resolution-run")} type="button">{cur.resolutionRunId}</button>}
+                    {cur.resolutionRunId && <button className="ven-link" onClick={() => ctx.openRun(cur.resolutionRunId, cur.resolutionSessionId || undefined)} title={t("pluto.resolution-run")} type="button">{cur.resolutionRunId}</button>}
                   </div>
                 )}
               </div>

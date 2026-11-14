@@ -1606,6 +1606,14 @@ class AgentService:
     def _motif_summary(self, record: Any) -> Any:
         from .contracts import MotifSummary
 
+        # The run head is the authority on which session owns the evidence
+        # run — list_motifs is tenant-scoped, so the UI cannot infer it.
+        resolution_session_id = ""
+        if record.resolution_run_id:
+            head = self._store.get_run_head(
+                record.tenant_id, record.resolution_run_id
+            )
+            resolution_session_id = head.session_id if head else ""
         return MotifSummary(
             motif_id=record.motif_id,
             text=record.text,
@@ -1613,6 +1621,7 @@ class AgentService:
             status=record.status,
             assigned_task_id=record.assigned_task_id,
             resolution_run_id=record.resolution_run_id,
+            resolution_session_id=resolution_session_id,
             resolution=record.resolution,
             created_at=record.created_at,
             updated_at=record.updated_at,

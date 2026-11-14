@@ -95,11 +95,16 @@
 - **[P2] Jupiter 预览串扰**：`previewFor` ref 绑定请求归属，响应提交前校验仍是当前选中项；选中变化作废在途请求（覆盖成功与失败两条回调）。
 - **[P2] 中英切换**：App 根 `useLang()` 订阅——语言变更即整树重渲染（原先仅 GlobalSettings 订阅，其余组件靠偶遇状态更新零散切换）。九个工作台正文文案接入字典：Mercury/Saturn/Uranus/Earth/Jupiter/Mars/Neptune/Pluto/Venus 的标题、按钮、空态、提示、placeholder、prompt/confirm；领域术语（参数名、字段名、Run/ID）与状态计数保留原文。Neptune 页签由中文键改为 id 键 + `TABS` 映射。
 
+### 审核修正·第二轮（两项）
+
+- **[P2] Pluto 证据链接缺所属会话**：`list_motifs` 按 tenant 返回（母题跨会话共享），`resolutionRunId` 可能属于其它会话，调用方拿不到所属 session → `refreshRun` 用当前会话查 → `RUN_NOT_FOUND`。合同补齐：`MotifSummary.resolution_session_id`——由 `_motif_summary` 经 `get_run_head(resolution_run_id)` 投影（Run 记录是所属会话的单一事实源，无需新增存储列），Python 合同/`to_dict`/wire/TS `mapMotif`/Pluto `openRun` 全链路接通。
+- **[P2] Jupiter 预览对象身份失效**：同一产物连续两次请求（A₁→B→A₂）使 `previewFor.current === a` 恒真，迟到的 A₁ 覆盖 A₂。改为 `createPreviewGate()` 单调序号——每次请求 mint 一个 token，响应提交时仍是最新才落盘；选中变化 `invalidate()`。复现逆序回归（A₂ 先回、A₁ 后回 → 只有 A₂ 落盘）。
+
 ### 证据
 
-- `npm run typecheck` 通过；`npm test` 94 项 subtest 全绿。
-- 新增回归：`frontendDraftI18n` 延迟 Promise 用例（在途输入不被清除 + 未变草稿正常清除）；`runController` 跨会话用例（`refreshRun` 带 sessionId 加载 foreign run → `selectRun` 接受；加载前 `selectRun` 拒绝）。
-- `test:orbits`/`test:scenes`/`npm run build` 通过。
+- `npm run typecheck` 通过；`npm test` 95 项 subtest 全绿。
+- 新增回归：`frontendDraftI18n` 延迟 Promise 用例（在途输入不被清除 + 未变草稿正常清除）；`runController` 跨会话用例（`refreshRun` 带 sessionId 加载 foreign run → `selectRun` 接受；加载前 `selectRun` 拒绝）；`workspaceCapability` 预览闸门逆序响应用例；`test_desktop_sidecar` 母题跨会话投影用例（证据 Run 在 s-a、调用方在 s-b → `resolution_session_id == "s-a"`）。
+- `test:orbits`/`test:scenes`/`npm run build` 通过；Python 全量 941 passed / 0 failed（合同变更全回归）。
 
 ### 未覆盖（外部验证）
 

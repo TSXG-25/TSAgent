@@ -45,3 +45,35 @@ test("jupiter: fact rows show scope/source/revision, not fake permissions", () =
   assert.deepEqual(labels, ["scope", "source", "revision", "evidence"]);
   assert.ok(!labels.includes("write") && !labels.includes("execute"));
 });
+
+test("jupiter: preview gate drops late out-of-order responses", async () => {
+  const { createPreviewGate } = await import("../src/workspaces/jupiter/jupiterAccess");
+  const gate = createPreviewGate();
+  const committed: string[] = [];
+  const deferred = <T,>() => {
+    let resolve!: (v: T) => void;
+    const p = new Promise<T>((r) => { resolve = r; });
+    return { p, resolve };
+  };
+  const respond = (tok: number, p: Promise<string>) =>
+    p.then((v) => { if (gate.isCurrent(tok)) committed.push(v); });
+
+  // 预览 A₁ → 选中 B（作废）→ 回到 A 预览 A₂ → A₂ 返回 → A₁ 最后返回
+  const a1 = deferred<string>();
+  const r1 = respond(gate.next(), a1.p);
+  gate.invalidate();                    // selection change to B
+  const a2 = deferred<string>();
+  const r2 = respond(gate.next(), a2.p);
+  a2.resolve("A2 result");
+  await r2;
+  a1.resolve("A1 stale");
+  await r1;
+  assert.deepEqual(committed, ["A2 result"]);
+
+  // 同一产物的连续请求 — 对象身份无法区分，序号可以
+  const g = createPreviewGate();
+  const t1 = g.next();
+  const t2 = g.next();
+  assert.equal(g.isCurrent(t1), false);
+  assert.equal(g.isCurrent(t2), true);
+});

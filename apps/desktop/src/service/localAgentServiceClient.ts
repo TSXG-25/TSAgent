@@ -301,6 +301,7 @@ function mapMotif(value: unknown): MotifSummary {
     status: optionalString(raw.status) ?? "",
     assignedTaskId: optionalString(raw.assigned_task_id) ?? "",
     resolutionRunId: optionalString(raw.resolution_run_id) ?? "",
+    resolutionSessionId: optionalString(raw.resolution_session_id) ?? "",
     resolution: optionalString(raw.resolution) ?? "",
     createdAt: optionalString(raw.created_at) ?? "",
     updatedAt: optionalString(raw.updated_at) ?? "",

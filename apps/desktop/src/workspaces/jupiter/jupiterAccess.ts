@@ -21,3 +21,17 @@ export function accessRows(item: FactRecordSummary | JupiterArtifactSummary): Ac
     { label: "evidence", value: item.evidenceId || "—" },
   ];
 }
+
+/** Preview request gate — each request mints a monotonically increasing
+ *  token; a response commits only while its token is current. Selection
+ *  changes and newer requests invalidate in-flight ones, so a late A₁
+ *  response can't overwrite the A₂-or-newer result (object identity can't
+ *  tell same-artifact requests apart). */
+export function createPreviewGate() {
+  let current = 0;
+  return {
+    next(): number { return ++current; },
+    isCurrent(token: number): boolean { return token === current; },
+    invalidate(): void { current += 1; },
+  };
+}

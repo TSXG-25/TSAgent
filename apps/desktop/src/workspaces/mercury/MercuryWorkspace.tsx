@@ -38,7 +38,9 @@ export default function MercuryWorkspace({ ctx }: { ctx: RunCtx }) {
   // 会话切换与组件卸载都让在途响应失效 — 旧会话的晚到响应不得
   // 更新当前页面（service 对象在会话间复用，memo 不会重建）。
   useEffect(() => {
+    // 切换会话清空本台搜索状态 —— A 的来源/日志不残留到 B。
     search.bind(service.identity.sessionId);
+    if (search.sessionId === service.identity.sessionId) { setSteps([]); setQuery(""); }
     return () => search.stop();
   }, [search, service.identity.sessionId]);
 

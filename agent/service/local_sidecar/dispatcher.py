@@ -36,6 +36,7 @@ class SidecarDispatcher:
             LocalTransportMethod.CANCEL_RUN: self._cancel_run,
             LocalTransportMethod.LIST_ARTIFACTS: self._list_artifacts,
             LocalTransportMethod.READ_ARTIFACT: self._read_artifact,
+            LocalTransportMethod.READ_ARTIFACT_PREVIEW: self._read_artifact_preview,
             LocalTransportMethod.LIST_RUNS: self._list_runs,
             LocalTransportMethod.CREATE_TASK: self._create_task,
             LocalTransportMethod.LIST_TASKS: self._list_tasks,
@@ -524,6 +525,12 @@ class SidecarDispatcher:
 
         request = self._from_dto(ReadArtifactRequest.from_dict, params)
         return await self._service.read_artifact(request)
+
+    async def _read_artifact_preview(self, params: Mapping[str, Any]) -> Any:
+        from ..contracts import ReadArtifactRequest
+
+        request = self._from_dto(ReadArtifactRequest.from_dict, params)
+        return await self._service.read_artifact_preview(request)
 
     async def _read_events(self, params: Mapping[str, Any]) -> list[Any]:
         # A poll must return promptly when a live Run has no new event.  The

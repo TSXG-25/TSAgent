@@ -5,6 +5,7 @@ import AgentComposer from "../../app/AgentComposer";
 import { MarkdownText } from "../../app/ui";
 import { t } from "../../app/i18n";
 import type { RunCtx } from "../../app/runCtx";
+import { workspaceRuns } from "../../app/workspaceSelection";
 import { WorkspaceTasks } from "../../app/WorkspaceTasks";
 
 /** Muse per hand-drawn spec §4 — File rail + style.md prefs | work preview +
@@ -13,14 +14,33 @@ import { WorkspaceTasks } from "../../app/WorkspaceTasks";
 import { VENUS_PRESETS, styleContext } from "./venusStyle";
 
 export default function VenusWorkspace({ ctx }: { ctx: RunCtx }) {
-  const { runs, service } = ctx;
+  const { service } = ctx;
   const scene = SCENES[2];
   const [sel, setSel] = useState<string | null>(null);
-  const [style, setStyle] = useState("# style.md — 文稿风格偏好\n\n- 语气：冷静、克制\n- 结构：先结论后论证\n- 格式：Markdown");
-  const [applied, setApplied] = useState<string | null>(null);
+  // 风格偏好按 tenant/session/venus 持久化 —— 离开页面不丢。
+  const styleKey = `venus-style:${service.identity.tenantId}:${ctx.sessionId}`;
+  const DEFAULT_STYLE = "# style.md — 文稿风格偏好\n\n- 语气：冷静、克制\n- 结构：先结论后论证\n- 格式：Markdown";
+  const [style, setStyle] = useState(
+    () => localStorage.getItem(`${styleKey}:text`) ?? DEFAULT_STYLE,
+  );
+  const [applied, setApplied] = useState<string | null>(
+    () => localStorage.getItem(`${styleKey}:preset`),
+  );
+  // 切换 session — 重新加载该 session 自己的偏好，不把上一个 session
+  // 的 style 写进新键。
+  useEffect(() => {
+    setStyle(localStorage.getItem(`${styleKey}:text`) ?? DEFAULT_STYLE);
+    setApplied(localStorage.getItem(`${styleKey}:preset`));
+  }, [styleKey]);
+  useEffect(() => { localStorage.setItem(`${styleKey}:text`, style); }, [styleKey, style]);
+  useEffect(() => {
+    if (applied) localStorage.setItem(`${styleKey}:preset`, applied);
+    else localStorage.removeItem(`${styleKey}:preset`);
+  }, [styleKey, applied]);
 
-  const docs = useMemo(() => runs.flatMap((r) => r.artifacts
-    .filter((a) => /\.(md|txt|svg)$/i.test(a.path)).map((a) => ({ run: r, artifact: a }))), [runs]);
+  // 文稿只来自本台在本会话的任务 —— 不混用全局 runs，详情绑定生产 Run。
+  const docs = useMemo(() => workspaceRuns(ctx, "venus").flatMap((r) => r.artifacts
+    .filter((a) => /\.(md|txt|svg)$/i.test(a.path)).map((a) => ({ run: r, artifact: a }))), [ctx.runs, ctx.sessionId]);
   const cur = docs.find((d) => d.artifact.artifactId === sel) ?? docs[0];
   const [content, setContent] = useState<{ text: string; stale: boolean; result: string } | null>(null);
   useEffect(() => {
@@ -67,7 +87,11 @@ export default function VenusWorkspace({ ctx }: { ctx: RunCtx }) {
           )}
           {cur ? (
             <>
-              <header className="muse-title"><strong>{cur.artifact.path.split("/").pop()}</strong><code>{cur.run.runId}</code>{applied && <span className="muse-applied">{t("ven.applied", { name: applied })}</span>}</header>
+              <header className="muse-title"><strong>{cur.artifact.path.split("/").pop()}</strong><code>{cur.run.runId}</code>{applied && <span className="muse-applied">{t("ven.applied", { name: applied })}</span>}
+                <button className="ven-link" type="button" onClick={() => window.dispatchEvent(new CustomEvent("tsagent:composer-draft", {
+                  detail: { text: t("ven.edit-prefill", { path: cur.artifact.path, runId: cur.run.runId }) },
+                }))}>{t("ven.edit-this")}</button>
+              </header>
               <div className="muse-body">
                 {content?.stale && <p className="omni-empty">{t("art.stale")}</p>}
                 {content && content.result !== "ok" && (
@@ -83,7 +107,7 @@ export default function VenusWorkspace({ ctx }: { ctx: RunCtx }) {
               </div>
             </>
           ) : <div className="empty-state"><p>{t("ven.select-work")}</p></div>}
-          <AgentComposer ctx={ctx} planet="venus" placeholder={t("ven.composer-ph")} contextPrefix={styleContext(style, applied)} />
+          <AgentComposer ctx={ctx} planet="venus" placeholder={t("ven.composer-ph")} contextPrefix={styleContext(style, applied) + (cur ? `\n[文稿引用] ${cur.artifact.path} · run ${cur.run.runId} · artifact ${cur.artifact.artifactId}` : "")} />
         </main>
 
         {/* Style gallery + applied state */}

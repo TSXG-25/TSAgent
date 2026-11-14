@@ -19,6 +19,7 @@ export const LOCAL_TRANSPORT_METHODS = [
   "cancel_run",
   "list_artifacts",
   "read_artifact",
+  "read_artifact_preview",
   "list_runs",
   "create_task",
   "list_tasks",

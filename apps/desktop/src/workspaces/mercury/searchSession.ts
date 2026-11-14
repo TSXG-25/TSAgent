@@ -37,6 +37,7 @@ export class MercurySearchSession {
   provider = "";
   sourceCount = 0;
   panes: MercuryPane[] = [{ source: null, content: null }];
+  private sources: Record<string, unknown>[] = [];
 
   constructor(
     private readonly search: (
@@ -63,6 +64,7 @@ export class MercurySearchSession {
       if (id !== this.seq) return false; // stale response — drop
       this.provider = String(res.provider ?? "");
       const sources = res.sources ?? [];
+      this.sources = sources;
       this.sourceCount = sources.length;
       // 按本次结果重建 pane — 结果变少时旧来源不再残留。
       this.panes = this.panes.map((_p, i) => ({
@@ -94,15 +96,29 @@ export class MercurySearchSession {
   }
 
   /** Re-bind to a chat session — a response from a search issued under
-   *  a different session must not write this session's view. */
+   *  a different session must not write this session's view, and the old
+   *  session's sources/panes must not leak into the new one. */
   bind(sessionId: string): void {
+    if (sessionId !== this.sessionId) this.clear();
     this.sessionId = sessionId;
     this.stop();
   }
 
+  /** Drop all search state — used on session switch. */
+  clear(): void {
+    this.sources = [];
+    this.sourceCount = 0;
+    this.provider = "";
+    this.err = null;
+    this.status = "idle";
+    this.panes = [{ source: null, content: null }];
+    this.notify();
+  }
+
   addPane(): void {
     if (this.panes.length >= 4) return;
-    this.panes = [...this.panes, { source: null, content: null }];
+    const i = this.panes.length;
+    this.panes = [...this.panes, { source: this.sources[i] ?? null, content: null }];
     this.notify();
   }
 

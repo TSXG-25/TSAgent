@@ -7,6 +7,7 @@ import { t, type I18nKey } from "../../app/i18n";
 import type { RunCtx } from "../../app/runCtx";
 import { WorkspaceTasks } from "../../app/WorkspaceTasks";
 import type { MotifSummary } from "../../types/service";
+import type { RunView } from "../../types";
 
 /** Genesis per hand-drawn spec §11 — motif rail (done/发放/current) |
  *  report log (what was done + answer) | 认可/不认可 human judgement. */
@@ -18,7 +19,7 @@ export default function PlutoWorkspace({ ctx }: { ctx: RunCtx }) {
   const [motifs, setMotifs] = useState<MotifSummary[]>([]);
   const [sel, setSel] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
-  const [autoSrc, setAutoSrc] = useState(false);
+  // "auto" 开关已移除 —— source 如实记录提交来源，没有自动探索流程。
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -35,7 +36,7 @@ export default function PlutoWorkspace({ ctx }: { ctx: RunCtx }) {
     e.preventDefault();
     if (!draft.trim()) return;
     setBusy(true);
-    try { await service.createMotif({ ...req(), text: draft.trim(), source: autoSrc ? "auto" : "user" }); setDraft(""); await refresh(); }
+    try { await service.createMotif({ ...req(), text: draft.trim(), source: "user" }); setDraft(""); await refresh(); }
     catch (e) { setErr(String(e)); } finally { setBusy(false); }
   }
   async function act(fn: () => Promise<unknown>) {
@@ -66,13 +67,30 @@ export default function PlutoWorkspace({ ctx }: { ctx: RunCtx }) {
     });
   }
 
-  /** 汇报 — 探索 Run 报告结论（run 证据），等待人工裁决。 */
+  /** 汇报 — 探索 Run 报告结论（run 证据），等待人工裁决。
+   *  证据只能来自该母题 assignedTaskId 的探索 Run 列表，不是全局选中任务。 */
+  const [evRuns, setEvRuns] = useState<RunView[]>([]);
+  const [evId, setEvId] = useState("");
+  useEffect(() => {
+    setEvRuns([]); setEvId("");
+    if (!cur?.assignedTaskId) return;
+    let alive = true;
+    void service.getTask({ tenantId: service.identity.tenantId, sessionId: ctx.sessionId, requestId: requestIdForRun(0), taskId: cur.assignedTaskId })
+      .then(async (task) => {
+        const views = (await Promise.all(task.runIds.map((id) => ctx.controller.refreshRun(id, task.sessionId)))).filter((v): v is RunView => Boolean(v));
+        if (alive) setEvRuns(views);
+      })
+      .catch((e) => setErr(String(e)));
+    return () => { alive = false; };
+  }, [cur?.assignedTaskId, cur?.motifId]);
+
   async function report(m: MotifSummary) {
+    if (!evId) { setErr(t("plu.no-evidence")); return; }
     const resolution = window.prompt(t("plu.prompt-report"), m.resolution || "");
     if (!resolution?.trim()) return;
     await act(() => service.reportMotif({
       ...req(), motifId: m.motifId,
-      resolutionRunId: ctx.activeRun?.runId ?? "",
+      resolutionRunId: evId,
       resolution: resolution.trim(),
     }));
   }
@@ -111,7 +129,7 @@ export default function PlutoWorkspace({ ctx }: { ctx: RunCtx }) {
             <textarea onChange={(e) => setDraft(e.target.value)} placeholder={t("plu.issue-ph")} rows={3} value={draft} />
             <div className="gen-issue-row">
               <button className="btn primary" disabled={busy || !draft.trim()} type="submit">{t("plu.issue")}</button>
-              <label className="gen-auto"><input checked={autoSrc} onChange={(e) => setAutoSrc(e.target.checked)} type="checkbox" />{t("plu.auto")}</label>
+              {/* source 如实为 "user" —— 不存在自动探索，不提供误导开关 */}
             </div>
           </form>
         </aside>
@@ -140,7 +158,14 @@ export default function PlutoWorkspace({ ctx }: { ctx: RunCtx }) {
                   <button className="btn secondary" disabled={busy} onClick={() => void assign(cur)} type="button">{t("plu.assign")}</button>
                 )}
                 {cur.status === "exploring" && (
-                  <button className="btn secondary" disabled={busy} onClick={() => void report(cur)} type="button">{t("plu.report-btn")}</button>
+                  <div className="gen-evidence">
+                    <label>{t("plu.evidence")}</label>
+                    <select value={evId} onChange={(e) => setEvId(e.target.value)}>
+                      <option value="">{t("plu.evidence-pick")}</option>
+                      {evRuns.map((r) => <option key={r.runId} value={r.runId}>{r.runId} · {r.status}</option>)}
+                    </select>
+                    <button className="btn secondary" disabled={busy || !evId} onClick={() => void report(cur)} type="button">{t("plu.report-btn")}</button>
+                  </div>
                 )}
                 <button className="btn primary" disabled={busy || cur.status !== "reported"} onClick={() => void judge(cur, true)} type="button">{t("plu.approve")}</button>
                 <button className="btn danger" disabled={busy || cur.status !== "reported"} onClick={() => void judge(cur, false)} type="button">{t("plu.reject")}</button>

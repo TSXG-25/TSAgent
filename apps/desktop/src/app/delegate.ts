@@ -69,7 +69,9 @@ export async function delegateToPlanet(
     taskId: result?.taskId ?? "",
     originPlanet: targetPlanet,
     workspaceRoot: result?.workspaceRoot,
-    contextRefs: attachments,
+    // artifact: refs validated against the parent are already embedded in
+    // the enriched requestText/handoff — start_run rejects that scheme.
+    contextRefs: attachments.filter((r) => !r.startsWith("artifact:")),
     metadata: {
       ...metadata,
       delegation_depth: 1,

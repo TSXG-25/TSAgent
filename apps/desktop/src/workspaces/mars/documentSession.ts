@@ -39,6 +39,12 @@ export class ForgeDocumentSession {
     private readonly onChange: () => void = () => {},
   ) {}
 
+  /** Exposed for the workspace-level session cache — a cache entry bound
+   *  to a different service object must not be reused. */
+  get serviceRef(): DocumentSessionService {
+    return this.service;
+  }
+
   private req() {
     return { ...this.identity(), requestId: `forge-${++this.requestSeq}` };
   }

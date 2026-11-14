@@ -30,6 +30,7 @@ class LocalTransportMethod(str, Enum):
     CANCEL_RUN = "cancel_run"
     LIST_ARTIFACTS = "list_artifacts"
     READ_ARTIFACT = "read_artifact"
+    READ_ARTIFACT_PREVIEW = "read_artifact_preview"
     LIST_RUNS = "list_runs"
     CREATE_TASK = "create_task"
     LIST_TASKS = "list_tasks"

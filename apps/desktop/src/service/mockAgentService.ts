@@ -12,6 +12,7 @@ import {
   type ListArtifactsRequest,
   type ReadArtifactRequest,
   type ArtifactContent,
+  type ArtifactPreview,
   type ApprovalSummary,
   type SessionSummary,
   type HandoffSummary,
@@ -1010,6 +1011,22 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
       text: this.artifactText.get(artifact.artifactId) ?? "",
       stale: false,
       result: "ok",
+    };
+  }
+
+  async readArtifactPreview(request: ReadArtifactRequest): Promise<ArtifactPreview> {
+    this.getScopedRun(request);
+    const artifact = (this.artifacts.get(request.runId) ?? []).find((a) => a.artifactId === request.artifactId);
+    if (!artifact) {
+      throw clientError("INVALID_REQUEST", `Artifact not found: ${request.artifactId}`, { runId: request.runId });
+    }
+    return {
+      artifactId: artifact.artifactId,
+      mime: "",
+      dataB64: "",
+      size: 0,
+      stale: false,
+      result: "unsupported",
     };
   }
 

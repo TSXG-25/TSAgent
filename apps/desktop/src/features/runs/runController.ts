@@ -112,6 +112,15 @@ export class RunController {
     return this.initialization;
   }
 
+  /** Session switch — stop the previous session's poll loops (their
+   *  locators point at the old session and would re-hydrate foreign runs)
+   *  and rebuild the catalog against the client's new identity. */
+  async reload(): Promise<void> {
+    for (const runId of [...this.pollTimers.keys()]) this.stopPolling(runId);
+    this.initialization = null;
+    return this.initialize();
+  }
+
   async startRun(request: StartRunRequest): Promise<RunView> {
     // Parallel acceptance: every submission is independently admitted; the
     // returned view is always the Run this request created, never an

@@ -6,6 +6,7 @@ import { requestIdForRun } from "../../app/ui";
 import { t } from "../../app/i18n";
 import type { RunCtx } from "../../app/runCtx";
 import { WorkspaceTasks } from "../../app/WorkspaceTasks";
+import { useWorkspaceCurrentRun } from "../../app/workspaceSelection";
 import type { EvaluationSummary, EvaluationVerdict } from "../../types/service";
 import { EARTH_PARAMS, EARTH_VERDICTS, buildEvalRequest, composerContext, defaultParamValues, parseRunParams } from "./earthEvalForm";
 
@@ -21,21 +22,34 @@ export default function EarthWorkspace({ ctx }: { ctx: RunCtx }) {
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // 被评价的实验 Run = 本台任务区选中的那一个，不随全局任务切换。
+  const currentRun = useWorkspaceCurrentRun(ctx, "earth");
 
+  const sessionId = ctx.sessionId;
   const refreshEvals = useCallback(async () => {
-    try { setEvals(await ctx.service.listEvaluations({ tenantId: ctx.service.identity.tenantId, sessionId: ctx.service.identity.sessionId, requestId: requestIdForRun(0) })); } catch { /* */ }
-  }, [ctx.service]);
+    try {
+      const list = await ctx.service.listEvaluations({
+        tenantId: ctx.service.identity.tenantId,
+        sessionId,
+        requestId: requestIdForRun(0),
+      });
+      setEvals(list);
+    } catch (err) {
+      // 读取失败要可见 —— 不吞成空列表。
+      setError(String(err instanceof Error ? err.message : err));
+    }
+  }, [ctx.service, sessionId]);
   useEffect(() => { void refreshEvals(); }, [refreshEvals]);
 
   async function record() {
     setBusy(true); setError(null);
     try {
-      // 裁决绑定该 Run 实际提交时的参数快照——从 Run 自己的请求文本解析，
-      // 而不是当前滑块值；非本 Composer 发起的 Run 参数未知，不伪造。
+      // 裁决绑定本台选中的实验 Run 及其已提交参数快照——不是全局任务，
+      // 也不是当前滑块值；非本 Composer 发起的 Run 参数未知，不伪造。
       await ctx.service.recordEvaluation(buildEvalRequest({
         tenantId: ctx.service.identity.tenantId, sessionId: ctx.service.identity.sessionId,
-        requestId: requestIdForRun(0), runId: ctx.activeRun?.runId ?? "",
-        verdict, vals: parseRunParams(ctx.activeRun?.request ?? ""), notes: notes.trim(),
+        requestId: requestIdForRun(0), runId: currentRun?.runId ?? "",
+        verdict, vals: parseRunParams(currentRun?.request ?? ""), notes: notes.trim(),
       }));
       setNotes(""); await refreshEvals();
     } catch (err) {
@@ -57,10 +71,10 @@ export default function EarthWorkspace({ ctx }: { ctx: RunCtx }) {
       <div className="lab">
         <aside className="lab-rail">{left.map(slider)}</aside>
         <main className="lab-brain">
-          {ctx.activeRun && (
+          {currentRun && (
             <div className="ws-hud"><span className="hud-mark">◈</span>
-              <div className="ws-hud-info"><strong>{ctx.activeRun.request?.slice(0, 60) || "Organic Lab"}</strong>
-                <small><code>{ctx.activeRun.runId}</code> · {ctx.activeRun.status}</small></div>
+              <div className="ws-hud-info"><strong>{currentRun.request?.slice(0, 60) || "Organic Lab"}</strong>
+                <small><code>{currentRun.runId}</code> · {currentRun.status}</small></div>
             </div>
           )}
           <div className="lab-brain-stage">
@@ -77,7 +91,7 @@ export default function EarthWorkspace({ ctx }: { ctx: RunCtx }) {
           <section className="lab-eval">
             <div className="ws-mod">{t("ear.records")} <em>{t("ear.verdicts", { n: evals.length })}</em></div>
             {(() => {
-              const snap = parseRunParams(ctx.activeRun?.request ?? "") ?? {};
+              const snap = parseRunParams(currentRun?.request ?? "") ?? {};
               const keys = Object.keys(snap);
               return keys.length > 0 ? (
                 <div className="lab-snapshot">

@@ -30,9 +30,11 @@ export default function JupiterWorkspace({ ctx }: { ctx: RunCtx }) {
   const previewGate = useMemo(() => createPreviewGate(), []);
   useEffect(() => { previewGate.invalidate(); setPreview(null); }, [previewGate, sel]);
   useEffect(() => {
-    service.listFacts(req()).then(setFacts).catch(() => setFacts([]));
+    service.listFacts(req()).then(setFacts).catch((e) => { setFacts([]); setErr(String(e)); });
     service.searchArtifacts({ ...req(), query: "", allSessions: true }).then(setFiles).catch((e) => setErr(String(e)));
   }, [service, req]);
+  // 会话切换 — 选中项/历史属于旧会话，清空后按新 session 重新拉取。
+  useEffect(() => { setSel(null); setHistory([]); }, [service.identity.sessionId]);
 
   return (
     <WorkspaceFrame scene={scene} ctx={ctx}>
@@ -47,7 +49,7 @@ export default function JupiterWorkspace({ ctx }: { ctx: RunCtx }) {
           <section className="jup-list">
             {tab === "memory" ? (
               <>
-                <h4 className="ws-mod">{t("jup.facts")} <button className="jup-cloud-toggle" onClick={() => setCloud((v) => !v)} type="button">{cloud ? t("jup.view-list") : t("jup.view-cloud")}</button></h4>
+                <h4 className="ws-mod">{t("jup.facts")} <em>{t("jup.facts-scope")}</em> <button className="jup-cloud-toggle" onClick={() => setCloud((v) => !v)} type="button">{cloud ? t("jup.view-list") : t("jup.view-cloud")}</button></h4>
                 {cloud && (
                   <div className="jup-cloud">
                     {facts.map((f) => {

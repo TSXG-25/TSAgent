@@ -2310,6 +2310,31 @@ class ArtifactContent:
 
 
 @dataclass(frozen=True)
+class ArtifactPreview:
+    """Guarded binary preview of one artifact — base64 payload capped by
+    the service's preview limit; ``mime`` is assigned from an allowlist,
+    never sniffed client-side."""
+
+    artifact_id: str
+    mime: str
+    data_b64: str
+    size: int
+    stale: bool
+    # "ok" | "missing" | "unsupported" | "too_large"
+    result: str = "ok"
+
+    def to_dict(self) -> dict[str, JSONValue]:
+        return {
+            "artifact_id": self.artifact_id,
+            "mime": self.mime,
+            "data_b64": self.data_b64,
+            "size": self.size,
+            "stale": self.stale,
+            "result": self.result,
+        }
+
+
+@dataclass(frozen=True)
 class ResumeSummary:
     disposition: ResumeDisposition
     action: ResumeAction | None

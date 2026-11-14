@@ -179,6 +179,23 @@ class WorkspaceService:
         self.record_open(self.relative_path(full))
         return projected, hashlib.sha256(data).hexdigest(), projected != text
 
+    def read_binary(self, path: str | Path, *, max_bytes: int) -> tuple[bytes, str]:
+        """Guarded byte read for previewable media → (data, digest).
+
+        Same path guard as read_document, but does not require UTF-8 —
+        capped by max_bytes so previews cannot pull unbounded payloads
+        over the transport."""
+        self._guard(path, operation="read")
+        full = self.resolve_path(path, must_exist=True)
+        self._guard(full, operation="read")
+        if full.is_dir():
+            raise IsADirectoryError(str(path))
+        if full.stat().st_size > max_bytes:
+            raise OverflowError(f"file exceeds preview limit: {path}")
+        data = full.read_bytes()
+        self.record_open(self.relative_path(full))
+        return data, hashlib.sha256(data).hexdigest()
+
     def write_document(
         self,
         path: str | Path,

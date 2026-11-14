@@ -12,11 +12,17 @@ import { ForgeDocumentSession } from "./documentSession";
 /** Forge per hand-drawn spec §6 — mode rail | file tree | tabs+editor w/
  *  line numbers | right control rail | AgentComposer. Code mode first. */
 const MODES = [
-  { id: "code", icon: "file-code", label: "Code" },
-  { id: "data", icon: "list", label: "Data" },
-  { id: "eng", icon: "tools", label: "Eng" },
-  { id: "cad", icon: "layers", label: "CAD" },
+  { id: "code", icon: "file-code", label: "Code", ready: true },
+  { id: "data", icon: "list", label: "Data", ready: false },
+  { id: "eng", icon: "tools", label: "Eng", ready: false },
+  { id: "cad", icon: "layers", label: "CAD", ready: false },
 ];
+
+// Drafts survive leaving the workspace — sessions are cached per
+// tenant:session so navigating away and back restores the open document,
+// its baseline and its dirty draft. Entries are bound to a service
+// identity; a service swap (e.g. backend restart) gets a fresh session.
+const sessionCache = new Map<string, ForgeDocumentSession>();
 
 export default function MarsWorkspace({ ctx }: { ctx: RunCtx }) {
   const { service, activeRun } = ctx;
@@ -28,28 +34,35 @@ export default function MarsWorkspace({ ctx }: { ctx: RunCtx }) {
   // The session binds the document (path + workspace identity + baseline +
   // draft); it survives selection churn and rejects writes when the bound
   // workspace or baseline no longer matches.
-  const session = useMemo(
-    () =>
-      new ForgeDocumentSession(
+  const session = useMemo(() => {
+    const key = `${service.identity.tenantId}:${service.identity.sessionId}`;
+    let cached = sessionCache.get(key);
+    if (!cached || cached.serviceRef !== service) {
+      cached = new ForgeDocumentSession(
         service,
         () => ({ tenantId: service.identity.tenantId, sessionId: service.identity.sessionId }),
         () => bump((v) => v + 1),
-      ),
-    [service],
-  );
+      );
+      sessionCache.set(key, cached);
+    }
+    return cached;
+  }, [service]);
   const doc = session.doc;
 
+  const sessionId = ctx.sessionId;
   useEffect(() => {
-    const identity = service.identity;
+    const identity = { tenantId: service.identity.tenantId, sessionId };
     service
       .listWorkspaceFiles({
-        tenantId: identity.tenantId,
-        sessionId: identity.sessionId,
+        ...identity,
         requestId: requestIdForRun(0),
       })
-      .then(setFiles)
+      .then((list) => {
+        // a slow A response must not land on session B's list
+        if (identity.sessionId === ctx.sessionId) setFiles(list);
+      })
       .catch((e) => setErr(String(e)));
-  }, [service]);
+  }, [service, sessionId, ctx.sessionId]);
 
   async function openFile(path: string) {
     setErr(null);
@@ -75,7 +88,8 @@ export default function MarsWorkspace({ ctx }: { ctx: RunCtx }) {
         {/* EngineeringModeRail [H] */}
         <nav className="forge-modes">
           {MODES.map((m) => (
-            <button className={`forge-mode ${mode === m.id ? "on" : ""}`} key={m.id} onClick={() => setMode(m.id)} title={m.label} type="button">
+            <button className={`forge-mode ${mode === m.id ? "on" : ""}`} key={m.id} disabled={!m.ready}
+              onClick={() => setMode(m.id)} title={m.ready ? m.label : `${m.label} — ${t("mar.mode-na")}`} type="button">
               <Icon name={m.icon as never} size={16} /><span>{m.label}</span>
             </button>
           ))}
@@ -109,11 +123,10 @@ export default function MarsWorkspace({ ctx }: { ctx: RunCtx }) {
             )}
           </div>
           <div className="forge-code">
-            {doc ? session.content.split("\n").map((l, i) => (
-              <div className="forge-line" key={`${doc.path}:${i}`}><span>{i + 1}</span><textarea className="forge-line-edit" value={l} readOnly={doc.redacted} onChange={(e) => {
-                const lines = session.content.split("\n"); lines[i] = e.target.value; session.edit(lines.join("\n"));
-              }} rows={1} /></div>
-            )) : <div className="empty-state"><p>{t("mar.select-file")}</p></div>}
+            {doc ? (
+              <textarea className="forge-editor" value={session.content} readOnly={doc.redacted}
+                onChange={(e) => session.edit(e.target.value)} spellCheck={false} />
+            ) : <div className="empty-state"><p>{t("mar.select-file")}</p></div>}
           </div>
         </main>
         {/* EngineeringActionPanel */}

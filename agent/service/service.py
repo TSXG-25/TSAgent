@@ -2855,13 +2855,10 @@ class AgentService:
         snapshot = await self.get_run(request)
         return snapshot.artifacts
 
-    async def read_artifact(self, request: Any) -> Any:
-        """Read one artifact's file via the session workspace — same guarded,
-        redacted path as read_workspace_file. ``stale`` marks a file whose
-        bytes no longer match the committed digest."""
-        self._ensure_open()
-        import asyncio
-
+    def _artifact_scoped_read(self, request: Any) -> tuple[Any, Any]:
+        """Locate one artifact's durable row + its recorded workspace —
+        shared by read_artifact/read_artifact_preview so both resolve the
+        same path and root."""
         # The projected ArtifactSummary carries an opaque artifact://
         # reference; the durable fact row holds the real workspace path.
         try:
@@ -2907,7 +2904,16 @@ class AgentService:
                 ServiceErrorCode.INVALID_REQUEST,
                 "service has no workspace root",
             )
-        workspace = self._scoped_workspace(root)
+        return artifact, self._scoped_workspace(root)
+
+    async def read_artifact(self, request: Any) -> Any:
+        """Read one artifact's file via the session workspace — same guarded,
+        redacted path as read_workspace_file. ``stale`` marks a file whose
+        bytes no longer match the committed digest."""
+        self._ensure_open()
+        import asyncio
+
+        artifact, workspace = self._artifact_scoped_read(request)
 
         def _read() -> tuple[str, str, str]:
             # 一次受保护字节读取 → 正文投影 + digest + stale 必须同源 —
@@ -2930,6 +2936,73 @@ class AgentService:
             reference=artifact.reference,
             text=text,
             stale=result == "ok" and digest != artifact.digest,
+            result=result,
+        )
+
+    _PREVIEW_MAX_BYTES = 8 * 1024 * 1024
+    _PREVIEW_MIMES = {
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".gif": "image/gif",
+        ".webp": "image/webp",
+        ".svg": "image/svg+xml",
+        ".mp4": "video/mp4",
+        ".webm": "video/webm",
+        ".mp3": "audio/mpeg",
+        ".wav": "audio/wav",
+    }
+
+    async def read_artifact_preview(self, request: Any) -> Any:
+        """Constrained binary preview — same guarded workspace path as
+        read_artifact, base64 over the transport. Mime comes from a fixed
+        allowlist by extension; unsupported types and files past the cap
+        return defined results rather than raw errors."""
+        self._ensure_open()
+        import asyncio
+        import base64
+
+        artifact, workspace = self._artifact_scoped_read(request)
+        mime = self._PREVIEW_MIMES.get(
+            Path(artifact.reference).suffix.lower()
+        )
+        from .contracts import ArtifactPreview
+
+        if mime is None:
+            return ArtifactPreview(
+                artifact_id=artifact.artifact_id,
+                mime="",
+                data_b64="",
+                size=0,
+                stale=False,
+                result="unsupported",
+            )
+
+        def _read() -> tuple[str, int, str, bool]:
+            try:
+                data, digest = workspace.read_binary(
+                    artifact.reference, max_bytes=self._PREVIEW_MAX_BYTES
+                )
+            except FileNotFoundError:
+                return "", 0, "missing", False
+            except OverflowError:
+                return "", 0, "too_large", False
+            except (ValueError, IsADirectoryError):
+                return "", 0, "unsupported", False
+            return (
+                base64.b64encode(data).decode("ascii"),
+                len(data),
+                "ok",
+                digest != artifact.digest,
+            )
+
+        data_b64, size, result, stale = await asyncio.to_thread(_read)
+        return ArtifactPreview(
+            artifact_id=artifact.artifact_id,
+            mime=mime,
+            data_b64=data_b64,
+            size=size,
+            stale=stale,
             result=result,
         )
 

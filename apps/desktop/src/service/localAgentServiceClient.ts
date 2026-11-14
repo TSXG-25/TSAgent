@@ -87,6 +87,7 @@ import {
   type ListSessionsRequest,
   type ReadArtifactRequest,
   type ArtifactContent,
+  type ArtifactPreview,
   type StartRunRequest,
   type TaskHandle,
   type TaskLookupRequest,
@@ -105,6 +106,7 @@ export type LocalClientOperation =
   | "get_task"
   | "list_artifacts"
   | "read_artifact"
+  | "read_artifact_preview"
   | "read_events"
   | "cancel_run"
   | "pause_run";
@@ -1245,6 +1247,25 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
         artifactId: requiredString(raw.artifact_id, "artifact_id"),
         reference: requiredString(raw.reference, "artifact.reference"),
         text: typeof raw.text === "string" ? raw.text : "",
+        stale: raw.stale === true,
+        result: typeof raw.result === "string" ? raw.result : "ok",
+      };
+    });
+  }
+
+  async readArtifactPreview(request: ReadArtifactRequest): Promise<ArtifactPreview> {
+    const params: LocalRpcParams = {
+      ...this.lookupParams(request, "read_artifact_preview"),
+      artifact_id: request.artifactId,
+    };
+    return this.project(async () => {
+      const raw = await this.call("read_artifact_preview", params);
+      if (!isRecord(raw)) throw new Error("read_artifact_preview result is not an object");
+      return {
+        artifactId: requiredString(raw.artifact_id, "artifact_id"),
+        mime: typeof raw.mime === "string" ? raw.mime : "",
+        dataB64: typeof raw.data_b64 === "string" ? raw.data_b64 : "",
+        size: typeof raw.size === "number" ? raw.size : 0,
         stale: raw.stale === true,
         result: typeof raw.result === "string" ? raw.result : "ok",
       };

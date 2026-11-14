@@ -7,6 +7,7 @@ import {
   type RunHandle,
   type RunSnapshot,
   type ArtifactContent,
+  type ArtifactPreview,
   type ArtifactSummary,
   type StartRunRequest,
   type GetRunRequest,
@@ -340,6 +341,10 @@ export class UnavailableDesktopAgentServiceClient implements DesktopAgentService
   }
 
   async readArtifact(): Promise<ArtifactContent> {
+    throw this.error;
+  }
+
+  async readArtifactPreview(): Promise<ArtifactPreview> {
     throw this.error;
   }
 

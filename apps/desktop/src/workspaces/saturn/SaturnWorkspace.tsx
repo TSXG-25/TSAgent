@@ -14,7 +14,9 @@ export default function SaturnWorkspace({ ctx }: { ctx: RunCtx }) {
   const { service } = ctx;
     const scene = SCENES[6];
   const [schedules, setSchedules] = useState<ScheduleSummary[]>([]);
-  const [sel, setSel] = useState<ScheduleSummary | null>(null);
+  // 选中只存 id —— 详情始终从最新列表派生，暂停/触发/刷新后不再持有旧对象。
+  const [selId, setSelId] = useState("");
+  const sel = schedules.find((s) => s.scheduleId === selId) ?? null;
   const [err, setErr] = useState<string | null>(null);
   const [text, setText] = useState("");
   const [mins, setMins] = useState("60");
@@ -58,7 +60,7 @@ export default function SaturnWorkspace({ ctx }: { ctx: RunCtx }) {
         <div className="chron-board">
           {schedules.map((s) => (
             <button className={`chron-card ${s.status.toLowerCase()} ${sel?.scheduleId === s.scheduleId ? "on" : ""}`} key={s.scheduleId}
-              onClick={() => setSel(s)} type="button">
+              onClick={() => setSelId(s.scheduleId)} type="button">
               <span className={`chron-dot ${s.status.toLowerCase()}`} />
               <strong>{s.requestText.slice(0, 30)}{s.requestText.length > 30 ? "…" : ""}</strong>
               <small>{s.intervalSeconds >= 86400 ? t("sat.every-days", { n: Math.round(s.intervalSeconds / 86400) }) : s.intervalSeconds >= 3600 ? t("sat.every-hours", { n: Math.round(s.intervalSeconds / 3600) }) : t("sat.every-minutes", { n: Math.max(1, Math.round(s.intervalSeconds / 60)) })} · {s.targetPlanet}</small>
@@ -80,7 +82,7 @@ export default function SaturnWorkspace({ ctx }: { ctx: RunCtx }) {
               <div className="ven-meta"><span>{t("sat.label-task")}</span><code>{sel.requestText}</code></div>
               <div className="ven-meta"><span>{t("sat.label-interval")}</span><code>{sel.intervalSeconds}s</code></div>
               <div className="ven-meta"><span>{t("sat.label-target")}</span><code>@{sel.targetPlanet}</code></div>
-              <div className="ven-meta"><span>{t("saturn.next-fire")}</span><code>{sel.nextFireAt ? sel.nextFireAt.slice(0, 19).replace("T", " ") : "—"}</code></div>
+              <div className="ven-meta"><span>{t("saturn.next-fire")}</span><code>{sel.nextFireAt ? new Date(sel.nextFireAt).toLocaleString() : "—"}</code></div>
               {sel.lastRunId && (
                 <div className="ven-meta"><span>{t("saturn.last-run")}</span>
                   <button className="ven-link" onClick={() => ctx.openRun(sel.lastRunId, sel.sessionId)} type="button">{sel.lastRunId}</button>

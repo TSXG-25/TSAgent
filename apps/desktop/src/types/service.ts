@@ -199,6 +199,18 @@ export interface ArtifactContent {
   result: string;
 }
 
+/** Guarded binary preview — base64 payload capped server-side; `mime`
+ *  comes from a fixed allowlist, never client sniffing. */
+export interface ArtifactPreview {
+  artifactId: string;
+  mime: string;
+  dataB64: string;
+  size: number;
+  stale: boolean;
+  /** "ok" | "missing" | "unsupported" | "too_large" */
+  result: string;
+}
+
 export interface RunEvent {
   eventId: string;
   sequenceNumber: number;
@@ -313,6 +325,7 @@ export interface AgentServiceClient {
   pauseRun(request: PauseRunRequest): Promise<RunHandle>;
   listArtifacts(request: ListArtifactsRequest): Promise<ArtifactSummary[]>;
   readArtifact(request: ReadArtifactRequest): Promise<ArtifactContent>;
+  readArtifactPreview(request: ReadArtifactRequest): Promise<ArtifactPreview>;
   readEvents(request: EventStreamRequest): Promise<RunEvent[]>;
   /** Long-poll variant — holds up to ~8s until new durable events arrive. */
   subscribeEvents(request: EventStreamRequest): Promise<RunEvent[]>;

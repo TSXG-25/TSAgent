@@ -6,44 +6,92 @@ import { requestIdForRun } from "../../app/ui";
 import { t } from "../../app/i18n";
 import type { RunCtx } from "../../app/runCtx";
 import { WorkspaceTasks } from "../../app/WorkspaceTasks";
-import type { GraphRunStepSummary, ProfileSummary, SkillSummary, WorkflowGraphSummary } from "../../types/service";
+import { useWorkspaceCurrentRun } from "../../app/workspaceSelection";
+import type { GraphRunStepSummary, HandoffSummary, ProfileSummary, RunStatus, SkillSummary, WorkflowGraphSummary } from "../../types/service";
 
 /** Laboratory per hand-drawn spec §9 — element palette | workflow canvas
- *  (nodes + save) | workflow list. Real workflow_graphs domain. */
+ *  (editable delegation nodes + save) | workflow list + durable child-run
+ *  status. Delegation status is re-read from run_handoffs, not from the
+ *  one-shot admission response. */
 const ELEMS = ["read_file", "web_search", "llm", "write_file", "approval", "condition"];
+
+/** Child runs execute in `<delegate session>:subtask:<taskId>` — mirrors
+ *  SUBTASK_SESSION_MARKER in agent/service/service.py. */
+function subtaskSessionId(sessionId: string, taskId: string): string {
+  return `${sessionId}:subtask:${taskId}`;
+}
+
+interface DelegationRow {
+  handoff: HandoffSummary;
+  status: RunStatus | "";
+}
 
 export default function UranusWorkspace({ ctx }: { ctx: RunCtx }) {
   const { service } = ctx;
     const scene = SCENES[7];
+  const currentRun = useWorkspaceCurrentRun(ctx, "uranus");
   const [profiles, setProfiles] = useState<ProfileSummary[]>([]);
   const [skills, setSkills] = useState<SkillSummary[]>([]);
   const [graphs, setGraphs] = useState<WorkflowGraphSummary[]>([]);
   const [nodes, setNodes] = useState<string[]>([]);
   const [lastSteps, setLastSteps] = useState<GraphRunStepSummary[]>([]);
+  const [delegations, setDelegations] = useState<DelegationRow[]>([]);
   const [name, setName] = useState("");
   const [err, setErr] = useState<string | null>(null);
 
   const req = useCallback(() => ({ tenantId: service.identity.tenantId, sessionId: service.identity.sessionId, requestId: requestIdForRun(0) }), [service]);
+  const sessionId = service.identity.sessionId;
   useEffect(() => {
-    service.listProfiles(req()).then(setProfiles).catch(() => {});
-    service.listSkills(req()).then(setSkills).catch(() => {});
+    service.listProfiles(req()).then(setProfiles).catch((e) => setErr(String(e)));
+    service.listSkills(req()).then(setSkills).catch((e) => setErr(String(e)));
     service.listWorkflowGraphs(req()).then(setGraphs).catch((e) => setErr(String(e)));
   }, [service, req]);
 
+  /** 后台执行状态查询 — run_graph 接纳后立刻返回 PENDING，真实进度
+   *  从持久化 run_handoffs + 各子 Run 的 head 重新读取。 */
+  const refreshDelegations = useCallback(async () => {
+    try {
+      const handoffs = await service.listHandoffs({ ...req(), limit: 200 });
+      const rows = await Promise.all(handoffs.map(async (handoff) => {
+        if (!handoff.targetRunId || !handoff.targetTaskId) return { handoff, status: "" as RunStatus | "" };
+        try {
+          const snap = await service.getRun({
+            tenantId: service.identity.tenantId,
+            sessionId: subtaskSessionId(sessionId, handoff.targetTaskId),
+            runId: handoff.targetRunId,
+          });
+          return { handoff, status: snap.status };
+        } catch { return { handoff, status: "" as RunStatus | "" }; }
+      }));
+      setDelegations(rows);
+    } catch (e) { setErr(String(e)); }
+  }, [service, req, sessionId]);
+  useEffect(() => { void refreshDelegations(); }, [refreshDelegations]);
+
   async function save() {
-    if (!name.trim() || nodes.length === 0) return;
+    if (!name.trim() || nodes.every((n) => !n.trim())) return;
     try {
       await service.upsertWorkflowGraph({
         ...req(), graphId: `g-${Date.now().toString(36)}`, name: name.trim(),
         // Canvas contract: nodes are delegated tasks, edges are {from,to}
         // success dependencies — the backend rejects anything else.
         definition: {
-          nodes: nodes.map((n, i) => ({ id: `n${i}`, type: "task", request_text: n })),
-          edges: nodes.slice(1).map((_, i) => ({ from: `n${i}`, to: `n${i + 1}` })),
+          nodes: nodes.filter((n) => n.trim()).map((n, i) => ({ id: `n${i}`, type: "task", request_text: n.trim() })),
+          edges: nodes.filter((n) => n.trim()).slice(1).map((_, i) => ({ from: `n${i}`, to: `n${i + 1}` })),
         },
       });
       setName(""); setNodes([]);
       setGraphs(await service.listWorkflowGraphs(req()));
+    } catch (e) { setErr(String(e)); }
+  }
+
+  async function launch(graphId: string) {
+    if (!currentRun) return;
+    try {
+      const steps = await service.runGraph({ ...req(), graphId, parentRunId: currentRun.runId });
+      setLastSteps(steps);
+      // 接纳响应只有 PENDING — 拉一次持久化 handoff 状态。
+      void refreshDelegations();
     } catch (e) { setErr(String(e)); }
   }
 
@@ -57,17 +105,21 @@ export default function UranusWorkspace({ ctx }: { ctx: RunCtx }) {
             <button className="lab-elem" key={e} onClick={() => setNodes((n) => [...n, e])} type="button">{e}</button>
           ))}
         </aside>
-        {/* workflow canvas */}
+        {/* workflow canvas — 节点为可编辑委派任务文本 */}
         <main className="lab-canvas">
           <div className="ws-hud"><span className="hud-mark">◈</span>
             <div className="ws-hud-info"><strong>{t("ura.canvas")}</strong>
-              <small>{t("ura.nodes", { n: nodes.length })}{ctx.activeRun ? ` · ${ctx.activeRun.runId}` : ""}</small></div>
+              <small>{t("ura.nodes", { n: nodes.length })}{currentRun ? ` · ${currentRun.runId}` : ""}</small></div>
           </div>
           <div className="lab-nodes">
             {nodes.map((n, i) => (
               <div className="lab-node" key={i}>
                 <span className="lab-node-id">n{i}</span>
-                <strong>{n}</strong>
+                <input
+                  className="lab-node-text"
+                  onChange={(e) => setNodes((v) => v.map((x, j) => (j === i ? e.target.value : x)))}
+                  value={n}
+                />
                 <button className="lab-node-x" onClick={() => setNodes((v) => v.filter((_, j) => j !== i))} type="button">×</button>
               </div>
             ))}
@@ -75,19 +127,20 @@ export default function UranusWorkspace({ ctx }: { ctx: RunCtx }) {
           </div>
           <div className="lab-save">
             <input onChange={(e) => setName(e.target.value)} placeholder="name" value={name} />
-            <button className="btn primary" disabled={!name.trim() || nodes.length === 0} onClick={() => void save()} type="button">{t("ura.save")}</button>
+            <button className="btn primary" disabled={!name.trim() || nodes.every((n) => !n.trim())} onClick={() => void save()} type="button">{t("ura.save")}</button>
           </div>
           {err && <p className="omni-empty" style={{ color: "var(--st-danger,#ff5a4f)" }}>{err}</p>}
         </main>
-        {/* workflow list + profiles */}
+        {/* workflow list + delegation status + profiles */}
         <aside className="lab-side">
           <h4 className="ws-mod">{t("ura.workflows")}</h4>
           {graphs.map((g) => (
             <div className="lab-graph-row" key={g.graphId}>
               <strong>{g.name}</strong><small>{g.graphId}</small>
-              <button className="lab-run" disabled={!ctx.activeRun} onClick={() => void service.runGraph({ ...req(), graphId: g.graphId, parentRunId: ctx.activeRun!.runId }).then((steps) => setLastSteps(steps)).catch((e) => setErr(String(e)))} title={ctx.activeRun ? t("ura.run-graph") : t("ura.need-run")} type="button">{t("ura.run")}</button>
+              <button className="lab-run" disabled={!currentRun} onClick={() => void launch(g.graphId)} title={currentRun ? t("ura.run-graph") : t("ura.need-run")} type="button">{t("ura.run")}</button>
             </div>
           ))}
+          {graphs.length === 0 && <p className="omni-empty">{t("ura.no-graphs")}</p>}
           {lastSteps.length > 0 && (
             <div className="lab-steps">
               {lastSteps.map((s) => (
@@ -101,7 +154,19 @@ export default function UranusWorkspace({ ctx }: { ctx: RunCtx }) {
               ))}
             </div>
           )}
-          {graphs.length === 0 && <p className="omni-empty">{t("ura.no-graphs")}</p>}
+          <h4 className="ws-mod">{t("ura.delegations")}
+            <button className="ven-link" onClick={() => void refreshDelegations()} title={t("ura.refresh-status")} type="button">↻</button>
+          </h4>
+          {delegations.map((d) => (
+            <div className="lab-graph-row" key={d.handoff.handoffId}>
+              <strong>{d.handoff.targetTaskId || d.handoff.sourceRunId}</strong>
+              <small>{d.handoff.targetPlanet || "—"} · {d.status || t("ura.pending")}</small>
+              {d.handoff.targetRunId && (
+                <button className="ven-link" onClick={() => ctx.openRun(d.handoff.targetRunId, subtaskSessionId(sessionId, d.handoff.targetTaskId))} title={t("uranus.goto-run")} type="button">→ {d.handoff.targetRunId}</button>
+              )}
+            </div>
+          ))}
+          {delegations.length === 0 && <p className="omni-empty">{t("ura.no-delegations")}</p>}
           <h4 className="ws-mod">{t("ura.skills")}</h4>
           {skills.map((sk) => <div className="lab-graph-row" key={sk.skillId}><strong>{sk.name}</strong><small>{sk.description.slice(0, 40)}</small></div>)}
           <h4 className="ws-mod">{t("ura.profiles")}</h4>

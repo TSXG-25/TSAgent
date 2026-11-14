@@ -222,6 +222,7 @@ function App() {
   function selectSession(id: string) {
     service.setSession(id);
     setSessionId(id);
+    void controller.reload();
   }
 
   const ctx: RunCtx = {

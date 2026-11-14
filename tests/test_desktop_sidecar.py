@@ -3024,3 +3024,152 @@ def test_a10_forget_scoped_to_displayed_fact_and_not_reme(
     finally:
         _run(service.close())
     assert calls == []
+
+
+def test_read_artifact_preview_serves_guarded_binary(
+    tmp_path: Path,
+) -> None:
+    """read_artifact_preview returns base64 + allowlist mime for media
+    artifacts, capped by size; other extensions report unsupported."""
+    import base64
+    import hashlib
+
+    from agent.runtime_store import (
+        ArtifactCommitFact,
+        DurableRuntimeStoreView,
+        SqliteRuntimeStore,
+    )
+    from agent.service.contracts import ReadArtifactRequest, StartRunRequest
+    from agent.service.run_projector import encode_request_reference
+
+    workspace_root = tmp_path / "workspace"
+    (workspace_root / "output").mkdir(parents=True)
+    png_bytes = b"\x89PNG\r\n\x1a\n" + bytes(range(64))
+    (workspace_root / "output" / "shot.png").write_bytes(png_bytes)
+    (workspace_root / "output" / "data.xyz").write_bytes(b"\x00" * 16)
+    (workspace_root / "output" / "big.mp4").write_bytes(b"\x00" * 32)
+    (workspace_root / "output" / "over.mp4").write_bytes(b"\x00" * 32)
+
+    database = tmp_path / "runtime.sqlite"
+    store = SqliteRuntimeStore.open(database)
+    request = StartRunRequest(
+        tenant_id="tenant-1",
+        user_id="user-1",
+        session_id="session-1",
+        request_id="request-prev",
+        request_text="produce media",
+        run_id="run-prev",
+    )
+    view = None
+    try:
+        store.reserve_service_start(
+            request.tenant_id,
+            request.session_id,
+            requested_run_id=request.run_id,
+            request_id=request.request_id,
+            request_digest=request.request_digest,
+            writer_id="writer-prev",
+            external_reference=encode_request_reference(
+                request,
+                run_id=request.run_id or "",
+                workspace_root=str(workspace_root.resolve()),
+            ),
+        )
+        view = DurableRuntimeStoreView(
+            store,
+            tenant_id=request.tenant_id,
+            session_id=request.session_id,
+            run_id=request.run_id or "",
+            request_id=request.request_id,
+            writer_id="writer-prev",
+        )
+        view.transition_run_with_event(
+            run_status="RUNNING",
+            event_id="run-started:prev",
+            event_type="run_started",
+            timestamp="2026-08-11T00:00:00Z",
+            payload={"request_id": request.request_id},
+            expected_status="CREATED",
+        )
+        artifacts = tuple(
+            ArtifactCommitFact(
+                artifact_id=f"artifact-{name}",
+                artifact_type="file",
+                reference=f"output/{name}",
+                digest=hashlib.sha256(
+                    (workspace_root / "output" / name).read_bytes()
+                ).hexdigest(),
+                producer_workflow_id="runtime-execution",
+                producer_stage_id="task:prev",
+                producer_task_id="prev",
+            )
+            for name in ("shot.png", "data.xyz", "big.mp4", "over.mp4")
+        )
+        view.transition_run_with_event(
+            run_status="COMPLETED",
+            event_id="run-completed:prev",
+            event_type="run_completed",
+            timestamp="2026-08-11T00:00:01Z",
+            payload={"request_id": request.request_id},
+            run_output={
+                "text": "done",
+                "artifact_ids": [a.artifact_id for a in artifacts],
+            },
+            artifacts=artifacts,
+        )
+    finally:
+        if view is not None:
+            view.close()
+        store.close()
+
+    service = _workspace_file_service(tmp_path, workspace_root=workspace_root)
+    lookup = {
+        "tenant_id": "tenant-1",
+        "user_id": "user-1",
+        "session_id": "session-1",
+        "run_id": "run-prev",
+    }
+
+    async def scenario() -> None:
+        preview = await service.read_artifact_preview(
+            ReadArtifactRequest(
+                **lookup, request_id="req-p1", artifact_id="artifact-shot.png"
+            )
+        )
+        assert preview.result == "ok"
+        assert preview.mime == "image/png"
+        assert preview.size == len(png_bytes)
+        assert base64.b64decode(preview.data_b64) == png_bytes
+        assert preview.stale is False
+
+        unsupported = await service.read_artifact_preview(
+            ReadArtifactRequest(
+                **lookup, request_id="req-p2", artifact_id="artifact-data.xyz"
+            )
+        )
+        assert unsupported.result == "unsupported"
+
+        big = await service.read_artifact_preview(
+            ReadArtifactRequest(
+                **lookup, request_id="req-p3", artifact_id="artifact-big.mp4"
+            )
+        )
+        assert big.result == "ok"  # 32 bytes < 8 MiB cap
+
+        # file grew past the cap after the commit — size check reads
+        # current bytes, not the committed digest
+        (workspace_root / "output" / "over.mp4").write_bytes(
+            b"\x00" * (service._PREVIEW_MAX_BYTES + 1)
+        )
+        capped = await service.read_artifact_preview(
+            ReadArtifactRequest(
+                **lookup, request_id="req-p4", artifact_id="artifact-over.mp4"
+            )
+        )
+        assert capped.result == "too_large"
+        assert capped.data_b64 == ""
+
+    try:
+        _run(scenario())
+    finally:
+        _run(service.close())

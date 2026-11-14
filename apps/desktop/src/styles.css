@@ -4293,3 +4293,9 @@ ol.md-list li::marker { color: var(--planet-accent); font-family: var(--font-mon
 .ws-task-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .ws-task-op { padding: 2px 8px; font-size: 10.5px; }
 .ws-task-fail { margin: 0; font-size: 10.5px; color: #f0b0ba; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* WS-07 — single multiline editor replacing per-line textareas. */
+.forge-editor { flex: 1; width: 100%; min-height: 0; resize: none; background: transparent; border: none; outline: none; color: var(--text-base); font-family: var(--font-mono); font-size: 12px; line-height: 1.6; padding: 10px 12px; tab-size: 2; }
+
+.lab-node-text { flex: 1; min-width: 0; background: transparent; border: none; border-bottom: 1px dashed var(--line-soft, rgba(255,255,255,0.15)); color: inherit; font: inherit; padding: 2px 0; }
+.lab-node-text:focus { outline: none; border-bottom-color: var(--planet-accent); }

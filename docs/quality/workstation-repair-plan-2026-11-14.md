@@ -146,3 +146,37 @@
 - 本台任务从接纳到结果/失败可在本台追踪，Omni 提供聚合视图与完整日志。
 - 所有可点击的功能有真实合同；未实现能力明确标注，不能用静态状态或空成功响应替代。
 - 逐项验收证据入档；离线完成与外部实测完成分别记录。
+
+---
+
+## 交付状态（2026-11 修复批次，基线 98e2f6d8 → d753cddb）
+
+离线验证口径：Desktop `npm test`（typecheck + 全部 subtest）、`test:orbits`、`test:scenes`、`npm run build` 全部通过；Python 相关回归 `test_desktop_sidecar.py` + `test_desktop_local_protocol.py` 56 项通过（屏蔽 Provider key、强制 Ollama）。浏览器/Tauri/provider/真实 ffmpeg 验收均未执行，见末节。
+
+| 工单 | 状态 | 交付要点 | 主要改动入口 | 测试证据 |
+|---|---|---|---|---|
+| WS-01 | ✅ 已交付 `c1f3b378` | 并行接纳（每次提交独立 Run）；originPlanet/taskId 上 wire；普通提交与显式委派分离；九台共享 WorkspaceTasks，按 tenant:session:planet 选 Run | `runController.ts`、`delegate.ts`、`workspaceSelection.ts`、`WorkspaceTasks.tsx`、`service.py`/projector | `ws01Admission.test.ts` 6 项；`test_task_entity` 7 项；wire fixture 回归 |
+| WS-02 | ✅ 已交付 `6e61c15c` | 接纳时确定 workspace root；未绑定会话注册默认 workspace；进程根解析路径登记为可见绑定；⚠️ SESSION_RUN_ACTIVE 不再拒绝活跃兄弟（per-run fencing 保留） | `service.py`、`context_factory.py` | sidecar/workspace 相关套件 29+71 项；e2e 断言已改为并行接纳 |
+| WS-03 | ✅ 已交付 `d753cddb` | `selectSession` 触发 `controller.reload()`：停止旧会话轮询并按 listRuns 重建目录；选中对象按 id 从最新列表派生；读失败可见 | `runController.ts`、`App.tsx`、各工作台 effect | controller 既有回归 + 全量 subtest |
+| WS-04 Mercury | ✅ 已交付 `d753cddb` | 切会话清空 panes/query/steps；addPane 从最近一次 sources 填入而非空槽；旧响应序号保护保留 | `searchSession.ts`、`MercuryWorkspace.tsx` | `mercurySearch.test.ts` 既有逆序回归保持通过 |
+| WS-05 Venus | ✅ 已交付 `d753cddb` | 文稿仅取本台本会话任务产物；详情绑定生产 Run/session；style/preset 按 tenant:session 持久化并在切会话时正确重载；contextPrefix 携带文稿 artifact+run 引用 | `VenusWorkspace.tsx` | `workspaceCapability.test.ts`（venus 用例） |
+| WS-06 Earth | ✅ 已交付 `d753cddb` | 本台实验 Run 选择（WorkspaceTasks + useWorkspaceCurrentRun）；裁决参数取所选 Run 的请求快照；评估按 session 键刷新，错误可见 | `EarthWorkspace.tsx` | `earthEvalForm.test.ts` 7 项 |
+| WS-07 Mars | ✅ 已交付 `d753cddb` | 文件列表按 session 刷新；受控多行编辑器（此前已是单 textarea）；文档会话按 tenant:session 缓存，离页草稿不丢；未实现模式禁用并标注 | `MarsWorkspace.tsx`、`documentSession.ts` | `documentSession.test.ts` 4 项 |
+| WS-08 Jupiter | ✅ 已交付 `d753cddb` | 三个 tab 显式标注范围（会话 scope / 全局检索 / 会话历史）；切会话清空选中与历史；facts 读取失败可见；forget 用记录自身 scope；预览序号闸门 | `JupiterWorkspace.tsx`、`jupiterAccess.ts` | `workspaceCapability.test.ts`（gate 逆序回归） |
+| WS-09 Saturn | ✅ 已交付 `d753cddb` | 选中存 scheduleId，详情从最新列表派生；暂停/恢复作用于所选 schedule；结构化表单=计划、Composer=即时任务（不再混淆）；lastRunId 跳转统一入口 | `SaturnWorkspace.tsx` | 全量 subtest |
+| WS-10 Uranus | ⚠️ 已交付主体 `d753cddb` | 节点可编辑任务文本；执行状态从持久化 run_handoffs + 子 Run head 重查（↻ 刷新 + runGraph 后自动拉）；子 Run 链接走 `session:subtask:taskId`；父 Run 用本台选中而非全局 activeRun。**未实现**：已保存图重新载入画布编辑、按节点选 profile | `UranusWorkspace.tsx` | 全量 subtest |
+| WS-11 Neptune | ⚠️ 已交付主体 `d753cddb` | 本台任务区；委派携带 `artifact:` contextRef（对生产 Run 验证，嵌进 handoff/请求文本）；新增 `read_artifact_preview`（守卫字节读、8MiB 上限、mime 白名单、base64 over JSONL）；图片/视频/音频真实预览；CSP 增 media-src。**未覆盖**：mock 只回 unsupported；浏览器/Tauri 实际播放与真实 ffmpeg 生成属外部验收 | `service.py`、`workspace_service.py`、`contracts.py`、`NeptuneWorkspace.tsx`、dispatcher/protocol | `test_read_artifact_preview_serves_guarded_binary`（ok/unsupported/too_large） |
+| WS-12 Pluto | ✅ 已交付 `d753cddb` | 证据从母题 assignedTaskId 的探索 Run 列表显式选择；汇报绑定所选证据 Run 的 run+session；移除误导性"自动"开关；跨会话 resolutionSessionId 链接保持 | `PlutoWorkspace.tsx` | `test_motif_summary_projects_resolution_session` 等 |
+
+### 已知未闭环项
+
+- **FE-04 code-server**：未安装，仍阻塞；Mars 走受控编辑器路径，不声明 IDE 能力。
+- **Uranus**：已保存工作流图不可重新载入画布编辑；节点级 profile 选择未实现（后端合同已支持 `profile_id`/`target_planet` 字段）。
+- **Neptune**：`glb`/3D 仍是不支持格式（如实显示 unsupported）；Mock client 的 `readArtifactPreview` 恒回 unsupported，预览链路只经真实 sidecar 离线验证。
+- **WS-02 外部验证**：计划要求的"真实 `python -m agent.service.local_sidecar` 子进程 + fake provider 的 read/list/write/子 Run 检查"本轮未独立重跑；覆盖为同进程的 service 级离线测试。
+
+### 外部真实场景验收（本轮均未执行，需单独报告）
+
+1. 浏览器 + Tauri 手工：九台切换、并行任务、目录绑定/改绑、冷启动、跨会话 Run/证据跳转、图片视频实际播放。
+2. 本地 ffmpeg + provider（优先 Ollama）：真实发起一次 MP4 生成/渲染，核对文件存在、可播放、所属 Run/目录正确。
+3. Mars 原生编辑键盘/剪贴板/终端与 code-server 生命周期：待 FE-04 前置条件满足。

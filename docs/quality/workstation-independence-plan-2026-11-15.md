@@ -1,6 +1,6 @@
 # 工作台独立运行修改计划
 
-日期：2026-11-15。代码基线：`6c6ed13ec`。状态：待实施。
+日期：2026-11-15。代码基线：`6c6ed13ec`。状态：八张工单代码与离线验收全部闭环（最新 `a97392ec`）；外部真实环境验收待交接。
 
 本轮仅编写计划；未修改生产代码、重启服务或迁移用户数据。
 
@@ -192,7 +192,7 @@
 - 跨台链路回归：`test_cross_workstation_offline_chain`——mars/neptune 各自认领会话+绑定不同目录（`session_workspace_path` 各归各）→并行接纳→`list_run_heads_tenant` 汇总与归属筛选→mars→neptune 委派子 Run（派生子会话）在 neptune 筛选下可发现、按真实 session 可打开→源台绑定与归属不被改写。durable 事实断言，非 UI 表象。
 - 旧计划 `workstation-repair-plan-2026-11-14.md` 头部加取代声明（共享会话口径与 Mars 未接入表述过时），交付历史表原样保留。
 - wire fixture（`origin_planet`）、Python DTO、TS client、mock 四侧同步，双端 fixture 校验通过。
-- 未覆盖（外部验收单列）：九台浏览器/Tauri 实测（并行任务、目录绑定、跨会话跳转、Neptune 媒体）、code-server 嵌入实测、真实 ffmpeg/Ollama 生成、假 Provider 端到端"上游写文件→下游读文件"循环。
+- 未覆盖（外部验收单列）：九台浏览器/Tauri 实测（并行任务、目录绑定、跨会话跳转、Neptune 媒体）、code-server 嵌入实测、真实 ffmpeg/Ollama 生成。假 Provider 端到端"上游写文件→下游读文件"已由 `test_subprocess_graph_upstream_writes_downstream_reads` 闭环（`8ebe15b3`）。
 
 ## 排期与交付边界
 

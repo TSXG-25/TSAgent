@@ -193,6 +193,14 @@
 | [P2] Uranus 执行详情响应串扰 + 不随会话刷新 | setExecution 无归属检查；effect 无 session 依赖 | {executionId, sessionId} token 闸门；切会话清空选中并重载列表；INTERRUPTED 计为终态停轮询 |
 | [P2] 子进程测试缺假 Provider 工具执行链 | ws02 链只走文件 RPC，provider 允许不可用 | 新增 test_subprocess_fake_provider_agent_tool_chain：脚本化 Ollama /api/chat（意图 JSON + write_file tool_call + done 轮）驱动父子 Run 真实工具执行；工具结果轮 ≥2，产物落盘；并暴露一个真 bug——`llm.py` 流式分支引用未定义 `response`（usage 改从终态 chunk 取），该 bug 会崩所有带 event_bus 的 run |
 
+### 审核修正·第四轮（`60032a1b`）
+
+| 问题 | 根因 | 修正 |
+|---|---|---|
+| [P1] 启动收敛误伤其他存活实例 | 无条件把所有 open 节点标 INTERRUPTED，不区分驱动归属（多实例共享库合同） | 节点行携带 `driver_writer_id`；收敛仅当：无绑定 Run（有绑定的读路径投影 head）、driver writer 无未过期 worker 租约、同执行内无宽限期内更新的行。新增存活实例保护回归 + 探针场景 |
+| [P2] 跨会话链接打不开分页外历史 Run | listRuns 只回最近页，目标不在页内时 selectRun 静默无效 | openRun 在 reload 后对明确目标再 refreshRun——归属闸门放行写入目录，不扩大分页；新增 page-boundary 回归 |
+| 子进程测试非确定性 | `TSAGENT_LLM_TIMEOUT` 是无效变量名（真名 `TSAGENT_OLLAMA_TIMEOUT`），且未固定 OLLAMA_BASE_URL；本机 Ollama 存活时流式修复让真实推理拖慢 Run 终态，shutdown 等待超时 | 死端口 + 零重试冷却固定 provider 不可达，ws02 链 60s+ → 3.4s 确定性通过 |
+
 ### 已知未闭环项
 
 - **FE-04 code-server**：未安装，仍阻塞；Mars 走受控编辑器路径，不声明 IDE 能力。

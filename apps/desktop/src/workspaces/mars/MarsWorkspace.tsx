@@ -8,8 +8,9 @@ import type { RunCtx } from "../../app/runCtx";
 import { useWorkspaceCurrentRun } from "../../app/workspaceSelection";
 import { WorkspaceTasks } from "../../app/WorkspaceTasks";
 import type { WorkspaceFileSummary } from "../../types/service";
-import { ideBridge, type IdeInfo } from "../../service/tauriBridge";
+import { ideBridge } from "../../service/tauriBridge";
 import { ForgeDocumentSession } from "./documentSession";
+import { MarsIdeSession } from "./ideSession";
 
 /** Forge per hand-drawn spec §6 — mode rail | file tree | tabs+editor w/
  *  line numbers | right control rail | AgentComposer. Code mode first. */
@@ -61,34 +62,28 @@ export default function MarsWorkspace({ ctx }: { ctx: RunCtx }) {
 
   const sessionId = ctx.sessionId;
   /** Hosted IDE (FE-04B) — bound to the session workspace; the Tauri host
-   *  owns the code-server child. Stops on session/workspace change and on
-   *  unmount so no instance lingers on a stale binding. */
-  const [ide, setIde] = useState<IdeInfo | null>(null);
-  const [ideBusy, setIdeBusy] = useState(false);
+   *  owns the code-server child. MarsIdeSession releases on session/
+   *  workspace change and on unmount, and drops a start that resolves
+   *  after the scope moved on — no instance binds a stale root. */
+  const ide = useMemo(() => (ideBridge ? new MarsIdeSession(ideBridge) : null), []);
+  const ideScope = `${sessionId}|${ctx.workspacePath ?? ""}`;
   useEffect(() => {
+    if (!ide) return;
+    ide.listener = () => bump((v) => v + 1);
+    void ide.bindScope(ideScope);
     return () => {
-      setIde(null);
-      void ideBridge?.stop();
+      ide.listener = null;
+      void ide.release();
     };
-  }, [sessionId, ctx.workspacePath]);
+  }, [ide, ideScope]);
 
   async function toggleIde() {
-    if (ide) {
-      setIdeBusy(true);
-      try { await ideBridge?.stop(); } catch { /* already dead */ }
-      setIde(null);
-      setIdeBusy(false);
-      return;
-    }
-    if (!ideBridge || !ctx.workspacePath || ideBusy) return;
-    setIdeBusy(true);
+    if (!ide || !ctx.workspacePath || ide.busy) return;
     setErr(null);
     try {
-      setIde(await ideBridge.start(ctx.workspacePath));
+      await ide.toggle(ctx.workspacePath);
     } catch (e) {
       setErr(String(e));
-    } finally {
-      setIdeBusy(false);
     }
   }
 
@@ -168,17 +163,17 @@ export default function MarsWorkspace({ ctx }: { ctx: RunCtx }) {
             )}
             <button
               className="forge-ide-toggle"
-              disabled={!ideBridge || !ctx.workspacePath || ideBusy}
+              disabled={!ide || !ctx.workspacePath || ide.busy}
               onClick={() => void toggleIde()}
-              title={!ideBridge ? t("mar.ide-na") : !ctx.workspacePath ? t("mar.ide-nows") : t("mar.ide-hint")}
+              title={!ide ? t("mar.ide-na") : !ctx.workspacePath ? t("mar.ide-nows") : t("mar.ide-hint")}
               type="button"
-            >{ideBusy ? "…" : ide ? t("mar.ide-stop") : t("mar.ide-start")}</button>
+            >{ide?.busy ? "…" : ide?.info ? t("mar.ide-stop") : t("mar.ide-start")}</button>
           </div>
           <div className="forge-code">
-            {ide ? (
+            {ide?.info ? (
               <iframe
                 className="forge-ide"
-                src={`${ide.url}?folder=${encodeURIComponent(ide.workspace)}`}
+                src={`${ide.info.url}?folder=${encodeURIComponent(ide.info.workspace)}`}
                 title="code-server"
               />
             ) : doc ? (

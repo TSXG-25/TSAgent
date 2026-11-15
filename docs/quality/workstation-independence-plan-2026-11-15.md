@@ -142,6 +142,14 @@
 
 验收：fake bridge 断言收到 Mars 的 root；延迟启动完成不能绑定旧会话或留下未管理实例；停止范围不涉及 brew 实例。Rust/TS 适当离线检查通过。真实 WebView、终端、剪贴板与退出验收单列。
 
+**实施记录（本轮）**：
+
+- 生命周期复核：Rust 宿主 `ide_start` 持锁跨 spawn+就绪等待，`ide_stop` 阻塞至完成后杀实例——宿主层无孤儿；独立 `user-data-dir`/`extensions-dir` 不接管 brew 实例；停止只 kill 本宿主记录的子进程。
+- 修缺口（UI 层）：`await ideBridge.start()` 解决时会话/目录已切换，原代码 `setIde` 会把旧 root 实例挂到新 scope。提取 `MarsIdeSession`（MercurySearchSession 同型）：`bindScope` 变更即 release 并标记在途 start 失效，迟到的 start 解决被丢弃且幂等 stop——不绑定旧会话、不留未管理实例。
+- `ctx.workspacePath` 经 WI-03 贯通为生效根（绑定路径或后端默认根），IDE 与文件编辑器同源；非 Tauri `ideBridge=null` 按钮禁用+如实提示，textarea 编辑仍可用。
+- 回归：`marsIdeSession.test.ts`（fake bridge 断言收到 root/toggle 停止/作用域切换丢弃迟到绑定/卸载释放/启动失败不留实例）5 项全过，挂入 `npm test`；`cargo test parse_listen_port` 既有断言保留。
+- 未做：真实 WebView/终端/剪贴板/宿主退出验收单列。
+
 ### WI-07 / P1 — Uranus 在独立上下文中完整执行
 
 依赖：WI-01、WI-02、WI-04。

@@ -36,13 +36,13 @@ export default function MarsWorkspace({ ctx }: { ctx: RunCtx }) {
   // draft); it survives selection churn and rejects writes when the bound
   // workspace or baseline no longer matches.
   // 按当前 tenant:session 取缓存 —— 切会话命中自己的文档/草稿。
-  const sessionKey = `${service.identity.tenantId}:${service.identity.sessionId}`;
+  const sessionKey = `${service.identity.tenantId}:${ctx.sessionId}`;
   const session = useMemo(() => {
     let cached = sessionCache.get(sessionKey);
     if (!cached || cached.serviceRef !== service) {
       cached = new ForgeDocumentSession(
         service,
-        () => ({ tenantId: service.identity.tenantId, sessionId: service.identity.sessionId }),
+        () => ({ tenantId: service.identity.tenantId, sessionId: ctx.sessionId }),
       );
       sessionCache.set(sessionKey, cached);
     }
@@ -100,10 +100,10 @@ export default function MarsWorkspace({ ctx }: { ctx: RunCtx }) {
       .then((list) => {
         // a slow A response must not land on session B's list — compare
         // against the live identity, not a second stale closure value
-        if (service.identity.sessionId === sessionId) setFiles(list);
+        if (ctx.sessionId === sessionId) setFiles(list);
       })
       .catch((e) => {
-        if (service.identity.sessionId === sessionId) setErr(String(e));
+        if (ctx.sessionId === sessionId) setErr(String(e));
       });
   }, [service, sessionId]);
 

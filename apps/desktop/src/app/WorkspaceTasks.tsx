@@ -1,6 +1,8 @@
+import { useEffect, useState } from "react";
 import { t } from "./i18n";
 import { StatusBadge } from "./ui";
 import type { RunCtx } from "./runCtx";
+import type { SessionSummary } from "../types/service";
 import { selectWorkspaceRun, useWorkspaceRunId, workspaceRuns } from "./workspaceSelection";
 
 /** Task rail for one workstation — list, progress, failures and result
@@ -12,7 +14,10 @@ export function WorkspaceTasks({ ctx, planet }: { ctx: RunCtx; planet: string })
   const mine = workspaceRuns(ctx, planet);
   return (
     <div className="ws-tasks">
-      <h4 className="ws-mod">{t("wstasks.title")}</h4>
+      <div className="ws-tasks-head">
+        <h4 className="ws-mod">{t("wstasks.title")}</h4>
+        <PlanetSessionPicker ctx={ctx} planet={planet} />
+      </div>
       {mine.length === 0 && <p className="omni-empty">{t("wstasks.empty")}</p>}
       {mine.map((run) => (
         <div className={`ws-task${run.runId === selId ? " sel" : ""}`} key={run.runId}>
@@ -46,5 +51,59 @@ export function WorkspaceTasks({ ctx, planet }: { ctx: RunCtx; planet: string })
         </div>
       ))}
     </div>
+  );
+}
+
+/** Per-workstation session picker — lists sessions owned by this planet
+ *  plus unclaimed ones (explicit adoption on select), and creates fresh
+ *  planet-tagged sessions. */
+function PlanetSessionPicker({ ctx, planet }: { ctx: RunCtx; planet: string }) {
+  const service = ctx.service;
+  const [sessions, setSessions] = useState<SessionSummary[]>([]);
+  const [creating, setCreating] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    void service.listSessions({
+      tenantId: service.identity.tenantId,
+      userId: service.identity.userId,
+      requestId: `ws-sess-${planet}-${Date.now()}`,
+    }).then((list) => { if (alive) setSessions(list); }).catch(() => {});
+    return () => { alive = false; };
+  }, [service, planet, ctx.sessionId]);
+  const options = sessions.filter((s) => !s.planet || s.planet === planet);
+  const known = options.some((s) => s.sessionId === ctx.sessionId);
+  return (
+    <span className="ws-sess-pick">
+      <select
+        className="ws-sess-sel"
+        onChange={(e) => ctx.selectSession(e.target.value)}
+        title={t("wstasks.session")}
+        value={ctx.sessionId}
+      >
+        {!known && <option value={ctx.sessionId}>{ctx.sessionId}</option>}
+        {options.map((s) => (
+          <option key={s.sessionId} value={s.sessionId}>
+            {s.sessionId}{!s.planet ? " ·" : ""}
+          </option>
+        ))}
+      </select>
+      <button
+        className="btn secondary ws-sess-new"
+        disabled={creating}
+        onClick={() => {
+          setCreating(true);
+          void service.createSession({
+            tenantId: service.identity.tenantId,
+            userId: service.identity.userId,
+            sessionId: `session-${planet}-${crypto.randomUUID().slice(0, 8)}`,
+            requestId: `ws-new-${planet}-${Date.now()}`,
+            planet,
+          }).then((s) => ctx.selectSession(s.sessionId))
+            .finally(() => setCreating(false));
+        }}
+        title={t("wstasks.new-session")}
+        type="button"
+      >＋</button>
+    </span>
   );
 }

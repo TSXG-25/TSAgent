@@ -210,6 +210,7 @@ class SessionHead:
     store_generation: str
     created_at: str
     workspace_id: str = ""
+    planet: str = ""
 
 
 @dataclass(frozen=True)

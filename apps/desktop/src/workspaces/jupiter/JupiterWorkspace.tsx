@@ -24,7 +24,7 @@ export default function JupiterWorkspace({ ctx }: { ctx: RunCtx }) {
   const [notice, setNotice] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
 
-  const req = useCallback(() => ({ tenantId: service.identity.tenantId, sessionId: service.identity.sessionId, requestId: requestIdForRun(0) }), [service]);
+  const req = useCallback(() => ({ tenantId: service.identity.tenantId, sessionId: ctx.sessionId, requestId: requestIdForRun(0) }), [service, ctx.sessionId]);
   // 预览归属 — 每次请求一个序号，响应提交时仍是最新才落盘；
   // 选中变化即作废在途请求（同一产物的重复请求靠序号区分，不靠对象身份）。
   const previewGate = useMemo(() => createPreviewGate(), []);
@@ -34,7 +34,7 @@ export default function JupiterWorkspace({ ctx }: { ctx: RunCtx }) {
     service.searchArtifacts({ ...req(), query: "", allSessions: true }).then(setFiles).catch((e) => setErr(String(e)));
   }, [service, req]);
   // 会话切换 — 选中项/历史属于旧会话，清空后按新 session 重新拉取。
-  useEffect(() => { setSel(null); setHistory([]); }, [service.identity.sessionId]);
+  useEffect(() => { setSel(null); setHistory([]); }, [ctx.sessionId]);
 
   return (
     <WorkspaceFrame scene={scene} ctx={ctx}>

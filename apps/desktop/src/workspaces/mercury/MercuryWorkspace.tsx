@@ -23,7 +23,7 @@ export default function MercuryWorkspace({ ctx }: { ctx: RunCtx }) {
     () => new MercurySearchSession((q) =>
       service.webSearch({
         tenantId: service.identity.tenantId,
-        sessionId: service.identity.sessionId,
+        sessionId: ctx.sessionId,
         requestId: requestIdForRun(0),
         query: q,
         maxResults: 4,
@@ -39,10 +39,10 @@ export default function MercuryWorkspace({ ctx }: { ctx: RunCtx }) {
   // 更新当前页面（service 对象在会话间复用，memo 不会重建）。
   useEffect(() => {
     // 切换会话清空本台搜索状态 —— A 的来源/日志不残留到 B。
-    search.bind(service.identity.sessionId);
-    if (search.sessionId === service.identity.sessionId) { setSteps([]); setQuery(""); }
+    search.bind(ctx.sessionId);
+    if (search.sessionId === ctx.sessionId) { setSteps([]); setQuery(""); }
     return () => search.stop();
-  }, [search, service.identity.sessionId]);
+  }, [search, ctx.sessionId]);
 
   const doSearch = useCallback(async (e: FormEvent) => {
     e.preventDefault();

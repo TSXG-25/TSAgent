@@ -6,12 +6,19 @@ import type { RunController } from "../features/runs/runController";
 /** Shared run context assembled once in App and handed to the selector and
  *  every workspace. Owns no state itself — App is the source of truth. */
 export interface RunCtx {
-  /** UI-selected session — composer sends target this scope. */
+  /** Current scope's session — for a workspace ctx this is that planet's own
+   *  session; for the base ctx it is Sun/Omni's. Composer sends target it. */
   sessionId: string;
   /** Session-bound workspace root — runs scoped to this dir. */
   workspacePath?: string;
-  /** The only UI path that switches service.identity.sessionId. */
+  /** Switch the current scope's session (claims it for this workstation). */
   selectSession: (sessionId: string) => void;
+  /** Ensure a planet's scope exists — creates its session on first use. */
+  ensurePlanet: (planet: string) => Promise<string>;
+  /** Read a planet's current session ("" if not yet created). */
+  sessionForPlanet: (planet: string) => string;
+  /** Switch a specific planet's session without leaving the current view. */
+  selectSessionFor: (planet: string, sessionId: string) => void;
   service: DesktopAgentServiceClient;
   runtimeLabel: string;
   controller: RunController;

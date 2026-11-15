@@ -642,6 +642,7 @@ class CreateSessionRequest:
     user_id: str
     session_id: str
     request_id: str
+    planet: str = ""
 
     def __post_init__(self) -> None:
         _required_identifier(self.tenant_id, "tenant_id")
@@ -656,6 +657,7 @@ class CreateSessionRequest:
             user_id=str(value.get("user_id", "")),
             session_id=str(value.get("session_id", "")),
             request_id=str(value.get("request_id", "")),
+            planet=str(value.get("planet", "")),
         )
 
 
@@ -720,11 +722,13 @@ class SessionSummary:
     latest_status: str = ""
     latest_updated_at: str = ""
     workspace_id: str = ""
+    planet: str = ""
 
     def to_dict(self) -> dict[str, JSONValue]:
         return {
             "tenant_id": self.tenant_id,
             "workspace_id": self.workspace_id,
+            "planet": self.planet,
             "session_id": self.session_id,
             "user_id": self.user_id,
             "created_at": self.created_at,

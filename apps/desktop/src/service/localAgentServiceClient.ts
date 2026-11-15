@@ -24,6 +24,7 @@ import {
   type RunSnapshot,
   type RunStatus,
   type ServiceErrorCode,
+  type SessionScope,
   type SessionSummary,
   type HandoffSummary,
   type HistoryEntry,
@@ -437,6 +438,7 @@ function mapSession(value: unknown): SessionSummary {
     latestStatus: optionalString(raw.latest_status) ?? "",
     latestUpdatedAt: optionalString(raw.latest_updated_at) ?? "",
     workspaceId: optionalString(raw.workspace_id) ?? "",
+    planet: optionalString(raw.planet) ?? "",
   };
 }
 
@@ -567,9 +569,6 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
   readonly mode = "local" as const;
   identity: DesktopIdentity;
 
-  setSession(sessionId: string): void {
-    this.identity = { ...this.identity, sessionId };
-  }
   private requestSequence = 0;
   private readonly knownSnapshots = new Map<string, RunSnapshot>();
 
@@ -591,11 +590,11 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
     await this.health();
   }
 
-  async listRuns(): Promise<RunSnapshot[]> {
+  async listRuns(scope: SessionScope): Promise<RunSnapshot[]> {
     const params: LocalRpcParams = {
-      tenant_id: this.identity.tenantId,
+      tenant_id: scope.tenantId,
       user_id: this.identity.userId,
-      session_id: this.identity.sessionId,
+      session_id: scope.sessionId,
       request_id: this.nextRequestId("get_run"),
       limit: 100,
     };
@@ -624,11 +623,11 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
     return mapTaskHandle(await this.call("create_task", params));
   }
 
-  async listTasks(): Promise<TaskRecord[]> {
+  async listTasks(scope: SessionScope): Promise<TaskRecord[]> {
     const params: LocalRpcParams = {
-      tenant_id: this.identity.tenantId,
+      tenant_id: scope.tenantId,
       user_id: this.identity.userId,
-      session_id: this.identity.sessionId,
+      session_id: scope.sessionId,
       request_id: this.nextRequestId("get_task"),
     };
     const result = (await this.call("list_tasks", params)) as unknown[];
@@ -1134,6 +1133,7 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
       user_id: request.userId,
       session_id: request.sessionId,
       request_id: request.requestId,
+      planet: request.planet ?? "",
     };
     return mapSession(await this.call("create_session", params));
   }

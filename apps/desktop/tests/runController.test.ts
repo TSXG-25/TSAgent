@@ -86,11 +86,6 @@ class FakeAgentServiceClient extends UnavailableDesktopAgentServiceClient {
     this.events.set("run-1", initialEvents);
   }
 
-  setSession(sessionId: string): void {
-    this.sessionId = sessionId;
-    this.identity = { ...this.identity, sessionId };
-  }
-
   releaseGetRun(): void {
     this.holdGetRun = false;
     this.heldGetRun?.(this.snapshots.get("run-1")!);
@@ -99,9 +94,9 @@ class FakeAgentServiceClient extends UnavailableDesktopAgentServiceClient {
 
   async ready(): Promise<void> {}
 
-  async listRuns(): Promise<RunSnapshot[]> {
+  async listRuns(scope: { tenantId: string; sessionId: string }): Promise<RunSnapshot[]> {
     return [...this.snapshots.values()].filter(
-      (s) => s.sessionId === this.sessionId && !this.listRunsExcludes.has(s.runId),
+      (s) => s.sessionId === scope.sessionId && !this.listRunsExcludes.has(s.runId),
     );
   }
 
@@ -170,7 +165,7 @@ class FakeAgentServiceClient extends UnavailableDesktopAgentServiceClient {
 test("4B01 controller hydrates a Run and advances the exclusive event cursor", async () => {
   const client = new FakeAgentServiceClient(snapshot("active"), [event(1, "event-1", "run_created")]);
   const controller = new RunController(client, { pollIntervalMs: 1000 });
-  await controller.initialize();
+  await controller.loadScope("session-1");
 
   assert.equal(controller.getState().runs[0]?.status, "active");
   assert.deepEqual(controller.getState().runs[0]?.events.map((item) => item.eventId), ["event-1"]);
@@ -181,7 +176,7 @@ test("4B01 controller hydrates a Run and advances the exclusive event cursor", a
 test("4B02 controller de-duplicates events and displays authoritative durable RunOutput", async () => {
   const client = new FakeAgentServiceClient(snapshot("active"), [event(1, "event-1", "run_created")]);
   const controller = new RunController(client, { pollIntervalMs: 1000 });
-  await controller.initialize();
+  await controller.loadScope("session-1");
 
   client.snapshots.set("run-1", snapshot("completed"));
   client.events.set("run-1", [
@@ -203,7 +198,7 @@ test("4B02 controller de-duplicates events and displays authoritative durable Ru
 test("4B03 startRun returns a hydrated active Run without waiting for terminal completion", async () => {
   const client = new FakeAgentServiceClient(null, []);
   const controller = new RunController(client, { pollIntervalMs: 1000 });
-  await controller.initialize();
+  await controller.loadScope("session-1");
 
   const run = await controller.startRun({
     tenantId: identity.tenantId,
@@ -227,7 +222,7 @@ test("4B04 dismissError clears the single controller-owned error", async () => {
   const controller = new RunController(new UnavailableClient(null, []), { pollIntervalMs: 1_000 });
   const observed: Array<string | null> = [];
   controller.subscribe((state) => observed.push(state.error?.code ?? null));
-  await controller.initialize();
+  await controller.loadScope("session-1");
   assert.equal(controller.getState().error?.code, "PROVIDER_UNAVAILABLE");
   controller.dismissError();
   assert.equal(controller.getState().error, null);
@@ -246,7 +241,7 @@ test("4B05 local stage events project a runtime workflow", async () => {
     event(7, "event-7", "stage_completed", { stage_id: "planning", phase: "planning", task_count: 2 }),
   ]);
   const controller = new RunController(client, { pollIntervalMs: 1000 });
-  await controller.initialize();
+  await controller.loadScope("session-1");
 
   const run = controller.getState().runs[0];
   assert.equal(run?.activeWorkflowId, "runtime");
@@ -271,7 +266,7 @@ test("4B06 chained subscribe applies returned events without re-reading", async 
   }
   const client = new PushOnceClient(snapshot("active"), [event(1, "event-1", "run_created")]);
   const controller = new RunController(client, { pollIntervalMs: 10 });
-  await controller.initialize();
+  await controller.loadScope("session-1");
   const readsAfterHydrate = client.eventCursors.length;
   await new Promise((resolve) => setTimeout(resolve, 40));
   const run = controller.getState().runs[0];
@@ -290,7 +285,7 @@ test("4B07 pause requests mint distinct idempotency ids", async () => {
   }
   const client = new PauseClient(snapshot("active"), [event(1, "event-1", "run_created")]);
   const controller = new RunController(client, { pollIntervalMs: 1000 });
-  await controller.initialize();
+  await controller.loadScope("session-1");
   await controller.pauseRun("run-1");
   await controller.pauseRun("run-1");
   assert.equal(requests.length, 2);
@@ -304,7 +299,7 @@ test("4B-hydrate drains every event batch when reopening a completed run", async
     event(i + 1, `event-${i + 1}`, i === 249 ? "run_completed" : "run_step"));
   const client = new FakeAgentServiceClient(snapshot("completed"), many);
   const controller = new RunController(client, { pollIntervalMs: 1000 });
-  await controller.initialize();
+  await controller.loadScope("session-1");
 
   const view = controller.getState().runs[0];
   assert.equal(view?.events.length, 250, "completed run's timeline must include events beyond the first batch");
@@ -323,7 +318,7 @@ test("4B-hydrate reads past a mid-history terminal batch (blocked then resumed)"
     event(4, "event-4", "run_completed"),
   ]);
   const controller = new RunController(client, { pollIntervalMs: 1000 });
-  await controller.initialize();
+  await controller.loadScope("session-1");
 
   const view = controller.getState().runs[0];
   assert.deepEqual(view?.events.map((item) => item.eventId), ["event-1", "event-2", "event-3", "event-4"]);
@@ -331,12 +326,12 @@ test("4B-hydrate reads past a mid-history terminal batch (blocked then resumed)"
   controller.stopAllPolling();
 });
 
-test("openRun path: foreign-session snapshot returns a view but never enters this catalog", async () => {
+test("openRun path: a cross-session refresh lands the run in its own scope", async () => {
   const client = new FakeAgentServiceClient(snapshot("active"), []);
   const controller = new RunController(client, { pollIntervalMs: 1000 });
-  await controller.initialize();
+  await controller.loadScope("session-1");
 
-  // A run owned by another session — not in the initialized list.
+  // A run owned by another session — not in session-1's catalog page.
   const foreign: RunSnapshot = { ...snapshot("completed"), sessionId: "session-2", runId: "run-2" };
   client.snapshots.set("run-2", foreign);
   assert.equal(controller.getState().runs.find((r) => r.runId === "run-2"), undefined);
@@ -344,18 +339,11 @@ test("openRun path: foreign-session snapshot returns a view but never enters thi
   controller.selectRun("run-2");
   assert.notEqual(controller.getState().activeRunId, "run-2");
 
-  // The refresh resolves the view (openRun reads view.sessionId to
-  // navigate) but a foreign snapshot must not mix into this catalog.
+  // The union store admits the run under its own session locator — no
+  // session switch needed; selectRun then resolves it.
   const view = await controller.refreshRun("run-2", "session-2");
   assert.equal(view?.sessionId, "session-2");
-  assert.equal(controller.getState().runs.find((r) => r.runId === "run-2"), undefined);
-  controller.selectRun("run-2");
-  assert.notEqual(controller.getState().activeRunId, "run-2");
-
-  // The real openRun then switches session and reloads — the run enters
-  // through the authoritative listRuns of its owning session.
-  client.setSession("session-2");
-  await controller.reload();
+  assert.equal(controller.getState().runs.find((r) => r.runId === "run-2")?.sessionId, "session-2");
   controller.selectRun("run-2");
   assert.equal(controller.getState().activeRunId, "run-2");
   controller.stopAllPolling();
@@ -367,14 +355,13 @@ test("openRun path: a target beyond the listRuns page is admitted by an explicit
   // refreshRun in openRun, not via a bigger page.
   const client = new FakeAgentServiceClient(snapshot("completed"), []);
   const controller = new RunController(client, { pollIntervalMs: 1000 });
-  await controller.initialize();
+  await controller.loadScope("session-1");
 
   const foreign: RunSnapshot = { ...snapshot("completed"), sessionId: "session-2", runId: "run-2" };
   client.snapshots.set("run-2", foreign);
   // Simulate the page boundary — run-2 exists but is outside listRuns.
   client.listRunsExcludes.add("run-2");
-  client.setSession("session-2");
-  await controller.reload();
+  await controller.loadScope("session-2");
   assert.equal(controller.getState().runs.find((r) => r.runId === "run-2"), undefined);
 
   const view = await controller.refreshRun("run-2", "session-2");
@@ -384,27 +371,29 @@ test("openRun path: a target beyond the listRuns page is admitted by an explicit
   controller.stopAllPolling();
 });
 
-test("catalog gate: a refresh resolving after a session switch cannot re-mix a foreign run", async () => {
-  // Probe scenario: A's refresh in-flight → switch to B → reload finishes
-  // → A's late response used to write [B, A] into the shared catalog.
+test("catalog isolation: a scope reload replaces only that session's slice", async () => {
+  // Union store: loading session-2 must not evict session-1's runs, and a
+  // late session-1 refresh lands in session-1's slice — never session-2's.
   const client = new FakeAgentServiceClient(snapshot("completed"), []);
   const controller = new RunController(client, { pollIntervalMs: 1000 });
-  await controller.initialize();
+  await controller.loadScope("session-1");
 
   client.holdGetRun = true;
   const refresh = controller.refreshRun("run-1"); // issued under session-1
 
   client.snapshots.set("run-2", { ...snapshot("completed"), sessionId: "session-2", runId: "run-2" });
-  client.setSession("session-2");
-  await controller.reload();
-  assert.deepEqual(controller.getState().runs.map((r) => r.runId), ["run-2"]);
+  await controller.loadScope("session-2");
+  const slice = (sid: string) => controller.getState().runs.filter((r) => r.sessionId === sid).map((r) => r.runId);
+  assert.deepEqual(slice("session-2"), ["run-2"]);
+  assert.deepEqual(slice("session-1"), ["run-1"]);
 
   client.releaseGetRun();
   await refresh;
   assert.deepEqual(
-    controller.getState().runs.map((r) => r.runId),
+    slice("session-2"),
     ["run-2"],
-    "the late session-1 response must not re-enter session-2's catalog",
+    "the late session-1 response must not enter session-2's slice",
   );
+  assert.deepEqual(slice("session-1"), ["run-1"]);
   controller.stopAllPolling();
 });

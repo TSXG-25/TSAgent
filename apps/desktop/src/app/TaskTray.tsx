@@ -18,7 +18,7 @@ export default function TaskTray({ ctx }: { ctx: RunCtx }) {
 
   const refreshTasks = useCallback(async () => {
     try {
-      const all = await service.listTasks();
+      const all = await service.listTasks({ tenantId: service.identity.tenantId, sessionId });
       setTasks(all.filter((x) => ["queued", "planning", "active"].includes(x.status)));
     } catch { /* keep last snapshot */ }
   }, [service]);

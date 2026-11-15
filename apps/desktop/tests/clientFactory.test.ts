@@ -70,7 +70,7 @@ test("D4A01 omitted mode is an explicit Mock client", async () => {
   assert.equal(client.mode, "mock");
   assert.equal(client.identity.sessionId, "session-desktop-mock");
   await client.ready();
-  assert.ok((await client.listRuns()).length > 0);
+  assert.ok((await client.listRuns({ tenantId: client.identity.tenantId, sessionId: "session-11af" })).length > 0);
 });
 
 test("D4A02 local mode requires tenant and user identity", async () => {
@@ -100,7 +100,7 @@ test("D4A04 invalid mode is a configuration error, not an implicit Mock selectio
     client.ready(),
     (error: unknown) => error instanceof AgentServiceClientError && error.code === "INVALID_REQUEST",
   );
-  await assert.rejects(client.listRuns(), (error: unknown) => error instanceof AgentServiceClientError);
+  await assert.rejects(client.listRuns({ tenantId: client.identity.tenantId, sessionId: client.identity.sessionId }), (error: unknown) => error instanceof AgentServiceClientError);
 });
 
 test("D4A05 local health and requests use one configured desktop identity", async () => {

@@ -696,6 +696,7 @@ class AgentService:
         head = self._store.ensure_session(
             request.tenant_id, request.session_id, request.user_id,
             role="owner",
+            planet=str(getattr(request, "planet", "")),
         )
         return self._session_summary(head)
 
@@ -876,6 +877,7 @@ class AgentService:
             latest_run_id="" if latest_run is None else latest_run.run_id,
             latest_status="" if latest_run is None else latest_run.run_status,
             workspace_id=getattr(head, "workspace_id", ""),
+            planet=getattr(head, "planet", ""),
             latest_updated_at="" if latest_run is None else latest_run.updated_at,
         )
 

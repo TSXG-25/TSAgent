@@ -47,7 +47,7 @@ class ParallelClient extends UnavailableDesktopAgentServiceClient {
   hold(promise: Promise<void>): void { this.gate = promise; }
 
   async ready(): Promise<void> {}
-  async listRuns(): Promise<RunSnapshot[]> { return []; }
+  async listRuns(_scope: { tenantId: string; sessionId: string }): Promise<RunSnapshot[]> { return []; }
 
   async startRun(request: StartRunRequest): Promise<RunHandle> {
     this.startRequests.push(request);
@@ -114,7 +114,7 @@ test("WS-01: control ops are per-run — cancelling another run during a start p
   await Promise.resolve();
   // A run already in the controller can be controlled while a start flies —
   // the old global operationState would refuse this cancel.
-  const seeded = controller.refreshRun("run-x");
+  const seeded = controller.refreshRun("run-x", "s1");
   release();
   await pending;
   const view = await seeded;
@@ -140,6 +140,9 @@ function ctxWith(runs: RunView[], service?: MockAgentServiceClient): RunCtx {
   return {
     sessionId: "s1",
     selectSession: () => {},
+    ensurePlanet: async () => "s1",
+    sessionForPlanet: () => "s1",
+    selectSessionFor: () => {},
     service: svc,
     runtimeLabel: "mock",
     controller: new RunController(svc),
@@ -181,7 +184,7 @@ test("WS-01: submitToPlanet always records originPlanet and admits independent t
   const r1 = await submitToPlanet(ctx, "mercury", "task one");
   const r2 = await submitToPlanet(ctx, "mercury", "task two");
   assert.notEqual(r1, r2);
-  const snaps = await service.listRuns();
+  const snaps = await service.listRuns({ tenantId: identity.tenantId, sessionId: "s1" });
   const s1 = snaps.find((s) => s.runId === r1);
   const s2 = snaps.find((s) => s.runId === r2);
   assert.equal(s1?.originPlanet, "mercury");
@@ -195,7 +198,7 @@ test("WS-01: delegateToPlanet anchors on the explicit parent, not the session ac
   const parent = runView("run-parent", "s1", "sun");
   const taskId = await delegateToPlanet(ctx, parent, "neptune", "child task");
   assert.ok(taskId);
-  const tasks = await service.listTasks();
+  const tasks = await service.listTasks({ tenantId: identity.tenantId, sessionId: "s1" });
   const child = tasks.find((task) => task.taskId === taskId);
   assert.equal(child?.originPlanet, "neptune");
   assert.equal(child?.parentTaskId, "task-run-parent");

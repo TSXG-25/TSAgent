@@ -45,8 +45,8 @@ export default function UranusWorkspace({ ctx }: { ctx: RunCtx }) {
   const [name, setName] = useState("");
   const [err, setErr] = useState<string | null>(null);
 
-  const req = useCallback(() => ({ tenantId: service.identity.tenantId, sessionId: service.identity.sessionId, requestId: requestIdForRun(0) }), [service]);
-  const sessionId = service.identity.sessionId;
+  const req = useCallback(() => ({ tenantId: service.identity.tenantId, sessionId: ctx.sessionId, requestId: requestIdForRun(0) }), [service, ctx.sessionId]);
+  const sessionId = ctx.sessionId;
   /** Response gate — an in-flight getGraphExecution for execution A must
    *  not commit after B is selected or the session moved. */
   const execToken = useRef<{ id: string; sessionId: string } | null>(null);
@@ -64,7 +64,7 @@ export default function UranusWorkspace({ ctx }: { ctx: RunCtx }) {
 
   /** 执行状态由持久化节点行投影 — 可重复查询，重启后仍为真实态。 */
   const refreshExecution = useCallback(async (executionId: string) => {
-    const token = { id: executionId, sessionId: service.identity.sessionId };
+    const token = { id: executionId, sessionId: ctx.sessionId };
     execToken.current = token;
     try {
       const summary = await service.getGraphExecution({ ...req(), executionId });

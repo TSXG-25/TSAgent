@@ -95,7 +95,7 @@ class OperationsClient extends UnavailableDesktopAgentServiceClient {
 
   async ready(): Promise<void> {}
 
-  async listRuns(): Promise<RunSnapshot[]> {
+  async listRuns(_scope: { tenantId: string; sessionId: string }): Promise<RunSnapshot[]> {
     return [this.snapshot];
   }
 
@@ -167,7 +167,7 @@ class OperationsClient extends UnavailableDesktopAgentServiceClient {
 
 async function initialized(client: OperationsClient): Promise<RunController> {
   const controller = new RunController(client, { pollIntervalMs: 1000 });
-  await controller.initialize();
+  await controller.loadScope("session-1");
   return controller;
 }
 

@@ -14,6 +14,7 @@ import {
   type ArtifactContent,
   type ArtifactPreview,
   type ApprovalSummary,
+  type SessionScope,
   type SessionSummary,
   type HandoffSummary,
   type DelegateRunRequest,
@@ -163,9 +164,6 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
   readonly mode = "mock" as const;
   identity: DesktopIdentity;
 
-  setSession(sessionId: string): void {
-    this.identity = { ...this.identity, sessionId };
-  }
   private readonly snapshots = new Map<string, RunSnapshot>();
   private readonly artifacts = new Map<string, ArtifactSummary[]>();
   private readonly artifactText = new Map<string, string>();
@@ -196,12 +194,14 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
     );
   }
 
-  listRunsSync(): RunSnapshot[] {
-    return [...this.snapshots.values()].map((snapshot) => clone(snapshot));
+  listRunsSync(sessionId?: string): RunSnapshot[] {
+    return [...this.snapshots.values()]
+      .filter((snapshot) => !sessionId || snapshot.sessionId === sessionId)
+      .map((snapshot) => clone(snapshot));
   }
 
-  async listRuns(): Promise<RunSnapshot[]> {
-    return this.listRunsSync();
+  async listRuns(scope: SessionScope): Promise<RunSnapshot[]> {
+    return this.listRunsSync(scope.sessionId);
   }
 
   private tasks: TaskRecord[] = [];
@@ -223,8 +223,9 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
     return task;
   }
 
-  async listTasks(): Promise<TaskRecord[]> {
-    return [...this.tasks, ...[...this.snapshots.values()].map((run) => ({
+  async listTasks(scope: SessionScope): Promise<TaskRecord[]> {
+    return [...this.tasks.filter((t) => t.sessionId === scope.sessionId),
+      ...[...this.snapshots.values()].filter((run) => run.sessionId === scope.sessionId).map((run) => ({
       tenantId: run.tenantId,
       sessionId: run.sessionId,
       taskId: run.taskId ?? `task-${run.runId}`,
@@ -281,10 +282,16 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
       latestRunId: "",
       latestStatus: "idle",
       latestUpdatedAt: new Date().toISOString(),
+      planet: request.planet ?? "",
     };
-    this.extraSessions = [session, ...this.extraSessions];
+    if (request.planet) this.sessionPlanets.set(session.sessionId, request.planet);
+    const existing = this.extraSessions.findIndex((s) => s.sessionId === session.sessionId);
+    if (existing >= 0) this.extraSessions[existing] = { ...this.extraSessions[existing], planet: session.planet };
+    else this.extraSessions = [session, ...this.extraSessions];
     return session;
   }
+
+  private sessionPlanets = new Map<string, string>();
 
   async deleteSession(request: CreateSessionRequest): Promise<{ removed: boolean }> {
     const before = this.extraSessions.length;
@@ -311,10 +318,11 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
         latestStatus: run.status,
         latestUpdatedAt: run.updatedAt,
         workspaceId: this.sessionWorkspaces.get(run.sessionId),
+        planet: this.sessionPlanets.get(run.sessionId),
       });
     }
     return [
-      ...this.extraSessions.map((s) => ({ ...s, workspaceId: this.sessionWorkspaces.get(s.sessionId) })),
+      ...this.extraSessions.map((s) => ({ ...s, workspaceId: this.sessionWorkspaces.get(s.sessionId), planet: this.sessionPlanets.get(s.sessionId) ?? s.planet })),
       ...bySession.values(),
     ];
   }
@@ -773,7 +781,7 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
   }
 
   async listHistory(request: ListHistoryRequest): Promise<HistoryEntry[]> {
-    return this.listRuns()
+    return this.listRuns({ tenantId: this.identity.tenantId, sessionId: request.sessionId })
       .then((runs) => runs.slice(0, request.limit ?? 200).map((run) => ({
         runId: run.runId,
         taskId: "",

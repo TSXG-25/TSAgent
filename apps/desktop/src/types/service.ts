@@ -380,7 +380,7 @@ export interface TaskLookupRequest {
 
 /** Run List is a desktop catalog capability; the core contract remains above. */
 export interface RunCatalogClient {
-  listRuns(): Promise<RunSnapshot[]>;
+  listRuns(scope: SessionScope): Promise<RunSnapshot[]>;
 }
 
 export interface ApprovalSummary {
@@ -432,6 +432,8 @@ export interface SessionSummary {
   latestUpdatedAt: string;
   /** Workspace this session is filed under ("" = recent/ungrouped). */
   workspaceId?: string;
+  /** Workstation this session is owned by ("" = unclaimed). */
+  planet?: string;
 }
 
 export interface CreateSessionRequest {
@@ -439,6 +441,15 @@ export interface CreateSessionRequest {
   userId: string;
   sessionId: string;
   requestId: string;
+  /** Claim the session for a workstation — explicit adoption/creation. */
+  planet?: string;
+}
+
+/** Explicit session scope required by per-session catalog reads — callers
+ * pass the workstation's own session; nothing is read off mutable identity. */
+export interface SessionScope {
+  tenantId: string;
+  sessionId: string;
 }
 
 export interface ListSessionsRequest {
@@ -1130,15 +1141,13 @@ export interface SessionCatalogClient {
 /** Task tree catalog — delegation units that Runs attach to. */
 export interface TaskCatalogClient {
   createTask(request: CreateTaskRequest): Promise<TaskHandle>;
-  listTasks(): Promise<TaskRecord[]>;
+  listTasks(scope: SessionScope): Promise<TaskRecord[]>;
   getTask(request: TaskLookupRequest): Promise<TaskRecord>;
 }
 
 export interface DesktopAgentServiceClient extends AgentServiceClient, RunCatalogClient, TaskCatalogClient, ApprovalClient, SessionCatalogClient, HandoffClient, HistoryClient, ScheduleClient, ProfileClient, SettingsClient, WorkspaceClient, CapabilityClient, WebSearchClient, SkillClient, DelegationClient, MemoryClient, ParticipantClient, JupiterClient, WorkspaceFilesClient, EvaluationClient, WorkflowCatalogClient, WorkflowGraphClient, MotifClient {
   readonly mode: DesktopAgentServiceMode;
   readonly identity: DesktopIdentity;
-  /** Switch the active session scope — subsequent sends target this session. */
-  setSession(sessionId: string): void;
   /** Resolve the backend health before the UI begins using the client. */
   ready(): Promise<void>;
   /** Release transport/sidecar resources. */

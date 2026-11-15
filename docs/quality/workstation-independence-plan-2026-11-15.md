@@ -64,6 +64,16 @@
 
 验收：A/B 两台使用同名文件、不同 session；延迟返回 A 请求后 B 状态不变；切回 A 恢复选择和草稿；页面重载恢复各台当前会话；A 运行期间 B 可以提交和取消自己的任务。
 
+**实施记录（本轮）**：
+
+- `session_heads.planet` 列（DDL+ALTER 迁移，与 `workspace_id` 并列）：`create_session(planet)` 显式认领，`SessionSummary.planet` 贯通到 TS `SessionSummary`；`ensure_session` 普通写路径传空不覆盖既有归属。
+- `workstationScopes.ts`：`tenant:user → planet → sessionId` 持久化（localStorage）；App `planetSessions` 状态 + `ensurePlanet`（首访建台属会话）+ `selectSessionFor`（认领未标注/本台会话；外台已认领会话仅切视图不夺权）。
+- client 移除 `setSession` 可变身份；`listRuns`/`listTasks` 改显式 `SessionScope` 参数，全部工作区调用点迁到 `ctx.sessionId`。
+- `RunController` 多作用域：`loadScope(sessionId)` 按会话序号门控、仅替换该会话的目录切片；store 为跨作用域并集（Run 自带 session 定位），外会话 refresh 落自己切片不污染他台；`refreshRun` 对未入目录的 Run 要求显式 session 定位；`openRun` 不再切会话——refresh→select→导航。
+- `WorkspaceHost` 按 scene 绑定每台的 `sessionId`/`selectSession`；`WorkspaceTasks` 新增台级会话选择器（本台+未认领列表、显式认领、新建台属会话）；浮动 dock 使用所在台的 scope；GlobalSettings 改显式 sessionId prop。
+- 回归：`test_session_planet_claim_and_adoption`（创建认领/未标注接入/写路径不夺权）；controller `loadScope` 切片隔离与跨会话 refresh 落位用例重写；Desktop `npm test` 113 subtest 全绿。
+- 未做：跨台并行提交/取消的浏览器实测、页面重载恢复各台会话的实测——归入外部验收。
+
 ### WI-03 / P1 — 各台目录选择与文件入口
 
 依赖：WI-02。

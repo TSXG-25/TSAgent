@@ -23,7 +23,7 @@ export default function PlutoWorkspace({ ctx }: { ctx: RunCtx }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const req = useCallback(() => ({ tenantId: service.identity.tenantId, sessionId: service.identity.sessionId, requestId: requestIdForRun(0) }), [service]);
+  const req = useCallback(() => ({ tenantId: service.identity.tenantId, sessionId: ctx.sessionId, requestId: requestIdForRun(0) }), [service, ctx.sessionId]);
   const refresh = useCallback(async () => {
     try { setMotifs(await service.listMotifs(req())); setErr(null); } catch (e) { setErr(String(e)); }
   }, [service, req]);

@@ -50,7 +50,7 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
   const [participants, setParticipants] = useState<ParticipantSummary[]>([]);
   const [wsList, setWsList] = useState<WorkspaceSummary[]>([]);
   const refreshWs = () => {
-    void service.listWorkspaces({ tenantId: service.identity.tenantId, sessionId: service.identity.sessionId, requestId: `ws-${Date.now()}` }).then(setWsList).catch(() => {});
+    void service.listWorkspaces({ tenantId: service.identity.tenantId, sessionId: ctx.sessionId, requestId: `ws-${Date.now()}` }).then(setWsList).catch(() => {});
   };
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [dragSid, setDragSid] = useState<string | null>(null);
@@ -108,7 +108,7 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
     setDlg({ mode: "confirm", title: `删除工作区「${label}」？`, onOk: () => {
       void service.deleteWorkspace({
         tenantId: service.identity.tenantId,
-        sessionId: service.identity.sessionId, requestId: `ws-${Date.now()}`,
+        sessionId: ctx.sessionId, requestId: `ws-${Date.now()}`,
         workspaceId: wsId,
       }).then(() => { refreshWs(); void refresh(); });
     } });
@@ -175,7 +175,7 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
     let dead = false;
     void (async () => {
       try {
-        const snaps = await service.listRuns();
+        const snaps = await service.listRuns({ tenantId: service.identity.tenantId, sessionId });
         if (dead) return;
         for (const snap of snaps.filter((x) => x.sessionId === sessionId)) {
           if (!runs.find((r) => r.runId === snap.runId)) {
@@ -260,7 +260,7 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
                   if (!picked) return;
                   await service.upsertWorkspace({
                     tenantId: service.identity.tenantId,
-                    sessionId: service.identity.sessionId, requestId: `ws-${Date.now()}`,
+                    sessionId: ctx.sessionId, requestId: `ws-${Date.now()}`,
                     workspaceId: picked.path, displayName: picked.name, path: picked.path,
                   });
                   setFolder(sessionId, picked.path);   // assign session to the workspace
@@ -272,7 +272,7 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
           </div>
           <div className="omni-sess-scroll">
             {(() => {
-              const allSids = [service.identity.sessionId, ...filtered.map((s) => s.sessionId)].filter((v, i, a) => a.indexOf(v) === i);
+              const allSids = [ctx.sessionId, ...filtered.map((s) => s.sessionId)].filter((v, i, a) => a.indexOf(v) === i);
               const row = (sid: string) => {
                 const s = sessions.find((x) => x.sessionId === sid);
                 const stRaw = s?.latestStatus ?? "";
@@ -296,7 +296,7 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
                         void service.deleteSession({ tenantId: service.identity.tenantId, userId: service.identity.userId, sessionId: sid, requestId: `req-${Date.now()}` })
                           .then(() => {
                             const next = sessions.find((x) => x.sessionId !== sid);
-                            if (sid === sessionId) selectSession(next?.sessionId ?? service.identity.sessionId);
+                            if (sid === sessionId) selectSession(next?.sessionId ?? ctx.sessionId);
                             void refresh();
                           })
                           .catch(() => {});
@@ -371,7 +371,7 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
                 <button className="omni-dlg-ok" onClick={() => {
                   void service.upsertWorkspace({
                     tenantId: service.identity.tenantId,
-                    sessionId: service.identity.sessionId, requestId: `ws-${Date.now()}`,
+                    sessionId: ctx.sessionId, requestId: `ws-${Date.now()}`,
                     workspaceId: browse.path, displayName: browse.path.split("/").filter(Boolean).pop() ?? browse.path, path: browse.path,
                   }).then(() => { setFolder(sessionId, browse.path); setBrowse(null); });
                 }} type="button">{t("sun.pick-this")}</button>
@@ -415,7 +415,7 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
                 <button className="omni-dlg-ok" onClick={() => {
                   void service.upsertWorkspace({
                     tenantId: service.identity.tenantId,
-                    sessionId: service.identity.sessionId, requestId: `ws-${Date.now()}`,
+                    sessionId: ctx.sessionId, requestId: `ws-${Date.now()}`,
                     workspaceId: editWs.wsId, displayName: editWs.name.trim(),
                     path: editWs.primary, paths: editWs.paths,
                   }).then(() => { refreshWs(); setEditWs(null); });

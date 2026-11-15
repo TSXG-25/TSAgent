@@ -23,7 +23,7 @@ export default function SaturnWorkspace({ ctx }: { ctx: RunCtx }) {
   const [planet, setPlanet] = useState("");
   const [creating, setCreating] = useState(false);
 
-  const req = useCallback(() => ({ tenantId: service.identity.tenantId, sessionId: service.identity.sessionId, requestId: requestIdForRun(0) }), [service]);
+  const req = useCallback(() => ({ tenantId: service.identity.tenantId, sessionId: ctx.sessionId, requestId: requestIdForRun(0) }), [service, ctx.sessionId]);
   const refresh = useCallback(async () => {
     try { setSchedules(await service.listSchedules(req())); } catch (e) { setErr(String(e)); }
   }, [service, req]);

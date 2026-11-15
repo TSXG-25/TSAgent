@@ -70,7 +70,6 @@ export class RunController {
   private readonly inFlight = new Set<string>();
   private readonly pollIntervalMs: number;
   private activeRunId = "";
-  private loading = true;
   private currentError: ServiceErrorDTO | null = null;
   private readonly controlOps = new Map<string, "resuming" | "cancelling" | "pausing">();
   private startingCount = 0;
@@ -78,11 +77,12 @@ export class RunController {
     if (this.startingCount > 0) return "starting";
     return this.controlOps.get(this.activeRunId) ?? "idle";
   }
-  private initialization: Promise<void> | null = null;
-  // Monotonic catalog batch — a reload issued while an earlier catalog
-  // load is in flight invalidates it: a late A response can never commit
-  // its runs or its default selection onto session B's catalog.
-  private catalogSeq = 0;
+  // Per-session catalog batches — the store is a union of every loaded
+  // scope, so a reload invalidates only that session's in-flight batch:
+  // a late response for session A can never commit onto session B.
+  private readonly scopeSeq = new Map<string, number>();
+  private readonly loadingScopes = new Set<string>();
+  private loadedOnce = false;
 
   constructor(
     private readonly client: DesktopAgentServiceClient,
@@ -98,7 +98,7 @@ export class RunController {
     return {
       runs: [...this.runs.values()],
       activeRunId: this.activeRunId,
-      isLoading: this.loading,
+      isLoading: this.loadingScopes.size > 0 || !this.loadedOnce,
       error: this.currentError,
       operationState: this.operationState,
     };
@@ -110,19 +110,40 @@ export class RunController {
     return () => this.listeners.delete(listener);
   }
 
-  async initialize(): Promise<void> {
-    if (this.initialization) return this.initialization;
-    this.initialization = this.initializeCatalog();
-    return this.initialization;
-  }
-
-  /** Session switch — stop the previous session's poll loops (their
-   *  locators point at the old session and would re-hydrate foreign runs)
-   *  and rebuild the catalog against the client's new identity. */
-  async reload(): Promise<void> {
-    for (const runId of [...this.pollTimers.keys()]) this.stopPolling(runId);
-    this.initialization = null;
-    return this.initialize();
+  /** (Re)load one session scope's run catalog. Scopes are independent:
+   *  loading session B replaces only session-B entries in the shared store;
+   *  other scopes' runs and their live polls are untouched. */
+  async loadScope(sessionId: string): Promise<void> {
+    const seq = (this.scopeSeq.get(sessionId) ?? 0) + 1;
+    this.scopeSeq.set(sessionId, seq);
+    this.loadingScopes.add(sessionId);
+    this.currentError = null;
+    this.emit();
+    try {
+      await this.client.ready();
+      const snapshots = await this.client.listRuns({ tenantId: this.client.identity.tenantId, sessionId });
+      if (seq !== this.scopeSeq.get(sessionId)) return;
+      for (const [runId, view] of this.runs) {
+        if (view.sessionId === sessionId) {
+          this.runs.delete(runId);
+          this.cursors.delete(runId);
+        }
+      }
+      const views = await Promise.all(snapshots.map((snapshot) => this.hydrateRun(snapshot, -1)));
+      if (seq !== this.scopeSeq.get(sessionId)) return;
+      for (const view of views) this.runs.set(view.runId, view);
+      if (!this.runs.has(this.activeRunId)) this.activeRunId = views[0]?.runId ?? "";
+      this.emit();
+      for (const view of views) this.startPollingIfLive(view);
+    } catch (error) {
+      if (seq === this.scopeSeq.get(sessionId)) this.setError(error);
+    } finally {
+      if (seq === this.scopeSeq.get(sessionId)) {
+        this.loadingScopes.delete(sessionId);
+        this.loadedOnce = true;
+        this.emit();
+      }
+    }
   }
 
   async startRun(request: StartRunRequest): Promise<RunView> {
@@ -233,11 +254,21 @@ export class RunController {
     const current = this.runs.get(runId);
     if (this.inFlight.has(runId)) return current;
 
+    const runSessionId = sessionId ?? current?.sessionId;
+    if (!runSessionId) {
+      const error = new AgentServiceClientError({
+        code: "INVALID_REQUEST",
+        message: "refreshRun requires a session locator for a run that is not in the catalog",
+        retryable: false,
+      });
+      this.setError(error);
+      throw error;
+    }
     this.inFlight.add(runId);
     try {
       const request = locator({
         tenantId: current?.tenantId ?? this.client.identity.tenantId,
-        sessionId: sessionId ?? current?.sessionId ?? this.client.identity.sessionId,
+        sessionId: runSessionId,
         runId,
       });
       const snapshot = await this.client.getRun(request);
@@ -266,35 +297,6 @@ export class RunController {
     this.listeners.clear();
   }
 
-  private async initializeCatalog(): Promise<void> {
-    const seq = ++this.catalogSeq;
-    this.loading = true;
-    this.currentError = null;
-    this.emit();
-    try {
-      await this.client.ready();
-      const snapshots = await this.client.listRuns();
-      if (seq !== this.catalogSeq) return; // superseded — drop this batch
-      this.runs.clear();
-      this.cursors.clear();
-      const views = await Promise.all(snapshots.map((snapshot) => this.hydrateRun(snapshot, -1)));
-      if (seq !== this.catalogSeq) return; // hydration outlived a reload
-      for (const view of views) this.runs.set(view.runId, view);
-      this.activeRunId = views.some((view) => view.runId === this.activeRunId)
-        ? this.activeRunId
-        : views[0]?.runId ?? "";
-      this.emit();
-      for (const view of views) this.startPollingIfLive(view);
-    } catch (error) {
-      if (seq === this.catalogSeq) this.setError(error);
-    } finally {
-      if (seq === this.catalogSeq) {
-        this.loading = false;
-        this.emit();
-      }
-    }
-  }
-
   private async applySnapshot(
     snapshot: RunSnapshot,
     current: RunView | undefined,
@@ -320,19 +322,14 @@ export class RunController {
       next.events,
     );
     this.projectRuntimeWorkflowIfMissing(next);
-    // Session ownership gate — same constraint as the catalog batch seq.
-    // A refresh admitted under session A can resolve after the identity
-    // moved to B: writing it would mix a foreign run into this catalog
-    // (probe: A refresh in-flight → switch → B shows [B, A]). The view is
-    // still returned so callers like openRun can read its sessionId and
-    // navigate; it just never enters this session's store.
-    if (next.sessionId === this.client.identity.sessionId) {
-      this.runs.set(snapshot.runId, next);
-      this.currentError = null;
-      this.emit();
-      if (isLiveStatus(next.status)) this.startPollingIfLive(next);
-      else this.stopPolling(snapshot.runId);
-    }
+    // The store is a union across loaded scopes keyed by runId — every
+    // view carries its own session locator, so a refreshed run lands in
+    // its owning scope without a per-session write gate.
+    this.runs.set(snapshot.runId, next);
+    this.currentError = null;
+    this.emit();
+    if (isLiveStatus(next.status)) this.startPollingIfLive(next);
+    else this.stopPolling(snapshot.runId);
     return next;
   }
 
@@ -400,7 +397,7 @@ export class RunController {
           const current = this.runs.get(runId) ?? view;
           const pushed = await this.client.subscribeEvents({
             tenantId: current.tenantId ?? this.client.identity.tenantId,
-            sessionId: current.sessionId ?? this.client.identity.sessionId,
+            sessionId: current.sessionId,
             runId,
             afterSequence: cursor?.lastSequence ?? -1,
           } satisfies EventStreamRequest);

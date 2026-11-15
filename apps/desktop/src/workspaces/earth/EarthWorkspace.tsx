@@ -47,7 +47,7 @@ export default function EarthWorkspace({ ctx }: { ctx: RunCtx }) {
       // 裁决绑定本台选中的实验 Run 及其已提交参数快照——不是全局任务，
       // 也不是当前滑块值；非本 Composer 发起的 Run 参数未知，不伪造。
       await ctx.service.recordEvaluation(buildEvalRequest({
-        tenantId: ctx.service.identity.tenantId, sessionId: ctx.service.identity.sessionId,
+        tenantId: ctx.service.identity.tenantId, sessionId: ctx.sessionId,
         requestId: requestIdForRun(0), runId: currentRun?.runId ?? "",
         verdict, vals: parseRunParams(currentRun?.request ?? ""), notes: notes.trim(),
       }));

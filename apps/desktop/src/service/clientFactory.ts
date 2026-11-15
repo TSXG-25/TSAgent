@@ -103,10 +103,6 @@ export class UnavailableDesktopAgentServiceClient implements DesktopAgentService
   readonly mode: DesktopAgentServiceMode;
   identity: DesktopIdentity;
 
-  setSession(sessionId: string): void {
-    this.identity = { ...this.identity, sessionId };
-  }
-
   constructor(mode: DesktopAgentServiceMode, identity: DesktopIdentity, private readonly error: AgentServiceClientError) {
     this.mode = mode;
     this.identity = identity;
@@ -118,7 +114,8 @@ export class UnavailableDesktopAgentServiceClient implements DesktopAgentService
 
   async close(): Promise<void> {}
 
-  async listRuns(): Promise<RunSnapshot[]> {
+  async listRuns(scope: { tenantId: string; sessionId: string }): Promise<RunSnapshot[]> {
+    void scope;
     throw this.error;
   }
 
@@ -126,7 +123,8 @@ export class UnavailableDesktopAgentServiceClient implements DesktopAgentService
     throw this.error;
   }
 
-  async listTasks(): Promise<TaskRecord[]> {
+  async listTasks(scope: { tenantId: string; sessionId: string }): Promise<TaskRecord[]> {
+    void scope;
     throw this.error;
   }
 

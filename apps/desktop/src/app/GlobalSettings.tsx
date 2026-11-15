@@ -10,7 +10,7 @@ import { t, useLang, setLang, type Lang } from "./i18n";
  *  other sections show their partition contract with a not-installed state.
  *  Provider/model state lives in SettingsForm so select/edit events always
  *  write the field the backend saves. */
-export default function GlobalSettings({ service, onClose, runs = [] }: { service: DesktopAgentServiceClient; onClose: () => void; runs?: RunView[] }) {
+export default function GlobalSettings({ service, sessionId, onClose, runs = [] }: { service: DesktopAgentServiceClient; sessionId: string; onClose: () => void; runs?: RunView[] }) {
   const lang = useLang();
   const [settings, setSettings] = useState<SettingsSummary | null>(null);
   const [form] = useState(() => new SettingsForm());
@@ -28,7 +28,7 @@ export default function GlobalSettings({ service, onClose, runs = [] }: { servic
     let stale = false;
     service.getSettings({
       tenantId: service.identity.tenantId,
-      sessionId: service.identity.sessionId,
+      sessionId,
       requestId: requestIdForRun(0),
     }).then((s) => {
       if (stale) return;
@@ -39,22 +39,22 @@ export default function GlobalSettings({ service, onClose, runs = [] }: { servic
     }).catch((e) => setError(String(e)));
     service.listProfiles({
       tenantId: service.identity.tenantId,
-      sessionId: service.identity.sessionId,
+      sessionId,
       requestId: requestIdForRun(0),
     }).then((p) => { if (!stale) setProfiles(p); }).catch(() => {});
     service.listCapabilities({
       tenantId: service.identity.tenantId,
-      sessionId: service.identity.sessionId,
+      sessionId,
       requestId: requestIdForRun(0),
     }).then((c) => { if (!stale) setCapabilities(c); }).catch(() => {});
     service.listSkills({
       tenantId: service.identity.tenantId,
-      sessionId: service.identity.sessionId,
+      sessionId,
       requestId: requestIdForRun(0),
     }).then((s) => { if (!stale) setSkills(s); }).catch(() => {});
     service.listWorkspaces({
       tenantId: service.identity.tenantId,
-      sessionId: service.identity.sessionId,
+      sessionId,
       requestId: requestIdForRun(0),
     }).then((w) => { if (!stale) setWorkspaces(w); }).catch(() => {});
     return () => { stale = true; };
@@ -83,7 +83,7 @@ export default function GlobalSettings({ service, onClose, runs = [] }: { servic
     try {
       const next = await service.updateSettings({
         tenantId: service.identity.tenantId,
-        sessionId: service.identity.sessionId,
+        sessionId,
         requestId: requestIdForRun(0),
         ...form.toSaveRequest(),
       });
@@ -206,7 +206,7 @@ export default function GlobalSettings({ service, onClose, runs = [] }: { servic
           {profiles.filter((p) => Object.keys(p.permissionPolicy).length > 0).map((p) => (
             <div className="cap-empty" key={`perm-${p.profileId}`}><span className="cap-dot live" /><div><strong>{p.displayName || p.profileId} permissions</strong><small>{Object.entries(p.permissionPolicy).map(([k, v]) => `${k}=${String(v)}`).join(", ")}</small></div></div>
           ))}
-          <div className="cap-empty"><span className="cap-dot live" /><div><strong>Runtime & Diagnostics</strong><small>mode {service.mode} · session {service.identity.sessionId} · {capabilities.length} capabilities · {skills.length} skills · {profiles.length} profiles</small></div></div>
+          <div className="cap-empty"><span className="cap-dot live" /><div><strong>Runtime & Diagnostics</strong><small>mode {service.mode} · session {sessionId} · {capabilities.length} capabilities · {skills.length} skills · {profiles.length} profiles</small></div></div>
           {["General", "Appearance", "Memory Policy", "Notifications"].map((s) => (
             <div className="cap-empty" key={s}><span className="cap-dot" /><div><strong>{s}</strong><small>Section registered — surface not installed yet.</small></div></div>
           ))}

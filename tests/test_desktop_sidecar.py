@@ -3780,3 +3780,56 @@ def test_graph_execute_substitutes_upstream_artifact_references(
             await service.close()
 
     asyncio.run(scenario())
+
+
+def test_session_planet_claim_and_adoption(tmp_path: Path) -> None:
+    """WI-02: sessions carry durable workstation ownership — create_session
+    claims a planet, an unclaimed session is adopted on explicit select, and
+    scope-ful writes (planet="") never strip an existing claim."""
+    from agent.service.contracts import (
+        CreateSessionRequest,
+        ListSessionsRequest,
+    )
+
+    service = _workspace_file_service(tmp_path)
+    ident = {"tenant_id": "t", "user_id": "u"}
+
+    async def scenario() -> None:
+        await service.create_session(
+            CreateSessionRequest(**ident, session_id="s-mars", request_id="r1", planet="mars")
+        )
+        # An unclaimed session (e.g. auto-registered by a child run).
+        service._store.ensure_session("t", "s-free", "u")
+        sessions = {
+            s.session_id: s
+            for s in await service.list_sessions(
+                ListSessionsRequest(**ident, request_id="r2")
+            )
+        }
+        assert sessions["s-mars"].planet == "mars"
+        assert sessions["s-free"].planet == ""
+
+        # Explicit select adopts the unclaimed session for a workstation.
+        await service.create_session(
+            CreateSessionRequest(**ident, session_id="s-free", request_id="r3", planet="venus")
+        )
+        sessions = {
+            s.session_id: s
+            for s in await service.list_sessions(
+                ListSessionsRequest(**ident, request_id="r4")
+            )
+        }
+        assert sessions["s-free"].planet == "venus"
+
+        # Scope-ful writes never strip the claim.
+        service._store.ensure_session("t", "s-mars", "u")
+        sessions = {
+            s.session_id: s
+            for s in await service.list_sessions(
+                ListSessionsRequest(**ident, request_id="r5")
+            )
+        }
+        assert sessions["s-mars"].planet == "mars"
+
+    import asyncio
+    asyncio.run(scenario())

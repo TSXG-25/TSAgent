@@ -12,6 +12,7 @@ import PlanetSwitcher from "./app/PlanetSwitcher";
 import { SCENES, PLANET_GLYPH, type SceneDef } from "./app/scenes";
 import { motionTier } from "./app/motionTier";
 import { draftKey, useDraft, clearDraftIfUnchanged } from "./app/draftStore";
+import { loadPlanetSessions, savePlanetSessions } from "./app/workstationScopes";
 import { t, tk, useLang } from "./app/i18n";
 /** §3 route-jump — planet glyph sweep on every workspace entry (starmap,
  *  switcher or keyboard). 620ms, skipped on first mount and reduced-motion. */
@@ -88,7 +89,20 @@ function App() {
     return () => clearTimeout(t);
   }, [location.pathname]);
   const activeRunId = controllerState.activeRunId;
-  const [sessionId, setSessionId] = useState(service.identity.sessionId);
+  // Per-workstation scope map — each planet owns an independently persisted
+  // current session (durable `planet` claim on the session head). The base
+  // ctx session is Sun/Omni's own scope.
+  const [planetSessions, setPlanetSessions] = useState<Record<string, string>>(() => ({
+    sun: service.identity.sessionId,
+    ...loadPlanetSessions(service.identity.tenantId, service.identity.userId),
+  }));
+  const sessionId = planetSessions.sun ?? service.identity.sessionId;
+  const planetSessionsRef = useRef(planetSessions);
+  planetSessionsRef.current = planetSessions;
+  const ensureInflight = useRef(new Map<string, Promise<string>>());
+  useEffect(() => {
+    savePlanetSessions(service.identity.tenantId, service.identity.userId, planetSessions);
+  }, [planetSessions, service]);
   // One subscription at the root — language changes re-render the whole
   // tree so every t() call site sees the new locale.
   useLang();
@@ -124,13 +138,73 @@ function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  function selectSessionFor(planet: string, id: string) {
+    void service.listSessions({
+      tenantId: service.identity.tenantId,
+      userId: service.identity.userId,
+      requestId: `sess-lookup-${Date.now()}`,
+    }).then((list) => {
+      const target = list.find((s) => s.sessionId === id);
+      if (target?.planet && target.planet !== planet) return; // foreign-owned — view only, no claim
+      return service.createSession({
+        tenantId: service.identity.tenantId,
+        userId: service.identity.userId,
+        sessionId: id,
+        requestId: `claim-${planet}-${Date.now()}`,
+        planet,
+      }).then(() => undefined);
+    }).then(() => {
+      setPlanetSessions((m) => ({ ...m, [planet]: id }));
+      void controller.loadScope(id);
+    }).catch((error) => setServiceError(toServiceError(error)));
+  }
+
+  function ensurePlanet(planet: string): Promise<string> {
+    const existing = planetSessionsRef.current[planet];
+    if (existing) {
+      void controller.loadScope(existing);
+      return Promise.resolve(existing);
+    }
+    let pending = ensureInflight.current.get(planet);
+    if (!pending) {
+      pending = (async () => {
+        const sid = `session-${planet}-${crypto.randomUUID().slice(0, 8)}`;
+        await service.createSession({
+          tenantId: service.identity.tenantId,
+          userId: service.identity.userId,
+          sessionId: sid,
+          requestId: `scope-${planet}-${Date.now()}`,
+          planet,
+        });
+        setPlanetSessions((m) => (m[planet] ? m : { ...m, [planet]: sid }));
+        void controller.loadScope(sid);
+        return sid;
+      })();
+      ensureInflight.current.set(planet, pending);
+    }
+    return pending;
+  }
+
   useEffect(() => {
     const unsubscribe = controller.subscribe(setControllerState);
-    void controller.initialize();
+    // Claim Sun's bootstrap session, then hydrate every known scope — each
+    // loadScope only touches its own session's catalog entries.
+    void service.createSession({
+      tenantId: service.identity.tenantId,
+      userId: service.identity.userId,
+      sessionId,
+      requestId: `scope-sun-${Date.now()}`,
+      planet: "sun",
+    }).catch((error) => setServiceError(toServiceError(error)));
+    void controller.loadScope(sessionId);
+    for (const [planet, sid] of Object.entries(planetSessionsRef.current)) {
+      if (planet !== "sun") void controller.loadScope(sid);
+    }
     return () => {
       unsubscribe();
       controller.dispose();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- boot once per client
   }, [controller]);
 
   const activeRun = runs.find((run) => run.runId === activeRunId) ?? runs[0];
@@ -155,23 +229,11 @@ function App() {
   }
 
   function openRun(runId: string, runSessionId?: string) {
-    // Load target → switch to its owning session → select → navigate. The
-    // refresh must settle before selectRun because controller.selectRun
-    // only accepts runs already in its store (a stale `runs` closure would
-    // silently drop first-load selections).
+    // The store is a union across scopes — refresh writes the target into
+    // its owning session's slice (beyond the catalog page is fine), then
+    // select + navigate. No session switching needed anymore.
     void controller.refreshRun(runId, runSessionId)
-      .then(async (view) => {
-        const sid = view?.sessionId ?? runSessionId;
-        if (sid && sid !== sessionId) {
-          selectSession(sid);
-          // Cross-session targets are not written into the old catalog —
-          // selectRun only accepts cataloged runs, so the new session's
-          // catalog must commit first. listRuns returns only the most
-          // recent page, so the requested run is then refreshed into the
-          // catalog explicitly — a target older than the page still lands.
-          await controller.reload();
-          if (view) await controller.refreshRun(runId);
-        }
+      .then((view) => {
         if (view) controller.selectRun(runId);
         navigate("/w/sun");
       })
@@ -229,15 +291,16 @@ function App() {
   }
 
   function selectSession(id: string) {
-    service.setSession(id);
-    setSessionId(id);
-    void controller.reload();
+    selectSessionFor("sun", id);
   }
 
   const ctx: RunCtx = {
     service,
     sessionId,
     selectSession,
+    ensurePlanet,
+    sessionForPlanet: (planet: string) => planetSessions[planet] ?? "",
+    selectSessionFor,
     runtimeLabel,
     controller,
     runs,
@@ -257,6 +320,11 @@ function App() {
     isCancelling,
     isResuming,
   };
+  // The floating dock opened from a workstation uses that workstation's
+  // scope when it already has one — not always Sun's session.
+  const chatCtx: RunCtx = scene && scene.id !== "sun" && planetSessions[scene.id]
+    ? { ...ctx, sessionId: planetSessions[scene.id], selectSession: (id: string) => selectSessionFor(scene.id, id) }
+    : ctx;
 
   return (
     <div className="app-shell" data-planet={scene?.id ?? "selector"}>
@@ -315,8 +383,8 @@ function App() {
         </Routes>
       </main>
 
-      {isSettingsOpen && <GlobalSettings service={service} runs={ctx.runs} onClose={() => setIsSettingsOpen(false)} />}
-      {isChatOpen && <GlobalChat ctx={ctx} instant={chatInstant} onClose={() => setIsChatOpen(false)} />}
+      {isSettingsOpen && <GlobalSettings service={service} sessionId={sessionId} runs={ctx.runs} onClose={() => setIsSettingsOpen(false)} />}
+      {isChatOpen && <GlobalChat ctx={chatCtx} instant={chatInstant} onClose={() => setIsChatOpen(false)} />}
       <SceneJump path={location.pathname} />
       {exitVeil && <div className="ws-exit" />}
       <TelemetryBar latency={latency} running={runningCount} />

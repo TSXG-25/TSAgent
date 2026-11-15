@@ -4345,3 +4345,8 @@ ol.md-list li::marker { color: var(--planet-accent); font-family: var(--font-mon
 .lab-node-text:focus { outline: none; border-bottom-color: var(--planet-accent); }
 
 .lab-execpick { width: 100%; margin: 4px 0 8px; background: var(--surface-2); color: var(--text-main); border: 1px solid var(--line-soft, rgba(255,255,255,0.15)); border-radius: 4px; font: inherit; font-size: 12px; padding: 4px 6px; }
+
+.ws-tasks-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ws-sess-pick { display: inline-flex; align-items: center; gap: 4px; }
+.ws-sess-sel { max-width: 170px; font-size: 11px; padding: 2px 4px; background: var(--panel2, #14161c); color: inherit; border: 1px solid var(--edge, #2a2f3a); border-radius: 6px; }
+.ws-sess-new { padding: 1px 7px; font-size: 12px; }

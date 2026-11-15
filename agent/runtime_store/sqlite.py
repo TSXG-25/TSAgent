@@ -397,6 +397,7 @@ class SqliteRuntimeStore:
                     user_id TEXT NOT NULL DEFAULT '',
                     store_generation TEXT NOT NULL,
                     created_at TEXT NOT NULL,
+                    planet TEXT NOT NULL DEFAULT '',
                     PRIMARY KEY (tenant_id, session_id)
                 );
 
@@ -879,6 +880,10 @@ class SqliteRuntimeStore:
             if head_columns and "workspace_id" not in head_columns:
                 connection.execute(
                     "ALTER TABLE session_heads ADD COLUMN workspace_id TEXT NOT NULL DEFAULT ''"
+                )
+            if head_columns and "planet" not in head_columns:
+                connection.execute(
+                    "ALTER TABLE session_heads ADD COLUMN planet TEXT NOT NULL DEFAULT ''"
                 )
             now = _now()
             if row is None:
@@ -2997,29 +3002,47 @@ class SqliteRuntimeStore:
         user_id: str = "",
         *,
         role: str = "member",
+        planet: str = "",
     ) -> "SessionHead":
         """Idempotent session registration; every scope-ful write path
-        calls this so sessions exist as first-class entities."""
+        calls this so sessions exist as first-class entities. A non-empty
+        ``planet`` claims workstation ownership for the session."""
         tenant_id = _require_text(tenant_id, "tenant_id")
         session_id = _require_text(session_id, "session_id")
+        planet = str(planet)
         with self._write_transaction() as connection:
             row = connection.execute(
                 """
-                SELECT tenant_id, session_id, user_id, store_generation, created_at, workspace_id
+                SELECT tenant_id, session_id, user_id, store_generation, created_at, workspace_id, planet
                 FROM session_heads
                 WHERE tenant_id = ? AND session_id = ?
                 """,
                 (tenant_id, session_id),
             ).fetchone()
             if row is not None:
+                if planet and str(row["planet"]) != planet:
+                    connection.execute(
+                        "UPDATE session_heads SET planet = ? WHERE tenant_id = ? AND session_id = ?",
+                        (planet, tenant_id, session_id),
+                    )
+                    return self._session_contract(
+                        connection.execute(
+                            """
+                            SELECT tenant_id, session_id, user_id, store_generation, created_at, workspace_id, planet
+                            FROM session_heads
+                            WHERE tenant_id = ? AND session_id = ?
+                            """,
+                            (tenant_id, session_id),
+                        ).fetchone()
+                    )
                 return self._session_contract(row)
             connection.execute(
                 """
                 INSERT INTO session_heads
-                    (tenant_id, session_id, user_id, store_generation, created_at)
-                VALUES (?, ?, ?, ?, ?)
+                    (tenant_id, session_id, user_id, store_generation, created_at, planet)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                (tenant_id, session_id, str(user_id), self.store_generation, _now()),
+                (tenant_id, session_id, str(user_id), self.store_generation, _now(), planet),
             )
             if user_id:
                 connection.execute(
@@ -3040,6 +3063,7 @@ class SqliteRuntimeStore:
                 user_id=str(user_id),
                 store_generation=self.store_generation,
                 created_at=_now(),
+                planet=planet,
             )
 
     def delete_session(self, tenant_id: str, session_id: str) -> bool:
@@ -3063,7 +3087,7 @@ class SqliteRuntimeStore:
             self._ensure_open()
             rows = self._connection.execute(
                 """
-                SELECT tenant_id, session_id, user_id, store_generation, created_at, workspace_id
+                SELECT tenant_id, session_id, user_id, store_generation, created_at, workspace_id, planet
                 FROM session_heads
                 WHERE tenant_id = ?
                 ORDER BY created_at DESC
@@ -3086,6 +3110,7 @@ class SqliteRuntimeStore:
             store_generation=str(row["store_generation"]),
             created_at=str(row["created_at"]),
             workspace_id=str(row["workspace_id"]) if "workspace_id" in row.keys() else "",
+            planet=str(row["planet"]) if "planet" in row.keys() else "",
         )
 
     @staticmethod

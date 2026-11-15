@@ -85,6 +85,13 @@
 
 验收：Mars 选 A、Neptune 选 B；两台文件读写各在对应目录，修改 Omni 绑定不影响二者；同台重绑拒绝旧草稿保存；接纳后改绑仍执行在原 root。
 
+**实施记录（本轮）**：
+
+- `sessionWorkspace.ts::resolveBoundPath`：共用 `listSessions + listWorkspaces` 解析会话→workspace→path，未绑定返回 ""（不回退 cwd/历史目录）。
+- `WorkspaceHost`：按每台 session 解析绑定；`wctx.workspacePath` = 生效根（绑定路径或经 `listDirectory("")` 解析的后端默认根）；sidecar 原生选目录对所有 scene 注册。
+- `WorkspaceDirBar`（共用目录栏，非 Sun 各台顶栏）：显示生效根（未绑定标"默认"徽标）、选择目录（`pickFolder→upsertWorkspace→assignSessionWorkspace`）、解绑；同一绑定贯通文件列表（`listWorkspaceFiles` 会话域）、附件（`attachFiles` 会话域）、任务提交（接纳时后端解析绑定）与 Mars IDE（`ctx.workspacePath`）。
+- 回归：`sessionWorkspace.test.ts`（绑定解析/改绑/解绑/他会话不共享）；既有 `documentSession` 同会话重绑拒写与接纳后原 root 合同不变。Mars A/Neptune B 双台目录实测归外部验收。
+
 ### WI-04 / P1 — 本台任务闭环与 Omni 总览
 
 依赖：WI-02；文件任务同时依赖 WI-03。

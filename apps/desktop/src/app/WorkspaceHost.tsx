@@ -1,6 +1,9 @@
-import { Suspense, lazy, useEffect } from "react";
+import { Suspense, lazy, useCallback, useEffect, useState } from "react";
 import { Navigate, useParams } from "react-router-dom";
 import { resolveScene, type SceneId } from "./scenes";
+import { resolveBoundPath } from "./sessionWorkspace";
+import { WorkspaceDirBar } from "./WorkspaceDirBar";
+import { setSidecarPicker } from "../service/tauriBridge";
 import type { RunCtx } from "./runCtx";
 
 const LAZY: Record<SceneId, React.LazyExoticComponent<(props: { ctx: RunCtx }) => React.JSX.Element>> = {
@@ -27,17 +30,44 @@ export default function WorkspaceHost({ ctx }: { ctx: RunCtx }) {
   useEffect(() => {
     if (planet) void ctx.ensurePlanet(planet);
   }, [ctx, planet]);
+  // Resolve this scope's durable session→workspace binding — files,
+  // attachments, submissions and the Mars IDE all read the same root.
+  // Unbound scopes still have an effective root: the backend's factory
+  // default, surfaced via listDirectory (never a guessed path).
+  const [boundPath, setBoundPath] = useState("");
+  const [effectivePath, setEffectivePath] = useState("");
+  const refreshWsPath = useCallback(() => {
+    if (!sessionId) return;
+    void resolveBoundPath(ctx.service, sessionId)
+      .then(async (bound) => {
+        setBoundPath(bound);
+        setEffectivePath(bound || (await ctx.service.listDirectory("")).path);
+      })
+      .catch(() => { setBoundPath(""); setEffectivePath(""); });
+  }, [ctx.service, sessionId]);
+  useEffect(refreshWsPath, [refreshWsPath]);
+  // Dev browser folder picking needs the local sidecar's native dialog —
+  // register it for every scene so planet directory bars work too.
+  useEffect(() => {
+    if (ctx.service.mode !== "local") return;
+    setSidecarPicker(() => ctx.service.pickFolder());
+    return () => setSidecarPicker(null);
+  }, [ctx.service]);
   if (!scene) return <Navigate to="/" replace />;
   if (!sessionId) return <div className="ws-loading">Preparing {scene.workspace}…</div>;
   const wctx: RunCtx = {
     ...ctx,
     sessionId,
+    workspacePath: effectivePath || undefined,
     selectSession: (id: string) => ctx.selectSessionFor(planet, id),
   };
   const Workspace = LAZY[scene.id];
   return (
-    <Suspense fallback={<div className="ws-loading">Loading {scene.workspace}…</div>}>
-      <Workspace ctx={wctx} />
-    </Suspense>
+    <>
+      {scene.id !== "sun" && <WorkspaceDirBar ctx={wctx} path={boundPath} onBound={refreshWsPath} />}
+      <Suspense fallback={<div className="ws-loading">Loading {scene.workspace}…</div>}>
+        <Workspace ctx={wctx} />
+      </Suspense>
+    </>
   );
 }

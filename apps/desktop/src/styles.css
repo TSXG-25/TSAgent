@@ -4350,3 +4350,9 @@ ol.md-list li::marker { color: var(--planet-accent); font-family: var(--font-mon
 .ws-sess-pick { display: inline-flex; align-items: center; gap: 4px; }
 .ws-sess-sel { max-width: 170px; font-size: 11px; padding: 2px 4px; background: var(--panel2, #14161c); color: inherit; border: 1px solid var(--edge, #2a2f3a); border-radius: 6px; }
 .ws-sess-new { padding: 1px 7px; font-size: 12px; }
+
+.ws-dirbar { display: flex; align-items: center; gap: 8px; padding: 4px 14px; border-bottom: 1px solid var(--edge, #232833); background: color-mix(in srgb, var(--panel, #14161c) 82%, transparent); font-size: 11.5px; }
+.ws-dir-icon { opacity: .7; }
+.ws-dir-path { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-dim, #9aa3b2); font-size: 11px; }
+.ws-dir-default { font-size: 9.5px; color: var(--text-faint, #6b7382); border: 1px solid var(--edge, #2a2f3a); border-radius: 4px; padding: 0 4px; }
+.ws-dir-btn { padding: 1px 8px; font-size: 11px; }

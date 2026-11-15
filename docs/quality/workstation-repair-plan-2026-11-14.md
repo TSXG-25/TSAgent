@@ -164,7 +164,7 @@
 | WS-07 Mars | ✅ 已交付 `d753cddb`+`d6584f93` | 文件列表按 session 刷新且响应按活读会话身份闸门；受控多行编辑器；文档会话持久态与挂载订阅分离，缓存按会话选择，离页草稿不丢且重进后通知不投死订阅；未实现模式禁用并标注 | `MarsWorkspace.tsx`、`documentSession.ts` | `documentSession.test.ts` 4 项 |
 | WS-08 Jupiter | ✅ 已交付 `d753cddb` | 三个 tab 显式标注范围（会话 scope / 全局检索 / 会话历史）；切会话清空选中与历史；facts 读取失败可见；forget 用记录自身 scope；预览序号闸门 | `JupiterWorkspace.tsx`、`jupiterAccess.ts` | `workspaceCapability.test.ts`（gate 逆序回归） |
 | WS-09 Saturn | ✅ 已交付 `d753cddb` | 选中存 scheduleId，详情从最新列表派生；暂停/恢复作用于所选 schedule；结构化表单=计划、Composer=即时任务（不再混淆）；lastRunId 跳转统一入口 | `SaturnWorkspace.tsx` | 全量 subtest |
-| WS-10 Uranus | ✅ 已交付 `d753cddb`+`d6584f93` | 节点可编辑任务文本；新增持久化 `graph_executions`/`graph_execution_nodes`：执行→节点→Run/session 关联可重启后查询；节点状态由对应 Run head 投影，支持 SKIPPED（无 handoff 节点）；父 Run 用本台选中而非全局 activeRun。**未实现**：已保存图重新载入画布编辑、按节点选 profile | `UranusWorkspace.tsx` | 全量 subtest |
+| WS-10 Uranus | ✅ 已交付 `d753cddb`+`d6584f93`+`fb40312a` | Dify 风格 DAG 画布：已保存图可重开编辑（含坐标/未知字段往返）、按节点选 Profile 与目标台、执行状态按 nodeId 叠加画布、`{artifacts:<node_id>}` 显式上游产物引用；持久化 `graph_executions`/`graph_execution_nodes` 执行→节点→Run/session 关联可重启后查询，节点状态由 Run head 投影，支持 SKIPPED/INTERRUPTED；父 Run 用本台选中而非全局 activeRun | `UranusWorkspace.tsx`、`UranusCanvas.tsx`、`graphModel.ts` | `uranusGraphModel.test.ts` + 全量 subtest |
 | WS-11 Neptune | ✅ 已交付 `d753cddb`+`d6584f93` | 本台任务区；产物列表默认 `originPlanet==neptune` scope；委派携带 `artifact:` contextRef（对生产 Run 验证）；`read_artifact_preview` 守卫字节读（8MiB/mime 白名单/base64）；`.svg` 移出字节白名单、保留脱敏文本投影（修复内容绕开 redaction 外泄）；图片/视频/音频真实预览；CSP 增 media-src。**未覆盖**：mock 只回 unsupported；浏览器/Tauri 实际播放与真实 ffmpeg 生成属外部验收 | `service.py`、`workspace_service.py`、`contracts.py`、`NeptuneWorkspace.tsx`、dispatcher/protocol | `test_read_artifact_preview_serves_guarded_binary`（ok/unsupported/too_large） |
 | WS-12 Pluto | ✅ 已交付 `d753cddb` | 证据从母题 assignedTaskId 的探索 Run 列表显式选择；汇报绑定所选证据 Run 的 run+session；移除误导性"自动"开关；跨会话 resolutionSessionId 链接保持 | `PlutoWorkspace.tsx` | `test_motif_summary_projects_resolution_session` 等 |
 
@@ -202,10 +202,21 @@
 | 子进程测试非确定性 | `TSAGENT_LLM_TIMEOUT` 是无效变量名（真名 `TSAGENT_OLLAMA_TIMEOUT`），且未固定 OLLAMA_BASE_URL；本机 Ollama 存活时流式修复让真实推理拖慢 Run 终态，shutdown 等待超时 | 死端口 + 零重试冷却固定 provider 不可达，ws02 链 60s+ → 3.4s 确定性通过 |
 | [P2] 宽限期内重启的孤儿不收敛（`9ff395f8`） | 启动收敛只跑一次，被宽限期跳过的行之后再无入口重评 | `converge_orphaned_graph_execution_nodes` 加可选 execution_id 范围并在 `get_graph_execution` 读路径惰性重评同一谓词——新鲜行/租约持有者的保护不变，过期孤儿经正常查询收敛；新回归覆盖"立即重启→PENDING→宽限期结束→查询得 INTERRUPTED" |
 
+### Uranus DAG Studio（`fb40312a`，两张遗留卡合并交付）
+
+借鉴 Dify 工作流编排交互，按已定语义实现——节点=委派任务（对应一个子 Run），边=成功依赖（全部前置 COMPLETED 才启动，分叉分支独立但驱动顺序推进，非并行调度）。
+
+- **画布**：`@xyflow/react` DAG 编辑器——拖拽节点、手柄连线、Delete 删除节点/边、缩放与适应画布。节点卡片只显示 id、profile、目标台与执行状态徽标，任务文本在右侧编辑，不撑满画布。
+- **完整保存与回读**：`definition_json` 往返保留节点 id/type/request_text/profile_id/target_planet/x/y 与未知字段；无坐标图按拓扑分层自动布局。"打开"已保存图就地编辑（保存保持 graphId），"另存为"生成新身份；顶栏未保存提示，脏草稿禁运行。
+- **节点配置与执行归属**：右侧面板按节点选 Profile（来自 listProfiles）与目标工作台（明示"子任务将显示在该工作台的任务列表中"），贯通既有后端字段；input 节点保留 `{name}` 替换。
+- **执行覆盖到画布**：底部条选一次历史执行，节点状态/错误/子 Run 链接按 nodeId 叠加到画布卡片；草稿编辑与历史执行分离。
+- **明确上游输入**：连线不携带数据；任务文本中 `{artifacts:<node_id>}` 在委派时替换为上游 Run 的 durable workspace 相对产物路径（零产物→`(none)`；引用未运行节点→该节点 FAILED），首条"写脚本→渲染"链路可验证。
+- 首版不含：循环、条件节点、变量表达式、单节点重跑——各自需要新的执行合同。
+
 ### 已知未闭环项
 
 - **FE-04 code-server**：已安装并在 `127.0.0.1:8080` 运行（password auth）——嵌入前置满足；Tauri WebView/终端/快捷键实测与 FE-04B 宿主适配仍未做，Mars 维持受控编辑器路径，不声明 IDE 能力。
-- **Uranus**：已保存工作流图不可重新载入画布编辑；节点级 profile 选择未实现（后端合同已支持 `profile_id`/`target_planet` 字段）。
+- ~~Uranus 图重载/profile~~：已在 `fb40312a` 闭环——DAG 画布保存/回读/节点配置/执行叠加/`{artifacts:<node_id>}` 上游引用全部落地。
 - **Neptune**：`glb`/3D 仍是不支持格式（如实显示 unsupported）；Mock client 的 `readArtifactPreview` 恒回 unsupported，预览链路只经真实 sidecar 离线验证。
 - ~~WS-02 外部验证~~：已在 `d6584f93` 闭环——`test_subprocess_ws02_workspace_and_delegation_chain` 以真实 `python -m agent.service.local_sidecar` 子进程 + 假 Provider 覆盖 workspace 绑定、read/write 与委派子 Run；`test_sidecar_coldstart.py` 覆盖冷启动授权工具可见性。
 

@@ -76,7 +76,13 @@ fn sidecar_spawn(
 fn sidecar_write(procs: State<Procs>, id: u64, line: String) -> Result<(), String> {
     let mut map = procs.0.lock().map_err(|_| "registry lock".to_string())?;
     let entry = map.get_mut(&id).ok_or("unknown sidecar id")?;
-    writeln!(entry.0, "{line}").map_err(|e| e.to_string())?;
+    // The line arrives with a trailing newline already; write raw so the
+    // sidecar never sees a phantom empty request after each real one.
+    if line.ends_with('\n') {
+        entry.0.write_all(line.as_bytes()).map_err(|e| e.to_string())?;
+    } else {
+        writeln!(entry.0, "{line}").map_err(|e| e.to_string())?;
+    }
     entry.0.flush().map_err(|e| e.to_string())
 }
 

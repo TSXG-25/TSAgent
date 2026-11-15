@@ -33,6 +33,7 @@ from .contracts import (
     ApprovalRecord,
     SessionParticipantRecord,
     EvaluationRecord,
+    GraphExecutionNodeRecord,
     MotifRecord,
     WorkflowGraphRecord,
     WorkspaceRecord,
@@ -599,6 +600,23 @@ class SqliteRuntimeStore:
                     updated_at TEXT NOT NULL,
                     store_generation TEXT NOT NULL,
                     PRIMARY KEY (tenant_id, motif_id)
+                );
+
+                CREATE TABLE IF NOT EXISTS graph_execution_nodes (
+                    tenant_id TEXT NOT NULL,
+                    execution_id TEXT NOT NULL,
+                    node_id TEXT NOT NULL,
+                    graph_id TEXT NOT NULL,
+                    session_id TEXT NOT NULL,
+                    position INTEGER NOT NULL DEFAULT 0,
+                    task_id TEXT NOT NULL DEFAULT '',
+                    run_id TEXT NOT NULL DEFAULT '',
+                    child_session_id TEXT NOT NULL DEFAULT '',
+                    status TEXT NOT NULL DEFAULT 'PENDING',
+                    detail TEXT NOT NULL DEFAULT '',
+                    updated_at TEXT NOT NULL,
+                    store_generation TEXT NOT NULL,
+                    PRIMARY KEY (tenant_id, execution_id, node_id)
                 );
 
                 CREATE TABLE IF NOT EXISTS workflow_graphs (
@@ -2811,6 +2829,120 @@ class SqliteRuntimeStore:
                 created_at=now, updated_at=now,
                 store_generation=self.store_generation,
             )
+
+    def upsert_graph_execution_node(
+        self,
+        tenant_id: str,
+        execution_id: str,
+        node_id: str,
+        *,
+        graph_id: str,
+        session_id: str,
+        position: int = 0,
+        task_id: str = "",
+        run_id: str = "",
+        child_session_id: str = "",
+        status: str = "PENDING",
+        detail: str = "",
+    ) -> "GraphExecutionNodeRecord":
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        execution_id = _require_text(execution_id, "execution_id")
+        node_id = _require_text(node_id, "node_id")
+        now = _now()
+        with self._write_transaction() as connection:
+            connection.execute(
+                """
+                INSERT INTO graph_execution_nodes
+                    (tenant_id, execution_id, node_id, graph_id, session_id,
+                     position, task_id, run_id, child_session_id, status,
+                     detail, updated_at, store_generation)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (tenant_id, execution_id, node_id) DO UPDATE SET
+                    task_id = excluded.task_id,
+                    run_id = excluded.run_id,
+                    child_session_id = excluded.child_session_id,
+                    status = excluded.status,
+                    detail = excluded.detail,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    tenant_id, execution_id, node_id, str(graph_id),
+                    str(session_id), int(position), str(task_id), str(run_id),
+                    str(child_session_id), str(status), str(detail), now,
+                    self.store_generation,
+                ),
+            )
+            return GraphExecutionNodeRecord(
+                tenant_id=tenant_id, execution_id=execution_id,
+                node_id=node_id, graph_id=str(graph_id),
+                session_id=str(session_id), position=int(position),
+                task_id=str(task_id), run_id=str(run_id),
+                child_session_id=str(child_session_id), status=str(status),
+                detail=str(detail), updated_at=now,
+                store_generation=self.store_generation,
+            )
+
+    def list_graph_execution_nodes(
+        self, tenant_id: str, execution_id: str
+    ) -> "list[GraphExecutionNodeRecord]":
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        execution_id = _require_text(execution_id, "execution_id")
+        with self._lock:
+            self._ensure_open()
+            rows = self._connection.execute(
+                """
+                SELECT tenant_id, execution_id, node_id, graph_id, session_id,
+                       position, task_id, run_id, child_session_id, status,
+                       detail, updated_at, store_generation
+                FROM graph_execution_nodes
+                WHERE tenant_id = ? AND execution_id = ?
+                ORDER BY position ASC
+                """,
+                (tenant_id, execution_id),
+            ).fetchall()
+            return [
+                GraphExecutionNodeRecord(
+                    tenant_id=str(r["tenant_id"]),
+                    execution_id=str(r["execution_id"]),
+                    node_id=str(r["node_id"]),
+                    graph_id=str(r["graph_id"]),
+                    session_id=str(r["session_id"]),
+                    position=int(r["position"]),
+                    task_id=str(r["task_id"]),
+                    run_id=str(r["run_id"]),
+                    child_session_id=str(r["child_session_id"]),
+                    status=str(r["status"]),
+                    detail=str(r["detail"]),
+                    updated_at=str(r["updated_at"]),
+                    store_generation=str(r["store_generation"]),
+                )
+                for r in rows
+                if str(r["store_generation"]) == self.store_generation
+            ]
+
+    def list_graph_executions(
+        self, tenant_id: str, session_id: str, *, limit: int = 50
+    ) -> "list[tuple[str, str, str]]":
+        """Distinct executions in a session → (execution_id, graph_id,
+        last updated_at), newest first."""
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        session_id = _require_text(session_id, "session_id")
+        with self._lock:
+            self._ensure_open()
+            rows = self._connection.execute(
+                """
+                SELECT execution_id, graph_id, MAX(updated_at) AS last_at
+                FROM graph_execution_nodes
+                WHERE tenant_id = ? AND session_id = ?
+                GROUP BY execution_id, graph_id
+                ORDER BY last_at DESC LIMIT ?
+                """,
+                (tenant_id, session_id, int(limit)),
+            ).fetchall()
+            return [
+                (str(r["execution_id"]), str(r["graph_id"]), str(r["last_at"]))
+                for r in rows
+            ]
 
     def list_workflow_graphs(
         self, tenant_id: str, *, limit: int = 200

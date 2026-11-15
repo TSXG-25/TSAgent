@@ -15,6 +15,7 @@ import pytest
 from agent.service import AgentServiceError, EventType, RunStatus, ServiceErrorCode
 from agent.service.contracts import (
     ArtifactSummary,
+    ListWorkflowGraphsRequest,
     RunEvent,
     RunHandle,
     RunSnapshot,
@@ -2008,6 +2009,35 @@ def test_run_graph_task_nodes_and_success_dependency(
             # n1 的 Handoff 在父会话；n2 的 Handoff 在 n1 的派生会话。
             assert len(store.list_handoffs("t", "s")) == 1
             assert len(store.list_handoffs("t", n1[1])) == 1
+            # 持久执行关联 — execution_id 由接纳响应给出，节点行携带
+            # 真实 run_id/child_session_id 与终态，可重复查询。
+            from agent.service.contracts import GraphExecutionLookupRequest
+            execution_id = steps[0].execution_id
+            assert execution_id == "gexec:g-ok:g-1"
+
+            def _terminal():
+                rows = store.list_graph_execution_nodes("t", execution_id)
+                return rows if len(rows) == 2 and all(
+                    r.status == "COMPLETED" for r in rows) else None
+            nodes = await _wait(_terminal)
+            assert nodes[0].node_id == "n1" and nodes[1].node_id == "n2"
+            assert nodes[0].run_id and nodes[0].child_session_id.startswith("s:subtask:")
+            assert nodes[1].child_session_id.startswith(nodes[0].child_session_id)
+            summary = await service.get_graph_execution(
+                GraphExecutionLookupRequest(
+                    tenant_id="t", user_id="u", session_id="s",
+                    request_id="req-gx", execution_id=execution_id))
+            assert summary.execution_id == execution_id
+            assert summary.graph_id == "g-ok"
+            assert [st.status for st in summary.steps] == ["COMPLETED", "COMPLETED"]
+            assert summary.steps[0].run_id == nodes[0].run_id
+            assert summary.steps[1].session_id == nodes[1].child_session_id
+            # list_graph_executions — 本会话能重新发现这次执行。
+            execs = await service.list_graph_executions(
+                ListWorkflowGraphsRequest(
+                    tenant_id="t", user_id="u", session_id="s",
+                    request_id="req-gxl"))
+            assert any(e["execution_id"] == execution_id for e in execs)
             # 同 request_id 重跑 — 委派事实复用，不新增 Handoff。
             await service.run_graph(RunWorkflowGraphRequest(
                 tenant_id="t", user_id="u", session_id="s",
@@ -3049,6 +3079,8 @@ def test_read_artifact_preview_serves_guarded_binary(
     (workspace_root / "output" / "data.xyz").write_bytes(b"\x00" * 16)
     (workspace_root / "output" / "big.mp4").write_bytes(b"\x00" * 32)
     (workspace_root / "output" / "over.mp4").write_bytes(b"\x00" * 32)
+    (workspace_root / "output" / "icon.svg").write_text(
+        "<svg><text>sk-secret-123</text></svg>", encoding="utf-8")
 
     database = tmp_path / "runtime.sqlite"
     store = SqliteRuntimeStore.open(database)
@@ -3103,7 +3135,7 @@ def test_read_artifact_preview_serves_guarded_binary(
                 producer_stage_id="task:prev",
                 producer_task_id="prev",
             )
-            for name in ("shot.png", "data.xyz", "big.mp4", "over.mp4")
+            for name in ("shot.png", "data.xyz", "big.mp4", "over.mp4", "icon.svg")
         )
         view.transition_run_with_event(
             run_status="COMPLETED",
@@ -3156,6 +3188,16 @@ def test_read_artifact_preview_serves_guarded_binary(
         )
         assert big.result == "ok"  # 32 bytes < 8 MiB cap
 
+        # SVG 不走字节路径 — 它必须经 read_artifact 的脱敏文本投影；
+        # 白名单曾误收 .svg 导致原始字节绕开 redaction 外泄。
+        svg = await service.read_artifact_preview(
+            ReadArtifactRequest(
+                **lookup, request_id="req-p5", artifact_id="artifact-icon.svg"
+            )
+        )
+        assert svg.result == "unsupported"
+        assert svg.data_b64 == ""
+
         # file grew past the cap after the commit — size check reads
         # current bytes, not the committed digest
         (workspace_root / "output" / "over.mp4").write_bytes(
@@ -3173,3 +3215,101 @@ def test_read_artifact_preview_serves_guarded_binary(
         _run(scenario())
     finally:
         _run(service.close())
+
+
+def test_subprocess_ws02_workspace_and_delegation_chain(tmp_path: Path) -> None:
+    """WS-02 真实子进程验收（离线）：python -m agent.service.local_sidecar
+    通过 stdio JSONL 完成 文件写/读/列 + 父 Run → delegate_run →
+    子 Run 接纳 的完整链路；后台 provider 不要求可用，断言的是
+    目录、持久事实与身份合同。"""
+    process = _spawn_sidecar(tmp_path, extra_env={"TSAGENT_LLM_TIMEOUT": "0.05"})
+    base = {"tenant_id": "tenant-1", "user_id": "user-1", "session_id": "s-ws02"}
+    ws_root = tmp_path / "workspace"
+    try:
+        _send(process, {"id": "h", "method": "health", "params": {}})
+        assert _read_response(process)["ok"] is True
+
+        # 文件写 → 读 → 列：同一会话 workspace。
+        _send(process, {
+            "id": "w1", "method": "write_workspace_file",
+            "params": {**base, "request_id": "w1", "path": "notes.txt", "content": "ws02-body"},
+        })
+        wrote = _read_response(process)
+        assert wrote["ok"] is True, wrote
+        _send(process, {
+            "id": "r1", "method": "read_workspace_file",
+            "params": {**base, "request_id": "r1", "path": "notes.txt"},
+        })
+        read = _read_response(process)
+        assert read["ok"] is True, read
+        assert read["result"]["text"] == "ws02-body"
+        assert read["result"]["workspace_root"].startswith(str(ws_root))
+        _send(process, {
+            "id": "l1", "method": "list_workspace_files",
+            "params": {**base, "request_id": "l1"},
+        })
+        listed = _read_response(process)
+        assert listed["ok"] is True, listed
+        assert any(f["path"] == "notes.txt" for f in listed["result"])
+
+        # 父 Run 接纳 — provider 不可达只影响后台终态，不影响身份。
+        _send(process, {
+            "id": "s1", "method": "start_run",
+            "params": {**base, "request_id": "p1", "request_text": "父任务",
+                       "origin_planet": "uranus"},
+        })
+        parent = _read_response(process)
+        assert parent["ok"] is True, parent
+        parent_run = parent["result"]["run_id"]
+
+        # 显式委派 → 子 task + handoff，child session 由 taskId 派生。
+        _send(process, {
+            "id": "d1", "method": "delegate_run",
+            "params": {**base, "request_id": "d1", "parent_run_id": parent_run,
+                       "request_text": "子任务", "target_planet": "neptune"},
+        })
+        delegation = _read_response(process)
+        assert delegation["ok"] is True, delegation
+        child_task = delegation["result"]["task_id"]
+        assert delegation["result"]["workspace_root"]
+
+        child_session = f"s-ws02:subtask:{child_task}"
+        _send(process, {
+            "id": "s2", "method": "start_run",
+            "params": {**base, "session_id": child_session, "request_id": "s2",
+                       "request_text": delegation["result"]["request_text"],
+                       "task_id": child_task,
+                       "origin_planet": "neptune",
+                       "workspace_root": delegation["result"]["workspace_root"]},
+        })
+        child = _read_response(process)
+        assert child["ok"] is True, child
+        child_run = child["result"]["run_id"]
+
+        # 子 Run 快照携带 task_id/origin_planet — 归属是持久事实。
+        _send(process, {
+            "id": "g2", "method": "get_run",
+            "params": {**base, "session_id": child_session, "request_id": "g2",
+                       "run_id": child_run},
+        })
+        snap = _read_response(process)
+        assert snap["ok"] is True, snap
+        assert snap["result"]["task_id"] == child_task
+        assert snap["result"]["origin_planet"] == "neptune"
+        # handoff 持久记录子 Run 目标。
+        _send(process, {
+            "id": "ho", "method": "list_handoffs",
+            "params": {**base, "request_id": "ho"},
+        })
+        handoffs = _read_response(process)
+        assert handoffs["ok"] is True, handoffs
+        assert any(
+            h["source_run_id"] == parent_run and h["target_task_id"] == child_task
+            for h in handoffs["result"]
+        ), handoffs["result"]
+
+        _send(process, {"id": "bye", "method": "shutdown", "params": {}})
+        assert _read_response(process)["ok"] is True
+        assert process.wait(timeout=60) == 0
+    finally:
+        _terminate(process)

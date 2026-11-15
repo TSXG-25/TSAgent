@@ -63,6 +63,9 @@ import {
   type WorkflowGraphSummary,
   type UpsertWorkflowGraphRequest,
   type ListWorkflowGraphsRequest,
+  type GraphExecutionLookupRequest,
+  type GraphExecutionRef,
+  type GraphExecutionSummary,
   type GraphRunStepSummary,
   type RunWorkflowGraphRequest,
   type MotifSummary,
@@ -936,6 +939,44 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
       runId: optionalString(raw.run_id) ?? "",
       sessionId: optionalString(raw.session_id) ?? "",
       status: optionalString(raw.status) ?? "",
+      executionId: optionalString(raw.execution_id) ?? "",
+      detail: optionalString(raw.detail) ?? "",
+    }));
+  }
+
+  async getGraphExecution(request: GraphExecutionLookupRequest): Promise<GraphExecutionSummary> {
+    const raw = (await this.call("get_graph_execution", {
+      tenant_id: request.tenantId, user_id: this.identity.userId,
+      session_id: request.sessionId, request_id: request.requestId,
+      execution_id: request.executionId,
+    })) as Record<string, unknown>;
+    if (!isRecord(raw)) throw new Error("get_graph_execution result is not an object");
+    const steps = (Array.isArray(raw.steps) ? raw.steps : []) as Array<Record<string, unknown>>;
+    return {
+      executionId: requiredString(raw.execution_id, "execution_id"),
+      graphId: optionalString(raw.graph_id) ?? "",
+      sessionId: optionalString(raw.session_id) ?? "",
+      steps: steps.map((s) => ({
+        nodeId: requiredString(s.node_id, "node_id"),
+        taskId: optionalString(s.task_id) ?? "",
+        runId: optionalString(s.run_id) ?? "",
+        sessionId: optionalString(s.session_id) ?? "",
+        status: optionalString(s.status) ?? "",
+        executionId: optionalString(s.execution_id) ?? "",
+        detail: optionalString(s.detail) ?? "",
+      })),
+    };
+  }
+
+  async listGraphExecutions(request: { tenantId: string; sessionId: string; requestId: string }): Promise<GraphExecutionRef[]> {
+    const result = (await this.call("list_graph_executions", {
+      tenant_id: request.tenantId, user_id: this.identity.userId,
+      session_id: request.sessionId, request_id: request.requestId,
+    })) as Array<Record<string, unknown>>;
+    return (Array.isArray(result) ? result : []).map((raw) => ({
+      executionId: requiredString(raw.execution_id, "execution_id"),
+      graphId: optionalString(raw.graph_id) ?? "",
+      updatedAt: optionalString(raw.updated_at) ?? "",
     }));
   }
 

@@ -64,6 +64,8 @@ class LocalTransportMethod(str, Enum):
     UPSERT_WORKFLOW_GRAPH = "upsert_workflow_graph"
     LIST_WORKFLOW_GRAPHS = "list_workflow_graphs"
     RUN_GRAPH = "run_graph"
+    GET_GRAPH_EXECUTION = "get_graph_execution"
+    LIST_GRAPH_EXECUTIONS = "list_graph_executions"
     CREATE_MOTIF = "create_motif"
     ASSIGN_MOTIF = "assign_motif"
     RESOLVE_MOTIF = "resolve_motif"

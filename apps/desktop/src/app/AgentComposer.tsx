@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { submitToPlanet } from "./delegate";
-import { selectWorkspaceRun } from "./workspaceSelection";
+import { selectWorkspaceRun, useWorkspaceCurrentRun } from "./workspaceSelection";
 import { Icon, requestIdForRun } from "./ui";
 import type { RunCtx } from "./runCtx";
 import { draftKey, useDraft, clearDraftIfUnchanged } from "./draftStore";
@@ -84,7 +84,13 @@ export default function AgentComposer({ ctx, planet, placeholder, contextPrefix 
   const R = 9, C = 2 * Math.PI * R;
   const [model, setModel] = useState("default");
   const [modelOpen, setModelOpen] = useState(false);
-  const runHere = ctx.activeRun && ctx.activeRun.sessionId === ctx.sessionId ? ctx.activeRun : null;
+  // Workstation composers control the run selected on *this* planet's
+  // rail — never the session-global activeRun, which may belong to
+  // another workstation's task. The sun composer keeps the global view.
+  const scopedRun = useWorkspaceCurrentRun(ctx, target);
+  const runHere = planet
+    ? (scopedRun && scopedRun.sessionId === ctx.sessionId ? scopedRun : null)
+    : (ctx.activeRun && ctx.activeRun.sessionId === ctx.sessionId ? ctx.activeRun : null);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -197,22 +203,22 @@ export default function AgentComposer({ ctx, planet, placeholder, contextPrefix 
             </div>
           )}
         </div>
-        {runHere && BUSY.has(runHere.status) ? (
+        {runHere && BUSY.has(runHere.status) && (
           <>
           <button aria-label={t("composer.pause")} className="ac-send ac-pause" onClick={() => { void ctx.controller.pauseRun(runHere.runId).catch(() => {}); }} title={t("composer.pause")} type="button">❚❚</button>
           <button aria-label={t("composer.stop")} className="ac-send ac-stop" onClick={() => { void ctx.controller.cancelRun(runHere.runId).catch(() => {}); }} title={t("composer.stop")} type="button">
             <Icon name="x" size={12} />
           </button>
           </>
-        ) : runHere?.status === "cancelling" ? (
+        )}
+        {runHere?.status === "cancelling" && (
           <button className="ac-send ac-stop" disabled title={t("composer.cancelling")} type="button">
             <Icon name="x" size={12} />
           </button>
-        ) : (
-          <button aria-label={t("composer.send-enter")} className="ac-send" disabled={busy || !text.trim()} title={t("composer.send-enter")} type="submit">
-            <Icon name="send" size={14} />
-          </button>
         )}
+        <button aria-label={t("composer.send-enter")} className="ac-send" disabled={busy || !text.trim()} title={t("composer.send-enter")} type="submit">
+          <Icon name="send" size={14} />
+        </button>
       </div>
       {text.endsWith("@") && (
         <div className="ac-atmenu">

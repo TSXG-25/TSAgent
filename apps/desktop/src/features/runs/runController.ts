@@ -79,6 +79,10 @@ export class RunController {
     return this.controlOps.get(this.activeRunId) ?? "idle";
   }
   private initialization: Promise<void> | null = null;
+  // Monotonic catalog batch — a reload issued while an earlier catalog
+  // load is in flight invalidates it: a late A response can never commit
+  // its runs or its default selection onto session B's catalog.
+  private catalogSeq = 0;
 
   constructor(
     private readonly client: DesktopAgentServiceClient,
@@ -263,15 +267,18 @@ export class RunController {
   }
 
   private async initializeCatalog(): Promise<void> {
+    const seq = ++this.catalogSeq;
     this.loading = true;
     this.currentError = null;
     this.emit();
     try {
       await this.client.ready();
       const snapshots = await this.client.listRuns();
+      if (seq !== this.catalogSeq) return; // superseded — drop this batch
       this.runs.clear();
       this.cursors.clear();
       const views = await Promise.all(snapshots.map((snapshot) => this.hydrateRun(snapshot, -1)));
+      if (seq !== this.catalogSeq) return; // hydration outlived a reload
       for (const view of views) this.runs.set(view.runId, view);
       this.activeRunId = views.some((view) => view.runId === this.activeRunId)
         ? this.activeRunId
@@ -279,10 +286,12 @@ export class RunController {
       this.emit();
       for (const view of views) this.startPollingIfLive(view);
     } catch (error) {
-      this.setError(error);
+      if (seq === this.catalogSeq) this.setError(error);
     } finally {
-      this.loading = false;
-      this.emit();
+      if (seq === this.catalogSeq) {
+        this.loading = false;
+        this.emit();
+      }
     }
   }
 

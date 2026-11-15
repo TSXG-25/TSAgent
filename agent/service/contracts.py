@@ -1969,6 +1969,8 @@ class GraphRunStepSummary:
     run_id: str
     session_id: str
     status: str = ""
+    execution_id: str = ""
+    detail: str = ""
 
     def to_dict(self) -> dict[str, JSONValue]:
         return {
@@ -1977,6 +1979,57 @@ class GraphRunStepSummary:
             "run_id": self.run_id,
             "session_id": self.session_id,
             "status": self.status,
+            "execution_id": self.execution_id,
+            "detail": self.detail,
+        }
+
+
+@dataclass(frozen=True)
+class GraphExecutionLookupRequest:
+    """Re-query one graph execution's durable node facts — the execution
+    id returned by run_graph at admission is the lookup key."""
+
+    tenant_id: str
+    user_id: str
+    session_id: str
+    request_id: str
+    execution_id: str
+
+    def __post_init__(self) -> None:
+        _required_identifier(self.tenant_id, "tenant_id")
+        _required_identifier(self.user_id, "user_id")
+        _required_identifier(self.session_id, "session_id")
+        _required_identifier(self.request_id, "request_id")
+        _required_identifier(self.execution_id, "execution_id")
+
+    @classmethod
+    def from_dict(
+        cls, value: Mapping[str, Any]
+    ) -> "GraphExecutionLookupRequest":
+        return cls(
+            tenant_id=str(value.get("tenant_id", "")),
+            user_id=str(value.get("user_id", "")),
+            session_id=str(value.get("session_id", "")),
+            request_id=str(value.get("request_id", "")),
+            execution_id=str(value.get("execution_id", "")),
+        )
+
+
+@dataclass(frozen=True)
+class GraphExecutionSummary:
+    """One graph execution's identity + node steps."""
+
+    execution_id: str
+    graph_id: str
+    session_id: str
+    steps: tuple[GraphRunStepSummary, ...]
+
+    def to_dict(self) -> dict[str, JSONValue]:
+        return {
+            "execution_id": self.execution_id,
+            "graph_id": self.graph_id,
+            "session_id": self.session_id,
+            "steps": [step.to_dict() for step in self.steps],
         }
 
 

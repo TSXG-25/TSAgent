@@ -78,6 +78,28 @@ class WorkflowGraphRecord:
 
 
 @dataclass(frozen=True)
+class GraphExecutionNodeRecord:
+    """One node's durable execution fact inside a graph run — the mapping
+    between canvas node and delegated child Run that handoffs alone
+    cannot rebuild (which execution produced it, plus PENDING/SKIPPED
+    nodes that never created a Run)."""
+
+    tenant_id: str
+    execution_id: str
+    node_id: str
+    graph_id: str
+    session_id: str
+    position: int
+    task_id: str
+    run_id: str
+    child_session_id: str
+    status: str
+    detail: str
+    updated_at: str
+    store_generation: str
+
+
+@dataclass(frozen=True)
 class EvaluationRecord:
     """An experiment verdict: baseline vs candidate with a score."""
 

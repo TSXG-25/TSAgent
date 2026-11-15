@@ -34,35 +34,45 @@ export default function MarsWorkspace({ ctx }: { ctx: RunCtx }) {
   // The session binds the document (path + workspace identity + baseline +
   // draft); it survives selection churn and rejects writes when the bound
   // workspace or baseline no longer matches.
+  // 按当前 tenant:session 取缓存 —— 切会话命中自己的文档/草稿。
+  const sessionKey = `${service.identity.tenantId}:${service.identity.sessionId}`;
   const session = useMemo(() => {
-    const key = `${service.identity.tenantId}:${service.identity.sessionId}`;
-    let cached = sessionCache.get(key);
+    let cached = sessionCache.get(sessionKey);
     if (!cached || cached.serviceRef !== service) {
       cached = new ForgeDocumentSession(
         service,
         () => ({ tenantId: service.identity.tenantId, sessionId: service.identity.sessionId }),
-        () => bump((v) => v + 1),
       );
-      sessionCache.set(key, cached);
+      sessionCache.set(sessionKey, cached);
     }
     return cached;
-  }, [service]);
+  }, [service, sessionKey]);
+  // 订阅随本次挂载绑定 —— 缓存对象跨页面存活，旧组件的回调不能继续收
+  // 通知（否则回到本页时编辑不再刷新受控输入/dirty/保存态）。
+  useEffect(() => {
+    session.listener = () => bump((v) => v + 1);
+    bump((v) => v + 1); // 进入页面时同步缓存文档状态
+    return () => { session.listener = null; };
+  }, [session]);
   const doc = session.doc;
 
   const sessionId = ctx.sessionId;
   useEffect(() => {
-    const identity = { tenantId: service.identity.tenantId, sessionId };
     service
       .listWorkspaceFiles({
-        ...identity,
+        tenantId: service.identity.tenantId,
+        sessionId,
         requestId: requestIdForRun(0),
       })
       .then((list) => {
-        // a slow A response must not land on session B's list
-        if (identity.sessionId === ctx.sessionId) setFiles(list);
+        // a slow A response must not land on session B's list — compare
+        // against the live identity, not a second stale closure value
+        if (service.identity.sessionId === sessionId) setFiles(list);
       })
-      .catch((e) => setErr(String(e)));
-  }, [service, sessionId, ctx.sessionId]);
+      .catch((e) => {
+        if (service.identity.sessionId === sessionId) setErr(String(e));
+      });
+  }, [service, sessionId]);
 
   async function openFile(path: string) {
     setErr(null);

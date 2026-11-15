@@ -53,6 +53,8 @@ export const LOCAL_TRANSPORT_METHODS = [
   "upsert_workflow_graph",
   "list_workflow_graphs",
   "run_graph",
+  "get_graph_execution",
+  "list_graph_executions",
   "create_motif",
   "assign_motif",
   "resolve_motif",

@@ -8,6 +8,7 @@ import { CapNotInstalled } from "../../design-system/WorkspaceFrame";
 import { t, type I18nKey } from "../../app/i18n";
 import type { RunCtx } from "../../app/runCtx";
 import { WorkspaceTasks } from "../../app/WorkspaceTasks";
+import { workspaceRuns } from "../../app/workspaceSelection";
 import type { ArtifactPreview } from "../../types/service";
 
 /** Media Studio per hand-drawn spec §10 — type tabs | media canvas | ops.
@@ -16,6 +17,12 @@ import type { ArtifactPreview } from "../../types/service";
 const MEDIA = /\.(svg|png|jpe?g|gif|webp|mp4|webm|wav|mp3|glb)$/i;
 const KINDS = { image: /\.(svg|png|jpe?g|gif|webp)$/i, video: /\.(mp4|webm)$/i, audio: /\.(wav|mp3)$/i, "3d": /\.glb$/i, all: /.*/ } as const;
 const TABS: Record<keyof typeof KINDS, I18nKey> = { image: "nep.tab-image", video: "nep.tab-video", audio: "nep.tab-audio", "3d": "nep.tab-3d", all: "nep.tab-all" };
+
+/** SVG goes through the redacted text read — its bytes can carry
+ *  sensitive content that the raw binary path must never expose. */
+function svgDataUrl(text: string): string {
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(text)}`;
+}
 
 function PreviewBody({ preview, name }: { preview: ArtifactPreview; name: string }) {
   if (preview.result !== "ok") {
@@ -39,24 +46,44 @@ export default function NeptuneWorkspace({ ctx }: { ctx: RunCtx }) {
   const [sel, setSel] = useState<string | null>(null);
   const [op, setOp] = useState<{ ok: boolean; text: string } | null>(null);
 
-  const media = useMemo(() => runs.flatMap((r) => r.artifacts.filter((a) => MEDIA.test(a.path)).map((a) => ({ run: r, artifact: a }))), [runs]);
+  // 本台产物为默认范围 —— 其他工作台的媒体只有明确勾选才进入列表。
+  const [allRuns, setAllRuns] = useState(false);
+  const media = useMemo(() => {
+    const scope = allRuns ? runs : workspaceRuns(ctx, "neptune");
+    return scope.flatMap((r) => r.artifacts.filter((a) => MEDIA.test(a.path)).map((a) => ({ run: r, artifact: a })));
+  }, [runs, allRuns, ctx]);
   const visible = media.filter((m) => KINDS[tab].test(m.artifact.path));
   const cur = visible.find((m) => m.artifact.artifactId === sel) ?? visible[0];
-  const [content, setContent] = useState<ArtifactPreview | null>(null);
+  const isSvg = cur?.artifact.path.endsWith(".svg") ?? false;
+  const [content, setContent] = useState<
+    | { kind: "svg"; text: string; stale: boolean; result: string }
+    | { kind: "bin"; preview: ArtifactPreview }
+    | null
+  >(null);
   const [readErr, setReadErr] = useState<string | null>(null);
   useEffect(() => {
     if (!cur) { setContent(null); return; }
     let staleFlag = false;
     setContent(null); setReadErr(null);
-    void service.readArtifactPreview({
+    const req = {
       tenantId: service.identity.tenantId,
       sessionId: cur.run.sessionId,
       runId: cur.run.runId,
       artifactId: cur.artifact.artifactId,
-    }).then((c) => { if (!staleFlag) setContent(c); })
-      .catch((e) => { if (!staleFlag) setReadErr(String(e instanceof Error ? e.message : e)); });
+    };
+    const apply = (fn: () => void) => { if (!staleFlag) fn(); };
+    const fail = (e: unknown) => apply(() => setReadErr(String(e instanceof Error ? e.message : e)));
+    if (isSvg) {
+      void service.readArtifact(req)
+        .then((c) => apply(() => setContent({ kind: "svg", text: c.text, stale: c.stale, result: c.result })))
+        .catch(fail);
+    } else {
+      void service.readArtifactPreview(req)
+        .then((p) => apply(() => setContent({ kind: "bin", preview: p })))
+        .catch(fail);
+    }
     return () => { staleFlag = true; };
-  }, [service, cur?.artifact.artifactId, cur?.run.runId, cur?.run.sessionId]);
+  }, [service, cur?.artifact.artifactId, cur?.run.runId, cur?.run.sessionId, isSvg]);
 
   return (
     <WorkspaceFrame scene={scene} ctx={ctx}>
@@ -70,11 +97,15 @@ export default function NeptuneWorkspace({ ctx }: { ctx: RunCtx }) {
           <div className="media-canvas">
             {cur ? (
               <div className="media-svg">
-                {content?.stale && <p className="omni-empty">{t("art.stale")}</p>}
+                {(content?.kind === "svg" ? content.stale : content?.preview.stale) && <p className="omni-empty">{t("art.stale")}</p>}
                 {readErr && <p className="omni-empty">{readErr}</p>}
-                {content
-                  ? <PreviewBody name={cur.artifact.path.split("/").pop() ?? ""} preview={content} />
-                  : !readErr && <p className="omni-empty">…</p>}
+                {content?.kind === "svg" && (
+                  content.result !== "ok"
+                    ? <p className="omni-empty">{content.result === "missing" ? t("art.missing") : content.result === "unsupported" ? t("art.unsupported") : t("art.preview-failed", { msg: content.text })}</p>
+                    : <img alt={cur.artifact.path.split("/").pop()} src={svgDataUrl(content.text)} />
+                )}
+                {content?.kind === "bin" && <PreviewBody name={cur.artifact.path.split("/").pop() ?? ""} preview={content.preview} />}
+                {!content && !readErr && <p className="omni-empty">…</p>}
               </div>
             ) : <div className="empty-state"><p>{t("nep.no-artifacts", { type: t(TABS[tab]) })}</p></div>}
             {cur && (
@@ -86,7 +117,11 @@ export default function NeptuneWorkspace({ ctx }: { ctx: RunCtx }) {
           <AgentComposer ctx={ctx} planet="neptune" placeholder={t("nep.composer-ph")} />
         </div>
         <aside className="media-side">
-          <h4 className="ws-mod">{t("nep.works")}</h4>
+          <h4 className="ws-mod">{t("nep.works")}
+            <button className="ven-link" onClick={() => setAllRuns((v) => !v)} title={t("nep.scope-hint")} type="button">
+              {allRuns ? t("nep.scope-all") : t("nep.scope-own")}
+            </button>
+          </h4>
           {visible.map(({ artifact: a }) => (
             <button className={`nep-thumb ${cur?.artifact.artifactId === a.artifactId ? "on" : ""}`} key={a.artifactId} onClick={() => setSel(a.artifactId)} type="button">
               <span className="nep-thumb-kind">{a.path.split(".").pop()?.toUpperCase()}</span>

@@ -1787,12 +1787,26 @@ class AgentService:
         order = _topo_task_order(task_nodes, edges)
         from .contracts import GraphRunStepSummary
 
+        # 一次图执行的持久身份 — 节点→子 Run 的关联无法从 handoff 重建
+        # （SKIPPED/PENDING 不产生 handoff），故在执行中逐节点落事实行。
+        execution_id = f"gexec:{request.graph_id}:{request.request_id}"
+        for position, node in enumerate(order):
+            self._store.upsert_graph_execution_node(
+                request.tenant_id,
+                execution_id,
+                str(node["id"]),
+                graph_id=request.graph_id,
+                session_id=request.session_id,
+                position=position,
+                status="PENDING",
+            )
+
         # 图执行在 Service 管理的后台任务里推进 — run_graph 在接纳
         # （整图预检 + 计划）后返回，不持有 JSONL 控制流等待子 Run。
         import asyncio
 
         task = asyncio.create_task(
-            self._graph_execute(request, order, edges, inputs),
+            self._graph_execute(request, execution_id, order, edges, inputs),
             name=f"graph:{request.graph_id}:{request.request_id}",
         )
         self._graph_tasks.add(task)
@@ -1804,13 +1818,59 @@ class AgentService:
                 run_id="",
                 session_id="",
                 status="PENDING",
+                execution_id=execution_id,
             )
             for node in order
+        ]
+
+    async def get_graph_execution(self, request: Any) -> Any:
+        """Re-query one execution's durable node facts — Run ids and
+        statuses are projected from the committed node rows, not from the
+        admission response."""
+        self._ensure_open()
+        from .contracts import GraphExecutionSummary, GraphRunStepSummary
+
+        nodes = self._store.list_graph_execution_nodes(
+            request.tenant_id, request.execution_id
+        )
+        return GraphExecutionSummary(
+            execution_id=request.execution_id,
+            graph_id=nodes[0].graph_id if nodes else "",
+            session_id=nodes[0].session_id if nodes else "",
+            steps=tuple(
+                GraphRunStepSummary(
+                    node_id=n.node_id,
+                    task_id=n.task_id,
+                    run_id=n.run_id,
+                    session_id=n.child_session_id,
+                    status=n.status,
+                    execution_id=n.execution_id,
+                    detail=n.detail,
+                )
+                for n in nodes
+            ),
+        )
+
+    async def list_graph_executions(self, request: Any) -> list[Any]:
+        """Distinct executions for a session — the workspace re-queries
+        each by execution_id for live node state."""
+        self._ensure_open()
+        records = self._store.list_graph_executions(
+            request.tenant_id, request.session_id
+        )
+        return [
+            {
+                "execution_id": execution_id,
+                "graph_id": graph_id,
+                "updated_at": updated_at,
+            }
+            for execution_id, graph_id, updated_at in records
         ]
 
     async def _graph_execute(
         self,
         request: Any,
+        execution_id: str,
         order: list,
         edges: list,
         inputs: dict[str, str],
@@ -1849,6 +1909,15 @@ class AgentService:
                     # 成功依赖：前任未完成的节点不被接纳 — 不产生
                     # Task/Handoff/Run；无依赖的兄弟分支继续。
                     results[node_id] = "SKIPPED"
+                    self._store.upsert_graph_execution_node(
+                        request.tenant_id,
+                        execution_id,
+                        node_id,
+                        graph_id=request.graph_id,
+                        session_id=request.session_id,
+                        status="SKIPPED",
+                        detail="predecessor not COMPLETED",
+                    )
                     continue
                 request_text = str(node.get("request_text", "")).strip()
                 for key, value in inputs.items():
@@ -1878,6 +1947,19 @@ class AgentService:
                     f"{delegate_session}{SUBTASK_SESSION_MARKER}"
                     f"{delegation['task_id']}"
                 )
+                # 节点→子 Run 关联先落事实行，再启动 — 后台状态查询在
+                # Run 存活期间就能看到真实身份。
+                self._store.upsert_graph_execution_node(
+                    request.tenant_id,
+                    execution_id,
+                    node_id,
+                    graph_id=request.graph_id,
+                    session_id=request.session_id,
+                    task_id=str(delegation["task_id"]),
+                    run_id="",
+                    child_session_id=child_session,
+                    status="ADMITTED",
+                )
                 started = await self.start_run(
                     StartRunRequest(
                         tenant_id=request.tenant_id,
@@ -1897,6 +1979,17 @@ class AgentService:
                     request.tenant_id,
                     delegation["handoff_id"],
                     started.run_id,
+                )
+                self._store.upsert_graph_execution_node(
+                    request.tenant_id,
+                    execution_id,
+                    node_id,
+                    graph_id=request.graph_id,
+                    session_id=request.session_id,
+                    task_id=str(delegation["task_id"]),
+                    run_id=started.run_id,
+                    child_session_id=child_session,
+                    status="RUNNING",
                 )
                 managed = self._runs.get(started.run_id)
                 if managed is not None and managed.task is not None:
@@ -1918,6 +2011,17 @@ class AgentService:
                 results[node_id] = snapshot.status.value
                 run_by_node[node_id] = started.run_id
                 session_by_node[node_id] = child_session
+                self._store.upsert_graph_execution_node(
+                    request.tenant_id,
+                    execution_id,
+                    node_id,
+                    graph_id=request.graph_id,
+                    session_id=request.session_id,
+                    task_id=str(delegation["task_id"]),
+                    run_id=started.run_id,
+                    child_session_id=child_session,
+                    status=snapshot.status.value,
+                )
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -2946,7 +3050,8 @@ class AgentService:
         ".jpeg": "image/jpeg",
         ".gif": "image/gif",
         ".webp": "image/webp",
-        ".svg": "image/svg+xml",
+        # SVG stays on the redacted text path (read_artifact) — raw bytes
+        # would bypass sensitive-content projection.
         ".mp4": "video/mp4",
         ".webm": "video/webm",
         ".mp3": "audio/mpeg",

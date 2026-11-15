@@ -7,24 +7,16 @@ import { t } from "../../app/i18n";
 import type { RunCtx } from "../../app/runCtx";
 import { WorkspaceTasks } from "../../app/WorkspaceTasks";
 import { useWorkspaceCurrentRun } from "../../app/workspaceSelection";
-import type { GraphRunStepSummary, HandoffSummary, ProfileSummary, RunStatus, SkillSummary, WorkflowGraphSummary } from "../../types/service";
+import type { GraphExecutionRef, GraphExecutionSummary, ProfileSummary, SkillSummary, WorkflowGraphSummary } from "../../types/service";
 
 /** Laboratory per hand-drawn spec §9 — element palette | workflow canvas
- *  (editable delegation nodes + save) | workflow list + durable child-run
- *  status. Delegation status is re-read from run_handoffs, not from the
- *  one-shot admission response. */
+ *  (editable delegation nodes + save) | workflow list + durable graph
+ *  execution status. Execution state comes from the persisted
+ *  node→run/session rows, not from the one-shot PENDING admission
+ *  response or session-wide handoff listing. */
 const ELEMS = ["read_file", "web_search", "llm", "write_file", "approval", "condition"];
 
-/** Child runs execute in `<delegate session>:subtask:<taskId>` — mirrors
- *  SUBTASK_SESSION_MARKER in agent/service/service.py. */
-function subtaskSessionId(sessionId: string, taskId: string): string {
-  return `${sessionId}:subtask:${taskId}`;
-}
-
-interface DelegationRow {
-  handoff: HandoffSummary;
-  status: RunStatus | "";
-}
+const TERMINAL = /^(COMPLETED|FAILED|CANCELLED|TIMED_OUT|SKIPPED)/;
 
 export default function UranusWorkspace({ ctx }: { ctx: RunCtx }) {
   const { service } = ctx;
@@ -34,8 +26,9 @@ export default function UranusWorkspace({ ctx }: { ctx: RunCtx }) {
   const [skills, setSkills] = useState<SkillSummary[]>([]);
   const [graphs, setGraphs] = useState<WorkflowGraphSummary[]>([]);
   const [nodes, setNodes] = useState<string[]>([]);
-  const [lastSteps, setLastSteps] = useState<GraphRunStepSummary[]>([]);
-  const [delegations, setDelegations] = useState<DelegationRow[]>([]);
+  const [executions, setExecutions] = useState<GraphExecutionRef[]>([]);
+  const [execSel, setExecSel] = useState<string | null>(null);
+  const [execution, setExecution] = useState<GraphExecutionSummary | null>(null);
   const [name, setName] = useState("");
   const [err, setErr] = useState<string | null>(null);
 
@@ -45,28 +38,30 @@ export default function UranusWorkspace({ ctx }: { ctx: RunCtx }) {
     service.listProfiles(req()).then(setProfiles).catch((e) => setErr(String(e)));
     service.listSkills(req()).then(setSkills).catch((e) => setErr(String(e)));
     service.listWorkflowGraphs(req()).then(setGraphs).catch((e) => setErr(String(e)));
+    service.listGraphExecutions(req()).then(setExecutions).catch((e) => setErr(String(e)));
   }, [service, req]);
 
-  /** 后台执行状态查询 — run_graph 接纳后立刻返回 PENDING，真实进度
-   *  从持久化 run_handoffs + 各子 Run 的 head 重新读取。 */
-  const refreshDelegations = useCallback(async () => {
+  /** 执行状态由持久化节点行投影 — 可重复查询，重启后仍为真实态。 */
+  const refreshExecution = useCallback(async (executionId: string) => {
     try {
-      const handoffs = await service.listHandoffs({ ...req(), limit: 200 });
-      const rows = await Promise.all(handoffs.map(async (handoff) => {
-        if (!handoff.targetRunId || !handoff.targetTaskId) return { handoff, status: "" as RunStatus | "" };
-        try {
-          const snap = await service.getRun({
-            tenantId: service.identity.tenantId,
-            sessionId: subtaskSessionId(sessionId, handoff.targetTaskId),
-            runId: handoff.targetRunId,
-          });
-          return { handoff, status: snap.status };
-        } catch { return { handoff, status: "" as RunStatus | "" }; }
-      }));
-      setDelegations(rows);
-    } catch (e) { setErr(String(e)); }
-  }, [service, req, sessionId]);
-  useEffect(() => { void refreshDelegations(); }, [refreshDelegations]);
+      const summary = await service.getGraphExecution({ ...req(), executionId });
+      setExecution(summary);
+      return summary;
+    } catch (e) { setErr(String(e)); return null; }
+  }, [service, req]);
+
+  const selectExecution = useCallback((id: string) => {
+    setExecSel(id);
+    void refreshExecution(id);
+  }, [refreshExecution]);
+
+  // 未终态的执行自动轮询 — 终态后停止。
+  useEffect(() => {
+    if (!execSel || !execution) return;
+    if (execution.steps.every((s) => TERMINAL.test(s.status ?? ""))) return;
+    const timer = globalThis.setInterval(() => { void refreshExecution(execSel); }, 2000);
+    return () => globalThis.clearInterval(timer);
+  }, [execSel, execution, refreshExecution]);
 
   async function save() {
     if (!name.trim() || nodes.every((n) => !n.trim())) return;
@@ -89,9 +84,9 @@ export default function UranusWorkspace({ ctx }: { ctx: RunCtx }) {
     if (!currentRun) return;
     try {
       const steps = await service.runGraph({ ...req(), graphId, parentRunId: currentRun.runId });
-      setLastSteps(steps);
-      // 接纳响应只有 PENDING — 拉一次持久化 handoff 状态。
-      void refreshDelegations();
+      const executionId = steps[0]?.executionId;
+      setExecutions(await service.listGraphExecutions(req()));
+      if (executionId) selectExecution(executionId);
     } catch (e) { setErr(String(e)); }
   }
 
@@ -131,7 +126,7 @@ export default function UranusWorkspace({ ctx }: { ctx: RunCtx }) {
           </div>
           {err && <p className="omni-empty" style={{ color: "var(--st-danger,#ff5a4f)" }}>{err}</p>}
         </main>
-        {/* workflow list + delegation status + profiles */}
+        {/* workflow list + execution status + profiles */}
         <aside className="lab-side">
           <h4 className="ws-mod">{t("ura.workflows")}</h4>
           {graphs.map((g) => (
@@ -141,32 +136,27 @@ export default function UranusWorkspace({ ctx }: { ctx: RunCtx }) {
             </div>
           ))}
           {graphs.length === 0 && <p className="omni-empty">{t("ura.no-graphs")}</p>}
-          {lastSteps.length > 0 && (
-            <div className="lab-steps">
-              {lastSteps.map((s) => (
-                <div className="lab-graph-row" key={s.nodeId}>
-                  <strong>{s.nodeId}</strong>
-                  <small>{s.status || "PENDING"}</small>
-                  {s.runId && (
-                    <button className="ven-link" onClick={() => ctx.openRun(s.runId, s.sessionId)} title={t("uranus.goto-run")} type="button">→ {s.runId}</button>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
           <h4 className="ws-mod">{t("ura.delegations")}
-            <button className="ven-link" onClick={() => void refreshDelegations()} title={t("ura.refresh-status")} type="button">↻</button>
+            <button className="ven-link" onClick={() => { if (execSel) void refreshExecution(execSel); }} title={t("ura.refresh-status")} type="button">↻</button>
           </h4>
-          {delegations.map((d) => (
-            <div className="lab-graph-row" key={d.handoff.handoffId}>
-              <strong>{d.handoff.targetTaskId || d.handoff.sourceRunId}</strong>
-              <small>{d.handoff.targetPlanet || "—"} · {d.status || t("ura.pending")}</small>
-              {d.handoff.targetRunId && (
-                <button className="ven-link" onClick={() => ctx.openRun(d.handoff.targetRunId, subtaskSessionId(sessionId, d.handoff.targetTaskId))} title={t("uranus.goto-run")} type="button">→ {d.handoff.targetRunId}</button>
+          {executions.length > 0 && (
+            <select className="lab-execpick" onChange={(e) => { if (e.target.value) selectExecution(e.target.value); }} value={execSel ?? ""}>
+              <option value="">{t("ura.pick-exec")}</option>
+              {executions.map((x) => (
+                <option key={x.executionId} value={x.executionId}>{x.graphId} · {x.executionId.split(":").pop()}</option>
+              ))}
+            </select>
+          )}
+          {execution && execution.steps.map((s) => (
+            <div className="lab-graph-row" key={s.nodeId}>
+              <strong>{s.nodeId}</strong>
+              <small>{s.status || "PENDING"}{s.detail ? ` — ${s.detail}` : ""}</small>
+              {s.runId && (
+                <button className="ven-link" onClick={() => ctx.openRun(s.runId, s.sessionId || undefined)} title={t("uranus.goto-run")} type="button">→ {s.runId}</button>
               )}
             </div>
           ))}
-          {delegations.length === 0 && <p className="omni-empty">{t("ura.no-delegations")}</p>}
+          {!execution && executions.length === 0 && <p className="omni-empty">{t("ura.no-delegations")}</p>}
           <h4 className="ws-mod">{t("ura.skills")}</h4>
           {skills.map((sk) => <div className="lab-graph-row" key={sk.skillId}><strong>{sk.name}</strong><small>{sk.description.slice(0, 40)}</small></div>)}
           <h4 className="ws-mod">{t("ura.profiles")}</h4>

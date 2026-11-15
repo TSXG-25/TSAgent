@@ -33,11 +33,20 @@ export class ForgeDocumentSession {
   private editSeq = 0;
   private requestSeq = 0;
 
+  /** The mounted workspace assigns this each time it subscribes — the
+   *  persistent document state (doc/draft/baseline) outlives any one
+   *  component instance, so notifications are a replaceable field, not a
+   *  constructor-time closure. */
+  listener: (() => void) | null = null;
+
   constructor(
     private readonly service: DocumentSessionService,
     private readonly identity: () => DocumentIdentity,
-    private readonly onChange: () => void = () => {},
   ) {}
+
+  private notify() {
+    this.listener?.();
+  }
 
   /** Exposed for the workspace-level session cache — a cache entry bound
    *  to a different service object must not be reused. */
@@ -71,7 +80,7 @@ export class ForgeDocumentSession {
     };
     this.content = c.text;
     this.dirty = false;
-    this.onChange();
+    this.notify();
     return true;
   }
 
@@ -79,7 +88,7 @@ export class ForgeDocumentSession {
     this.content = next;
     this.editSeq += 1;
     this.dirty = true;
-    this.onChange();
+    this.notify();
   }
 
   async save(): Promise<void> {
@@ -103,7 +112,7 @@ export class ForgeDocumentSession {
       }
     } finally {
       this.saving = false;
-      this.onChange();
+      this.notify();
     }
   }
 }

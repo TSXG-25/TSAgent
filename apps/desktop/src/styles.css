@@ -4299,3 +4299,5 @@ ol.md-list li::marker { color: var(--planet-accent); font-family: var(--font-mon
 
 .lab-node-text { flex: 1; min-width: 0; background: transparent; border: none; border-bottom: 1px dashed var(--line-soft, rgba(255,255,255,0.15)); color: inherit; font: inherit; padding: 2px 0; }
 .lab-node-text:focus { outline: none; border-bottom-color: var(--planet-accent); }
+
+.lab-execpick { width: 100%; margin: 4px 0 8px; background: var(--surface-2); color: var(--text-main); border: 1px solid var(--line-soft, rgba(255,255,255,0.15)); border-radius: 4px; font: inherit; font-size: 12px; padding: 4px 6px; }

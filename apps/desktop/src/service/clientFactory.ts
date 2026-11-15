@@ -28,6 +28,8 @@ import {
   type JupiterArtifactSummary,
   type WorkflowDefinitionSummary,
   type WorkflowGraphSummary,
+  type GraphExecutionRef,
+  type GraphExecutionSummary,
   type GraphRunStepSummary,
   type MotifSummary,
   type WorkspaceFileSummary,
@@ -265,6 +267,14 @@ export class UnavailableDesktopAgentServiceClient implements DesktopAgentService
   }
 
   async runGraph(): Promise<GraphRunStepSummary[]> {
+    throw this.error;
+  }
+
+  async getGraphExecution(): Promise<GraphExecutionSummary> {
+    throw this.error;
+  }
+
+  async listGraphExecutions(): Promise<GraphExecutionRef[]> {
     throw this.error;
   }
 

@@ -1049,6 +1049,32 @@ export interface GraphRunStepSummary {
   sessionId: string;
   /** Terminal status (COMPLETED, FAILED_*), or SKIPPED for dependents of a failed node. */
   status?: string;
+  /** Durable execution identity — lookup key for getGraphExecution. */
+  executionId?: string;
+  /** Why a node is in its state (e.g. "predecessor not COMPLETED"). */
+  detail?: string;
+}
+
+/** One graph execution's identity + live node steps. */
+export interface GraphExecutionSummary {
+  executionId: string;
+  graphId: string;
+  sessionId: string;
+  steps: GraphRunStepSummary[];
+}
+
+export interface GraphExecutionLookupRequest {
+  tenantId: string;
+  sessionId: string;
+  requestId: string;
+  executionId: string;
+}
+
+/** A session's past graph executions (id + owning graph). */
+export interface GraphExecutionRef {
+  executionId: string;
+  graphId: string;
+  updatedAt: string;
 }
 
 export interface RunWorkflowGraphRequest {
@@ -1063,6 +1089,8 @@ export interface RunWorkflowGraphRequest {
 export interface WorkflowGraphClient {
   upsertWorkflowGraph(request: UpsertWorkflowGraphRequest): Promise<WorkflowGraphSummary>;
   runGraph(request: RunWorkflowGraphRequest): Promise<GraphRunStepSummary[]>;
+  getGraphExecution(request: GraphExecutionLookupRequest): Promise<GraphExecutionSummary>;
+  listGraphExecutions(request: { tenantId: string; sessionId: string; requestId: string }): Promise<GraphExecutionRef[]>;
   listWorkflowGraphs(request: ListWorkflowGraphsRequest): Promise<WorkflowGraphSummary[]>;
 }
 

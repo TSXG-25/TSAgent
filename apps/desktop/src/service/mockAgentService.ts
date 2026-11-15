@@ -38,6 +38,8 @@ import {
   type JupiterArtifactSummary,
   type WorkflowDefinitionSummary,
   type WorkflowGraphSummary,
+  type GraphExecutionRef,
+  type GraphExecutionSummary,
   type GraphRunStepSummary,
   type MotifSummary,
   type WorkspaceFileSummary,
@@ -578,6 +580,14 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
   }
 
   async runGraph(): Promise<GraphRunStepSummary[]> {
+    return [];
+  }
+
+  async getGraphExecution(request: { executionId: string }): Promise<GraphExecutionSummary> {
+    return { executionId: request.executionId, graphId: "", sessionId: "", steps: [] };
+  }
+
+  async listGraphExecutions(): Promise<GraphExecutionRef[]> {
     return [];
   }
 

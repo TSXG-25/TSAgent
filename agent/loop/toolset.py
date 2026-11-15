@@ -225,10 +225,20 @@ def build_toolset(
                 concurrency_safe=name in _WEB_TOOLS,
             )
 
+    # Schema-bearing modules are imported at authorization time, not at
+    # service bootstrap — a cold sidecar (bootstrap_tools=False) still
+    # exposes shell/python when the Run's intent grants them, and never
+    # exposes them without the grant.
     if authorization.code_execution_allowed:
+        from agent.bootstrap import load_tool_modules
+
+        load_tool_modules(("python",))
         for name in _CODE_EXECUTION_TOOLS:
             add_registry(name, "execute", declares_outputs=True)
     if authorization.command_execution_allowed:
+        from agent.bootstrap import load_tool_modules
+
+        load_tool_modules(("shell",))
         for name in _COMMAND_EXECUTION_TOOLS:
             add_registry(name, "execute", declares_outputs=True)
     for name in _WEB_TOOLS:

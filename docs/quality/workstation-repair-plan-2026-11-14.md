@@ -157,23 +157,39 @@
 |---|---|---|---|---|
 | WS-01 | ✅ 已交付 `c1f3b378` | 并行接纳（每次提交独立 Run）；originPlanet/taskId 上 wire；普通提交与显式委派分离；九台共享 WorkspaceTasks，按 tenant:session:planet 选 Run | `runController.ts`、`delegate.ts`、`workspaceSelection.ts`、`WorkspaceTasks.tsx`、`service.py`/projector | `ws01Admission.test.ts` 6 项；`test_task_entity` 7 项；wire fixture 回归 |
 | WS-02 | ✅ 已交付 `6e61c15c` | 接纳时确定 workspace root；未绑定会话注册默认 workspace；进程根解析路径登记为可见绑定；⚠️ SESSION_RUN_ACTIVE 不再拒绝活跃兄弟（per-run fencing 保留） | `service.py`、`context_factory.py` | sidecar/workspace 相关套件 29+71 项；e2e 断言已改为并行接纳 |
-| WS-03 | ✅ 已交付 `d753cddb` | `selectSession` 触发 `controller.reload()`：停止旧会话轮询并按 listRuns 重建目录；选中对象按 id 从最新列表派生；读失败可见 | `runController.ts`、`App.tsx`、各工作台 effect | controller 既有回归 + 全量 subtest |
+| WS-03 | ✅ 已交付 `d753cddb`+`d6584f93` | `selectSession` 触发 `controller.reload()`：停止旧会话轮询并按 listRuns 重建目录；目录提交带批次代次闸门，在途旧响应不能覆盖新会话目录；选中对象按 id 从最新列表派生；读失败可见 | `runController.ts`、`App.tsx`、各工作台 effect | controller 既有回归 + 全量 subtest |
 | WS-04 Mercury | ✅ 已交付 `d753cddb` | 切会话清空 panes/query/steps；addPane 从最近一次 sources 填入而非空槽；旧响应序号保护保留 | `searchSession.ts`、`MercuryWorkspace.tsx` | `mercurySearch.test.ts` 既有逆序回归保持通过 |
 | WS-05 Venus | ✅ 已交付 `d753cddb` | 文稿仅取本台本会话任务产物；详情绑定生产 Run/session；style/preset 按 tenant:session 持久化并在切会话时正确重载；contextPrefix 携带文稿 artifact+run 引用 | `VenusWorkspace.tsx` | `workspaceCapability.test.ts`（venus 用例） |
 | WS-06 Earth | ✅ 已交付 `d753cddb` | 本台实验 Run 选择（WorkspaceTasks + useWorkspaceCurrentRun）；裁决参数取所选 Run 的请求快照；评估按 session 键刷新，错误可见 | `EarthWorkspace.tsx` | `earthEvalForm.test.ts` 7 项 |
-| WS-07 Mars | ✅ 已交付 `d753cddb` | 文件列表按 session 刷新；受控多行编辑器（此前已是单 textarea）；文档会话按 tenant:session 缓存，离页草稿不丢；未实现模式禁用并标注 | `MarsWorkspace.tsx`、`documentSession.ts` | `documentSession.test.ts` 4 项 |
+| WS-07 Mars | ✅ 已交付 `d753cddb`+`d6584f93` | 文件列表按 session 刷新且响应按活读会话身份闸门；受控多行编辑器；文档会话持久态与挂载订阅分离，缓存按会话选择，离页草稿不丢且重进后通知不投死订阅；未实现模式禁用并标注 | `MarsWorkspace.tsx`、`documentSession.ts` | `documentSession.test.ts` 4 项 |
 | WS-08 Jupiter | ✅ 已交付 `d753cddb` | 三个 tab 显式标注范围（会话 scope / 全局检索 / 会话历史）；切会话清空选中与历史；facts 读取失败可见；forget 用记录自身 scope；预览序号闸门 | `JupiterWorkspace.tsx`、`jupiterAccess.ts` | `workspaceCapability.test.ts`（gate 逆序回归） |
 | WS-09 Saturn | ✅ 已交付 `d753cddb` | 选中存 scheduleId，详情从最新列表派生；暂停/恢复作用于所选 schedule；结构化表单=计划、Composer=即时任务（不再混淆）；lastRunId 跳转统一入口 | `SaturnWorkspace.tsx` | 全量 subtest |
-| WS-10 Uranus | ⚠️ 已交付主体 `d753cddb` | 节点可编辑任务文本；执行状态从持久化 run_handoffs + 子 Run head 重查（↻ 刷新 + runGraph 后自动拉）；子 Run 链接走 `session:subtask:taskId`；父 Run 用本台选中而非全局 activeRun。**未实现**：已保存图重新载入画布编辑、按节点选 profile | `UranusWorkspace.tsx` | 全量 subtest |
-| WS-11 Neptune | ⚠️ 已交付主体 `d753cddb` | 本台任务区；委派携带 `artifact:` contextRef（对生产 Run 验证，嵌进 handoff/请求文本）；新增 `read_artifact_preview`（守卫字节读、8MiB 上限、mime 白名单、base64 over JSONL）；图片/视频/音频真实预览；CSP 增 media-src。**未覆盖**：mock 只回 unsupported；浏览器/Tauri 实际播放与真实 ffmpeg 生成属外部验收 | `service.py`、`workspace_service.py`、`contracts.py`、`NeptuneWorkspace.tsx`、dispatcher/protocol | `test_read_artifact_preview_serves_guarded_binary`（ok/unsupported/too_large） |
+| WS-10 Uranus | ✅ 已交付 `d753cddb`+`d6584f93` | 节点可编辑任务文本；新增持久化 `graph_executions`/`graph_execution_nodes`：执行→节点→Run/session 关联可重启后查询；节点状态由对应 Run head 投影，支持 SKIPPED（无 handoff 节点）；父 Run 用本台选中而非全局 activeRun。**未实现**：已保存图重新载入画布编辑、按节点选 profile | `UranusWorkspace.tsx` | 全量 subtest |
+| WS-11 Neptune | ✅ 已交付 `d753cddb`+`d6584f93` | 本台任务区；产物列表默认 `originPlanet==neptune` scope；委派携带 `artifact:` contextRef（对生产 Run 验证）；`read_artifact_preview` 守卫字节读（8MiB/mime 白名单/base64）；`.svg` 移出字节白名单、保留脱敏文本投影（修复内容绕开 redaction 外泄）；图片/视频/音频真实预览；CSP 增 media-src。**未覆盖**：mock 只回 unsupported；浏览器/Tauri 实际播放与真实 ffmpeg 生成属外部验收 | `service.py`、`workspace_service.py`、`contracts.py`、`NeptuneWorkspace.tsx`、dispatcher/protocol | `test_read_artifact_preview_serves_guarded_binary`（ok/unsupported/too_large） |
 | WS-12 Pluto | ✅ 已交付 `d753cddb` | 证据从母题 assignedTaskId 的探索 Run 列表显式选择；汇报绑定所选证据 Run 的 run+session；移除误导性"自动"开关；跨会话 resolutionSessionId 链接保持 | `PlutoWorkspace.tsx` | `test_motif_summary_projects_resolution_session` 等 |
+
+### 审核修正·第二轮（`d6584f93`）
+
+第二轮代码调用链审查（离线探针复现三项）提出的 P1/P2 缺口，逐项修正：
+
+| 问题 | 根因 | 修正 |
+|---|---|---|
+| [P1] 切会话后旧目录响应覆盖新会话 | `reload()` 停轮询但无批次代次，已发出的 listRuns 返回仍提交 | 目录提交按加载代次闸门，仅最新批次落盘；回归：B 完成后迟到的 A 响应被丢弃 |
+| [P1] Composer 隐藏发送/跨台控制 | `runHere` 仍取全局 activeRun，只校验 session | 发送常驻独立入口；暂停/停止绑定本台 WorkspaceTasks 选中 Run |
+| [P1] Mars 文档通知投死订阅 | 缓存的 `ForgeDocumentSession` 保留首次挂载回调；缓存键不含 session；列表闸门读闭包值 | 持久态与订阅者分离（订阅表按挂载注册）；缓存按 tenant:session；响应提交前活读会话身份 |
+| [P1] 冷启动授权 shell 不可见 | `bootstrap_tools=False` 只预载 web，授权工具 schema 不装载 | 按已授予能力惰性装载对应工具 schema；子进程回归断言 COMMAND_EXECUTION → shell 可见 |
+| [P1] `.svg` 字节预览绕开脱敏 | svg 在 mime 白名单内直接返回原始 base64 | `.svg` 移出白名单返回 unsupported，继续走 read_artifact 的 redaction 投影；探针断言合成 key 不经二进制路径外泄 |
+| [P2] Uranus 无执行—节点—Run 持久关联 | lastSteps 仅保留 PENDING 接纳快照；handoff 扫描无 graph/执行/node 归属；子会话字符串推导不可靠 | `graph_executions`/`graph_execution_nodes` 表记录执行、节点、目标 Run/session 与终态；`get_graph_execution`/`list_graph_executions` 上 wire；UI 按执行记录刷新 |
+| [P2] Neptune 产物混他台 | `runs.flatMap` 不按 originPlanet 过滤 | 默认列表只取本台 Run；跨台引用保留为显式操作 |
+
+新增子进程离线验收：`test_sidecar_coldstart.py`（授权工具可见性）与 `test_subprocess_ws02_workspace_and_delegation_chain`（真实 sidecar stdio 上的 workspace 绑定、read/write、委派链）——即计划要求的"真实 Sidecar 子进程 + 假 Provider"项，不再归入外部验收。
 
 ### 已知未闭环项
 
 - **FE-04 code-server**：未安装，仍阻塞；Mars 走受控编辑器路径，不声明 IDE 能力。
 - **Uranus**：已保存工作流图不可重新载入画布编辑；节点级 profile 选择未实现（后端合同已支持 `profile_id`/`target_planet` 字段）。
 - **Neptune**：`glb`/3D 仍是不支持格式（如实显示 unsupported）；Mock client 的 `readArtifactPreview` 恒回 unsupported，预览链路只经真实 sidecar 离线验证。
-- **WS-02 外部验证**：计划要求的"真实 `python -m agent.service.local_sidecar` 子进程 + fake provider 的 read/list/write/子 Run 检查"本轮未独立重跑；覆盖为同进程的 service 级离线测试。
+- ~~WS-02 外部验证~~：已在 `d6584f93` 闭环——`test_subprocess_ws02_workspace_and_delegation_chain` 以真实 `python -m agent.service.local_sidecar` 子进程 + 假 Provider 覆盖 workspace 绑定、read/write 与委派子 Run；`test_sidecar_coldstart.py` 覆盖冷启动授权工具可见性。
 
 ### 外部真实场景验收（本轮均未执行，需单独报告）
 

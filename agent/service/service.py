@@ -1824,32 +1824,76 @@ class AgentService:
         ]
 
     async def get_graph_execution(self, request: Any) -> Any:
-        """Re-query one execution's durable node facts — Run ids and
-        statuses are projected from the committed node rows, not from the
-        admission response."""
+        """Re-query one execution's durable node facts. Nodes bound to a
+        Run project their status from the authoritative run head — the
+        stored row is a driver checkpoint and goes stale the moment the
+        driver exits without writing the terminal fact. Nodes with no Run
+        (PENDING/ADMITTED/SKIPPED) read their stored status; a lost driver
+        leaves them INTERRUPTED via exit marking or restart convergence."""
         self._ensure_open()
         from .contracts import GraphExecutionSummary, GraphRunStepSummary
 
         nodes = self._store.list_graph_execution_nodes(
             request.tenant_id, request.execution_id
         )
-        return GraphExecutionSummary(
-            execution_id=request.execution_id,
-            graph_id=nodes[0].graph_id if nodes else "",
-            session_id=nodes[0].session_id if nodes else "",
-            steps=tuple(
+        steps: list[Any] = []
+        for n in nodes:
+            status = n.status
+            if n.run_id:
+                head = self._store.get_run_head(
+                    request.tenant_id,
+                    n.run_id,
+                    session_id=n.child_session_id or None,
+                )
+                if head is not None:
+                    status = head.run_status
+            steps.append(
                 GraphRunStepSummary(
                     node_id=n.node_id,
                     task_id=n.task_id,
                     run_id=n.run_id,
                     session_id=n.child_session_id,
-                    status=n.status,
+                    status=status,
                     execution_id=n.execution_id,
                     detail=n.detail,
                 )
-                for n in nodes
-            ),
+            )
+        return GraphExecutionSummary(
+            execution_id=request.execution_id,
+            graph_id=nodes[0].graph_id if nodes else "",
+            session_id=nodes[0].session_id if nodes else "",
+            steps=tuple(steps),
         )
+
+    _GRAPH_NODE_OPEN = frozenset({"PENDING", "ADMITTED", "RUNNING"})
+
+    def _graph_mark_unfinished(
+        self,
+        tenant_id: str,
+        execution_id: str,
+        *,
+        status: str,
+        detail: str,
+    ) -> None:
+        """The in-process driver is gone; nodes it never advanced can
+        never move again — record that explicitly instead of leaving a
+        permanent PENDING. Existing task/run/session ids are preserved."""
+        for n in self._store.list_graph_execution_nodes(tenant_id, execution_id):
+            if n.status not in self._GRAPH_NODE_OPEN:
+                continue
+            self._store.upsert_graph_execution_node(
+                tenant_id,
+                execution_id,
+                n.node_id,
+                graph_id=n.graph_id,
+                session_id=n.session_id,
+                position=n.position,
+                task_id=n.task_id,
+                run_id=n.run_id,
+                child_session_id=n.child_session_id,
+                status=status,
+                detail=detail,
+            )
 
     async def list_graph_executions(self, request: Any) -> list[Any]:
         """Distinct executions for a session — the workspace re-queries
@@ -1901,6 +1945,12 @@ class AgentService:
             for node in order:
                 node_id = str(node["id"])
                 if self._closed:
+                    self._graph_mark_unfinished(
+                        request.tenant_id,
+                        execution_id,
+                        status="INTERRUPTED",
+                        detail="service closed",
+                    )
                     return
                 preds = deps.get(node_id, set())
                 if any(
@@ -2023,10 +2073,22 @@ class AgentService:
                     status=snapshot.status.value,
                 )
         except asyncio.CancelledError:
+            self._graph_mark_unfinished(
+                request.tenant_id,
+                execution_id,
+                status="INTERRUPTED",
+                detail="graph driver cancelled",
+            )
             raise
         except Exception:
             logging.getLogger(__name__).exception(
                 "graph execution failed: %s", request.graph_id
+            )
+            self._graph_mark_unfinished(
+                request.tenant_id,
+                execution_id,
+                status="FAILED",
+                detail="graph driver raised",
             )
 
     async def list_workflow_graphs(self, request: Any) -> list[Any]:

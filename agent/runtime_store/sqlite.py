@@ -4330,6 +4330,26 @@ class SqliteRuntimeStore:
             return False
         return True
 
+    def converge_orphaned_graph_execution_nodes(self) -> int:
+        """Startup sweep: an open graph node row (PENDING/ADMITTED/RUNNING)
+        only advances while its in-process driver lives. After a restart
+        no driver owns it — mark it INTERRUPTED instead of leaving a
+        permanent pending state. Run-bound nodes still project their real
+        status from the run head at read time, so this never hides a run's
+        own converged outcome."""
+        with self._write_transaction() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE graph_execution_nodes
+                SET status = 'INTERRUPTED',
+                    detail = 'graph driver lost on restart',
+                    updated_at = ?
+                WHERE status IN ('PENDING', 'ADMITTED', 'RUNNING')
+                """,
+                (_now(),),
+            )
+            return cursor.rowcount
+
     def converge_orphaned_runs(self) -> int:
         """Startup sweep: fail every active head whose worker is provably
         gone, across all tenants/sessions — same predicate as the

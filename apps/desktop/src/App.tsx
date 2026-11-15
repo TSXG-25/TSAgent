@@ -160,9 +160,15 @@ function App() {
     // only accepts runs already in its store (a stale `runs` closure would
     // silently drop first-load selections).
     void controller.refreshRun(runId, runSessionId)
-      .then((view) => {
+      .then(async (view) => {
         const sid = view?.sessionId ?? runSessionId;
-        if (sid && sid !== sessionId) selectSession(sid);
+        if (sid && sid !== sessionId) {
+          selectSession(sid);
+          // Cross-session targets are not written into the old catalog —
+          // selectRun only accepts cataloged runs, so the new session's
+          // catalog must commit first.
+          await controller.reload();
+        }
         if (view) controller.selectRun(runId);
         navigate("/w/sun");
       })

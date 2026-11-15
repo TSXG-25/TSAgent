@@ -75,6 +75,9 @@ class FakeAgentServiceClient extends UnavailableDesktopAgentServiceClient {
   readonly snapshots = new Map<string, RunSnapshot>();
   readonly events = new Map<string, RunEvent[]>();
   readonly eventCursors: number[] = [];
+  sessionId = identity.sessionId;
+  private heldGetRun: ((value: RunSnapshot) => void) | null = null;
+  holdGetRun = false;
 
   constructor(initial: RunSnapshot | null, initialEvents: RunEvent[]) {
     super("local", identity, new AgentServiceClientError({ code: "PROVIDER_UNAVAILABLE", message: "unavailable in test", retryable: true }));
@@ -82,10 +85,21 @@ class FakeAgentServiceClient extends UnavailableDesktopAgentServiceClient {
     this.events.set("run-1", initialEvents);
   }
 
+  setSession(sessionId: string): void {
+    this.sessionId = sessionId;
+    this.identity = { ...this.identity, sessionId };
+  }
+
+  releaseGetRun(): void {
+    this.holdGetRun = false;
+    this.heldGetRun?.(this.snapshots.get("run-1")!);
+    this.heldGetRun = null;
+  }
+
   async ready(): Promise<void> {}
 
   async listRuns(): Promise<RunSnapshot[]> {
-    return [...this.snapshots.values()];
+    return [...this.snapshots.values()].filter((s) => s.sessionId === this.sessionId);
   }
 
   async startRun(request: StartRunRequest): Promise<RunHandle> {
@@ -109,6 +123,11 @@ class FakeAgentServiceClient extends UnavailableDesktopAgentServiceClient {
   async getRun(request: GetRunRequest): Promise<RunSnapshot> {
     const value = this.snapshots.get(request.runId);
     if (!value) throw new Error("missing run");
+    if (this.holdGetRun) {
+      return new Promise<RunSnapshot>((resolve) => {
+        this.heldGetRun = resolve;
+      });
+    }
     return value;
   }
 
@@ -309,7 +328,7 @@ test("4B-hydrate reads past a mid-history terminal batch (blocked then resumed)"
   controller.stopAllPolling();
 });
 
-test("openRun path: refreshRun loads a foreign-session run, then selectRun accepts it", async () => {
+test("openRun path: foreign-session snapshot returns a view but never enters this catalog", async () => {
   const client = new FakeAgentServiceClient(snapshot("active"), []);
   const controller = new RunController(client, { pollIntervalMs: 1000 });
   await controller.initialize();
@@ -322,9 +341,44 @@ test("openRun path: refreshRun loads a foreign-session run, then selectRun accep
   controller.selectRun("run-2");
   assert.notEqual(controller.getState().activeRunId, "run-2");
 
+  // The refresh resolves the view (openRun reads view.sessionId to
+  // navigate) but a foreign snapshot must not mix into this catalog.
   const view = await controller.refreshRun("run-2", "session-2");
   assert.equal(view?.sessionId, "session-2");
+  assert.equal(controller.getState().runs.find((r) => r.runId === "run-2"), undefined);
+  controller.selectRun("run-2");
+  assert.notEqual(controller.getState().activeRunId, "run-2");
+
+  // The real openRun then switches session and reloads — the run enters
+  // through the authoritative listRuns of its owning session.
+  client.setSession("session-2");
+  await controller.reload();
   controller.selectRun("run-2");
   assert.equal(controller.getState().activeRunId, "run-2");
+  controller.stopAllPolling();
+});
+
+test("catalog gate: a refresh resolving after a session switch cannot re-mix a foreign run", async () => {
+  // Probe scenario: A's refresh in-flight → switch to B → reload finishes
+  // → A's late response used to write [B, A] into the shared catalog.
+  const client = new FakeAgentServiceClient(snapshot("completed"), []);
+  const controller = new RunController(client, { pollIntervalMs: 1000 });
+  await controller.initialize();
+
+  client.holdGetRun = true;
+  const refresh = controller.refreshRun("run-1"); // issued under session-1
+
+  client.snapshots.set("run-2", { ...snapshot("completed"), sessionId: "session-2", runId: "run-2" });
+  client.setSession("session-2");
+  await controller.reload();
+  assert.deepEqual(controller.getState().runs.map((r) => r.runId), ["run-2"]);
+
+  client.releaseGetRun();
+  await refresh;
+  assert.deepEqual(
+    controller.getState().runs.map((r) => r.runId),
+    ["run-2"],
+    "the late session-1 response must not re-enter session-2's catalog",
+  );
   controller.stopAllPolling();
 });

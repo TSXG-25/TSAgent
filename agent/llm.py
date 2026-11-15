@@ -301,6 +301,7 @@ class _OllamaHTTPProvider:
                         )
                     content_parts: list[str] = []
                     tool_calls: tuple[ToolCall, ...] = ()
+                    usage: dict[str, object] = {}
                     async for line in stream_response.aiter_lines():
                         if not line.strip():
                             continue
@@ -308,6 +309,17 @@ class _OllamaHTTPProvider:
                             chunk = json.loads(line)
                         except ValueError:
                             continue
+                        # Ollama 的终态 NDJSON 行带 done:true 与 token 计数。
+                        if chunk.get("done"):
+                            usage = {
+                                key: chunk[key]
+                                for key in (
+                                    "prompt_eval_count",
+                                    "eval_count",
+                                    "total_duration",
+                                )
+                                if key in chunk
+                            }
                         message = chunk.get("message") or {}
                         text = message.get("content")
                         if isinstance(text, str) and text:
@@ -330,9 +342,7 @@ class _OllamaHTTPProvider:
                     return ChatTurn(
                         content="".join(content_parts),
                         tool_calls=tool_calls,
-                        usage=dict(
-                            getattr(response, "usage_metadata", None) or {}
-                        ),
+                        usage=usage,
                     )
         if response.is_error:
             raise RuntimeError(

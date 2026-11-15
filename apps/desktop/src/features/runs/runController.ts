@@ -320,11 +320,19 @@ export class RunController {
       next.events,
     );
     this.projectRuntimeWorkflowIfMissing(next);
-    this.runs.set(snapshot.runId, next);
-    this.currentError = null;
-    this.emit();
-    if (isLiveStatus(next.status)) this.startPollingIfLive(next);
-    else this.stopPolling(snapshot.runId);
+    // Session ownership gate — same constraint as the catalog batch seq.
+    // A refresh admitted under session A can resolve after the identity
+    // moved to B: writing it would mix a foreign run into this catalog
+    // (probe: A refresh in-flight → switch → B shows [B, A]). The view is
+    // still returned so callers like openRun can read its sessionId and
+    // navigate; it just never enters this session's store.
+    if (next.sessionId === this.client.identity.sessionId) {
+      this.runs.set(snapshot.runId, next);
+      this.currentError = null;
+      this.emit();
+      if (isLiveStatus(next.status)) this.startPollingIfLive(next);
+      else this.stopPolling(snapshot.runId);
+    }
     return next;
   }
 

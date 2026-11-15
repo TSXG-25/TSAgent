@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { SCENES } from "../../app/scenes";
 import { WorkspaceFrame } from "../../design-system/WorkspaceFrame";
 import AgentComposer from "../../app/AgentComposer";
@@ -16,7 +16,7 @@ import type { GraphExecutionRef, GraphExecutionSummary, ProfileSummary, SkillSum
  *  response or session-wide handoff listing. */
 const ELEMS = ["read_file", "web_search", "llm", "write_file", "approval", "condition"];
 
-const TERMINAL = /^(COMPLETED|FAILED|CANCELLED|TIMED_OUT|SKIPPED)/;
+const TERMINAL = /^(COMPLETED|FAILED|CANCELLED|TIMED_OUT|SKIPPED|INTERRUPTED)/;
 
 export default function UranusWorkspace({ ctx }: { ctx: RunCtx }) {
   const { service } = ctx;
@@ -34,20 +34,33 @@ export default function UranusWorkspace({ ctx }: { ctx: RunCtx }) {
 
   const req = useCallback(() => ({ tenantId: service.identity.tenantId, sessionId: service.identity.sessionId, requestId: requestIdForRun(0) }), [service]);
   const sessionId = service.identity.sessionId;
+  /** Response gate — an in-flight getGraphExecution for execution A must
+   *  not commit after B is selected or the session moved (a late A would
+   *  overwrite B's detail, and a terminal A would stop B's polling). */
+  const execToken = useRef<{ id: string; sessionId: string } | null>(null);
   useEffect(() => {
+    setExecutions([]);
+    setExecution(null);
+    setExecSel(null);
+    execToken.current = null;
     service.listProfiles(req()).then(setProfiles).catch((e) => setErr(String(e)));
     service.listSkills(req()).then(setSkills).catch((e) => setErr(String(e)));
     service.listWorkflowGraphs(req()).then(setGraphs).catch((e) => setErr(String(e)));
     service.listGraphExecutions(req()).then(setExecutions).catch((e) => setErr(String(e)));
-  }, [service, req]);
+  }, [service, req, sessionId]);
 
   /** 执行状态由持久化节点行投影 — 可重复查询，重启后仍为真实态。 */
   const refreshExecution = useCallback(async (executionId: string) => {
+    const token = { id: executionId, sessionId: service.identity.sessionId };
+    execToken.current = token;
     try {
       const summary = await service.getGraphExecution({ ...req(), executionId });
-      setExecution(summary);
+      if (execToken.current === token) setExecution(summary);
       return summary;
-    } catch (e) { setErr(String(e)); return null; }
+    } catch (e) {
+      if (execToken.current === token) setErr(String(e));
+      return null;
+    }
   }, [service, req]);
 
   const selectExecution = useCallback((id: string) => {

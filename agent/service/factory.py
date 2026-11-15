@@ -34,6 +34,12 @@ def create_default_agent_service(
         # otherwise crashed heads stay RUNNING and block their session or
         # long-poll forever.
         store.converge_orphaned_runs()
+        # Same for graph nodes: a stored PENDING/ADMITTED/RUNNING row only
+        # exists while its in-process driver lives — after a restart no
+        # driver will ever advance it, so mark it INTERRUPTED rather than
+        # letting the workspace poll a zombie forever. Run-bound nodes
+        # still project their real status from the run head at read time.
+        store.converge_orphaned_graph_execution_nodes()
         contexts = ServiceContextFactory(
             store,
             workspace_root=workspace_root,

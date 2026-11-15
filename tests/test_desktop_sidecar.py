@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import ast
+import http.server
 import json
 import os
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Any, cast
@@ -3313,3 +3315,255 @@ def test_subprocess_ws02_workspace_and_delegation_chain(tmp_path: Path) -> None:
         assert process.wait(timeout=60) == 0
     finally:
         _terminate(process)
+
+
+def _wait_run_terminal(
+    process: subprocess.Popen[str],
+    base: dict[str, Any],
+    run_id: str,
+    *,
+    session_id: str,
+    deadline: float = 120.0,
+) -> dict[str, Any]:
+    """Poll get_run until the durable head reaches a terminal status."""
+    started = time.monotonic()
+    tick = 0
+    while time.monotonic() - started < deadline:
+        tick += 1
+        _send(process, {
+            "id": f"poll-{run_id}-{tick}", "method": "get_run",
+            "params": {**base, "session_id": session_id,
+                       "request_id": f"poll-{tick}", "run_id": run_id},
+        })
+        snap = _read_response(process)
+        assert snap["ok"] is True, snap
+        status = str(snap["result"]["status"])
+        if status.startswith(("COMPLETED", "FAILED", "CANCELLED", "TIMED_OUT")):
+            return snap["result"]
+        time.sleep(0.4)
+    raise AssertionError(f"run {run_id} did not reach a terminal status")
+
+
+def test_subprocess_fake_provider_agent_tool_chain(tmp_path: Path) -> None:
+    """真实入口 + 假 Provider：父子 Run 经模型工具调用真实写文件。
+
+    覆盖此前未闭合的验收面 — 不是 RPC 直写，而是 sidecar 子进程内
+    agent loop 从脚本化 Ollama 端点拿到 write_file tool_call、经
+    filesystem executor 落盘：断言父/子 workspace 各自出现
+    agent-note.txt，且服务端确实收到了带工具目录的 chat 请求。
+    """
+    calls: list[dict[str, Any]] = []
+
+    # 意图分类走 ainvoke（payload 无 tools 键）并期望 JSON 分析结果；
+    # agent loop 走 achat（带 tools）— 两轮脚本必须分开。
+    intent_json = json.dumps({
+        "artifact_required": True,
+        "requested_outcomes": ["USER_VISIBLE_OUTPUT", "FILE_MUTATION"],
+        "domain": "文件",
+        "action": "write",
+        "target": "agent-note.txt",
+        "entities": [],
+        "resolved_request": "write the file agent-note.txt in the workspace",
+        "conversation_relation": "new_request",
+        "delivery_requirements": [{
+            "id": "d1", "kind": "file", "quantity": 1,
+            "target": "agent-note.txt", "acceptance_criteria": [],
+        }],
+        "prohibited_effects": [],
+        "acceptance_criteria": [],
+        "write_targets": ["."],
+        "external_effects": [],
+        "search_query": "",
+        "search_timeliness": "any",
+        "context_needs": {"memory": False, "repository": False},
+        "memory_action": "none",
+        "freshness_required": False,
+        "source_grounding_required": False,
+    })
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_POST(self) -> None:  # noqa: N802 — http.server API
+            body = json.loads(
+                self.rfile.read(int(self.headers["Content-Length"]))
+            )
+            calls.append(body)
+            messages = body.get("messages") or []
+            message: dict[str, Any]
+            if "tools" not in body:
+                # 意图/其他文本轮 — 意图提示词给 JSON，其余给短文本。
+                system = str(messages[0].get("content", "")) if messages else ""
+                is_intent = "目标语义理解" in system
+                message = {
+                    "role": "assistant",
+                    "content": intent_json if is_intent else "done",
+                }
+            elif any(m.get("role") == "tool" for m in messages):
+                message = {"role": "assistant", "content": "done"}
+            else:
+                message = {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [{
+                        "id": "call-0",
+                        "function": {
+                            "name": "write_file",
+                            "arguments": {
+                                "path": "agent-note.txt",
+                                "content": "written-by-agent",
+                            },
+                        },
+                    }],
+                }
+            if body.get("stream"):
+                payload = (json.dumps({"message": message, "done": True}) + "\n").encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/x-ndjson")
+            else:
+                payload = json.dumps({"message": message, "done": True}).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def log_message(self, *_args: Any) -> None:
+            pass
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    process = _spawn_sidecar(tmp_path, extra_env={
+        "TSAGENT_LLM_PROVIDER": "ollama",
+        "OLLAMA_BASE_URL": f"http://127.0.0.1:{server.server_port}/v1",
+        "OPENAI_API_KEY": "",
+        "LLM_API_KEY": "",
+        "P2_SECONDARY_API_KEY": "",
+    })
+    base = {"tenant_id": "tenant-1", "user_id": "user-1", "session_id": "s-tools"}
+    try:
+        _send(process, {"id": "h", "method": "health", "params": {}})
+        assert _read_response(process)["ok"] is True
+
+        # 父 Run — 请求文本携带明确写意图（意图引擎据此授予 FILE_MUTATION，
+        # write_file 才进入该 Run 的工具目录）。
+        _send(process, {
+            "id": "s1", "method": "start_run",
+            "params": {**base, "request_id": "p1",
+                       "request_text": "write the file agent-note.txt in the workspace",
+                       "origin_planet": "mars"},
+        })
+        parent = _read_response(process)
+        assert parent["ok"] is True, parent
+        parent_run = parent["result"]["run_id"]
+        parent_head = _wait_run_terminal(
+            process, base, parent_run, session_id="s-tools")
+        assert parent_head["status"].startswith("COMPLETED"), parent_head
+
+        # 委派 → 子 Run 同样经假 provider 的工具调用写文件。
+        _send(process, {
+            "id": "d1", "method": "delegate_run",
+            "params": {**base, "request_id": "d1", "parent_run_id": parent_run,
+                       "request_text": "write the file agent-note.txt in the workspace",
+                       "target_planet": "mars"},
+        })
+        delegation = _read_response(process)
+        assert delegation["ok"] is True, delegation
+        child_task = delegation["result"]["task_id"]
+        child_session = f"s-tools:subtask:{child_task}"
+        _send(process, {
+            "id": "s2", "method": "start_run",
+            "params": {**base, "session_id": child_session, "request_id": "s2",
+                       "request_text": delegation["result"]["request_text"],
+                       "task_id": child_task,
+                       "origin_planet": "mars",
+                       "workspace_root": delegation["result"]["workspace_root"]},
+        })
+        child = _read_response(process)
+        assert child["ok"] is True, child
+        child_head = _wait_run_terminal(
+            process, base, child["result"]["run_id"], session_id=child_session)
+        assert child_head["status"].startswith("COMPLETED"), child_head
+
+        # 真实工具执行证据 — 文件落盘于 Run workspace（委派子 Run 与父
+        # 共享 workspace root，故为同一目录同一文件）。
+        notes = sorted(
+            p for p in tmp_path.rglob("agent-note.txt") if p.is_file()
+        )
+        assert len(notes) == 1, notes
+        assert notes[0].read_text() == "written-by-agent"
+        # 父子各自完成了 工具轮→结果轮：至少两次 chat 携带 tool 结果。
+        tool_result_rounds = sum(
+            1 for body in calls
+            if any(m.get("role") == "tool" for m in (body.get("messages") or []))
+        )
+        assert tool_result_rounds >= 2, calls
+        # 假 provider 确实走了带工具目录的 chat 路径。
+        assert any(body.get("tools") for body in calls)
+
+        _send(process, {"id": "bye", "method": "shutdown", "params": {}})
+        assert _read_response(process)["ok"] is True
+        assert process.wait(timeout=60) == 0
+    finally:
+        server.shutdown()
+        _terminate(process)
+
+
+def test_graph_execution_head_projection_and_restart_convergence(
+    tmp_path: Path,
+) -> None:
+    """审核修正：节点状态以 Run head 为权威（存储行只是驱动检查点），
+    驱动丢失的未完成节点在服务重启时收敛为 INTERRUPTED — 不再
+    永久显示运行中。"""
+    import asyncio
+
+    import tests.test_ha_r1_harness as harness
+    from agent.service.contracts import GraphExecutionLookupRequest
+
+    async def scenario() -> None:
+        service, store = harness.service_at(tmp_path)
+        try:
+            _running_parent(service, store, tmp_path)
+            head = store.get_run_head("t", "run-parent", session_id="s")
+            assert head is not None
+            # 存储行陈旧（SKIPPED）但绑定了真实 run — 投影必须来自 head。
+            store.upsert_graph_execution_node(
+                "t", "gexec:g-x:r1", "n1",
+                graph_id="g-x", session_id="s", position=0,
+                task_id="task-1", run_id="run-parent",
+                child_session_id="s", status="SKIPPED")
+            summary = await service.get_graph_execution(
+                GraphExecutionLookupRequest(
+                    tenant_id="t", user_id="u", session_id="s",
+                    request_id="req-1", execution_id="gexec:g-x:r1"))
+            assert summary.steps[0].status == head.run_status
+            assert summary.steps[0].status != "SKIPPED"
+            # 无 Run 的未完成节点 — 驱动若中断将永不再推进。
+            store.upsert_graph_execution_node(
+                "t", "gexec:g-x:r1", "n2",
+                graph_id="g-x", session_id="s", position=1, status="PENDING")
+        finally:
+            await service.close()
+
+        # 重启走 factory（启动收敛在 create_default_agent_service 内）。
+        service2 = _workspace_file_service(tmp_path)
+        try:
+            rows = {
+                r.node_id: r
+                for r in service2._store.list_graph_execution_nodes(
+                    "t", "gexec:g-x:r1")
+            }
+            assert rows["n2"].status == "INTERRUPTED"
+            # n1 的存储行保持种子值（SKIPPED 不是 open 态，收敛不动它），
+            # 但读路径仍投影 head — 存储行从来不是权威。
+            assert rows["n1"].status == "SKIPPED"
+            summary2 = await service2.get_graph_execution(
+                GraphExecutionLookupRequest(
+                    tenant_id="t", user_id="u", session_id="s",
+                    request_id="req-2", execution_id="gexec:g-x:r1"))
+            assert summary2.steps[0].status == head.run_status
+            # n2 无 Run — INTERRUPTED 如实可见。
+            assert summary2.steps[1].status == "INTERRUPTED"
+        finally:
+            await service2.close()
+
+    asyncio.run(scenario())
+

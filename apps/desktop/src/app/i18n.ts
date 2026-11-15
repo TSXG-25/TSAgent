@@ -304,6 +304,11 @@ const zh = {
   "mar.controls": "控制 / Agent 操作",
   "mar.composer-ph": "交给 Forge 的任务…",
   "mar.discard": "放弃对 {path} 的未保存修改？",
+  "mar.ide-start": "启动 IDE",
+  "mar.ide-stop": "停止 IDE",
+  "mar.ide-na": "仅桌面端（Tauri）可用",
+  "mar.ide-nows": "先给会话绑定目录",
+  "mar.ide-hint": "在本会话绑定的目录上启动 code-server",
   // neptune
   "nep.tab-image": "图像",
   "nep.tab-video": "视频",
@@ -685,6 +690,11 @@ const en: Record<keyof typeof zh, string> = {
   "mar.controls": "Controls / Agent Actions",
   "mar.composer-ph": "Task for Forge…",
   "mar.discard": "Discard unsaved changes to {path}?",
+  "mar.ide-start": "Start IDE",
+  "mar.ide-stop": "Stop IDE",
+  "mar.ide-na": "Desktop app (Tauri) only",
+  "mar.ide-nows": "Bind a folder to this session first",
+  "mar.ide-hint": "Launch code-server on this session's bound folder",
   // neptune
   "nep.tab-image": "Images",
   "nep.tab-video": "Video",

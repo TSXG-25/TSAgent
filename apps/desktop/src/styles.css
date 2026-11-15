@@ -3341,8 +3341,12 @@ html[data-fx="standard"] .ws-root::after { animation: none; }
 .forge-tabs { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line); }
 .forge-tab { padding: 4px 10px; font-family: var(--font-mono); font-size: 11px; color: var(--text-faint); border-bottom: 2px solid transparent; }
 .forge-tab.on { color: var(--text-main); border-color: var(--planet-accent); }
-.forge-save { margin-left: auto; background: var(--planet-accent); border: none; border-radius: 2px; color: #0a0d12; font-size: 10px; font-weight: 600; padding: 5px 14px; cursor: pointer; }
+.forge-save { margin-left: 8px; background: var(--planet-accent); border: none; border-radius: 2px; color: #0a0d12; font-size: 10px; font-weight: 600; padding: 5px 14px; cursor: pointer; }
 .forge-code { flex: 1; overflow-y: auto; font-family: var(--font-mono); font-size: 12px; }
+.forge-ide { width: 100%; height: 100%; border: none; background: #1e1e1e; display: block; }
+.forge-ide-toggle { margin-left: auto; background: transparent; border: 1px solid var(--border-base); border-radius: 2px; color: var(--text-muted); font-size: 10px; padding: 5px 12px; cursor: pointer; }
+.forge-ide-toggle:hover:not(:disabled) { border-color: var(--planet-accent); color: var(--planet-accent); }
+.forge-ide-toggle:disabled { opacity: .45; cursor: default; }
 .forge-line { display: flex; }
 .forge-line span { flex: 0 0 40px; text-align: right; padding: 1px 10px; color: var(--text-faint); user-select: none; }
 .forge-line-edit { flex: 1; background: none; border: none; color: var(--text-main); font: inherit; resize: none; overflow: hidden; }

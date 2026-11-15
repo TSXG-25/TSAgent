@@ -7,6 +7,7 @@ import { t } from "../../app/i18n";
 import type { RunCtx } from "../../app/runCtx";
 import { WorkspaceTasks } from "../../app/WorkspaceTasks";
 import type { WorkspaceFileSummary } from "../../types/service";
+import { ideBridge, type IdeInfo } from "../../service/tauriBridge";
 import { ForgeDocumentSession } from "./documentSession";
 
 /** Forge per hand-drawn spec §6 — mode rail | file tree | tabs+editor w/
@@ -57,6 +58,38 @@ export default function MarsWorkspace({ ctx }: { ctx: RunCtx }) {
   const doc = session.doc;
 
   const sessionId = ctx.sessionId;
+  /** Hosted IDE (FE-04B) — bound to the session workspace; the Tauri host
+   *  owns the code-server child. Stops on session/workspace change and on
+   *  unmount so no instance lingers on a stale binding. */
+  const [ide, setIde] = useState<IdeInfo | null>(null);
+  const [ideBusy, setIdeBusy] = useState(false);
+  useEffect(() => {
+    return () => {
+      setIde(null);
+      void ideBridge?.stop();
+    };
+  }, [sessionId, ctx.workspacePath]);
+
+  async function toggleIde() {
+    if (ide) {
+      setIdeBusy(true);
+      try { await ideBridge?.stop(); } catch { /* already dead */ }
+      setIde(null);
+      setIdeBusy(false);
+      return;
+    }
+    if (!ideBridge || !ctx.workspacePath || ideBusy) return;
+    setIdeBusy(true);
+    setErr(null);
+    try {
+      setIde(await ideBridge.start(ctx.workspacePath));
+    } catch (e) {
+      setErr(String(e));
+    } finally {
+      setIdeBusy(false);
+    }
+  }
+
   useEffect(() => {
     service
       .listWorkspaceFiles({
@@ -131,9 +164,22 @@ export default function MarsWorkspace({ ctx }: { ctx: RunCtx }) {
                 {session.saving ? "…" : t("mar.save")}
               </button>
             )}
+            <button
+              className="forge-ide-toggle"
+              disabled={!ideBridge || !ctx.workspacePath || ideBusy}
+              onClick={() => void toggleIde()}
+              title={!ideBridge ? t("mar.ide-na") : !ctx.workspacePath ? t("mar.ide-nows") : t("mar.ide-hint")}
+              type="button"
+            >{ideBusy ? "…" : ide ? t("mar.ide-stop") : t("mar.ide-start")}</button>
           </div>
           <div className="forge-code">
-            {doc ? (
+            {ide ? (
+              <iframe
+                className="forge-ide"
+                src={`${ide.url}?folder=${encodeURIComponent(ide.workspace)}`}
+                title="code-server"
+              />
+            ) : doc ? (
               <textarea className="forge-editor" value={session.content} readOnly={doc.redacted}
                 onChange={(e) => session.edit(e.target.value)} spellCheck={false} />
             ) : <div className="empty-state"><p>{t("mar.select-file")}</p></div>}

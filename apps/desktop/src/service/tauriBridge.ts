@@ -54,6 +54,28 @@ if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
   };
 }
 
+/** Hosted code-server IDE (FE-04B) — the Tauri host spawns an isolated
+ *  standalone instance bound to the session workspace; outside Tauri the
+ *  bridge is null and the UI must degrade honestly. */
+export interface IdeInfo {
+  url: string;
+  port: number;
+  workspace: string;
+}
+
+export const ideBridge: {
+  start(workspace: string): Promise<IdeInfo>;
+  status(): Promise<IdeInfo | null>;
+  stop(): Promise<void>;
+} | null =
+  typeof window !== "undefined" && "__TAURI_INTERNALS__" in window
+    ? {
+        start: (workspace) => invoke<IdeInfo>("ide_start", { workspace }),
+        status: () => invoke<IdeInfo | null>("ide_status"),
+        stop: () => invoke<void>("ide_stop"),
+      }
+    : null;
+
 /** Native pickers — Finder dialog inside Tauri, DOM fallback in dev browser. */
 export interface PickedFolder { name: string; path: string; files: File[] }
 

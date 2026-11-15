@@ -200,6 +200,7 @@
 | [P1] 启动收敛误伤其他存活实例 | 无条件把所有 open 节点标 INTERRUPTED，不区分驱动归属（多实例共享库合同） | 节点行携带 `driver_writer_id`；收敛仅当：无绑定 Run（有绑定的读路径投影 head）、driver writer 无未过期 worker 租约、同执行内无宽限期内更新的行。新增存活实例保护回归 + 探针场景 |
 | [P2] 跨会话链接打不开分页外历史 Run | listRuns 只回最近页，目标不在页内时 selectRun 静默无效 | openRun 在 reload 后对明确目标再 refreshRun——归属闸门放行写入目录，不扩大分页；新增 page-boundary 回归 |
 | 子进程测试非确定性 | `TSAGENT_LLM_TIMEOUT` 是无效变量名（真名 `TSAGENT_OLLAMA_TIMEOUT`），且未固定 OLLAMA_BASE_URL；本机 Ollama 存活时流式修复让真实推理拖慢 Run 终态，shutdown 等待超时 | 死端口 + 零重试冷却固定 provider 不可达，ws02 链 60s+ → 3.4s 确定性通过 |
+| [P2] 宽限期内重启的孤儿不收敛（`9ff395f8`） | 启动收敛只跑一次，被宽限期跳过的行之后再无入口重评 | `converge_orphaned_graph_execution_nodes` 加可选 execution_id 范围并在 `get_graph_execution` 读路径惰性重评同一谓词——新鲜行/租约持有者的保护不变，过期孤儿经正常查询收敛；新回归覆盖"立即重启→PENDING→宽限期结束→查询得 INTERRUPTED" |
 
 ### 已知未闭环项
 

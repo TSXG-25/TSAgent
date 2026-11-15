@@ -184,6 +184,15 @@
 
 新增子进程离线验收：`test_sidecar_coldstart.py`（授权工具可见性）与 `test_subprocess_ws02_workspace_and_delegation_chain`（真实 sidecar stdio 上的 workspace 绑定、read/write、委派链）——即计划要求的"真实 Sidecar 子进程 + 假 Provider"项，不再归入外部验收。
 
+### 审核修正·第三轮（`b81c6a3d`）
+
+| 问题 | 根因 | 修正 |
+|---|---|---|
+| [P1] 旧 refreshRun 响应在 reload 后重混入目录 | catalogSeq 只闸目录批量，applySnapshot 不检查归属 | applySnapshot 仅当 snapshot.sessionId 等于当前身份才写目录/开轮询；跨会话刷新仍返回 view 供 openRun 读 sessionId，openRun 改为 reload 落定后再 selectRun |
+| [P1] 图执行状态不投影 head，重启永久 RUNNING | get_graph_execution 直读存储行；驱动退出/崩溃无终态写入 | run 绑定节点读路径投影 run head；驱动退出/取消/异常标记未完节点 INTERRUPTED/FAILED；启动收敛（converge_orphaned_graph_execution_nodes）把孤儿 open 行标 INTERRUPTED |
+| [P2] Uranus 执行详情响应串扰 + 不随会话刷新 | setExecution 无归属检查；effect 无 session 依赖 | {executionId, sessionId} token 闸门；切会话清空选中并重载列表；INTERRUPTED 计为终态停轮询 |
+| [P2] 子进程测试缺假 Provider 工具执行链 | ws02 链只走文件 RPC，provider 允许不可用 | 新增 test_subprocess_fake_provider_agent_tool_chain：脚本化 Ollama /api/chat（意图 JSON + write_file tool_call + done 轮）驱动父子 Run 真实工具执行；工具结果轮 ≥2，产物落盘；并暴露一个真 bug——`llm.py` 流式分支引用未定义 `response`（usage 改从终态 chunk 取），该 bug 会崩所有带 event_bus 的 run |
+
 ### 已知未闭环项
 
 - **FE-04 code-server**：未安装，仍阻塞；Mars 走受控编辑器路径，不声明 IDE 能力。

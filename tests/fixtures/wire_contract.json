@@ -1,277 +1,279 @@
 {
- "version": 1,
- "comment": "Python DTOs are the wire source of truth; TS client must match. Deliberate field/enum changes must break both sides' tests.",
- "methods": {
-  "start_run": {
-   "request": {
-    "tenant_id": "t",
-    "user_id": "u",
-    "session_id": "s",
-    "request_id": "r1",
-    "request_text": "x",
-    "task_id": "task-1",
-    "workspace_root": "/w",
-    "origin_planet": "mars",
-    "context_refs": [
-     "file:a"
-    ],
-    "metadata": {
-     "agent_profile": {
-      "model_ref": "m"
-     },
-     "delegation_depth": 1
-    }
-   },
-   "request_fields": [
-    "context_refs",
-    "metadata",
-    "origin_planet",
-    "request_id",
-    "request_text",
-    "run_id",
-    "session_id",
-    "task_id",
-    "tenant_id",
-    "user_id",
-    "workspace_root"
-   ],
-   "response_fields": [
-    "created_at",
-    "request_id",
-    "revision",
-    "run_id",
-    "session_id",
-    "status",
-    "task_id",
-    "tenant_id",
-    "updated_at"
-   ],
-   "ts_result_fields": [
-    "tenantId",
-    "sessionId",
-    "runId",
-    "taskId",
-    "status"
-   ]
-  },
-  "get_run": {
-   "request": {
-    "tenant_id": "t",
-    "user_id": "u",
-    "session_id": "s",
-    "run_id": "run-1",
-    "request_id": "r2"
-   },
-   "request_fields": [
-    "request_id",
-    "run_id",
-    "session_id",
-    "tenant_id",
-    "user_id"
-   ],
-   "response_fields": [
-    "active_workflow_id",
-    "artifacts",
-    "completed_workflow_ids",
-    "created_at",
-    "failure_summary",
-    "origin_planet",
-    "output",
-    "pending_workflow_ids",
-    "request_id",
-    "request_text",
-    "resume_summary",
-    "revision",
-    "run_id",
-    "session_id",
-    "status",
-    "task_id",
-    "tenant_id",
-    "updated_at",
-    "verifier_summary"
-   ],
-   "ts_result_fields": [
-    "runId",
-    "status"
-   ]
-  },
-  "list_approvals": {
-   "request": {
-    "tenant_id": "t",
-    "user_id": "u",
-    "session_id": "s",
-    "request_id": "r3",
-    "run_id": "",
-    "status": "",
-    "limit": 200
-   },
-   "request_fields": [
-    "limit",
-    "request_id",
-    "run_id",
-    "session_id",
-    "status",
-    "tenant_id",
-    "user_id"
-   ],
-   "response_fields": [
-    "action",
-    "approval_id",
-    "created_at",
-    "decided_at",
-    "decided_by",
-    "params",
-    "risk_level",
-    "run_id",
-    "scope",
-    "status"
-   ],
-   "ts_result_fields": [
-    "approvalId",
-    "runId",
-    "status"
-   ]
-  },
-  "decide_approval": {
-   "request": {
-    "tenant_id": "t",
-    "user_id": "u",
-    "session_id": "s",
-    "run_id": "run-1",
-    "approval_id": "ap-1",
-    "decision": "approve",
-    "request_id": "r4",
-    "decided_by": "u"
-   },
-   "request_fields": [
-    "approval_id",
-    "decided_by",
-    "decision",
-    "request_id",
-    "run_id",
-    "session_id",
-    "tenant_id",
-    "user_id"
-   ],
-   "response_fields": [
-    "action",
-    "approval_id",
-    "created_at",
-    "decided_at",
-    "decided_by",
-    "params",
-    "risk_level",
-    "run_id",
-    "scope",
-    "status"
-   ],
-   "ts_result_fields": [
-    "approvalId",
-    "status"
-   ],
-   "response": {
-    "approval_id": "ap-1",
-    "run_id": "run-1",
-    "action": "write_file",
-    "scope": "",
-    "params": {
-     "path": "x"
+  "comment": "Python DTOs are the wire source of truth; TS client must match. Deliberate field/enum changes must break both sides' tests.",
+  "methods": {
+    "decide_approval": {
+      "request": {
+        "approval_id": "ap-1",
+        "decided_by": "u",
+        "decision": "approve",
+        "request_id": "r4",
+        "run_id": "run-1",
+        "session_id": "s",
+        "tenant_id": "t",
+        "user_id": "u"
+      },
+      "request_fields": [
+        "approval_id",
+        "decided_by",
+        "decision",
+        "request_id",
+        "run_id",
+        "session_id",
+        "tenant_id",
+        "user_id"
+      ],
+      "response": {
+        "action": "write_file",
+        "approval_id": "ap-1",
+        "created_at": "2026-11-10T00:00:00Z",
+        "decided_at": "2026-11-10T00:00:01Z",
+        "decided_by": "u",
+        "params": {
+          "path": "x"
+        },
+        "risk_level": "R1",
+        "run_id": "run-1",
+        "scope": "",
+        "status": "APPROVED"
+      },
+      "response_fields": [
+        "action",
+        "approval_id",
+        "created_at",
+        "decided_at",
+        "decided_by",
+        "params",
+        "risk_level",
+        "run_id",
+        "scope",
+        "status"
+      ],
+      "ts_result_fields": [
+        "approvalId",
+        "status"
+      ]
     },
-    "risk_level": "R1",
-    "status": "APPROVED",
-    "decided_by": "u",
-    "created_at": "2026-11-10T00:00:00Z",
-    "decided_at": "2026-11-10T00:00:01Z"
-   }
-  },
-  "delegate_run": {
-   "request": {
-    "tenant_id": "t",
-    "user_id": "u",
-    "session_id": "s",
-    "request_id": "r5",
-    "parent_run_id": "run-1",
-    "request_text": "x",
-    "target_planet": "mars",
-    "profile_id": "p1",
-    "context_refs": []
-   },
-   "request_fields": [
-    "context_refs",
-    "parent_run_id",
-    "profile_id",
-    "request_id",
-    "request_text",
-    "session_id",
-    "target_planet",
-    "tenant_id",
-    "user_id"
-   ],
-   "response_fields": [
-    "agent_profile",
-    "handoff_id",
-    "request_text",
-    "session_id",
-    "target_planet",
-    "task_id",
-    "workspace_root"
-   ],
-   "ts_result_fields": [
-    "agentProfile",
-    "handoffId",
-    "requestText",
-    "sessionId",
-    "targetPlanet",
-    "taskId",
-    "workspaceRoot"
-   ]
-  },
-  "run_graph": {
-   "request": {
-    "tenant_id": "t",
-    "user_id": "u",
-    "session_id": "s",
-    "request_id": "r6",
-    "graph_id": "g-1",
-    "parent_run_id": "run-1"
-   },
-   "request_fields": [
-    "graph_id",
-    "parent_run_id",
-    "request_id",
-    "session_id",
-    "tenant_id",
-    "user_id"
-   ],
-   "response_fields": [
-    "node_id",
-    "run_id",
-    "session_id",
-    "status",
-    "task_id",
-    "execution_id",
-    "detail"
-   ],
-   "ts_result_fields": [
-    "nodeId",
-    "runId",
-    "sessionId",
-    "status",
-    "taskId",
-    "executionId",
-    "detail"
-   ],
-   "response": [
-    {
-     "node_id": "n1",
-     "task_id": "",
-     "run_id": "",
-     "session_id": "",
-     "status": "PENDING",
-     "execution_id": "gexec:g-1:r6",
-     "detail": ""
+    "delegate_run": {
+      "request": {
+        "context_refs": [],
+        "parent_run_id": "run-1",
+        "profile_id": "p1",
+        "request_id": "r5",
+        "request_text": "x",
+        "session_id": "s",
+        "target_planet": "mars",
+        "tenant_id": "t",
+        "user_id": "u"
+      },
+      "request_fields": [
+        "context_refs",
+        "parent_run_id",
+        "profile_id",
+        "request_id",
+        "request_text",
+        "session_id",
+        "target_planet",
+        "tenant_id",
+        "user_id"
+      ],
+      "response_fields": [
+        "agent_profile",
+        "handoff_id",
+        "request_text",
+        "session_id",
+        "target_planet",
+        "task_id",
+        "workspace_root"
+      ],
+      "ts_result_fields": [
+        "agentProfile",
+        "handoffId",
+        "requestText",
+        "sessionId",
+        "targetPlanet",
+        "taskId",
+        "workspaceRoot"
+      ]
+    },
+    "get_run": {
+      "request": {
+        "request_id": "r2",
+        "run_id": "run-1",
+        "session_id": "s",
+        "tenant_id": "t",
+        "user_id": "u"
+      },
+      "request_fields": [
+        "request_id",
+        "run_id",
+        "session_id",
+        "tenant_id",
+        "user_id"
+      ],
+      "response_fields": [
+        "active_workflow_id",
+        "artifacts",
+        "completed_workflow_ids",
+        "created_at",
+        "failure_summary",
+        "origin_planet",
+        "output",
+        "pending_workflow_ids",
+        "request_id",
+        "request_text",
+        "resume_summary",
+        "revision",
+        "run_id",
+        "session_id",
+        "status",
+        "task_id",
+        "tenant_id",
+        "updated_at",
+        "verifier_summary"
+      ],
+      "ts_result_fields": [
+        "runId",
+        "status"
+      ]
+    },
+    "list_approvals": {
+      "request": {
+        "limit": 200,
+        "request_id": "r3",
+        "run_id": "",
+        "session_id": "s",
+        "status": "",
+        "tenant_id": "t",
+        "user_id": "u"
+      },
+      "request_fields": [
+        "limit",
+        "request_id",
+        "run_id",
+        "session_id",
+        "status",
+        "tenant_id",
+        "user_id"
+      ],
+      "response_fields": [
+        "action",
+        "approval_id",
+        "created_at",
+        "decided_at",
+        "decided_by",
+        "params",
+        "risk_level",
+        "run_id",
+        "scope",
+        "status"
+      ],
+      "ts_result_fields": [
+        "approvalId",
+        "runId",
+        "status"
+      ]
+    },
+    "run_graph": {
+      "request": {
+        "graph_id": "g-1",
+        "origin_planet": "uranus",
+        "parent_run_id": "run-1",
+        "request_id": "r6",
+        "session_id": "s",
+        "tenant_id": "t",
+        "user_id": "u"
+      },
+      "request_fields": [
+        "graph_id",
+        "origin_planet",
+        "parent_run_id",
+        "request_id",
+        "session_id",
+        "tenant_id",
+        "user_id"
+      ],
+      "response": [
+        {
+          "detail": "",
+          "execution_id": "gexec:g-1:r6",
+          "node_id": "n1",
+          "run_id": "",
+          "session_id": "",
+          "status": "PENDING",
+          "task_id": ""
+        }
+      ],
+      "response_fields": [
+        "node_id",
+        "run_id",
+        "session_id",
+        "status",
+        "task_id",
+        "execution_id",
+        "detail"
+      ],
+      "ts_result_fields": [
+        "nodeId",
+        "runId",
+        "sessionId",
+        "status",
+        "taskId",
+        "executionId",
+        "detail"
+      ]
+    },
+    "start_run": {
+      "request": {
+        "context_refs": [
+          "file:a"
+        ],
+        "metadata": {
+          "agent_profile": {
+            "model_ref": "m"
+          },
+          "delegation_depth": 1
+        },
+        "origin_planet": "mars",
+        "request_id": "r1",
+        "request_text": "x",
+        "session_id": "s",
+        "task_id": "task-1",
+        "tenant_id": "t",
+        "user_id": "u",
+        "workspace_root": "/w"
+      },
+      "request_fields": [
+        "context_refs",
+        "metadata",
+        "origin_planet",
+        "request_id",
+        "request_text",
+        "run_id",
+        "session_id",
+        "task_id",
+        "tenant_id",
+        "user_id",
+        "workspace_root"
+      ],
+      "response_fields": [
+        "created_at",
+        "request_id",
+        "revision",
+        "run_id",
+        "session_id",
+        "status",
+        "task_id",
+        "tenant_id",
+        "updated_at"
+      ],
+      "ts_result_fields": [
+        "tenantId",
+        "sessionId",
+        "runId",
+        "taskId",
+        "status"
+      ]
     }
-   ]
-  }
- }
+  },
+  "version": 1
 }

@@ -161,6 +161,14 @@
 
 验收：新会话直接从 Uranus 保存并运行两节点图，无需先去 Omni；假 Provider 让上游实际写文件、下游实际读取，不能只 mock 路径字符串替换；子 Run 出现在目标台，历史执行不叠加到不一致定义。
 
+**实施记录（本轮）**：
+
+- 去前置：`RunWorkflowGraphRequest` 增 `origin_planet`；`parent_run_id` 为空时 `run_graph` 经既有 `create_task_head` 建真实父 Task（`task-graph-<request_id>`，origin_planet=uranus）——图执行自身归属，非假 COMPLETED Run。根节点走 `_provision_delegation`（`source_run_id=""` 如实、handoff `source_task_id`=图任务）；依赖节点仍委派在前任 Run 之下，合同不变。
+- 前端：`launch()` 去掉 `!currentRun` 门控，`parentRunId` 可空、`originPlanet: "uranus"`；删除 `ura.need-run` 失效键。图列表/执行列表/运行均走 `ctx.sessionId` 显式作用域。
+- wire fixture 同步 `origin_planet`（Python DTO 为源，双端校验通过）。
+- 回归：`test_graph_execute_without_parent_run_provisions_graph_task`——`run_graph` 全路径：图任务归属 uranus、n1 子 Task parent=图任务、handoff `source_run_id=""`/source_task=图任务、n2 委派在前任 Run 下、节点全 COMPLETED；既有 `{artifacts:n1}` 产物引用测试覆盖"上游产物真实路径注入下游"。graph/delegate 相关 15 项全过。
+- 未做：假 Provider 驱动真 LLM 循环的端到端"上游写文件→下游读文件"（现有覆盖为 durable 产物行注入，非循环执行）；浏览器实测归外部验收。
+
 ### WI-08 / P2 — 跨台验收与文档收口
 
 依赖：WI-01～07。

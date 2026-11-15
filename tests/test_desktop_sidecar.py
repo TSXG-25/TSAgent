@@ -3833,3 +3833,104 @@ def test_session_planet_claim_and_adoption(tmp_path: Path) -> None:
 
     import asyncio
     asyncio.run(scenario())
+
+
+def test_graph_execute_without_parent_run_provisions_graph_task(
+    tmp_path: Path,
+) -> None:
+    """WI-07：无父 Run 的图也能执行 —— run_graph 经既有 create_task_head
+    入口建真实父 Task（origin_planet=uranus），根节点 handoff 挂到它，
+    source_run_id 如实为空；依赖节点仍委派在前任 Run 之下。"""
+    import asyncio
+    import json as _json
+    from types import SimpleNamespace
+
+    from agent.service.contracts import (
+        GraphExecutionLookupRequest,
+        RunWorkflowGraphRequest,
+    )
+
+    async def scenario() -> None:
+        service = _workspace_file_service(tmp_path)
+        store = service._store
+        try:
+            store.ensure_session("t", "s", "u")
+            nodes = [
+                {"id": "n1", "type": "task", "request_text": "write script"},
+                {"id": "n2", "type": "task", "request_text": "render video"},
+            ]
+            edges = [{"from": "n1", "to": "n2"}]
+            store.upsert_workflow_graph("t", "g-np", definition_json=(
+                _json.dumps({"nodes": nodes, "edges": edges})))
+
+            delegated_parents: list[str] = []
+
+            async def fake_delegate(req):
+                delegated_parents.append(req.parent_run_id)
+                node = req.request_id.rsplit("-", 1)[-1]
+                return {
+                    "task_id": f"task-{node}",
+                    "handoff_id": f"h-{node}",
+                    "request_text": req.request_text,
+                    "workspace_root": str(tmp_path),
+                    "agent_profile": "",
+                }
+
+            run_seq = iter(range(1, 10))
+
+            async def fake_start(req):
+                return SimpleNamespace(run_id=f"run-{next(run_seq)}")
+
+            async def fake_get_run(req):
+                return SimpleNamespace(
+                    status=SimpleNamespace(value="COMPLETED"),
+                    artifacts=(),
+                )
+
+            service.delegate_run = fake_delegate
+            service.start_run = fake_start
+            service.get_run = fake_get_run
+            store.update_handoff_target_run = lambda *a, **k: None
+
+            steps = await service.run_graph(RunWorkflowGraphRequest(
+                tenant_id="t", user_id="u", session_id="s",
+                request_id="r-1", graph_id="g-np",
+                parent_run_id="", origin_planet="uranus"))
+            assert {s.node_id for s in steps} == {"n1", "n2"}
+            await asyncio.gather(*list(service._graph_tasks))
+
+            graph_task = store.get_task_head("t", "task-graph-r-1")
+            assert graph_task is not None
+            assert graph_task.origin_planet == "uranus"
+
+            # 根节点 n1 的子 Task 父级是图任务，且 handoff source 如实为空。
+            n1_task = store.get_task_head("t", "task-delegate-" + __import__("hashlib").sha256(b"r-1-n1").hexdigest()[:12])
+            assert n1_task is not None
+            assert n1_task.parent_task_id == "task-graph-r-1"
+            handoff = store._connection.execute(
+                "SELECT source_run_id, source_task_id FROM run_handoffs "
+                "WHERE handoff_id = ?",
+                (f"handoff:{n1_task.task_id}",),
+            ).fetchone()
+            assert tuple(handoff) == ("", "task-graph-r-1")
+
+            # n2 仍委派在 n1 的 Run 之下（fake_delegate 只被依赖节点调用）。
+            assert delegated_parents == ["run-1"]
+
+            rows = {
+                r.node_id: r
+                for r in store.list_graph_execution_nodes("t", "gexec:g-np:r-1")
+            }
+            assert rows["n1"].status == "COMPLETED"
+            assert rows["n2"].status == "COMPLETED"
+            summary = await service.get_graph_execution(
+                GraphExecutionLookupRequest(
+                    tenant_id="t", user_id="u", session_id="s",
+                    request_id="req-x", execution_id="gexec:g-np:r-1"))
+            assert {s.node_id: s.status for s in summary.steps} == {
+                "n1": "COMPLETED", "n2": "COMPLETED",
+            }
+        finally:
+            await service.close()
+
+    asyncio.run(scenario())

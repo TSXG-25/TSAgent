@@ -1799,6 +1799,17 @@ class AgentService:
         order = _topo_task_order(task_nodes, edges)
         from .contracts import GraphRunStepSummary
 
+        # 无父 Run 时图执行自带一个真实父 Task（既有 create_task_head
+        # 接纳入口）——根节点委派以它为 source_task，不造假 Run 充数。
+        graph_task_id = ""
+        if not request.parent_run_id:
+            graph_task_id = self._store.create_task_head(
+                request.tenant_id,
+                request.session_id,
+                f"task-graph-{request.request_id}",
+                origin_planet=request.origin_planet or "uranus",
+            ).task_id
+
         # 一次图执行的持久身份 — 节点→子 Run 的关联无法从 handoff 重建
         # （SKIPPED/PENDING 不产生 handoff），故在执行中逐节点落事实行。
         execution_id = f"gexec:{request.graph_id}:{request.request_id}"
@@ -1819,7 +1830,10 @@ class AgentService:
         import asyncio
 
         task = asyncio.create_task(
-            self._graph_execute(request, execution_id, order, edges, inputs),
+            self._graph_execute(
+                request, execution_id, order, edges, inputs,
+                parent_task_id=graph_task_id,
+            ),
             name=f"graph:{request.graph_id}:{request.request_id}",
         )
         self._graph_tasks.add(task)
@@ -1940,6 +1954,8 @@ class AgentService:
         order: list,
         edges: list,
         inputs: dict[str, str],
+        *,
+        parent_task_id: str = "",
     ) -> None:
         """Advance the graph chain in the background: provision + start
         each node, wait for its terminal head, then gate dependents on
@@ -2033,23 +2049,58 @@ class AgentService:
                     continue
                 parent_run_id = request.parent_run_id
                 delegate_session = request.session_id
+                node_parent_task = parent_task_id
                 if preds:
                     # 依赖节点的委派归属在拓扑上最近完成的前任之下。
                     pred = max(preds, key=lambda p: order_index[p])
                     parent_run_id = run_by_node[pred]
                     delegate_session = session_by_node[pred]
-                delegation = await self.delegate_run(
-                    DelegateRunRequest(
-                        tenant_id=request.tenant_id,
-                        user_id=request.user_id,
-                        session_id=delegate_session,
-                        request_id=f"{request.request_id}-{node_id}",
-                        parent_run_id=parent_run_id,
-                        request_text=request_text,
-                        target_planet=str(node.get("target_planet", "")),
-                        profile_id=str(node.get("profile_id", "")),
+                    node_parent_task = ""
+                if parent_run_id:
+                    delegation = await self.delegate_run(
+                        DelegateRunRequest(
+                            tenant_id=request.tenant_id,
+                            user_id=request.user_id,
+                            session_id=delegate_session,
+                            request_id=f"{request.request_id}-{node_id}",
+                            parent_run_id=parent_run_id,
+                            request_text=request_text,
+                            target_planet=str(node.get("target_planet", "")),
+                            profile_id=str(node.get("profile_id", "")),
+                        )
                     )
-                )
+                else:
+                    # 无父 Run 的图直接执行：根节点挂到图执行的父 Task。
+                    profile = None
+                    node_profile_id = str(node.get("profile_id", ""))
+                    if node_profile_id:
+                        profile = self._store.get_profile(
+                            request.tenant_id, node_profile_id
+                        )
+                        if profile is None:
+                            raise AgentServiceError(
+                                ServiceErrorCode.INVALID_REQUEST,
+                                "agent profile not found: "
+                                f"{node_profile_id}",
+                            )
+                    delegation = self._provision_delegation(
+                        tenant_id=request.tenant_id,
+                        session_id=delegate_session,
+                        source_run_id="",
+                        parent_task_id=node_parent_task,
+                        request_key=f"{request.request_id}-{node_id}",
+                        request_text=request_text,
+                        target_planet=str(node.get("target_planet", ""))
+                        or (profile.planet_affinity if profile else ""),
+                        profile=profile,
+                        resolved_refs=(),
+                        workspace_root=str(
+                            self._contexts.session_workspace(
+                                request.tenant_id, delegate_session
+                            )
+                            or ""
+                        ),
+                    )
                 child_session = (
                     f"{delegate_session}{SUBTASK_SESSION_MARKER}"
                     f"{delegation['task_id']}"

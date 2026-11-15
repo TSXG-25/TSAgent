@@ -1951,6 +1951,7 @@ class RunWorkflowGraphRequest:
     request_id: str
     graph_id: str
     parent_run_id: str = ""
+    origin_planet: str = ""
 
     def __post_init__(self) -> None:
         _required_identifier(self.tenant_id, "tenant_id")
@@ -1968,6 +1969,7 @@ class RunWorkflowGraphRequest:
             request_id=str(value.get("request_id", "")),
             graph_id=str(value.get("graph_id", "")),
             parent_run_id=str(value.get("parent_run_id", "")),
+            origin_planet=str(value.get("origin_planet", "")),
         )
 
 

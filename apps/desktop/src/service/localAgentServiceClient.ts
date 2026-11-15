@@ -931,6 +931,7 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
       tenant_id: request.tenantId, user_id: this.identity.userId,
       session_id: request.sessionId, request_id: request.requestId,
       graph_id: request.graphId, parent_run_id: request.parentRunId ?? "",
+      origin_planet: request.originPlanet ?? "",
     })) as Array<Record<string, unknown>>;
     return result.map((raw) => ({
       nodeId: requiredString(raw.node_id, "node_id"),

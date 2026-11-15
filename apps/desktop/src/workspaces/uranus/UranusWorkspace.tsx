@@ -193,9 +193,14 @@ export default function UranusWorkspace({ ctx }: { ctx: RunCtx }) {
   }
 
   async function launch() {
-    if (!currentRun || !openGraphId || dirty) return;
+    // 无本台 Run 也可执行 —— 后端以图执行自身的父 Task 接纳根节点。
+    if (!openGraphId || dirty) return;
     try {
-      const steps = await service.runGraph({ ...req(), graphId: openGraphId, parentRunId: currentRun.runId });
+      const steps = await service.runGraph({
+        ...req(), graphId: openGraphId,
+        parentRunId: currentRun?.runId ?? "",
+        originPlanet: "uranus",
+      });
       const executionId = steps[0]?.executionId;
       setExecutions(await service.listGraphExecutions(req()));
       if (executionId) {
@@ -241,9 +246,9 @@ export default function UranusWorkspace({ ctx }: { ctx: RunCtx }) {
             <button className="btn" disabled={!name.trim() || !canvas.nodes.length} onClick={() => void save(true)} title={t("ura.save-as-hint")} type="button">{t("ura.save-as")}</button>
             <button
               className="btn primary"
-              disabled={!currentRun || !openGraphId || dirty}
+              disabled={!openGraphId || dirty}
               onClick={() => void launch()}
-              title={!currentRun ? t("ura.need-run") : dirty || !openGraphId ? t("ura.save-first") : t("ura.run-graph")}
+              title={dirty || !openGraphId ? t("ura.save-first") : t("ura.run-graph")}
               type="button"
             >{t("ura.run")}</button>
           </div>

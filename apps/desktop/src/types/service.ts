@@ -1096,7 +1096,10 @@ export interface RunWorkflowGraphRequest {
   sessionId: string;
   requestId: string;
   graphId: string;
+  /** Empty runs the graph under its own durable parent Task — no Omni
+   *  task needs to exist first (WI-07). */
   parentRunId: string;
+  originPlanet?: string;
 }
 
 /** Uranus canvas persistence — durable node-graph definitions. */

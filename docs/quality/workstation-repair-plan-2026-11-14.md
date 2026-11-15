@@ -220,6 +220,7 @@
 | [P1] 画布忽略选择事件 | 受控模式下 select 增量只被通知未写回——点节点不更新右侧配置，选中边后 Delete 不生效 | Node/EdgeChange 全部经 `applyNodeDeltas`/`applyEdgeDeltas` 写回；edgeSel 渲染器内追踪，Delete 命中实际选中边 |
 | [P1] 迟到的保存回执污染草稿 | 响应无条件置 openGraphId+dirty=false——保存期间继续编辑被误标已保存，打开 B 期间 A 的回执把身份改回 A | `DraftSaveGate`：回执绑定提交时文档身份+编辑版本，不符则仅刷新列表不提交身份 |
 | [P2] 执行叠加粘到别的图/改后节点 | 仅按 nodeId 叠加，切图与编辑不解除 | 叠加绑定（选中执行, 画布对象, openGraphId）三元组；编辑/切图即解除，历史详情底部条独立保留 |
+| [P2] 历史执行选择重新授权叠加（`本轮`） | selectExecution 把任意历史执行绑定到当前画布，无定义一致性证据；且底部条/轮询未核对 execution.executionId===execSel，选 B 时可显 A | 叠加授权只来自本端发起执行时记录的（execId, 序列化定义）；`overlayStepsFor` 要求选中执行+发起绑定+定义相等三重一致；历史执行仅底部详情。底部条与轮询按 executionId 核对响应身份 |
 
 ### 已知未闭环项
 

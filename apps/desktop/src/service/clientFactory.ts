@@ -168,6 +168,10 @@ export class UnavailableDesktopAgentServiceClient implements DesktopAgentService
     throw this.error;
   }
 
+  async resolveSessionWorkspace(): Promise<{ sessionId: string; workspaceId: string; path: string; bound: boolean }> {
+    throw this.error;
+  }
+
   async deleteWorkspace(): Promise<{ removed: boolean }> {
     throw this.error;
   }

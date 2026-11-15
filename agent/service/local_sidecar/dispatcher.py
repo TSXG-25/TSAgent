@@ -86,6 +86,7 @@ class SidecarDispatcher:
             LocalTransportMethod.ATTACH_FILES: self._attach_files,
             LocalTransportMethod.REVEAL_PATH: self._reveal_path,
             LocalTransportMethod.ASSIGN_SESSION_WORKSPACE: self._assign_session_workspace,
+            LocalTransportMethod.RESOLVE_SESSION_WORKSPACE: self._resolve_session_workspace,
             LocalTransportMethod.DELETE_WORKSPACE: self._delete_workspace,
             LocalTransportMethod.READ_WORKSPACE_FILE: self._read_workspace_file,
             LocalTransportMethod.WRITE_WORKSPACE_FILE: self._write_workspace_file,
@@ -391,6 +392,12 @@ class SidecarDispatcher:
 
         request = self._from_dto(AssignSessionWorkspaceRequest.from_dict, params)
         return await self._service.assign_session_workspace(request)
+
+    async def _resolve_session_workspace(self, params: Mapping[str, Any]) -> Any:
+        from ..contracts import ResolveSessionWorkspaceRequest
+
+        request = self._from_dto(ResolveSessionWorkspaceRequest.from_dict, params)
+        return await self._service.resolve_session_workspace(request)
 
     async def _delete_workspace(self, params: Mapping[str, Any]) -> Any:
         from ..contracts import DeleteWorkspaceRequest

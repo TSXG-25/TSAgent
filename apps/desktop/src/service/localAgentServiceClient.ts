@@ -112,6 +112,7 @@ export type LocalClientOperation =
   | "read_artifact"
   | "read_artifact_preview"
   | "read_events"
+  | "resolve_session_workspace"
   | "cancel_run"
   | "pause_run";
 
@@ -1160,6 +1161,22 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
       workspace_id: request.workspaceId,
     })) as { session_id: string; workspace_id: string };
     return { sessionId: result.session_id, workspaceId: result.workspace_id };
+  }
+
+  async resolveSessionWorkspace(
+    request: SessionScope,
+  ): Promise<{ sessionId: string; workspaceId: string; path: string; bound: boolean }> {
+    this.assertIdentity(request);
+    const result = (await this.call("resolve_session_workspace", {
+      tenant_id: request.tenantId, user_id: this.identity.userId,
+      session_id: request.sessionId, request_id: this.nextRequestId("resolve_session_workspace"),
+    })) as { session_id: string; workspace_id: string; path: string; bound: boolean };
+    return {
+      sessionId: result.session_id,
+      workspaceId: result.workspace_id ?? "",
+      path: result.path ?? "",
+      bound: result.bound === true,
+    };
   }
 
   async deleteWorkspace(request: DeleteWorkspaceRequest): Promise<{ removed: boolean }> {

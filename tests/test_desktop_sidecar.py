@@ -4004,3 +4004,263 @@ def test_cross_workstation_offline_chain(tmp_path: Path) -> None:
     finally:
         import asyncio
         asyncio.run(service.close())
+
+
+def test_subprocess_graph_upstream_writes_downstream_reads(
+    tmp_path: Path,
+) -> None:
+    """WI-07 验收闭环：真实 sidecar 子进程 + 假 Provider 驱动两节点图 ——
+    上游 agent 经 write_file 工具真实落盘，{artifacts:n1} 注入真实产物
+    路径，下游 agent 经 read_file 工具真实读取同一文件。非产物行注入
+    的替代方案。"""
+    calls: list[dict[str, Any]] = []
+    want_read = [False]
+
+    intent_json = json.dumps({
+        "artifact_required": True,
+        "requested_outcomes": ["USER_VISIBLE_OUTPUT", "FILE_MUTATION"],
+        "domain": "文件",
+        "action": "write",
+        "target": "agent-note.txt",
+        "entities": [],
+        "resolved_request": "file task in the workspace",
+        "conversation_relation": "new_request",
+        "delivery_requirements": [{
+            "id": "d1", "kind": "file", "quantity": 1,
+            "target": "agent-note.txt", "acceptance_criteria": [],
+        }],
+        "prohibited_effects": [],
+        "acceptance_criteria": [],
+        "write_targets": ["."],
+        "external_effects": [],
+        "search_query": "",
+        "search_timeliness": "any",
+        "context_needs": {"memory": False, "repository": False},
+        "memory_action": "none",
+        "freshness_required": False,
+        "source_grounding_required": False,
+    })
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_POST(self) -> None:  # noqa: N802 — http.server API
+            body = json.loads(
+                self.rfile.read(int(self.headers["Content-Length"]))
+            )
+            calls.append(body)
+            messages = body.get("messages") or []
+            if "tools" not in body:
+                system = str(messages[0].get("content", "")) if messages else ""
+                is_intent = "目标语义理解" in system
+                if is_intent:
+                    # 意图轮带 current_request 原文 — 顺序驱动下按当前
+                    # Run 的意图分相（系统提示词本身含"渲染"等字样，
+                    # 不能按整段 transcript 匹配）。
+                    want_read[0] = "read it back" in json.dumps(
+                        messages, ensure_ascii=False)
+                message = {
+                    "role": "assistant",
+                    "content": intent_json if is_intent else "done",
+                }
+            elif want_read[0]:
+                # 下游节点 — prompt 已注入上游真实产物路径；先读回上游
+                # 产物，再写入本节点交付物满足 FILE_MUTATION。
+                tool_rounds = sum(
+                    1 for m in messages if m.get("role") == "tool")
+                if tool_rounds == 0:
+                    tc = ("read_file", {"path": "agent-note.txt"})
+                elif tool_rounds == 1:
+                    # 交付目标即意图声明的 agent-note.txt。
+                    tc = ("write_file", {
+                        "path": "agent-note.txt",
+                        "content": "rendered-from-upstream",
+                    })
+                else:
+                    tc = None
+                message = (
+                    {"role": "assistant", "content": "done"}
+                    if tc is None else {
+                        "role": "assistant", "content": "",
+                        "tool_calls": [{
+                            "id": "call-0",
+                            "function": {"name": tc[0], "arguments": tc[1]},
+                        }],
+                    })
+            elif any(m.get("role") == "tool" for m in messages):
+                message = {"role": "assistant", "content": "done"}
+            else:
+                message = {
+                    "role": "assistant", "content": "",
+                    "tool_calls": [{
+                        "id": "call-0",
+                        "function": {
+                            "name": "write_file",
+                            "arguments": {
+                                "path": "agent-note.txt",
+                                "content": "written-by-upstream",
+                            },
+                        },
+                    }],
+                }
+            if body.get("stream"):
+                payload = (json.dumps({"message": message, "done": True}) + "\n").encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/x-ndjson")
+            else:
+                payload = json.dumps({"message": message, "done": True}).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def log_message(self, *_args: Any) -> None:
+            pass
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    process = _spawn_sidecar(tmp_path, extra_env={
+        "TSAGENT_LLM_PROVIDER": "ollama",
+        "OLLAMA_BASE_URL": f"http://127.0.0.1:{server.server_port}/v1",
+        "OPENAI_API_KEY": "",
+        "LLM_API_KEY": "",
+        "P2_SECONDARY_API_KEY": "",
+    })
+    base = {"tenant_id": "tenant-1", "user_id": "user-1", "session_id": "s-graph"}
+    try:
+        _send(process, {"id": "h", "method": "health", "params": {}})
+        assert _read_response(process)["ok"] is True
+        _send(process, {
+            "id": "cs", "method": "create_session",
+            "params": {**base, "request_id": "cs1", "planet": "uranus"},
+        })
+        assert _read_response(process)["ok"] is True
+
+        definition = {
+            "nodes": [
+                {"id": "n1", "type": "task",
+                 "request_text": "write the file agent-note.txt in the workspace"},
+                {"id": "n2", "type": "task",
+                 "request_text": "read it back — 渲染输入 {artifacts:n1}"},
+            ],
+            "edges": [{"from": "n1", "to": "n2"}],
+        }
+        _send(process, {
+            "id": "ug", "method": "upsert_workflow_graph",
+            "params": {**base, "request_id": "ug1", "graph_id": "g-io",
+                       "name": "io-chain", "definition": definition},
+        })
+        assert _read_response(process)["ok"] is True
+
+        # 无父 Run 直接执行 —— 图任务由后端接纳入口创建。
+        _send(process, {
+            "id": "rg", "method": "run_graph",
+            "params": {**base, "request_id": "rg1", "graph_id": "g-io",
+                       "parent_run_id": "", "origin_planet": "uranus"},
+        })
+        steps = _read_response(process)
+        assert steps["ok"] is True, steps
+        execution_id = steps["result"][0]["execution_id"]
+
+        deadline = time.time() + 120
+        final: dict[str, Any] = {}
+        while time.time() < deadline:
+            _send(process, {
+                "id": "ge", "method": "get_graph_execution",
+                "params": {**base, "request_id": "ge",
+                           "execution_id": execution_id},
+            })
+            final = _read_response(process)
+            assert final["ok"] is True, final
+            statuses = [s["status"] for s in final["result"]["steps"]]
+            if all(s in ("COMPLETED", "FAILED", "SKIPPED") for s in statuses):
+                break
+            time.sleep(0.5)
+        by_node = {s["node_id"]: s["status"] for s in final["result"]["steps"]}
+        assert by_node == {"n1": "COMPLETED", "n2": "COMPLETED"}, by_node
+
+        # 上游真实落盘 — 文件存在于 Run workspace 下（n2 的交付覆写
+        # 同一声明目标，终态内容是下游产物）。
+        notes = sorted(p for p in tmp_path.rglob("agent-note.txt") if p.is_file())
+        assert len(notes) == 1, notes
+        assert notes[0].read_text() == "rendered-from-upstream"
+
+        # 下游真实读取 — read_file 的工具结果（文件内容）回传到 provider。
+        tool_contents = [
+            str(m.get("content", ""))
+            for body in calls
+            for m in (body.get("messages") or [])
+            if m.get("role") == "tool"
+        ]
+        assert any("written-by-upstream" in c for c in tool_contents), (
+            tool_contents, [
+                (i, "tools" in b,
+                 "read it back" in json.dumps(b.get("messages") or [], ensure_ascii=False),
+                 any(m.get("role") == "tool" for m in (b.get("messages") or [])),
+                 "目标语义理解" in str((b.get("messages") or [{}])[0].get("content", "")))
+                for i, b in enumerate(calls)
+            ])
+
+        _send(process, {"id": "bye", "method": "shutdown", "params": {}})
+        assert _read_response(process)["ok"] is True
+        assert process.wait(timeout=60) == 0
+    finally:
+        server.shutdown()
+        _terminate(process)
+
+
+def test_resolve_session_workspace_mirrors_admission(tmp_path: Path) -> None:
+    """WI-03 修正：未绑定会话得到有效根 = 应用管理目录（注册+绑定，
+    与 start_run 接纳同合同），不是 Path.home()；已绑定会话直接返回
+    绑定路径。"""
+    import asyncio
+
+    from agent.service.contracts import (
+        AssignSessionWorkspaceRequest,
+        ResolveSessionWorkspaceRequest,
+        UpsertWorkspaceRequest,
+    )
+
+    async def scenario() -> None:
+        service = _workspace_file_service(tmp_path)
+        store = service._store
+        try:
+            store.ensure_session("t", "s-unbound", "u")
+            store.ensure_session("t", "s-bound", "u")
+            bound_root = tmp_path / "user-picked"
+            bound_root.mkdir()
+            await service.upsert_workspace(UpsertWorkspaceRequest(
+                tenant_id="t", user_id="u", session_id="s-bound",
+                request_id="u1", workspace_id="ws-user",
+                path=str(bound_root)))
+            await service.assign_session_workspace(AssignSessionWorkspaceRequest(
+                tenant_id="t", user_id="u", session_id="s-bound",
+                request_id="a1", workspace_id="ws-user"))
+
+            bound = await service.resolve_session_workspace(
+                ResolveSessionWorkspaceRequest(
+                    tenant_id="t", user_id="u", session_id="s-bound",
+                    request_id="r1"))
+            assert bound["bound"] is True
+            assert bound["workspace_id"] == "ws-user"
+            assert bound["path"] == str(bound_root)
+
+            unbound = await service.resolve_session_workspace(
+                ResolveSessionWorkspaceRequest(
+                    tenant_id="t", user_id="u", session_id="s-unbound",
+                    request_id="r2"))
+            assert unbound["bound"] is True
+            assert unbound["workspace_id"] == "ws-auto-s-unbound"
+            assert "workspaces" in unbound["path"]
+            assert unbound["path"] != str(Path.home())
+            # 绑定成为 durable 事实 —— 后续解析与接纳读到同一根。
+            assert store.session_workspace_id(
+                "t", "s-unbound") == "ws-auto-s-unbound"
+            again = await service.resolve_session_workspace(
+                ResolveSessionWorkspaceRequest(
+                    tenant_id="t", user_id="u", session_id="s-unbound",
+                    request_id="r3"))
+            assert again["path"] == unbound["path"]
+        finally:
+            await service.close()
+
+    asyncio.run(scenario())

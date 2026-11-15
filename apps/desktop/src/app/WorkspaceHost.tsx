@@ -1,7 +1,6 @@
-import { Suspense, lazy, useCallback, useEffect, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { Navigate, useParams } from "react-router-dom";
 import { resolveScene, type SceneId } from "./scenes";
-import { resolveBoundPath } from "./sessionWorkspace";
 import { WorkspaceDirBar } from "./WorkspaceDirBar";
 import { setSidecarPicker } from "../service/tauriBridge";
 import type { RunCtx } from "./runCtx";
@@ -25,27 +24,40 @@ export default function WorkspaceHost({ ctx }: { ctx: RunCtx }) {
   const planet = scene?.id ?? "";
   const sessionId = ctx.sessionForPlanet(planet);
   // First visit to a workstation creates its own session scope (durable
-  // `planet` claim); revisits reload that scope's catalog. Switching
-  // workstations never touches another scope's session.
+  // `planet` claim). Depends on the stable planet/session primitives —
+  // a new ctx identity per App render must not re-fire scope creation.
   useEffect(() => {
-    if (planet) void ctx.ensurePlanet(planet);
-  }, [ctx, planet]);
-  // Resolve this scope's durable session→workspace binding — files,
-  // attachments, submissions and the Mars IDE all read the same root.
-  // Unbound scopes still have an effective root: the backend's factory
-  // default, surfaced via listDirectory (never a guessed path).
-  const [boundPath, setBoundPath] = useState("");
-  const [effectivePath, setEffectivePath] = useState("");
+    if (planet && !sessionId) void ctx.ensurePlanet(planet);
+  }, [planet, sessionId]);
+  // Resolve this scope's effective workspace root via the authoritative
+  // backend contract (durable binding, or the resolver/app-managed root
+  // it registers + binds). The result stays bound to the session it was
+  // requested for: a switch clears it immediately, a late response for
+  // the old session is discarded, and submissions can never see a stale
+  // root — workspacePath is undefined until the live scope resolves.
+  const [ws, setWs] = useState<{ sessionId: string; path: string; bound: boolean; workspaceId: string } | null>(null);
+  const sessionRef = useRef(sessionId);
+  sessionRef.current = sessionId;
   const refreshWsPath = useCallback(() => {
     if (!sessionId) return;
-    void resolveBoundPath(ctx.service, sessionId)
-      .then(async (bound) => {
-        setBoundPath(bound);
-        setEffectivePath(bound || (await ctx.service.listDirectory("")).path);
-      })
-      .catch(() => { setBoundPath(""); setEffectivePath(""); });
+    const target = sessionId;
+    void ctx.service.resolveSessionWorkspace({
+      tenantId: ctx.service.identity.tenantId,
+      sessionId: target,
+    }).then((r) => {
+      // Live-scope check via ref — the closure's sessionId is stale by
+      // the time a slow response lands.
+      if (sessionRef.current === target) {
+        setWs({ sessionId: r.sessionId, path: r.path, bound: r.bound, workspaceId: r.workspaceId });
+      }
+    }).catch(() => {
+      if (sessionRef.current === target) setWs(null);
+    });
   }, [ctx.service, sessionId]);
-  useEffect(refreshWsPath, [refreshWsPath]);
+  useEffect(() => {
+    setWs((cur) => (cur && cur.sessionId === sessionId ? cur : null));
+    refreshWsPath();
+  }, [refreshWsPath, sessionId]);
   // Dev browser folder picking needs the local sidecar's native dialog —
   // register it for every scene so planet directory bars work too.
   useEffect(() => {
@@ -55,16 +67,19 @@ export default function WorkspaceHost({ ctx }: { ctx: RunCtx }) {
   }, [ctx.service]);
   if (!scene) return <Navigate to="/" replace />;
   if (!sessionId) return <div className="ws-loading">Preparing {scene.workspace}…</div>;
+  // Only a resolution owned by the live scope may reach consumers —
+  // during a switch workspacePath is undefined, never the old session's.
+  const active = ws && ws.sessionId === sessionId ? ws : null;
   const wctx: RunCtx = {
     ...ctx,
     sessionId,
-    workspacePath: effectivePath || undefined,
+    workspacePath: active?.path || undefined,
     selectSession: (id: string) => ctx.selectSessionFor(planet, id),
   };
   const Workspace = LAZY[scene.id];
   return (
     <>
-      {scene.id !== "sun" && <WorkspaceDirBar ctx={wctx} path={boundPath} onBound={refreshWsPath} />}
+      {scene.id !== "sun" && <WorkspaceDirBar ctx={wctx} path={active && active.bound && !active.workspaceId.startsWith("ws-auto-") ? active.path : ""} onBound={refreshWsPath} />}
       <Suspense fallback={<div className="ws-loading">Loading {scene.workspace}…</div>}>
         <Workspace ctx={wctx} />
       </Suspense>

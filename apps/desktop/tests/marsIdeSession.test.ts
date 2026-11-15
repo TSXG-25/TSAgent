@@ -68,6 +68,33 @@ test("scope change while start is in flight drops the late binding", async () =>
   assert.ok(calls.includes("start:/ws/a"));
 });
 
+test("release mid-start invalidates the in-flight ticket", async () => {
+  const { bridge, calls, resolveStart } = fakeBridge({ holdStart: true });
+  const ide = new MarsIdeSession(bridge);
+  await ide.bindScope("s1|/ws/a");
+  calls.length = 0;
+  const pending = ide.toggle("/ws/a");
+  await ide.release();
+  resolveStart("/ws/a");
+  await pending;
+  assert.equal(ide.info, null);
+  assert.ok(calls.includes("stop"));
+});
+
+test("A→B→A rebinding does not re-accept the stale A start", async () => {
+  const { bridge, calls, resolveStart } = fakeBridge({ holdStart: true });
+  const ide = new MarsIdeSession(bridge);
+  await ide.bindScope("s1|/ws/a");
+  calls.length = 0;
+  const pending = ide.toggle("/ws/a");
+  await ide.bindScope("s2|/ws/b");
+  await ide.bindScope("s1|/ws/a"); // same scope string as the ticket
+  resolveStart("/ws/a");
+  await pending;
+  assert.equal(ide.info, null);
+  assert.ok(calls.includes("stop"));
+});
+
 test("release on unmount kills the instance and forgets info", async () => {
   const { bridge, calls } = fakeBridge();
   const ide = new MarsIdeSession(bridge);

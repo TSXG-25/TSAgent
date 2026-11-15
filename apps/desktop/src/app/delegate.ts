@@ -19,10 +19,11 @@ export async function submitToPlanet(
   attachments: string[] = [],
   options: { model?: string } = {},
 ): Promise<string> {
+  // No explicit workspaceRoot — admission resolves the session's durable
+  // binding itself, so a stale ctx path can never become the run root.
   const view = await ctx.controller.startRun({
     tenantId: ctx.service.identity.tenantId,
     sessionId: ctx.sessionId,
-    workspaceRoot: ctx.workspacePath,
     originPlanet: targetPlanet,
     contextRefs: attachments,
     metadata: metadataFor(options),

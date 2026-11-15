@@ -81,6 +81,7 @@ class LocalTransportMethod(str, Enum):
     ATTACH_FILES = "attach_files"
     REVEAL_PATH = "reveal_path"
     ASSIGN_SESSION_WORKSPACE = "assign_session_workspace"
+    RESOLVE_SESSION_WORKSPACE = "resolve_session_workspace"
     DELETE_WORKSPACE = "delete_workspace"
     READ_WORKSPACE_FILE = "read_workspace_file"
     WRITE_WORKSPACE_FILE = "write_workspace_file"

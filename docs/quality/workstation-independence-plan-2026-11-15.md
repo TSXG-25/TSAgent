@@ -167,7 +167,13 @@
 - 前端：`launch()` 去掉 `!currentRun` 门控，`parentRunId` 可空、`originPlanet: "uranus"`；删除 `ura.need-run` 失效键。图列表/执行列表/运行均走 `ctx.sessionId` 显式作用域。
 - wire fixture 同步 `origin_planet`（Python DTO 为源，双端校验通过）。
 - 回归：`test_graph_execute_without_parent_run_provisions_graph_task`——`run_graph` 全路径：图任务归属 uranus、n1 子 Task parent=图任务、handoff `source_run_id=""`/source_task=图任务、n2 委派在前任 Run 下、节点全 COMPLETED；既有 `{artifacts:n1}` 产物引用测试覆盖"上游产物真实路径注入下游"。graph/delegate 相关 15 项全过。
-- 未做：假 Provider 驱动真 LLM 循环的端到端"上游写文件→下游读文件"（现有覆盖为 durable 产物行注入，非循环执行）；浏览器实测归外部验收。
+- 复核修正（4 项）：
+  - WorkspaceHost 作用域 effect 改依赖稳定 planet/session 原语（`ctx` 每次渲染重建导致的 ensurePlanet→loadScope→emit 持续循环消除）；目录解析状态与请求所属会话绑定（切换即清空、迟到响应按活 ref 丢弃、`workspacePath` 未解析前为 undefined 不携旧根）。
+  - 新 RPC `resolve_session_workspace`：与接纳同一合同——绑定→路径；未绑定→resolver/应用管理根并注册+绑定（`ws-auto-<session>` durable 事实），取代错误的 `listDirectory("")`（实为 Path.home 选择器入口）；`submitToPlanet` 不再显式提交 `workspaceRoot`，由后端按会话绑定解析，杜绝过期 ctx 污染执行根。
+  - MarsWorkspace 文件列表守卫改读 live ref（原比较同闭包旧值无效）。
+  - MarsIdeSession 代次票据：`release()`/重绑定递增 gen 作废旧 start——覆盖"启动中卸载"与"A→B→A"两条遗漏路径。
+- 验收闭环：`test_subprocess_graph_upstream_writes_downstream_reads`——真实 sidecar 子进程+假 Ollama 端点：n1 经 write_file 工具真实落盘、`{artifacts:n1}` 注入真实路径、n2 经 read_file 工具真实读取（tool 结果含上游内容）后写交付物，两节点 COMPLETED。`test_resolve_session_workspace_mirrors_admission` 覆盖绑定/未绑定/幂等路径。
+- 未做：浏览器/Tauri 九台实测、code-server 嵌入实测、真实 ffmpeg/Ollama 媒体链路——外部验收单列。
 
 ### WI-08 / P2 — 跨台验收与文档收口
 

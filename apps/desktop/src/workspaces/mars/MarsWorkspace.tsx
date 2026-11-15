@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { SCENES } from "../../app/scenes";
 import { WorkspaceFrame } from "../../design-system/WorkspaceFrame";
 import AgentComposer from "../../app/AgentComposer";
@@ -87,20 +87,23 @@ export default function MarsWorkspace({ ctx }: { ctx: RunCtx }) {
     }
   }
 
+  const liveSession = useRef(sessionId);
+  liveSession.current = sessionId;
   useEffect(() => {
+    const target = sessionId;
     service
       .listWorkspaceFiles({
         tenantId: service.identity.tenantId,
-        sessionId,
+        sessionId: target,
         requestId: requestIdForRun(0),
       })
       .then((list) => {
         // a slow A response must not land on session B's list — compare
-        // against the live identity, not a second stale closure value
-        if (ctx.sessionId === sessionId) setFiles(list);
+        // against the live ref, not a stale closure value
+        if (liveSession.current === target) setFiles(list);
       })
       .catch((e) => {
-        if (ctx.sessionId === sessionId) setErr(String(e));
+        if (liveSession.current === target) setErr(String(e));
       });
   }, [service, sessionId]);
 

@@ -371,6 +371,28 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
     return { sessionId: request.sessionId, workspaceId: request.workspaceId };
   }
 
+  async resolveSessionWorkspace(
+    request: SessionScope,
+  ): Promise<{ sessionId: string; workspaceId: string; path: string; bound: boolean }> {
+    const boundId = this.sessionWorkspaces.get(request.sessionId) ?? "";
+    if (boundId) {
+      const path = this.workspaces.find((w) => w.workspaceId === boundId)?.path ?? "";
+      return { sessionId: request.sessionId, workspaceId: boundId, path, bound: true };
+    }
+    // Mirror the backend admission contract: unbound sessions get an
+    // app-managed root, registered and bound so it is a visible fact.
+    const workspaceId = `ws-auto-${request.sessionId}`;
+    const path = `/mock/workspaces/${request.sessionId}`;
+    const auto = {
+      workspaceId, displayName: `session ${request.sessionId} workspace`,
+      path, paths: [path], capabilities: [] as string[],
+      defaultProfileId: "", description: "", updatedAt: new Date().toISOString(),
+    };
+    this.workspaces = [auto, ...this.workspaces.filter((w) => w.workspaceId !== workspaceId)];
+    this.sessionWorkspaces.set(request.sessionId, workspaceId);
+    return { sessionId: request.sessionId, workspaceId, path, bound: true };
+  }
+
   async deleteWorkspace(request: DeleteWorkspaceRequest): Promise<{ removed: boolean }> {
     const before = this.workspaces.length;
     this.workspaces = this.workspaces.filter((w) => w.workspaceId !== request.workspaceId);

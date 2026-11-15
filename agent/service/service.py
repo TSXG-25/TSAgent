@@ -809,6 +809,45 @@ class AgentService:
         )
         return {"session_id": request.session_id, "workspace_id": request.workspace_id}
 
+    async def resolve_session_workspace(self, request: Any) -> Any:
+        """Effective workspace root for a session — the exact contract run
+        admission applies: a durable binding wins; an unbound session gets
+        the resolver root (or the app-managed per-session directory when
+        the resolver has none) registered and bound, so the source is a
+        visible fact rather than an implicit fallback."""
+        self._ensure_open()
+        tenant_id, session_id = request.tenant_id, request.session_id
+        bound_id = self._store.session_workspace_id(tenant_id, session_id)
+        if bound_id:
+            return {
+                "session_id": session_id,
+                "workspace_id": bound_id,
+                "path": self._store.session_workspace_path(
+                    tenant_id, session_id
+                ),
+                "bound": True,
+            }
+        root = self._contexts.run_workspace(tenant_id, session_id, "")
+        if root is None:
+            root = self._default_session_workspace(tenant_id, session_id)
+        else:
+            root = Path(root).resolve()
+            if self._contexts.uses_default_resolver:
+                self._bind_session_workspace(tenant_id, session_id, root)
+            else:
+                return {
+                    "session_id": session_id,
+                    "workspace_id": "",
+                    "path": str(root),
+                    "bound": False,
+                }
+        return {
+            "session_id": session_id,
+            "workspace_id": f"ws-auto-{session_id}",
+            "path": str(root),
+            "bound": True,
+        }
+
     async def delete_workspace(self, request: Any) -> Any:
         removed = self._store.delete_workspace(request.tenant_id, request.workspace_id)
         return {"removed": removed}

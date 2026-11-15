@@ -70,6 +70,7 @@ export const LOCAL_TRANSPORT_METHODS = [
   "attach_files",
   "reveal_path",
   "assign_session_workspace",
+  "resolve_session_workspace",
   "delete_workspace",
   "read_workspace_file",
   "write_workspace_file",

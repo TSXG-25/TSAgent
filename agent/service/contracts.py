@@ -667,6 +667,33 @@ class CreateSessionRequest:
 
 
 @dataclass(frozen=True)
+class ResolveSessionWorkspaceRequest:
+    """Resolve a session's effective workspace root — same contract as run
+    admission: durable binding, else the resolver/default root registered
+    and bound so the source is a visible fact (never Home or cwd)."""
+
+    tenant_id: str
+    user_id: str
+    session_id: str
+    request_id: str
+
+    def __post_init__(self) -> None:
+        _required_identifier(self.tenant_id, "tenant_id")
+        _required_identifier(self.user_id, "user_id")
+        _required_identifier(self.session_id, "session_id")
+        _required_identifier(self.request_id, "request_id")
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "ResolveSessionWorkspaceRequest":
+        return cls(
+            tenant_id=str(value.get("tenant_id", "")),
+            user_id=str(value.get("user_id", "")),
+            session_id=str(value.get("session_id", "")),
+            request_id=str(value.get("request_id", "")),
+        )
+
+
+@dataclass(frozen=True)
 class DeleteSessionRequest:
     """Request to remove a session from the registry. Orphaned runs remain
     addressable by session locator but the session no longer lists."""

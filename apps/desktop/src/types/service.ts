@@ -682,6 +682,12 @@ export interface WorkspaceClient {
   assignSessionWorkspace(
     request: AssignSessionWorkspaceRequest,
   ): Promise<{ sessionId: string; workspaceId: string }>;
+  /** Effective workspace root — the admission contract: durable binding,
+   *  or the backend's resolver/app-managed default (registered + bound).
+   *  Never Home or cwd. */
+  resolveSessionWorkspace(
+    request: SessionScope,
+  ): Promise<{ sessionId: string; workspaceId: string; path: string; bound: boolean }>;
   deleteWorkspace(request: DeleteWorkspaceRequest): Promise<{ removed: boolean }>;
   /** Native folder picker — resolves to the picked path or null on cancel. */
   pickFolder(): Promise<{ path: string | null }>;

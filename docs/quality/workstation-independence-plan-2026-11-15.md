@@ -125,6 +125,12 @@
 
 验收：假搜索 provider 覆盖成功、空结果、不可用；来源进入研究任务请求；Stop/切会话丢弃旧响应。真实联网搜索与页面访问另列外部验收，不调用真实模型替代离线测试。
 
+**实施记录（本轮）**：
+
+- 现状核实：搜索表单/结果窗格/`target="_blank"` 来源链接、`MercurySearchSession`（seq 失效 + `bind`/`stop` 串话隔离）、`CapNotInstalled` 浏览器边界声明均已存在——浏览器导航/点击/登录不冒充交付。
+- 本轮增量："基于结果创建任务"按钮——把当前来源列表（title+url）经既有 `tsagent:composer-draft` 草稿合同预填研究请求（`mer.research-prefill` 带查询词+来源，预填不代提交）；搜索与普通 Agent 任务保持两条入口。
+- 回归：`mercurySearch.test.ts` 已覆盖成功/空/不可用/stop 丢弃晚到响应/会话切换清空——验收面齐全，未重复添加。
+
 ### WI-06 / P1 — Mars IDE 接入正确的独立目录
 
 依赖：WI-02、WI-03。复用 `e37292d1a` 的 FE-04B 实现。

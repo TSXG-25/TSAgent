@@ -18,6 +18,7 @@ export default function MercuryWorkspace({ ctx }: { ctx: RunCtx }) {
   const scene = SCENES[1];
   const currentRun = useWorkspaceCurrentRun(ctx, "mercury");
   const [query, setQuery] = useState("");
+  const [searchedQuery, setSearchedQuery] = useState("");
   const [steps, setSteps] = useState<{ plan: string; preview: string }[]>([]);
   const [, bump] = useReducer((n: number) => n + 1, 0);
 
@@ -53,6 +54,7 @@ export default function MercuryWorkspace({ ctx }: { ctx: RunCtx }) {
     setSteps((s) => [...s, { plan: `web_search → "${q}"`, preview: t("mer.searching") }]);
     const applied = await search.run(q);
     if (!applied) return; // stopped/superseded — no view or log update
+    setSearchedQuery(q);
     setSteps((s) => [...s, {
       plan: search.status === "error" || search.status === "unavailable"
         ? t("status.failed")
@@ -105,6 +107,14 @@ export default function MercuryWorkspace({ ctx }: { ctx: RunCtx }) {
             <div className="nav-vctl">
               <button className="btn secondary" disabled={search.panes.length >= 4} onClick={() => search.addPane()} type="button">{t("mer.add-view")}</button>
               <button className="btn secondary" disabled={search.panes.length <= 1} onClick={() => search.removePane()} type="button">{t("mer.remove-view")}</button>
+              <button className="btn secondary" disabled={search.sourceCount === 0} type="button" onClick={() => {
+                // 选中来源经既有草稿合同进入研究任务 —— 预填不代提交。
+                const sources = search.panes.flatMap((p) => p.source ? [p.source] : [])
+                  .map((s) => `- ${String(s.title ?? s.url ?? "source")} — ${String(s.url ?? "")}`).join("\n");
+                window.dispatchEvent(new CustomEvent("tsagent:composer-draft", {
+                  detail: { text: t("mer.research-prefill", { query: searchedQuery, sources }) },
+                }));
+              }}>{t("mer.research-task")}</button>
             </div>
             <AgentComposer ctx={ctx} planet="mercury" placeholder={t("mer.composer-ph")} />
           </div>

@@ -211,6 +211,8 @@ const zh = {
   "mer.stop": "■ 停止",
   "mer.cap-browser": "浏览器接管 / 截图 / 点击",
   "mer.composer-ph": "交给 Navigator 的任务…",
+  "mer.research-task": "基于结果创建任务",
+  "mer.research-prefill": "基于以下搜索结果继续研究：\n查询：{query}\n{sources}\n\n研究目标：",
   // saturn
   "sat.ph-task": "定时任务内容…",
   "sat.ph-mins": "分钟",
@@ -606,6 +608,8 @@ const en: Record<keyof typeof zh, string> = {
   "mer.stop": "■ Stop",
   "mer.cap-browser": "Browser takeover / screenshots / clicks",
   "mer.composer-ph": "Task for Navigator…",
+  "mer.research-task": "Research from results",
+  "mer.research-prefill": "Continue research from these search results:\nQuery: {query}\n{sources}\n\nResearch goal: ",
   // saturn
   "sat.ph-task": "Scheduled task…",
   "sat.ph-mins": "Minutes",

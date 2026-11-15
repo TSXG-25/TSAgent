@@ -1834,6 +1834,12 @@ class AgentService:
         self._ensure_open()
         from .contracts import GraphExecutionSummary, GraphRunStepSummary
 
+        # 惰性收敛：启动扫描只跑一次，驱动在宽限期内崩溃的执行会被
+        # 跳过 — 同一判死谓词在读路径重评，宽限期过后正常查询即得
+        # 终态，而不是永久 PENDING。
+        self._store.converge_orphaned_graph_execution_nodes(
+            request.execution_id
+        )
         nodes = self._store.list_graph_execution_nodes(
             request.tenant_id, request.execution_id
         )

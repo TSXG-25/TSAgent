@@ -4345,12 +4345,14 @@ class SqliteRuntimeStore:
             return False
         return True
 
-    def converge_orphaned_graph_execution_nodes(self) -> int:
-        """Startup sweep: an open graph node row (PENDING/ADMITTED/RUNNING)
-        only advances while its in-process driver lives — but several
-        service instances may share one database, so 'this instance just
-        started' is not proof that every driver is dead. A node converges
-        only when ALL of the following hold:
+    def converge_orphaned_graph_execution_nodes(
+        self, execution_id: str | None = None
+    ) -> int:
+        """An open graph node row (PENDING/ADMITTED/RUNNING) only advances
+        while its in-process driver lives — but several service instances
+        may share one database, so 'this instance just started' is not
+        proof that every driver is dead. A node converges only when ALL
+        of the following hold:
 
         - it has no bound Run (run-bound rows project the authoritative
           head at read time and never need this sweep);
@@ -4360,14 +4362,26 @@ class SqliteRuntimeStore:
           window — a just-seeded or mid-flight execution looks exactly
           like this row, and the driver's own next upsert is the freshest
           evidence it is alive.
+
+        Called once at service start for every execution, and lazily from
+        read paths with ``execution_id`` — a driver that died moments
+        before a restart is skipped by the grace check at startup and
+        would otherwise stay PENDING forever; the lazy call re-evaluates
+        the same predicate once the row has aged past the window.
         """
         now = _now()
         lease_grace = (
             datetime.now(timezone.utc) - timedelta(seconds=WORKER_LEASE_SECONDS)
         ).isoformat().replace("+00:00", "Z")
+        scope = "AND target.execution_id = ?" if execution_id else ""
+        params = (
+            (now, now, lease_grace, execution_id)
+            if execution_id
+            else (now, now, lease_grace)
+        )
         with self._write_transaction() as connection:
             cursor = connection.execute(
-                """
+                f"""
                 UPDATE graph_execution_nodes AS target
                 SET status = 'INTERRUPTED',
                     detail = 'graph driver lost: no live writer lease',
@@ -4384,8 +4398,9 @@ class SqliteRuntimeStore:
                         AND sibling.execution_id = target.execution_id
                         AND sibling.updated_at > ?
                   )
+                  {scope}
                 """,
-                (now, now, lease_grace),
+                params,
             )
             return cursor.rowcount
 

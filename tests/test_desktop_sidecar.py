@@ -3632,3 +3632,47 @@ def test_graph_convergence_preserves_live_instance_nodes(
 
     asyncio.run(scenario())
 
+
+def test_graph_convergence_lazy_read_after_grace(tmp_path: Path) -> None:
+    """宽限期内重启的执行不被启动收敛误杀；宽限期过后正常查询
+    惰性重评同一判死谓词 — 得到终态而非永久 PENDING。"""
+    import asyncio
+
+    import tests.test_ha_r1_harness as harness
+    from agent.service.contracts import GraphExecutionLookupRequest
+
+    async def scenario() -> None:
+        service_a, store_a = harness.service_at(tmp_path)
+        try:
+            store_a.upsert_graph_execution_node(
+                "t", "gexec:stale:r1", "n1",
+                graph_id="g-x", session_id="s", position=0,
+                status="PENDING", driver_writer_id="dead-writer")
+        finally:
+            await service_a.close()
+
+        # 驱动死后立即重启 — 行在宽限期内，启动收敛如实跳过（这正是
+        # 多实例存活保护的另一半：新鲜行也可能是存活驱动刚写的）。
+        service_b = _workspace_file_service(tmp_path)
+        try:
+            rows = service_b._store.list_graph_execution_nodes(
+                "t", "gexec:stale:r1")
+            assert rows[0].status == "PENDING"
+            # 时间推进出宽限期 — 正常查询惰性收敛。
+            stale = "2000-01-01T00:00:00Z"
+            with service_b._store._write_transaction() as connection:
+                connection.execute(
+                    "UPDATE graph_execution_nodes SET updated_at = ? "
+                    "WHERE tenant_id = 't' AND execution_id = 'gexec:stale:r1'",
+                    (stale,),
+                )
+            summary = await service_b.get_graph_execution(
+                GraphExecutionLookupRequest(
+                    tenant_id="t", user_id="u", session_id="s",
+                    request_id="req-l", execution_id="gexec:stale:r1"))
+            assert summary.steps[0].status == "INTERRUPTED"
+        finally:
+            await service_b.close()
+
+    asyncio.run(scenario())
+

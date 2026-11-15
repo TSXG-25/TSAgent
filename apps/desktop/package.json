@@ -17,11 +17,12 @@
     "test:scenes": "node scripts/test-scenes.mjs",
     "test:sidecar-e2e": "node scripts/test-sidecar-e2e.mjs",
     "typecheck": "tsc -p tsconfig.json && tsc -p tests/tsconfig.json",
-    "test": "npm run typecheck && node scripts/run-ts-test.mjs tests/localAgentServiceClient.test.ts tests/clientFactory.test.ts tests/runController.test.ts tests/runControllerOperations.test.ts tests/documentSession.test.ts tests/wireContract.test.ts tests/mercurySearch.test.ts tests/globalSettings.test.ts tests/sunSession.test.ts tests/earthEvalForm.test.ts tests/workspaceCapability.test.ts tests/frontendDraftI18n.test.ts tests/frontendMarkdown.test.ts tests/frontendApprovals.test.ts tests/ws01Admission.test.ts"
+    "test": "npm run typecheck && node scripts/run-ts-test.mjs tests/localAgentServiceClient.test.ts tests/clientFactory.test.ts tests/runController.test.ts tests/runControllerOperations.test.ts tests/documentSession.test.ts tests/wireContract.test.ts tests/mercurySearch.test.ts tests/globalSettings.test.ts tests/sunSession.test.ts tests/earthEvalForm.test.ts tests/workspaceCapability.test.ts tests/frontendDraftI18n.test.ts tests/frontendMarkdown.test.ts tests/frontendApprovals.test.ts tests/ws01Admission.test.ts tests/uranusGraphModel.test.ts"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.12.4",
     "@tauri-apps/plugin-dialog": "^2.8.4",
+    "@xyflow/react": "12.12.1",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-router-dom": "^7.9.6",
@@ -29,13 +30,13 @@
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.12.4",
+    "@types/node": "22.18.0",
     "@types/react": "19.1.11",
     "@types/react-dom": "19.1.1",
     "@types/three": "^0.186.0",
     "esbuild": "0.27.7",
     "typescript": "5.9.3",
-    "vite": "7.3.5",
-    "@types/node": "22.18.0"
+    "vite": "7.3.5"
   },
   "engines": {
     "node": "^20.19.0 || >=22.12.0"

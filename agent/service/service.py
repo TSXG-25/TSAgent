@@ -1951,6 +1951,8 @@ class AgentService:
         results: dict[str, str] = {}
         run_by_node: dict[str, str] = {}
         session_by_node: dict[str, str] = {}
+        artifact_refs_by_node: dict[str, list[str]] = {}
+        import re as _re
         try:
             for node in order:
                 node_id = str(node["id"])
@@ -1985,6 +1987,38 @@ class AgentService:
                     request_text = request_text.replace(
                         "{" + key + "}", value
                     )
+                # {artifacts:<node_id>} — 边本身不携带数据；节点必须显式
+                # 声明引用，替换内容为上游 Run 的 durable workspace 相对
+                # 路径（dep 门已保证 COMPLETED）。引用未运行节点直接判
+                # FAILED，不把占位符原样传给下游造成数据已传递的假象。
+                bad_ref = False
+                for ref in set(
+                    _re.findall(r"\{artifacts:([^}]+)\}", request_text)
+                ):
+                    refs = artifact_refs_by_node.get(ref)
+                    if refs is None:
+                        results[node_id] = "FAILED"
+                        self._store.upsert_graph_execution_node(
+                            request.tenant_id,
+                            execution_id,
+                            node_id,
+                            graph_id=request.graph_id,
+                            session_id=request.session_id,
+                            status="FAILED",
+                            detail=(
+                                "artifact reference to uncompleted "
+                                f"node: {ref}"
+                            ),
+                            driver_writer_id=self._contexts.writer_id,
+                        )
+                        bad_ref = True
+                        break
+                    request_text = request_text.replace(
+                        "{artifacts:" + ref + "}",
+                        "\n".join(refs) if refs else "(none)",
+                    )
+                if bad_ref:
+                    continue
                 parent_run_id = request.parent_run_id
                 delegate_session = request.session_id
                 if preds:
@@ -2074,6 +2108,11 @@ class AgentService:
                 results[node_id] = snapshot.status.value
                 run_by_node[node_id] = started.run_id
                 session_by_node[node_id] = child_session
+                artifact_refs_by_node[node_id] = [
+                    str(a.reference)
+                    for a in getattr(snapshot, "artifacts", ()) or ()
+                    if getattr(a, "exists", False)
+                ]
                 self._store.upsert_graph_execution_node(
                     request.tenant_id,
                     execution_id,

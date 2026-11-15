@@ -3399,6 +3399,46 @@ html[data-fx="standard"] .ws-root::after { animation: none; }
 .lab-graph-row small { color: var(--text-faint); font-size: 9px; }
 .lab-side .agent-composer { margin-top: auto; padding: 0; border: none; }
 
+/* Uranus DAG studio */
+.lab-top { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.lab-name { flex: 1; min-width: 0; background: rgba(255,255,255,.035); border: 1px solid var(--border-base); border-radius: 2px; color: var(--text-main); font-size: 12px; padding: 7px 9px; }
+.ura-dirty { font-size: 10px; color: var(--st-warn, #e6b96b); white-space: nowrap; }
+.lab-flow { flex: 1; min-height: 0; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; background: var(--surface-0, #0b0c0f); position: relative; }
+.ura-empty { padding: 24px; }
+.lab-exec { flex: 0 0 auto; max-height: 160px; overflow-y: auto; margin-top: 10px; border-top: 1px dashed var(--line); padding-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.lab-exec-head { display: flex; align-items: center; gap: 8px; }
+.lab-exec-head h4 { margin: 0; flex: 0 0 auto; }
+.lab-execpick { flex: 1; min-width: 0; background: rgba(255,255,255,.035); border: 1px solid var(--border-base); border-radius: 2px; color: var(--text-main); font-size: 11px; padding: 4px 6px; }
+.lab-exec-steps { display: flex; flex-direction: column; gap: 4px; }
+.lab-graph-open { text-align: left; cursor: pointer; }
+.lab-graph-open:hover { border-color: var(--planet-accent); }
+.lab-graph-open.open { border-color: var(--planet-accent); box-shadow: inset 0 0 0 1px var(--planet-accent); }
+.ura-nodecard { min-width: 150px; max-width: 220px; background: var(--surface-2); border: 1px solid var(--planet-accent); border-radius: 4px; padding: 8px 10px; font-size: 11px; color: var(--text-main); }
+.ura-nodecard.sel { box-shadow: 0 0 0 2px var(--planet-accent); }
+.ura-nodecard.is-input { border-style: dashed; }
+.ura-nodecard-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.ura-nodecard-id { font-family: var(--font-mono); font-size: 9px; color: var(--text-faint); }
+.ura-nodecard-body { margin-top: 4px; font-size: 10.5px; color: var(--text-muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ura-nodecard-meta { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px; }
+.ura-chip { font-size: 9px; padding: 1px 6px; border: 1px solid var(--border-base); border-radius: 8px; color: var(--text-faint); }
+.ura-badge { font-size: 8.5px; font-family: var(--font-mono); padding: 1px 6px; border-radius: 8px; border: 1px solid var(--border-base); color: var(--text-faint); }
+.ura-badge.ok { color: #5fe0b1; border-color: #5fe0b1; }
+.ura-badge.bad { color: #ff5a4f; border-color: #ff5a4f; }
+.ura-badge.run { color: #4da3ff; border-color: #4da3ff; }
+.ura-badge.skip { color: #9b7bff; border-color: #9b7bff; }
+.ura-cfg { display: flex; flex-direction: column; gap: 8px; }
+.ura-cfg-label { display: flex; flex-direction: column; gap: 4px; font-size: 10px; color: var(--text-faint); }
+.ura-cfg-label code { color: var(--planet-accent); }
+.ura-cfg-label input, .ura-cfg-label textarea, .ura-cfg-label select { background: rgba(255,255,255,.035); border: 1px solid var(--border-base); border-radius: 2px; color: var(--text-main); font-size: 11px; padding: 6px 8px; font-family: inherit; }
+.ura-cfg-label textarea { resize: vertical; }
+.ura-cfg-hint { font-size: 9px; color: var(--text-faint); }
+.ura-del { color: var(--st-danger, #ff5a4f); }
+.lab-flow .react-flow { background: transparent; }
+.lab-flow .react-flow__controls { box-shadow: none; border: 1px solid var(--line); }
+.lab-flow .react-flow__controls-button { background: var(--surface-2); border-bottom: 1px solid var(--line); fill: var(--text-muted); }
+.lab-flow .react-flow__edge-path { stroke: var(--planet-accent); }
+.lab-flow .react-flow__handle { width: 7px; height: 7px; background: var(--planet-accent); border: none; }
+
 .media { display: flex; flex: 1; min-height: 0; gap: 10px; }
 .media-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
 .media-canvas { flex: 1; min-height: 0; display: grid; place-items: center; background: #141414; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }

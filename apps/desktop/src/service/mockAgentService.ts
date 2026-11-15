@@ -38,6 +38,8 @@ import {
   type JupiterArtifactSummary,
   type WorkflowDefinitionSummary,
   type WorkflowGraphSummary,
+  type UpsertWorkflowGraphRequest,
+  type RunWorkflowGraphRequest,
   type GraphExecutionRef,
   type GraphExecutionSummary,
   type GraphRunStepSummary,
@@ -551,8 +553,21 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
     return { path: request.path, text: "saved", digest: `mock-${request.path}-${next.length}`, redacted: false, workspaceRoot: "mock-ws" };
   }
 
-  async upsertWorkflowGraph(): Promise<WorkflowGraphSummary> {
-    return {} as WorkflowGraphSummary;
+  private workflowGraphs: WorkflowGraphSummary[] = [];
+  private graphExecutions = new Map<string, GraphExecutionSummary>();
+
+  async upsertWorkflowGraph(request: UpsertWorkflowGraphRequest): Promise<WorkflowGraphSummary> {
+    const existing = this.workflowGraphs.find((g) => g.graphId === request.graphId);
+    const summary: WorkflowGraphSummary = {
+      graphId: request.graphId,
+      name: request.name ?? existing?.name ?? "",
+      definitionJson: JSON.stringify(request.definition ?? {}),
+      owner: request.owner ?? existing?.owner ?? "",
+      createdAt: existing?.createdAt ?? new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    this.workflowGraphs = [summary, ...this.workflowGraphs.filter((g) => g.graphId !== summary.graphId)];
+    return summary;
   }
 
   async createMotif(): Promise<MotifSummary> {
@@ -579,20 +594,38 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
     return [];
   }
 
-  async runGraph(): Promise<GraphRunStepSummary[]> {
-    return [];
+  async runGraph(request: RunWorkflowGraphRequest): Promise<GraphRunStepSummary[]> {
+    const graph = this.workflowGraphs.find((g) => g.graphId === request.graphId);
+    if (!graph) throw clientError("RUN_NOT_FOUND", `workflow graph not found: ${request.graphId}`);
+    const definition = JSON.parse(graph.definitionJson) as { nodes?: Array<{ id?: string }> };
+    const executionId = `gexec:${request.graphId}:${request.requestId}`;
+    const steps: GraphRunStepSummary[] = (definition.nodes ?? [])
+      .filter((n) => n.id)
+      .map((n) => ({
+        nodeId: String(n.id), taskId: "", runId: "", sessionId: "",
+        status: "PENDING", executionId,
+      }));
+    this.graphExecutions.set(executionId, {
+      executionId, graphId: request.graphId, sessionId: request.sessionId, steps,
+    });
+    return steps;
   }
 
   async getGraphExecution(request: { executionId: string }): Promise<GraphExecutionSummary> {
-    return { executionId: request.executionId, graphId: "", sessionId: "", steps: [] };
+    return this.graphExecutions.get(request.executionId)
+      ?? { executionId: request.executionId, graphId: "", sessionId: "", steps: [] };
   }
 
   async listGraphExecutions(): Promise<GraphExecutionRef[]> {
-    return [];
+    return [...this.graphExecutions.values()].map((e) => ({
+      executionId: e.executionId,
+      graphId: e.graphId,
+      updatedAt: new Date().toISOString(),
+    }));
   }
 
   async listWorkflowGraphs(): Promise<WorkflowGraphSummary[]> {
-    return [];
+    return [...this.workflowGraphs];
   }
 
   async listWorkflows(): Promise<WorkflowDefinitionSummary[]> {

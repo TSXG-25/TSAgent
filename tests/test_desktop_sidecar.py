@@ -3676,3 +3676,107 @@ def test_graph_convergence_lazy_read_after_grace(tmp_path: Path) -> None:
 
     asyncio.run(scenario())
 
+
+
+def test_graph_execute_substitutes_upstream_artifact_references(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """{artifacts:<node_id>} 占位符在委派前替换为上游 Run 的 durable
+    workspace 相对产物路径；引用未运行的节点判 FAILED 且其下游 SKIPPED。"""
+    import asyncio
+    import json as _json
+    from types import SimpleNamespace
+
+    import tests.test_ha_r1_harness as harness
+    from agent.service.contracts import (
+        ArtifactSummary,
+        GraphExecutionLookupRequest,
+        RunWorkflowGraphRequest,
+    )
+    from agent.service.service import _topo_task_order
+
+    async def scenario() -> None:
+        service = _workspace_file_service(tmp_path)
+        store = service._store
+        try:
+            nodes = [
+                {"id": "n1", "type": "task", "request_text": "write script"},
+                {"id": "n2", "type": "task",
+                 "request_text": "使用 {artifacts:n1} 渲染 MP4"},
+                {"id": "n3", "type": "task",
+                 "request_text": "see {artifacts:n9}"},
+                {"id": "n4", "type": "task", "request_text": "after n3"},
+            ]
+            edges = [{"from": "n1", "to": "n2"}, {"from": "n3", "to": "n4"}]
+            store.upsert_workflow_graph("t", "g-art", definition_json=(
+                _json.dumps({"nodes": nodes, "edges": edges})))
+
+            delegated: list[str] = []
+
+            async def fake_delegate(req):
+                delegated.append(req.request_text)
+                node = req.request_id.rsplit("-", 1)[-1]
+                return {
+                    "task_id": f"task-{node}",
+                    "handoff_id": f"h-{node}",
+                    "request_text": req.request_text,
+                    "workspace_root": str(tmp_path),
+                    "agent_profile": "",
+                }
+
+            run_seq = iter(range(1, 10))
+
+            async def fake_start(req):
+                return SimpleNamespace(run_id=f"run-{next(run_seq)}")
+
+            artifact = ArtifactSummary(
+                artifact_id="a-1", artifact_type="file", digest="d",
+                reference="output/script.py", exists=True, verified=True)
+
+            async def fake_get_run(req):
+                return SimpleNamespace(
+                    status=SimpleNamespace(value="COMPLETED"),
+                    artifacts=(artifact,),
+                )
+
+            service.delegate_run = fake_delegate
+            service.start_run = fake_start
+            service.get_run = fake_get_run
+            store.update_handoff_target_run = (
+                lambda *a, **k: None)
+
+            request = RunWorkflowGraphRequest(
+                tenant_id="t", user_id="u", session_id="s",
+                request_id="r-1", graph_id="g-art",
+                parent_run_id="run-parent")
+            task_nodes = [n for n in nodes if n["type"] == "task"]
+            order = _topo_task_order(task_nodes, edges)
+            await service._graph_execute(
+                request, "gexec:g-art:r-1", order, edges, {})
+
+            # n1 真实产物路径注入到 n2 的任务文本；占位符不再保留。
+            assert len(delegated) == 2
+            assert delegated[1] == "使用 output/script.py 渲染 MP4"
+            rows = {
+                r.node_id: r
+                for r in store.list_graph_execution_nodes(
+                    "t", "gexec:g-art:r-1")
+            }
+            assert rows["n1"].status == "COMPLETED"
+            assert rows["n2"].status == "COMPLETED"
+            assert rows["n3"].status == "FAILED"
+            assert "n9" in rows["n3"].detail
+            assert rows["n4"].status == "SKIPPED"
+            summary = await service.get_graph_execution(
+                GraphExecutionLookupRequest(
+                    tenant_id="t", user_id="u", session_id="s",
+                    request_id="req-x", execution_id="gexec:g-art:r-1"))
+            by_id = {s.node_id: s.status for s in summary.steps}
+            assert by_id == {
+                "n1": "COMPLETED", "n2": "COMPLETED",
+                "n3": "FAILED", "n4": "SKIPPED",
+            }
+        finally:
+            await service.close()
+
+    asyncio.run(scenario())

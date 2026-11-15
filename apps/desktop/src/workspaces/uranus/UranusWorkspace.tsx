@@ -10,6 +10,7 @@ import { useWorkspaceCurrentRun } from "../../app/workspaceSelection";
 import type { GraphExecutionRef, GraphExecutionSummary, ProfileSummary, SkillSummary, WorkflowGraphSummary } from "../../types/service";
 import { UranusCanvas } from "./UranusCanvas";
 import {
+  DraftSaveGate,
   emptyCanvas,
   executionStatusByNode,
   nextNodeId,
@@ -54,6 +55,7 @@ export default function UranusWorkspace({ ctx }: { ctx: RunCtx }) {
     setExecution(null);
     setExecSel(null);
     execToken.current = null;
+    overlayRef.current = null;
     service.listProfiles(req()).then(setProfiles).catch((e) => setErr(String(e)));
     service.listSkills(req()).then(setSkills).catch((e) => setErr(String(e)));
     service.listWorkflowGraphs(req()).then(setGraphs).catch((e) => setErr(String(e)));
@@ -75,9 +77,10 @@ export default function UranusWorkspace({ ctx }: { ctx: RunCtx }) {
   }, [service, req]);
 
   const selectExecution = useCallback((id: string) => {
+    overlayRef.current = { execId: id, canvas };
     setExecSel(id);
     void refreshExecution(id);
-  }, [refreshExecution]);
+  }, [refreshExecution, canvas]);
 
   // 未终态的执行自动轮询 — 终态后停止。
   useEffect(() => {
@@ -87,13 +90,33 @@ export default function UranusWorkspace({ ctx }: { ctx: RunCtx }) {
     return () => globalThis.clearInterval(timer);
   }, [execSel, execution, refreshExecution]);
 
-  const statusByNode = useMemo(() => executionStatusByNode(execution?.steps), [execution]);
+  /** 保存回执票据 — 提交时的文档身份+编辑版本；迟到的响应不能
+   *  把之后的修改误标已保存、也不能把 openGraphId 改回旧图。 */
+  const saveGateRef = useRef<DraftSaveGate | null>(null);
+  if (!saveGateRef.current) saveGateRef.current = new DraftSaveGate();
+  const saveGate = saveGateRef.current;
+
+  /** 执行叠加绑定到选中时刻的画布对象 — 任何编辑/切图产生新 canvas
+   *  即解除叠加；历史详情在底部条独立保留。 */
+  const overlayRef = useRef<{ execId: string; canvas: CanvasGraph } | null>(null);
+  const statusByNode = useMemo(
+    () => (
+      execution
+      && execution.graphId === openGraphId
+      && overlayRef.current?.execId === execSel
+      && overlayRef.current.canvas === canvas
+        ? executionStatusByNode(execution.steps)
+        : new Map<string, never>()
+    ),
+    [execution, execSel, openGraphId, canvas],
+  );
   const selected = canvas.nodes.find((n) => n.id === selNode) ?? null;
 
   const mutate = useCallback((next: CanvasGraph) => {
+    saveGate.touch();
     setCanvas(next);
     setDirty(true);
-  }, []);
+  }, [saveGate]);
 
   const addNode = useCallback((type: "task" | "input") => {
     const id = nextNodeId(canvas.nodes);
@@ -124,33 +147,48 @@ export default function UranusWorkspace({ ctx }: { ctx: RunCtx }) {
     setSelNode(null);
   }, [canvas, mutate, selNode]);
 
+  function clearExecSelection() {
+    execToken.current = null;
+    overlayRef.current = null;
+    setExecSel(null);
+    setExecution(null);
+  }
+
   function newGraph() {
+    saveGate.touch();
     setCanvas(emptyCanvas());
     setOpenGraphId(null);
     setName("");
     setDirty(false);
     setSelNode(null);
+    clearExecSelection();
   }
 
   function openGraph(g: WorkflowGraphSummary) {
+    saveGate.touch();
     setCanvas(parseGraphDefinition(g.definitionJson));
     setOpenGraphId(g.graphId);
     setName(g.name);
     setDirty(false);
     setSelNode(null);
+    clearExecSelection();
   }
 
   async function save(saveAs: boolean) {
     if (!name.trim() || !canvas.nodes.some((n) => n.type === "task" && n.requestText.trim())) return;
+    const ticket = saveGate.submit(openGraphId);
     try {
       const graphId = !saveAs && openGraphId ? openGraphId : `g-${Date.now().toString(36)}`;
       const saved = await service.upsertWorkflowGraph({
         ...req(), graphId, name: name.trim(),
         definition: serializeGraphDefinition(canvas),
       });
-      setOpenGraphId(saved.graphId || graphId);
-      setDirty(false);
       setGraphs(await service.listWorkflowGraphs(req()));
+      // 回执仅当草稿自提交后未再编辑、且仍打开同一图时才提交身份变更。
+      if (saveGate.accept(ticket, openGraphId)) {
+        setOpenGraphId(saved.graphId || graphId);
+        setDirty(false);
+      }
     } catch (e) { setErr(String(e)); }
   }
 
@@ -190,7 +228,7 @@ export default function UranusWorkspace({ ctx }: { ctx: RunCtx }) {
         {/* 中 — 顶栏 + DAG 画布 + 底部执行条 */}
         <main className="lab-canvas">
           <div className="lab-top">
-            <input className="lab-name" onChange={(e) => { setName(e.target.value); setDirty(true); }} placeholder={t("ura.name-ph")} value={name} />
+            <input className="lab-name" onChange={(e) => { saveGate.touch(); setName(e.target.value); setDirty(true); }} placeholder={t("ura.name-ph")} value={name} />
             {dirty && <span className="ura-dirty" title={t("ura.dirty-hint")}>● {t("ura.dirty")}</span>}
             <button className="btn primary" disabled={!name.trim() || !canvas.nodes.some((n) => n.type === "task" && n.requestText.trim())} onClick={() => void save(false)} type="button">{t("ura.save")}</button>
             <button className="btn" disabled={!name.trim() || !canvas.nodes.length} onClick={() => void save(true)} title={t("ura.save-as-hint")} type="button">{t("ura.save-as")}</button>

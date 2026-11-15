@@ -139,6 +139,115 @@ export function nextNodeId(nodes: CanvasNodeData[]): string {
   return `n${max + 1}`;
 }
 
+/** Canvas edit events translated from the flow renderer — kept free of
+ *  @xyflow types so the pure contract is unit-testable. */
+export interface NodeDelta {
+  kind: "position" | "remove" | "select";
+  id: string;
+  position?: { x: number; y: number };
+  selected?: boolean;
+}
+
+export interface EdgeDelta {
+  kind: "remove" | "select";
+  id: string;
+  selected?: boolean;
+}
+
+export interface NodeDeltaResult {
+  graph: CanvasGraph;
+  /** undefined = no select deltas; null = everything deselected. */
+  selectNext: string | null | undefined;
+}
+
+/** Controlled-mode contract: position/remove/select deltas must be
+ *  written back into the model — notifications alone don't move RF
+ *  state. Returns the updated graph plus the resulting node selection. */
+export function applyNodeDeltas(graph: CanvasGraph, deltas: NodeDelta[]): NodeDeltaResult {
+  const removed = new Set<string>();
+  const moved = new Map<string, { x: number; y: number }>();
+  let selectNext: string | null | undefined;
+  for (const d of deltas) {
+    if (d.kind === "remove") removed.add(d.id);
+    else if (d.kind === "position" && d.position) moved.set(d.id, d.position);
+    else if (d.kind === "select") {
+      selectNext = d.selected ? d.id : selectNext === undefined ? null : selectNext;
+    }
+  }
+  if (removed.has(selectNext ?? "")) selectNext = null;
+  const changed = removed.size > 0 || moved.size > 0;
+  return {
+    graph: changed
+      ? {
+          nodes: graph.nodes
+            .filter((n) => !removed.has(n.id))
+            .map((n) => (moved.has(n.id) ? { ...n, ...moved.get(n.id)! } : n)),
+          edges: graph.edges.filter((e) => !removed.has(e.from) && !removed.has(e.to)),
+        }
+      : graph,
+    selectNext,
+  };
+}
+
+export interface EdgeDeltaResult {
+  graph: CanvasGraph;
+  edgeSel: Set<string>;
+}
+
+/** Edge ids are `from->to` — deletion works only for edges whose
+ *  `selected` state was written back (controlled contract). */
+export function applyEdgeDeltas(
+  graph: CanvasGraph,
+  deltas: EdgeDelta[],
+  edgeSel: Set<string>,
+): EdgeDeltaResult {
+  const removed = new Set<string>();
+  let sel = edgeSel;
+  for (const d of deltas) {
+    if (d.kind === "select") {
+      if (sel === edgeSel) sel = new Set(sel);
+      if (d.selected) sel.add(d.id);
+      else sel.delete(d.id);
+    } else if (d.kind === "remove") {
+      removed.add(d.id);
+      if (sel === edgeSel) sel = new Set(sel);
+      sel.delete(d.id);
+    }
+  }
+  return {
+    graph: removed.size
+      ? {
+          ...graph,
+          edges: graph.edges.filter((e) => !removed.has(`${e.from}->${e.to}`)),
+        }
+      : graph,
+    edgeSel: sel,
+  };
+}
+
+/** Save receipts must bind to the submitted document identity and edit
+ *  version — a late response cannot mark newer edits saved or switch the
+ *  open graph back to the submitted one. */
+export class DraftSaveGate {
+  private seq = 0;
+
+  /** Every draft edit (canvas or name) bumps the version. */
+  touch(): number {
+    return ++this.seq;
+  }
+
+  submit(openGraphId: string | null): { seq: number; openGraphId: string | null } {
+    return { seq: ++this.seq, openGraphId };
+  }
+
+  accept(
+    ticket: { seq: number; openGraphId: string | null },
+    openGraphId: string | null,
+  ): boolean {
+    return ticket.seq === this.seq && ticket.openGraphId === openGraphId;
+  }
+}
+
 /** Draft/edited canvas → node-id lookup for execution overlay. The
  *  execution is a historical fact; only nodes still present show it. */
 export function executionStatusByNode(

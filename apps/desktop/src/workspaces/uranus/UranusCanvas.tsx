@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   Background,
   Controls,
@@ -17,7 +17,15 @@ import "@xyflow/react/dist/style.css";
 import { t } from "../../app/i18n";
 import { PLANET_SCENES } from "../../app/scenes";
 import type { GraphRunStepSummary } from "../../types/service";
-import type { CanvasEdge, CanvasGraph, CanvasNodeData } from "./graphModel";
+import {
+  applyEdgeDeltas,
+  applyNodeDeltas,
+  type CanvasEdge,
+  type CanvasGraph,
+  type CanvasNodeData,
+  type EdgeDelta,
+  type NodeDelta,
+} from "./graphModel";
 
 type FlowNode = Node<{ node: CanvasNodeData; step?: GraphRunStepSummary }, "uranusNode">;
 
@@ -85,6 +93,11 @@ export function UranusCanvas({
   onChange: (next: CanvasGraph) => void;
   onSelect: (id: string | null) => void;
 }) {
+  /** Edge selection is renderer-local state — needed so Delete deletes
+   *  the edge the user actually selected (controlled-mode contract:
+   *  select changes must be written back). */
+  const [edgeSel, setEdgeSel] = useState<Set<string>>(new Set());
+
   const rfNodes = useMemo<FlowNode[]>(
     () =>
       graph.nodes.map((n) => ({
@@ -102,42 +115,48 @@ export function UranusCanvas({
         id: edgeId(e),
         source: e.from,
         target: e.to,
+        selected: edgeSel.has(edgeId(e)),
         markerEnd: { type: MarkerType.ArrowClosed },
       })),
-    [graph.edges],
+    [graph.edges, edgeSel],
   );
 
   const onNodesChange = useCallback(
     (changes: NodeChange<FlowNode>[]) => {
-      const removed = new Set(
-        changes.filter((c) => c.type === "remove").map((c) => c.id),
-      );
-      const moved = new Map<string, { x: number; y: number }>();
+      const deltas: NodeDelta[] = [];
       for (const c of changes) {
-        if (c.type === "position" && c.position) moved.set(c.id, c.position);
+        if (c.type === "position" && c.position) {
+          deltas.push({ kind: "position", id: c.id, position: c.position });
+        } else if (c.type === "remove") {
+          deltas.push({ kind: "remove", id: c.id });
+        } else if (c.type === "select") {
+          deltas.push({ kind: "select", id: c.id, selected: c.selected });
+        }
       }
-      if (removed.size === 0 && moved.size === 0) return;
-      onChange({
-        nodes: graph.nodes
-          .filter((n) => !removed.has(n.id))
-          .map((n) => (moved.has(n.id) ? { ...n, ...moved.get(n.id)! } : n)),
-        edges: graph.edges.filter(
-          (e) => !removed.has(e.from) && !removed.has(e.to),
-        ),
-      });
+      const { graph: next, selectNext } = applyNodeDeltas(graph, deltas);
+      if (next !== graph) onChange(next);
+      if (selectNext !== undefined) onSelect(selectNext);
     },
-    [graph, onChange],
+    [graph, onChange, onSelect],
   );
 
   const onEdgesChange = useCallback(
     (changes: EdgeChange<Edge>[]) => {
-      const removed = new Set(
-        changes.filter((c) => c.type === "remove").map((c) => c.id),
-      );
-      if (removed.size === 0) return;
-      onChange({ ...graph, edges: graph.edges.filter((e) => !removed.has(edgeId(e))) });
+      const deltas: EdgeDelta[] = changes
+        .filter((c) => c.type === "remove" || c.type === "select")
+        .map((c) => ({
+          kind: c.type,
+          id: c.id,
+          selected: c.type === "select" ? c.selected : undefined,
+        }));
+      const { graph: next, edgeSel: sel } = applyEdgeDeltas(graph, deltas, edgeSel);
+      if (sel !== edgeSel) setEdgeSel(sel);
+      if (next !== graph) {
+        onChange(next);
+        setEdgeSel((prev) => new Set([...prev].filter((id) => next.edges.some((e) => edgeId(e) === id))));
+      }
     },
-    [graph, onChange],
+    [graph, onChange, edgeSel],
   );
 
   const onConnect = useCallback(
@@ -150,13 +169,6 @@ export function UranusCanvas({
     [graph, onChange],
   );
 
-  const onSelectionChange = useCallback(
-    ({ nodes: sel }: { nodes: FlowNode[] }) => {
-      onSelect(sel[0]?.id ?? null);
-    },
-    [onSelect],
-  );
-
   return (
     <ReactFlow
       nodes={rfNodes}
@@ -165,7 +177,6 @@ export function UranusCanvas({
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
       onConnect={onConnect}
-      onSelectionChange={onSelectionChange}
       fitView
       proOptions={{ hideAttribution: true }}
       deleteKeyCode={["Backspace", "Delete"]}

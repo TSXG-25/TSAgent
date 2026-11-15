@@ -10,6 +10,9 @@ const {
   serializeGraphDefinition,
   nextNodeId,
   executionStatusByNode,
+  applyNodeDeltas,
+  applyEdgeDeltas,
+  DraftSaveGate,
 } = await import("../src/workspaces/uranus/graphModel");
 
 test("round-trip preserves nodes, edges, profile, target planet, coordinates", () => {
@@ -95,4 +98,67 @@ test("executionStatusByNode maps steps for canvas overlay", () => {
   assert.equal(map.get("n2")?.detail, "predecessor not COMPLETED");
   assert.equal(map.get("n3"), undefined);
   assert.equal(executionStatusByNode(undefined).size, 0);
+});
+
+test("applyNodeDeltas writes select changes back (controlled contract)", () => {
+  const canvas = parseGraphDefinition(JSON.stringify({
+    nodes: [
+      { id: "n1", type: "task", request_text: "a" },
+      { id: "n2", type: "task", request_text: "b" },
+    ],
+    edges: [],
+  }));
+  // 打开图后点击 n2 — select 增量驱动右侧配置。
+  const { selectNext } = applyNodeDeltas(canvas, [
+    { kind: "select", id: "n2", selected: true },
+  ]);
+  assert.equal(selectNext, "n2");
+  // 点击边/空白 — 只有反选增量，节点选择清空。
+  const desel = applyNodeDeltas(canvas, [
+    { kind: "select", id: "n2", selected: false },
+  ]);
+  assert.equal(desel.selectNext, null);
+  // 选中后被删除 — 不产生对已删节点的选择。
+  const gone = applyNodeDeltas(canvas, [
+    { kind: "remove", id: "n2" },
+    { kind: "select", id: "n2", selected: true },
+  ]);
+  assert.equal(gone.selectNext, null);
+  assert.equal(gone.graph.nodes.length, 1);
+});
+
+test("applyEdgeDeltas: select writes back so Delete removes the right edge", () => {
+  const canvas = parseGraphDefinition(JSON.stringify({
+    nodes: [
+      { id: "n1", type: "task", request_text: "a" },
+      { id: "n2", type: "task", request_text: "b" },
+      { id: "n3", type: "task", request_text: "c" },
+    ],
+    edges: [{ from: "n1", to: "n2" }, { from: "n2", to: "n3" }],
+  }));
+  let sel = new Set<string>();
+  // 选择 n2->n3 —— selected 写回后 Delete 才能命中。
+  let r = applyEdgeDeltas(canvas, [{ kind: "select", id: "n2->n3", selected: true }], sel);
+  sel = r.edgeSel;
+  assert.deepEqual([...sel], ["n2->n3"]);
+  r = applyEdgeDeltas(r.graph, [{ kind: "remove", id: "n2->n3" }], sel);
+  assert.deepEqual(r.graph.edges, [{ from: "n1", to: "n2" }]);
+  assert.equal(r.edgeSel.size, 0);
+});
+
+test("DraftSaveGate rejects receipts after edits or graph switch", () => {
+  const gate = new DraftSaveGate();
+  // 基线：提交后无编辑 — 回执可提交身份。
+  const clean = gate.submit("g-a");
+  assert.equal(gate.accept(clean, "g-a"), true);
+  // 保存 A 期间继续编辑 — 编辑推进版本，回执被拒：不把新草稿误标已保存。
+  const t1 = gate.submit("g-a");
+  gate.touch();
+  assert.equal(gate.accept(t1, "g-a"), false);
+  // 保存 A 期间打开 B — 身份不匹配，回执不把 openGraphId 改回 A。
+  const t2 = gate.submit("g-a");
+  assert.equal(gate.accept(t2, "g-b"), false);
+  // 重新提交则新票据生效。
+  const t3 = gate.submit("g-b");
+  assert.equal(gate.accept(t3, "g-b"), true);
 });

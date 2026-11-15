@@ -5,6 +5,7 @@ import AgentComposer from "../../app/AgentComposer";
 import { requestIdForRun } from "../../app/ui";
 import { t } from "../../app/i18n";
 import { CapNotInstalled } from "../../design-system/WorkspaceFrame";
+import { useWorkspaceCurrentRun } from "../../app/workspaceSelection";
 import type { RunCtx } from "../../app/runCtx";
 import { WorkspaceTasks } from "../../app/WorkspaceTasks";
 import { MercurySearchSession } from "./searchSession";
@@ -15,6 +16,7 @@ import { MercurySearchSession } from "./searchSession";
 export default function MercuryWorkspace({ ctx }: { ctx: RunCtx }) {
   const { service } = ctx;
   const scene = SCENES[1];
+  const currentRun = useWorkspaceCurrentRun(ctx, "mercury");
   const [query, setQuery] = useState("");
   const [steps, setSteps] = useState<{ plan: string; preview: string }[]>([]);
   const [, bump] = useReducer((n: number) => n + 1, 0);
@@ -64,10 +66,10 @@ export default function MercuryWorkspace({ ctx }: { ctx: RunCtx }) {
     <WorkspaceFrame scene={scene} ctx={ctx}>
       <div className="nav2">
         <div className="nav-main">
-          {ctx.activeRun && (
+          {currentRun && (
             <div className="ws-hud"><span className="hud-mark">◈</span>
-              <div className="ws-hud-info"><strong>{ctx.activeRun.request?.slice(0, 60) || "Navigator"}</strong>
-                <small><code>{ctx.activeRun.runId}</code> · {ctx.activeRun.status}</small></div>
+              <div className="ws-hud-info"><strong>{currentRun.request?.slice(0, 60) || "Navigator"}</strong>
+                <small><code>{currentRun.runId}</code> · {currentRun.status}</small></div>
             </div>
           )}
           {/* BrowserSessionBar [H] */}

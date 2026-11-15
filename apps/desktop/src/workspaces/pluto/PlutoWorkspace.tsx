@@ -5,6 +5,7 @@ import { requestIdForRun } from "../../app/ui";
 import AgentComposer from "../../app/AgentComposer";
 import { t, type I18nKey } from "../../app/i18n";
 import type { RunCtx } from "../../app/runCtx";
+import { useWorkspaceCurrentRun } from "../../app/workspaceSelection";
 import { WorkspaceTasks } from "../../app/WorkspaceTasks";
 import type { MotifSummary } from "../../types/service";
 import type { RunView } from "../../types";
@@ -15,6 +16,7 @@ const TAG: Record<string, I18nKey> = { open: "plu.tag-open", exploring: "plu.tag
 
 export default function PlutoWorkspace({ ctx }: { ctx: RunCtx }) {
   const { service } = ctx;
+  const currentRun = useWorkspaceCurrentRun(ctx, "pluto");
     const scene = SCENES[9];
   const [motifs, setMotifs] = useState<MotifSummary[]>([]);
   const [sel, setSel] = useState<string | null>(null);
@@ -47,7 +49,7 @@ export default function PlutoWorkspace({ ctx }: { ctx: RunCtx }) {
   /** 委派入口 — assignMotif 返回授权的子 Run 启动配置，立即启动探索。 */
   async function assign(m: MotifSummary) {
     await act(async () => {
-      const parent = ctx.activeRun && ctx.activeRun.sessionId === ctx.sessionId ? ctx.activeRun : null;
+      const parent = currentRun;
       const r = await service.assignMotif({
         tenantId: service.identity.tenantId,
         sessionId: ctx.sessionId,

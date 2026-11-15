@@ -598,6 +598,7 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
       request_id: this.nextRequestId("get_run"),
       limit: 100,
     };
+    if (scope.originPlanet !== undefined) params.origin_planet = scope.originPlanet;
     return this.project(async () => {
       const result = (await this.call("list_runs", params)) as unknown;
       const items = Array.isArray(result) ? result : ((result as { runs?: unknown[] }).runs ?? []);

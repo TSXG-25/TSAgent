@@ -146,6 +146,55 @@ export class RunController {
     }
   }
 
+  /** Tenant-wide catalog — Omni's aggregate view, or one planet's runs
+   *  across all its sessions (delegated child runs included). Batches are
+   *  gated per originPlanet key and evict only covered sessions' stale
+   *  entries; other scopes' slices stay untouched. */
+  async loadTenantCatalog(originPlanet?: string): Promise<void> {
+    const key = `tenant:${originPlanet ?? "*"}`;
+    const seq = (this.scopeSeq.get(key) ?? 0) + 1;
+    this.scopeSeq.set(key, seq);
+    this.loadingScopes.add(key);
+    this.currentError = null;
+    this.emit();
+    try {
+      await this.client.ready();
+      const snapshots = await this.client.listRuns({
+        tenantId: this.client.identity.tenantId,
+        sessionId: "",
+        originPlanet,
+      });
+      if (seq !== this.scopeSeq.get(key)) return;
+      const covered = new Map<string, Set<string>>();
+      for (const snapshot of snapshots) {
+        const set = covered.get(snapshot.sessionId) ?? new Set<string>();
+        set.add(snapshot.runId);
+        covered.set(snapshot.sessionId, set);
+      }
+      for (const [runId, view] of this.runs) {
+        const owned = covered.get(view.sessionId);
+        if (owned && !owned.has(runId)) {
+          this.runs.delete(runId);
+          this.cursors.delete(runId);
+        }
+      }
+      const views = await Promise.all(snapshots.map((snapshot) => this.hydrateRun(snapshot, -1)));
+      if (seq !== this.scopeSeq.get(key)) return;
+      for (const view of views) this.runs.set(view.runId, view);
+      if (!this.runs.has(this.activeRunId)) this.activeRunId = views[0]?.runId ?? "";
+      this.emit();
+      for (const view of views) this.startPollingIfLive(view);
+    } catch (error) {
+      if (seq === this.scopeSeq.get(key)) this.setError(error);
+    } finally {
+      if (seq === this.scopeSeq.get(key)) {
+        this.loadingScopes.delete(key);
+        this.loadedOnce = true;
+        this.emit();
+      }
+    }
+  }
+
   async startRun(request: StartRunRequest): Promise<RunView> {
     // Parallel acceptance: every submission is independently admitted; the
     // returned view is always the Run this request created, never an

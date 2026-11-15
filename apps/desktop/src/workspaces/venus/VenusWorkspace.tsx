@@ -5,7 +5,7 @@ import AgentComposer from "../../app/AgentComposer";
 import { MarkdownText } from "../../app/ui";
 import { t } from "../../app/i18n";
 import type { RunCtx } from "../../app/runCtx";
-import { workspaceRuns } from "../../app/workspaceSelection";
+import { useWorkspaceCurrentRun, workspaceRuns } from "../../app/workspaceSelection";
 import { WorkspaceTasks } from "../../app/WorkspaceTasks";
 
 /** Muse per hand-drawn spec §4 — File rail + style.md prefs | work preview +
@@ -16,6 +16,7 @@ import { VENUS_PRESETS, styleContext } from "./venusStyle";
 export default function VenusWorkspace({ ctx }: { ctx: RunCtx }) {
   const { service } = ctx;
   const scene = SCENES[2];
+  const currentRun = useWorkspaceCurrentRun(ctx, "venus");
   const [sel, setSel] = useState<string | null>(null);
   // 风格偏好按 tenant/session/venus 持久化 —— 离开页面不丢。
   const styleKey = `venus-style:${service.identity.tenantId}:${ctx.sessionId}`;
@@ -79,10 +80,10 @@ export default function VenusWorkspace({ ctx }: { ctx: RunCtx }) {
 
         {/* Work preview + composer */}
         <main className="muse-main">
-          {ctx.activeRun && (
+          {currentRun && (
             <div className="ws-hud"><span className="hud-mark">◈</span>
               <div className="ws-hud-info"><strong>{cur?.artifact.path.split("/").pop() ?? "Muse"}</strong>
-                <small><code>{ctx.activeRun.runId}</code> · {ctx.activeRun.status}</small></div>
+                <small><code>{currentRun.runId}</code> · {currentRun.status}</small></div>
             </div>
           )}
           {cur ? (

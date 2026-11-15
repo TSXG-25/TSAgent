@@ -12,6 +12,15 @@ export function WorkspaceTasks({ ctx, planet }: { ctx: RunCtx; planet: string })
   const tenantId = ctx.service.identity.tenantId;
   const selId = useWorkspaceRunId(tenantId, ctx.sessionId, planet);
   const mine = workspaceRuns(ctx, planet);
+  // Delegated runs land in derived child sessions — load this planet's
+  // tenant-wide catalog so they stay discoverable here (never guessed:
+  // durable originPlanet is the only membership fact).
+  useEffect(() => {
+    void ctx.controller.loadTenantCatalog(planet);
+  }, [ctx.controller, planet]);
+  const delegated = ctx.runs.filter(
+    (run) => run.originPlanet === planet && run.sessionId !== ctx.sessionId,
+  );
   return (
     <div className="ws-tasks">
       <div className="ws-tasks-head">
@@ -50,6 +59,31 @@ export function WorkspaceTasks({ ctx, planet }: { ctx: RunCtx; planet: string })
           {run.failure && <p className="ws-task-fail">{run.failure.message}</p>}
         </div>
       ))}
+      {delegated.length > 0 && (
+        <>
+          <h4 className="ws-mod">{t("wstasks.delegated")}</h4>
+          {delegated.map((run) => (
+            <div className="ws-task" key={run.runId}>
+              <button
+                type="button"
+                className="ws-task-title"
+                onClick={() => ctx.openRun(run.runId, run.sessionId)}
+              >
+                {run.request || run.runId}
+              </button>
+              <div className="ws-task-row">
+                <StatusBadge status={run.status} />
+                <span className="ws-task-sess">{run.sessionId}</span>
+                <button type="button" className="ven-link"
+                  onClick={() => ctx.openRun(run.runId, run.sessionId)}>
+                  {t("wstasks.open-omni")}
+                </button>
+              </div>
+              {run.failure && <p className="ws-task-fail">{run.failure.message}</p>}
+            </div>
+          ))}
+        </>
+      )}
     </div>
   );
 }

@@ -194,14 +194,15 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
     );
   }
 
-  listRunsSync(sessionId?: string): RunSnapshot[] {
+  listRunsSync(scope?: SessionScope): RunSnapshot[] {
     return [...this.snapshots.values()]
-      .filter((snapshot) => !sessionId || snapshot.sessionId === sessionId)
+      .filter((snapshot) => !scope?.sessionId || snapshot.sessionId === scope.sessionId)
+      .filter((snapshot) => scope?.originPlanet === undefined || (snapshot.originPlanet ?? "") === scope.originPlanet)
       .map((snapshot) => clone(snapshot));
   }
 
   async listRuns(scope: SessionScope): Promise<RunSnapshot[]> {
-    return this.listRunsSync(scope.sessionId);
+    return this.listRunsSync(scope);
   }
 
   private tasks: TaskRecord[] = [];

@@ -479,18 +479,20 @@ class RunLookupRequest:
 
 @dataclass(frozen=True)
 class ListRunsRequest:
-    """Identity-complete request for the Runs of one session."""
+    """Identity-complete request for Runs of one session — or the whole
+    tenant when ``session_id`` is empty. ``origin_planet`` filters durable
+    workstation ownership when present ("" = unclassified)."""
 
     tenant_id: str
     user_id: str
     session_id: str
     request_id: str
     limit: int = 100
+    origin_planet: str | None = None
 
     def __post_init__(self) -> None:
         _required_identifier(self.tenant_id, "tenant_id")
         _required_identifier(self.user_id, "user_id")
-        _required_identifier(self.session_id, "session_id")
         _required_identifier(self.request_id, "request_id")
 
     @classmethod
@@ -501,6 +503,9 @@ class ListRunsRequest:
             session_id=str(value.get("session_id", "")),
             request_id=str(value.get("request_id", "")),
             limit=int(value.get("limit") or 100),
+            origin_planet=(
+                str(value["origin_planet"]) if "origin_planet" in value else None
+            ),
         )
 
 

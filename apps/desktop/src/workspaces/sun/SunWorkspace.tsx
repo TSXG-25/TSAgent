@@ -85,6 +85,10 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
       workspaceId: wsId,
     }).then(() => { refreshWs(); void refresh(); });
   };
+  // Omni aggregates every tenant session — hydrate the tenant-wide
+  // catalog once per mount and let the rail filter by workstation.
+  const [planetFilter, setPlanetFilter] = useState<string>("all");
+  useEffect(() => { void ctx.controller.loadTenantCatalog(); }, [ctx.controller]);
   const [wsMenu, setWsMenu] = useState<string | null>(null);
   const [editWs, setEditWs] = useState<{ wsId: string; name: string; paths: string[]; primary: string } | null>(null);
   const [pinned, setPinned] = useState<string[]>(() => {
@@ -244,6 +248,7 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
   const filtered = sessions
     .slice()
     .sort((a, b) => (b.latestUpdatedAt ?? "").localeCompare(a.latestUpdatedAt ?? ""))
+    .filter((s) => planetFilter === "all" || (s.planet ?? "") === planetFilter)
     .filter((s) => !query || titleOf(s.sessionId, s.latestRunId).includes(query) || s.sessionId.includes(query));
 
   return (
@@ -269,6 +274,15 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
               </div>
             </div>
             {searchOpen && <div className="omni-search"><Icon name="search" size={12} /><input autoFocus onChange={(e) => setQuery(e.target.value)} placeholder={t("sun.search-sessions")} value={query} /></div>}
+            <div className="omni-search omni-planet-filter">
+              <select onChange={(e) => setPlanetFilter(e.target.value)} value={planetFilter}>
+                <option value="all">{t("sun.filter-all")}</option>
+                <option value="">{t("sun.filter-unclaimed")}</option>
+                {SCENES.map((sc) => (
+                  <option key={sc.id} value={sc.id}>{sc.workspace}</option>
+                ))}
+              </select>
+            </div>
           </div>
           <div className="omni-sess-scroll">
             {(() => {

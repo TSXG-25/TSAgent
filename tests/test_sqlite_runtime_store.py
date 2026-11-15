@@ -1145,3 +1145,47 @@ def test_converge_orphaned_runs_sweeps_all_sessions(tmp_path: Path) -> None:
             assert str(head.run_status) == status
     finally:
         store.close()
+
+
+def test_list_run_heads_tenant_scopes_and_origin_filter(tmp_path: Path) -> None:
+    """WI-04: tenant-wide catalog across sessions with durable origin_planet
+    filtering — delegated runs in child sessions surface under their target
+    workstation; unclassified runs only appear unfiltered or under ""."""
+    store = _store(tmp_path / "catalog.sqlite")
+    try:
+        store.ensure_session("t", "s-mars", "u")
+        store.ensure_session("t", "s-child", "u")
+        store.ensure_session("t", "s-neptune", "u")
+        store.create_task_head("t", "s-mars", "task-m", origin_planet="mars")
+        store.create_task_head("t", "s-child", "task-c", origin_planet="mars")
+        store.create_task_head("t", "s-neptune", "task-n", origin_planet="neptune")
+        for run_id, sid, task_id in [
+            ("run-m1", "s-mars", "task-m"),
+            ("run-m2", "s-child", "task-c"),
+            ("run-n1", "s-neptune", "task-n"),
+            ("run-x1", "s-mars", ""),
+        ]:
+            reservation = store.reserve_service_start(
+                "t", sid,
+                requested_run_id=run_id,
+                request_id=f"req-{run_id}",
+                request_digest="d",
+                writer_id="w",
+                external_reference="ext",
+                task_id=task_id,
+            )
+            assert reservation.created is True
+
+        all_runs = {h.run_id for h in store.list_run_heads_tenant("t")}
+        assert all_runs == {"run-m1", "run-m2", "run-n1", "run-x1"}
+
+        mars = {h.run_id for h in store.list_run_heads_tenant("t", origin_planet="mars")}
+        assert mars == {"run-m1", "run-m2"}  # child-session delegated run included
+
+        neptune = {h.run_id for h in store.list_run_heads_tenant("t", origin_planet="neptune")}
+        assert neptune == {"run-n1"}
+
+        unclassified = {h.run_id for h in store.list_run_heads_tenant("t", origin_planet="")}
+        assert unclassified == {"run-x1"}
+    finally:
+        store.close()

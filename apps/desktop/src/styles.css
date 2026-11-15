@@ -4356,3 +4356,5 @@ ol.md-list li::marker { color: var(--planet-accent); font-family: var(--font-mon
 .ws-dir-path { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-dim, #9aa3b2); font-size: 11px; }
 .ws-dir-default { font-size: 9.5px; color: var(--text-faint, #6b7382); border: 1px solid var(--edge, #2a2f3a); border-radius: 4px; padding: 0 4px; }
 .ws-dir-btn { padding: 1px 8px; font-size: 11px; }
+
+.ws-task-sess { font-size: 9.5px; color: var(--text-faint, #6b7382); }

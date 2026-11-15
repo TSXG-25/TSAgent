@@ -5,6 +5,7 @@ import AgentComposer from "../../app/AgentComposer";
 import { requestIdForRun } from "../../app/ui";
 import { t } from "../../app/i18n";
 import type { RunCtx } from "../../app/runCtx";
+import { useWorkspaceCurrentRun } from "../../app/workspaceSelection";
 import { WorkspaceTasks } from "../../app/WorkspaceTasks";
 import type { ScheduleSummary } from "../../types/service";
 
@@ -12,6 +13,7 @@ import type { ScheduleSummary } from "../../types/service";
  *  today's report | AgentComposer. */
 export default function SaturnWorkspace({ ctx }: { ctx: RunCtx }) {
   const { service } = ctx;
+  const currentRun = useWorkspaceCurrentRun(ctx, "saturn");
     const scene = SCENES[6];
   const [schedules, setSchedules] = useState<ScheduleSummary[]>([]);
   // 选中只存 id —— 详情始终从最新列表派生，暂停/触发/刷新后不再持有旧对象。
@@ -70,10 +72,10 @@ export default function SaturnWorkspace({ ctx }: { ctx: RunCtx }) {
           {schedules.length === 0 && <div className="empty-state"><p>{t("sat.empty")}</p></div>}
         </div>
         <aside className="chron-side">
-          {ctx.activeRun && (
+          {currentRun && (
             <div className="ws-hud"><span className="hud-mark">◈</span>
               <div className="ws-hud-info"><strong>Chronos</strong>
-                <small><code>{ctx.activeRun.runId}</code> · {ctx.activeRun.status}</small></div>
+                <small><code>{currentRun.runId}</code> · {currentRun.status}</small></div>
             </div>
           )}
           <h4 className="ws-mod">{t("sat.report")}</h4>

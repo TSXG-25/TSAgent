@@ -1453,6 +1453,45 @@ class SqliteRuntimeStore:
                 if str(row["store_generation"]) == self.store_generation
             ]
 
+    def list_run_heads_tenant(
+        self,
+        tenant_id: str,
+        *,
+        origin_planet: "str | None" = None,
+        limit: int = 100,
+    ) -> list[RunHead]:
+        """Tenant-wide run catalog across all sessions — Omni's aggregate
+        view. ``origin_planet`` filters durable workstation ownership when
+        given ("" = runs without a workstation claim)."""
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        with self._lock:
+            self._ensure_open()
+            rows = self._connection.execute(
+                """
+                SELECT rh.tenant_id, rh.session_id, rh.run_id, rh.request_id, rh.task_id,
+                       rh.current_revision, rh.current_digest, rh.current_writer_id,
+                       rh.current_fence_token, rh.store_generation, rh.run_status, rh.updated_at
+                FROM run_heads rh
+                LEFT JOIN task_heads th
+                  ON th.tenant_id = rh.tenant_id AND th.task_id = rh.task_id
+                WHERE rh.tenant_id = ?
+                  AND (? IS NULL OR COALESCE(th.origin_planet, '') = ?)
+                ORDER BY rh.updated_at DESC
+                LIMIT ?
+                """,
+                (
+                    tenant_id,
+                    origin_planet,
+                    "" if origin_planet is None else origin_planet,
+                    int(limit),
+                ),
+            ).fetchall()
+            return [
+                self._head_contract(row)
+                for row in rows
+                if str(row["store_generation"]) == self.store_generation
+            ]
+
     def list_runs_for_task(
         self,
         tenant_id: str,

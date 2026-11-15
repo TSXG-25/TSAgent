@@ -263,14 +263,20 @@ function App() {
     const submitted = requestDraftState;
     const request = requestDraft.trim() || "生成一个 Python 程序，计算 9 的平方并保存";
     const requestId = requestIdForRun(runs.length + 1);
+    // Submission target follows where the user is: inside a workstation the
+    // global new-task modal creates that workstation's task (its own
+    // session + durable originPlanet); from the map/Omni it targets Sun.
+    const target = scene?.id ?? "sun";
     try {
       setServiceError(null);
+      const targetSession = target === "sun" ? sessionId : await ensurePlanet(target);
       await controller.startRun({
         tenantId: service.identity.tenantId,
-        sessionId,
+        sessionId: targetSession,
         requestId,
         requestText: request,
         contextRefs: submitted.files,
+        originPlanet: target,
       });
       clearDraftIfUnchanged(requestDraftKey, submitted);
       setIsCreateOpen(false);

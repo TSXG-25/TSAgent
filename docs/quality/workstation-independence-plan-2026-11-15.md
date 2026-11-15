@@ -104,6 +104,16 @@
 
 验收：从每台提交的入口检查请求归属；Mars/Neptune 并行任务分别出现在本台且都出现在 Omni；跨台委派在目标台可发现；历史未分类任务不被猜测归属；打开分页外 Run 和返回原台正常。
 
+**实施记录（本轮）**：
+
+- 租户级目录：`session_id=""` 作为租户范围直通 `list_run_heads`（新 `list_run_heads_tenant(tenant, origin_planet?)` 经 `task_heads.origin_planet` 连接过滤）；`ListRunsRequest`/`SessionScope` 增 `origin_planet`——子会话委派 Run 在目标台可发现，非循环加载所有会话的双路径。
+- `RunController.loadTenantCatalog`：Omni 用租户级范围加载，不改写当前工作台作用域；`mock` 同步支持会话/归属过滤。
+- 各台闭环：`WorkspaceTasks` 每行显示 status/失败摘要 + pause/cancel 走本台 scope + "在 Omni 打开"按 Run 真实 session 跳转（`openRun` 不改写事实）；Mercury/Venus/Mars/Neptune/Jupiter/Saturn/Pluto 本台标题/状态/控制改读 `useWorkspaceCurrentRun`（tenant+session+originPlanet 推导），清除全局 `ctx.activeRun` 残留。
+- 提交归属统一：工作台内提交/委派带本台 `originPlanet`+明确 `ctx.sessionId`；Omni 提交归属 Omni（未分类）。
+- Omni 会话栏增工作台筛选（全部/各台/未认领），`sun.filter-all`/`sun.filter-unclaimed` i18n 双语言；历史无归属任务归入"未认领"不猜测。
+- 回归：`test_list_run_heads_tenant_scopes_and_origin_filter`（跨会话汇集/归属过滤含子会话委派/未分类只现于无筛选）；Desktop `npm test` 115 subtest 全绿。
+- 未做：Mars/Neptune 并行任务的双台浏览器实测、打开分页外 Run 返回原台的实测——归外部验收。
+
 ### WI-05 / P2 — Mercury 明确搜索与浏览器能力
 
 依赖：WI-02、WI-04。

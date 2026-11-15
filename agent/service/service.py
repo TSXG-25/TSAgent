@@ -517,24 +517,34 @@ class AgentService:
 
     async def list_runs(self, request: "ListRunsRequest") -> list[RunSnapshot]:
         self._ensure_open()
-        heads = self._store.list_run_heads(
-            request.tenant_id,
-            request.session_id,
-            limit=request.limit,
-        )
+        # session_id="" → tenant-wide catalog (Omni aggregate); otherwise
+        # the caller's own session scope. origin_planet filters durable
+        # workstation ownership when given.
+        if request.session_id:
+            heads = self._store.list_run_heads(
+                request.tenant_id,
+                request.session_id,
+                limit=request.limit,
+            )
+        else:
+            heads = self._store.list_run_heads_tenant(
+                request.tenant_id,
+                origin_planet=request.origin_planet,
+                limit=request.limit,
+            )
         snapshots: list[RunSnapshot] = []
         for head in heads:
             lookup = RunLookupRequest(
                 tenant_id=request.tenant_id,
                 user_id=request.user_id,
-                session_id=request.session_id,
+                session_id=head.session_id,
                 run_id=head.run_id,
                 request_id=request.request_id,
             )
             read = self._store.read_run_snapshot(
                 request.tenant_id,
                 head.run_id,
-                session_id=request.session_id,
+                session_id=head.session_id,
             )
             snapshots.append(self._run_projector().project(read, lookup))
         return snapshots

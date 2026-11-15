@@ -5,6 +5,7 @@ import AgentComposer from "../../app/AgentComposer";
 import { requestIdForRun, StatusBadge, Icon } from "../../app/ui";
 import { t } from "../../app/i18n";
 import type { RunCtx } from "../../app/runCtx";
+import { useWorkspaceCurrentRun } from "../../app/workspaceSelection";
 import { WorkspaceTasks } from "../../app/WorkspaceTasks";
 import type { WorkspaceFileSummary } from "../../types/service";
 import { ideBridge, type IdeInfo } from "../../service/tauriBridge";
@@ -26,7 +27,8 @@ const MODES = [
 const sessionCache = new Map<string, ForgeDocumentSession>();
 
 export default function MarsWorkspace({ ctx }: { ctx: RunCtx }) {
-  const { service, activeRun } = ctx;
+  const { service } = ctx;
+  const currentRun = useWorkspaceCurrentRun(ctx, "mars");
   const scene = SCENES[4];
   const [mode, setMode] = useState("code");
   const [files, setFiles] = useState<WorkspaceFileSummary[]>([]);
@@ -151,7 +153,7 @@ export default function MarsWorkspace({ ctx }: { ctx: RunCtx }) {
         <main className="forge-editor">
           <div className="ws-hud"><span className="hud-mark">◈</span>
             <div className="ws-hud-info"><strong>{doc?.path ?? "Forge"}</strong>
-              <small>{ctx.activeRun ? <code>{ctx.activeRun.runId} · {ctx.activeRun.status}</code> : t("mar.no-active")}</small></div>
+              <small>{currentRun ? <code>{currentRun.runId} · {currentRun.status}</code> : t("mar.no-active")}</small></div>
           </div>
           <div className="forge-tabs">
             {doc ? (
@@ -187,7 +189,7 @@ export default function MarsWorkspace({ ctx }: { ctx: RunCtx }) {
         </main>
         {/* EngineeringActionPanel */}
         <aside className="forge-ctl">
-          {activeRun && <div className="forge-status"><StatusBadge status={activeRun.status} /><code>{activeRun.runId}</code></div>}
+          {currentRun && <div className="forge-status"><StatusBadge status={currentRun.status} /><code>{currentRun.runId}</code></div>}
           <div className="forge-ctl-hint">{t("mar.controls")}</div>
           <AgentComposer ctx={ctx} planet="mars" placeholder={t("mar.composer-ph")} />
                     <WorkspaceTasks ctx={ctx} planet="mars" />

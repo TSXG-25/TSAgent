@@ -446,10 +446,13 @@ export interface CreateSessionRequest {
 }
 
 /** Explicit session scope required by per-session catalog reads — callers
- * pass the workstation's own session; nothing is read off mutable identity. */
+ * pass the workstation's own session; nothing is read off mutable identity.
+ * `sessionId: ""` = tenant-wide catalog (Omni aggregate); `originPlanet`
+ * filters durable workstation ownership ("" = unclassified). */
 export interface SessionScope {
   tenantId: string;
   sessionId: string;
+  originPlanet?: string;
 }
 
 export interface ListSessionsRequest {

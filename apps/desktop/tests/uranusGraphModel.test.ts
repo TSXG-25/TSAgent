@@ -13,6 +13,7 @@ const {
   applyNodeDeltas,
   applyEdgeDeltas,
   DraftSaveGate,
+  overlayStepsFor,
 } = await import("../src/workspaces/uranus/graphModel");
 
 test("round-trip preserves nodes, edges, profile, target planet, coordinates", () => {
@@ -161,4 +162,26 @@ test("DraftSaveGate rejects receipts after edits or graph switch", () => {
   // 重新提交则新票据生效。
   const t3 = gate.submit("g-b");
   assert.equal(gate.accept(t3, "g-b"), true);
+});
+
+test("overlayStepsFor only paints onto the launched definition", () => {
+  const canvas = parseGraphDefinition(JSON.stringify({
+    nodes: [{ id: "n1", type: "task", request_text: "old task" }],
+    edges: [],
+  }));
+  const definition = JSON.stringify(serializeGraphDefinition(canvas));
+  const execA = { executionId: "e-a", steps: [{ nodeId: "n1", taskId: "t", runId: "r", sessionId: "s", status: "COMPLETED" }] };
+  const bound = { execId: "e-a", definition };
+  // 本端发起的执行 + 同一画布 → 叠加。
+  assert.equal(overlayStepsFor({ execution: execA, execSel: "e-a", bound, canvas }).get("n1")?.status, "COMPLETED");
+  // 编辑 n1 文本后 — 定义不一致，旧 COMPLETED 不得贴上。
+  const edited = { ...canvas, nodes: canvas.nodes.map((n) => ({ ...n, requestText: "new task" })) };
+  assert.equal(overlayStepsFor({ execution: execA, execSel: "e-a", bound, canvas: edited }).size, 0);
+  // 历史执行（无发起绑定）— 无叠加，只在底部展示。
+  assert.equal(overlayStepsFor({ execution: execA, execSel: "e-a", bound: null, canvas }).size, 0);
+  // 选中 B 但拿到 A 的响应 — 执行 ID 不匹配，不展示。
+  const boundB = { execId: "e-b", definition };
+  assert.equal(overlayStepsFor({ execution: execA, execSel: "e-b", bound: boundB, canvas }).size, 0);
+  // 绑定 B 而执行是 A — 同样拒绝。
+  assert.equal(overlayStepsFor({ execution: execA, execSel: "e-a", bound: boundB, canvas }).size, 0);
 });

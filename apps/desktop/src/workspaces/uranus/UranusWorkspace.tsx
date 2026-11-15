@@ -12,8 +12,8 @@ import { UranusCanvas } from "./UranusCanvas";
 import {
   DraftSaveGate,
   emptyCanvas,
-  executionStatusByNode,
   nextNodeId,
+  overlayStepsFor,
   parseGraphDefinition,
   serializeGraphDefinition,
   type CanvasGraph,
@@ -76,40 +76,40 @@ export default function UranusWorkspace({ ctx }: { ctx: RunCtx }) {
     }
   }, [service, req]);
 
-  const selectExecution = useCallback((id: string) => {
-    overlayRef.current = { execId: id, canvas };
-    setExecSel(id);
-    void refreshExecution(id);
-  }, [refreshExecution, canvas]);
-
-  // 未终态的执行自动轮询 — 终态后停止。
-  useEffect(() => {
-    if (!execSel || !execution) return;
-    if (execution.steps.every((s) => TERMINAL.test(s.status ?? ""))) return;
-    const timer = globalThis.setInterval(() => { void refreshExecution(execSel); }, 2000);
-    return () => globalThis.clearInterval(timer);
-  }, [execSel, execution, refreshExecution]);
-
   /** 保存回执票据 — 提交时的文档身份+编辑版本；迟到的响应不能
    *  把之后的修改误标已保存、也不能把 openGraphId 改回旧图。 */
   const saveGateRef = useRef<DraftSaveGate | null>(null);
   if (!saveGateRef.current) saveGateRef.current = new DraftSaveGate();
   const saveGate = saveGateRef.current;
 
-  /** 执行叠加绑定到选中时刻的画布对象 — 任何编辑/切图产生新 canvas
-   *  即解除叠加；历史详情在底部条独立保留。 */
-  const overlayRef = useRef<{ execId: string; canvas: CanvasGraph } | null>(null);
+  /** 叠加授权仅来自本端发起执行时提交的定义 — 历史执行选择不能证明
+   *  当前画布与其执行定义一致，只在底部展示详情。 */
+  const overlayRef = useRef<{ execId: string; definition: string } | null>(null);
+  /** 响应身份核对 — A 的旧摘要在选中 B 后不得再展示。 */
+  const shownExecution = execution && execution.executionId === execSel ? execution : null;
   const statusByNode = useMemo(
-    () => (
-      execution
-      && execution.graphId === openGraphId
-      && overlayRef.current?.execId === execSel
-      && overlayRef.current.canvas === canvas
-        ? executionStatusByNode(execution.steps)
-        : new Map<string, never>()
-    ),
-    [execution, execSel, openGraphId, canvas],
+    () => overlayStepsFor({
+      execution: shownExecution,
+      execSel,
+      bound: overlayRef.current,
+      canvas,
+    }),
+    [shownExecution, execSel, canvas],
   );
+
+  const selectExecution = useCallback((id: string) => {
+    setExecSel(id);
+    void refreshExecution(id);
+  }, [refreshExecution]);
+
+  // 未终态的执行自动轮询 — 终态后停止。
+  useEffect(() => {
+    if (!execSel || !shownExecution) return;
+    if (shownExecution.steps.every((s) => TERMINAL.test(s.status ?? ""))) return;
+    const timer = globalThis.setInterval(() => { void refreshExecution(execSel); }, 2000);
+    return () => globalThis.clearInterval(timer);
+  }, [execSel, shownExecution, refreshExecution]);
+
   const selected = canvas.nodes.find((n) => n.id === selNode) ?? null;
 
   const mutate = useCallback((next: CanvasGraph) => {
@@ -198,7 +198,14 @@ export default function UranusWorkspace({ ctx }: { ctx: RunCtx }) {
       const steps = await service.runGraph({ ...req(), graphId: openGraphId, parentRunId: currentRun.runId });
       const executionId = steps[0]?.executionId;
       setExecutions(await service.listGraphExecutions(req()));
-      if (executionId) selectExecution(executionId);
+      if (executionId) {
+        // 叠加授权绑定到本次提交的定义 — 唯一可证一致的来源。
+        overlayRef.current = {
+          execId: executionId,
+          definition: JSON.stringify(serializeGraphDefinition(canvas)),
+        };
+        selectExecution(executionId);
+      }
     } catch (e) { setErr(String(e)); }
   }
 
@@ -264,9 +271,9 @@ export default function UranusWorkspace({ ctx }: { ctx: RunCtx }) {
               </select>
               <button className="ven-link" onClick={() => { if (execSel) void refreshExecution(execSel); }} title={t("ura.refresh-status")} type="button">↻</button>
             </div>
-            {execution && (
+            {shownExecution && (
               <div className="lab-exec-steps">
-                {execution.steps.map((s) => (
+                {shownExecution.steps.map((s) => (
                   <div className="lab-graph-row" key={s.nodeId}>
                     <strong>{s.nodeId} <span className={`ura-badge ${statusClass(s.status ?? "")}`}>{s.status || "PENDING"}</span></strong>
                     {s.detail && <small>{s.detail}</small>}

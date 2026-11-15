@@ -257,3 +257,29 @@ export function executionStatusByNode(
   for (const s of steps ?? []) map.set(s.nodeId, s);
   return map;
 }
+
+/** Canvas overlay authorization — status may only be painted onto a
+ *  definition provably identical to the one that execution ran on.
+ *  `bound` is recorded by the local launch path (the definition we
+ *  submitted); history selections cannot prove identity and get no
+ *  overlay — their detail stays in the bottom strip. Also guards the
+ *  response identity: a stale summary for a different executionId is
+ *  never overlaid. */
+export function overlayStepsFor({
+  execution,
+  execSel,
+  bound,
+  canvas,
+}: {
+  execution: { executionId: string; steps: GraphRunStepSummary[] } | null;
+  execSel: string | null;
+  bound: { execId: string; definition: string } | null;
+  canvas: CanvasGraph;
+}): Map<string, GraphRunStepSummary> {
+  if (!execution || !execSel || !bound) return new Map();
+  if (execution.executionId !== execSel || bound.execId !== execSel) return new Map();
+  if (JSON.stringify(serializeGraphDefinition(canvas)) !== bound.definition) {
+    return new Map();
+  }
+  return executionStatusByNode(execution.steps);
+}

@@ -178,6 +178,13 @@
 - Python/TS/mock/wire fixture 同步变更；测试检验业务结果，不只检查纯函数返回。
 - 交付记录逐项列出代码提交、实际执行检查和未覆盖项；禁止以测试总数宣称真实 UI 全部验收。
 
+**实施记录（本轮）**：
+
+- 跨台链路回归：`test_cross_workstation_offline_chain`——mars/neptune 各自认领会话+绑定不同目录（`session_workspace_path` 各归各）→并行接纳→`list_run_heads_tenant` 汇总与归属筛选→mars→neptune 委派子 Run（派生子会话）在 neptune 筛选下可发现、按真实 session 可打开→源台绑定与归属不被改写。durable 事实断言，非 UI 表象。
+- 旧计划 `workstation-repair-plan-2026-11-14.md` 头部加取代声明（共享会话口径与 Mars 未接入表述过时），交付历史表原样保留。
+- wire fixture（`origin_planet`）、Python DTO、TS client、mock 四侧同步，双端 fixture 校验通过。
+- 未覆盖（外部验收单列）：九台浏览器/Tauri 实测（并行任务、目录绑定、跨会话跳转、Neptune 媒体）、code-server 嵌入实测、真实 ffmpeg/Ollama 生成、假 Provider 端到端"上游写文件→下游读文件"循环。
+
 ## 排期与交付边界
 
 顺序：WI-01 → WI-02 → WI-03/WI-04 → WI-05/WI-06/WI-07 → WI-08。

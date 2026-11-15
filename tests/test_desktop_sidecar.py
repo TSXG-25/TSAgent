@@ -3934,3 +3934,73 @@ def test_graph_execute_without_parent_run_provisions_graph_task(
             await service.close()
 
     asyncio.run(scenario())
+
+
+def test_cross_workstation_offline_chain(tmp_path: Path) -> None:
+    """WI-08 跨台链路：各台独立绑定→并行接纳→Omni 汇总→跨台委派→
+    返回源台，全部以 durable 事实断言，不靠 UI。"""
+    service = _workspace_file_service(tmp_path)
+    store = service._store
+    ws_mars = tmp_path / "ws-mars"
+    ws_neptune = tmp_path / "ws-neptune"
+    ws_mars.mkdir(); ws_neptune.mkdir()
+    try:
+        # 1. 两台各自认领会话并绑定不同目录。
+        store.ensure_session("t", "s-mars", "u", planet="mars")
+        store.ensure_session("t", "s-nep", "u", planet="neptune")
+        store.upsert_workspace("t", "ws-m", path=str(ws_mars))
+        store.upsert_workspace("t", "ws-n", path=str(ws_neptune))
+        store.assign_session_workspace("t", "s-mars", "ws-m")
+        store.assign_session_workspace("t", "s-nep", "ws-n")
+        assert store.session_workspace_path("t", "s-mars") == str(ws_mars)
+        assert store.session_workspace_path("t", "s-nep") == str(ws_neptune)
+
+        # 2. 并行接纳 —— 两台各自的任务互不影响。
+        store.create_task_head("t", "s-mars", "task-m", origin_planet="mars")
+        store.create_task_head("t", "s-nep", "task-n", origin_planet="neptune")
+        for run_id, sid, task in [
+            ("run-m", "s-mars", "task-m"), ("run-n", "s-nep", "task-n"),
+        ]:
+            r = store.reserve_service_start(
+                "t", sid, requested_run_id=run_id,
+                request_id=f"req-{run_id}", request_digest="d",
+                writer_id="w", external_reference="ext",
+                task_id=task)
+            assert r.created is True
+
+        # 3. Omni 租户汇总 + 归属筛选。
+        assert {h.run_id for h in store.list_run_heads_tenant("t")} == {
+            "run-m", "run-n"}
+        assert {h.run_id for h in store.list_run_heads_tenant(
+            "t", origin_planet="mars")} == {"run-m"}
+
+        # 4. mars → neptune 跨台委派：子任务在派生子会话，归属 neptune。
+        child_session = "s-mars::subtask-task-del"
+        store.ensure_session("t", child_session, "u")
+        store.create_task_head(
+            "t", child_session, "task-del",
+            parent_task_id="task-m", origin_planet="neptune")
+        store.create_handoff(
+            "t", "s-mars", "handoff:task-del",
+            source_run_id="run-m", source_task_id="task-m",
+            target_task_id="task-del", target_planet="neptune")
+        store.reserve_service_start(
+            "t", child_session, requested_run_id="run-del",
+            request_id="req-del", request_digest="d",
+            writer_id="w", external_reference="ext",
+            task_id="task-del")
+
+        # 委派子 Run 在目标台筛选下可发现（即使 session 属于源台派生）。
+        assert {h.run_id for h in store.list_run_heads_tenant(
+            "t", origin_planet="neptune")} == {"run-n", "run-del"}
+        # 按真实 session 定位可打开 —— 不改写归属事实。
+        assert store.get_run_head(
+            "t", "run-del", session_id=child_session).run_id == "run-del"
+
+        # 5. 返回源台：各台绑定与归属不被跨台操作改写。
+        assert store.session_workspace_path("t", "s-mars") == str(ws_mars)
+        assert {h.run_id for h in store.list_run_heads_tenant(
+            "t", origin_planet="mars")} == {"run-m"}
+    finally:
+        import asyncio
+        asyncio.run(service.close())

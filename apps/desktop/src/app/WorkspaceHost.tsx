@@ -74,12 +74,16 @@ export default function WorkspaceHost({ ctx }: { ctx: RunCtx }) {
     ...ctx,
     sessionId,
     workspacePath: active?.path || undefined,
+    workspaceUserBound: active ? active.bound && !active.workspaceId.startsWith("ws-auto-") : false,
+    onWorkspaceBound: refreshWsPath,
     selectSession: (id: string) => ctx.selectSessionFor(planet, id),
   };
   const Workspace = LAZY[scene.id];
   return (
     <>
-      {scene.id !== "sun" && (
+      {/* Mars embeds the dir controls inside its IDE pane; other
+       *  workstations get the shared bar above the workspace. */}
+      {scene.id !== "sun" && scene.id !== "mars" && (
         <WorkspaceDirBar ctx={wctx} onBound={refreshWsPath}
           resolved={active ? {
             path: active.path,

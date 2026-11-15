@@ -11,6 +11,11 @@ export interface RunCtx {
   sessionId: string;
   /** Session-bound workspace root — runs scoped to this dir. */
   workspacePath?: string;
+  /** True only when the resolved root is a user-bound workspace (auto
+   *  roots are app-managed). Lets a workspace embed its own dir controls. */
+  workspaceUserBound?: boolean;
+  /** Re-resolve the live scope's workspace after a bind/unbind action. */
+  onWorkspaceBound?: () => void;
   /** Switch the current scope's session (claims it for this workstation). */
   selectSession: (sessionId: string) => void;
   /** Ensure a planet's scope exists — creates its session on first use. */

@@ -2,195 +2,77 @@ import { useEffect, useMemo, useState } from "react";
 import { SCENES } from "../../app/scenes";
 import { WorkspaceFrame } from "../../design-system/WorkspaceFrame";
 import AgentComposer from "../../app/AgentComposer";
-import { requestIdForRun, StatusBadge, Icon } from "../../app/ui";
+import { StatusBadge } from "../../app/ui";
 import { t } from "../../app/i18n";
 import type { RunCtx } from "../../app/runCtx";
 import { useWorkspaceCurrentRun } from "../../app/workspaceSelection";
 import { WorkspaceTasks } from "../../app/WorkspaceTasks";
-import type { WorkspaceFileSummary } from "../../types/service";
+import { WorkspaceDirBar } from "../../app/WorkspaceDirBar";
 import { ideBridge } from "../../service/tauriBridge";
-import { ForgeDocumentSession } from "./documentSession";
 import { MarsIdeSession } from "./ideSession";
-import { WorkspaceFileList } from "./fileListSession";
 
-/** Forge per hand-drawn spec §6 — mode rail | file tree | tabs+editor w/
- *  line numbers | right control rail | AgentComposer. Code mode first. */
-const MODES = [
-  { id: "code", icon: "file-code", label: "Code", ready: true },
-  { id: "data", icon: "list", label: "Data", ready: false },
-  { id: "eng", icon: "tools", label: "Eng", ready: false },
-  { id: "cad", icon: "layers", label: "CAD", ready: false },
-];
-
-// Drafts survive leaving the workspace — sessions are cached per
-// tenant:session so navigating away and back restores the open document,
-// its baseline and its dirty draft. Entries are bound to a service
-// identity; a service swap (e.g. backend restart) gets a fresh session.
-const sessionCache = new Map<string, ForgeDocumentSession>();
-
+/** Mars = hosted code-server IDE + agent rail. The IDE is always-on: it
+ *  auto-starts on the session's resolved workspace and follows every
+ *  rebind/unbind, so there is no start/stop control. Agent tasks run
+ *  against the same session workspace root — files an agent writes land
+ *  in the directory code-server shows. The dir bar lives inside the IDE
+ *  pane header (the only place binding is needed). */
 export default function MarsWorkspace({ ctx }: { ctx: RunCtx }) {
-  const { service } = ctx;
   const currentRun = useWorkspaceCurrentRun(ctx, "mars");
   const scene = SCENES[4];
-  const [mode, setMode] = useState("code");
-  const [err, setErr] = useState<string | null>(null);
   const [, bump] = useState(0);
-  // The session binds the document (path + workspace identity + baseline +
-  // draft); it survives selection churn and rejects writes when the bound
-  // workspace or baseline no longer matches.
-  // 按当前 tenant:session 取缓存 —— 切会话命中自己的文档/草稿。
-  const sessionKey = `${service.identity.tenantId}:${ctx.sessionId}`;
-  const session = useMemo(() => {
-    let cached = sessionCache.get(sessionKey);
-    if (!cached || cached.serviceRef !== service) {
-      cached = new ForgeDocumentSession(
-        service,
-        () => ({ tenantId: service.identity.tenantId, sessionId: ctx.sessionId }),
-      );
-      sessionCache.set(sessionKey, cached);
-    }
-    return cached;
-  }, [service, sessionKey]);
-  // 订阅随本次挂载绑定 —— 缓存对象跨页面存活，旧组件的回调不能继续收
-  // 通知（否则回到本页时编辑不再刷新受控输入/dirty/保存态）。
-  useEffect(() => {
-    session.listener = () => bump((v) => v + 1);
-    bump((v) => v + 1); // 进入页面时同步缓存文档状态
-    return () => { session.listener = null; };
-  }, [session]);
-  const doc = session.doc;
 
-  const sessionId = ctx.sessionId;
-  /** Hosted IDE (FE-04B) — bound to the session workspace; the Tauri host
-   *  owns the code-server child. MarsIdeSession releases on session/
-   *  workspace change and on unmount, and drops a start that resolves
-   *  after the scope moved on — no instance binds a stale root. */
+  /** Hosted IDE — MarsIdeSession binds the process to the live scope:
+   *  a bound workspace auto-starts it, a session/workspace change or
+   *  unmount releases it, and a start resolving after the scope moved on
+   *  is dropped and killed — no instance binds a stale root. */
   const ide = useMemo(() => (ideBridge ? new MarsIdeSession(ideBridge) : null), []);
-  const ideScope = `${sessionId}|${ctx.workspacePath ?? ""}`;
+  const sessionId = ctx.sessionId;
+  const workspacePath = ctx.workspacePath ?? "";
+  const ideScope = `${sessionId}|${workspacePath}`;
   useEffect(() => {
     if (!ide) return;
     ide.listener = () => bump((v) => v + 1);
-    void ide.bindScope(ideScope);
+    void ide.bindScope(ideScope, workspacePath);
     return () => {
       ide.listener = null;
       void ide.release();
     };
-  }, [ide, ideScope]);
+  }, [ide, ideScope, workspacePath]);
 
-  async function toggleIde() {
-    if (!ide || !ctx.workspacePath || ide.busy) return;
-    setErr(null);
-    try {
-      await ide.toggle(ctx.workspacePath);
-    } catch (e) {
-      setErr(String(e));
-    }
-  }
-
-  // 文件列表绑定到已解析的作用域（session|workspace）——同会话改绑
-  // 触发重载，迟到响应只在作用域仍活时落地；解析完成也自动重试。
-  const fileScope = `${sessionId}|${ctx.workspacePath ?? ""}`;
-  const fileList = useMemo(
-    () => new WorkspaceFileList((sid) =>
-      service.listWorkspaceFiles({
-        tenantId: service.identity.tenantId,
-        sessionId: sid,
-        requestId: requestIdForRun(0),
-      })),
-    [service],
-  );
-  useEffect(() => {
-    fileList.listener = () => bump((v) => v + 1);
-    void fileList.bindScope(fileScope, sessionId);
-    return () => { fileList.listener = null; };
-  }, [fileList, fileScope, sessionId]);
-  const files = fileList.files;
-
-  async function openFile(path: string) {
-    setErr(null);
-    try {
-      if (!(await session.open(path))) {
-        if (!window.confirm(t("mar.discard", { path: session.doc?.path ?? "current file" }))) return;
-        await session.open(path, { discardDraft: true });
-      }
-    } catch (e) {
-      setErr(String(e));
-    }
-  }
-
-  async function save() {
-    setErr(null);
-    try { await session.save(); }
-    catch (e) { setErr(String(e)); }
-  }
+  const resolved = workspacePath
+    ? { path: workspacePath, userBound: ctx.workspaceUserBound ?? false }
+    : null;
 
   return (
     <WorkspaceFrame scene={scene} ctx={ctx}>
-      <div className="forge">
-        {/* EngineeringModeRail [H] */}
-        <nav className="forge-modes">
-          {MODES.map((m) => (
-            <button className={`forge-mode ${mode === m.id ? "on" : ""}`} key={m.id} disabled={!m.ready}
-              onClick={() => setMode(m.id)} title={m.ready ? m.label : `${m.label} — ${t("mar.mode-na")}`} type="button">
-              <Icon name={m.icon as never} size={16} /><span>{m.label}</span>
-            </button>
-          ))}
-        </nav>
-        {/* ProjectFileTree */}
-        <aside className="forge-tree">
-          <h4 className="ws-mod">{t("mar.explorer")}</h4>
-          {files.map((f) => (
-            <button className={`forge-file ${doc?.path === f.path ? "on" : ""}`} key={f.path} onClick={() => void openFile(f.path)} type="button">
-              {f.path}
-            </button>
-          ))}
-          {(err || fileList.error) && <p className="omni-empty" style={{ color: "var(--st-danger,#ff5a4f)" }}>{err ?? fileList.error}</p>}
-        </aside>
-        {/* Tabs + editor */}
+      <div className="forge mars-ide">
         <main className="forge-editor">
-          <div className="ws-hud"><span className="hud-mark">◈</span>
-            <div className="ws-hud-info"><strong>{doc?.path ?? "Forge"}</strong>
-              <small>{currentRun ? <code>{currentRun.runId} · {currentRun.status}</code> : t("mar.no-active")}</small></div>
-          </div>
-          <div className="forge-tabs">
-            {doc ? (
-              <span className="forge-tab on">
-                {doc.path}{session.dirty ? " ●" : ""}{doc.redacted ? ` · ${t("mar.readonly")}` : ""}
-              </span>
-            ) : <span className="forge-tab">{t("mar.no-file")}</span>}
-            {doc && !doc.redacted && (
-              <button className="forge-save" disabled={!session.dirty || session.saving} onClick={() => void save()} type="button">
-                {session.saving ? "…" : t("mar.save")}
-              </button>
-            )}
-            <button
-              className="forge-ide-toggle"
-              disabled={!ide || !ctx.workspacePath || ide.busy}
-              onClick={() => void toggleIde()}
-              title={!ide ? t("mar.ide-na") : !ctx.workspacePath ? t("mar.ide-nows") : t("mar.ide-hint")}
-              type="button"
-            >{ide?.busy ? "…" : ide?.info ? t("mar.ide-stop") : t("mar.ide-start")}</button>
-          </div>
-          <div className="forge-code">
-            {ide?.info ? (
+          <WorkspaceDirBar ctx={ctx} resolved={resolved} onBound={ctx.onWorkspaceBound ?? (() => {})} />
+          <div className="forge-code forge-ide-host">
+            {!ide ? (
+              <div className="empty-state"><p>{t("mar.ide-na")}</p></div>
+            ) : !workspacePath ? (
+              <div className="empty-state"><p>{t("mar.ide-nows")}</p></div>
+            ) : ide.info ? (
               <iframe
                 className="forge-ide"
                 src={`${ide.info.url}?folder=${encodeURIComponent(ide.info.workspace)}`}
                 title="code-server"
               />
-            ) : doc ? (
-              <textarea className="forge-editor" value={session.content} readOnly={doc.redacted}
-                onChange={(e) => session.edit(e.target.value)} spellCheck={false} />
-            ) : <div className="empty-state"><p>{t("mar.select-file")}</p></div>}
+            ) : (
+              <div className="empty-state">
+                <p>{ide.busy ? t("mar.ide-starting") : (ide.error ?? t("mar.ide-failed"))}</p>
+              </div>
+            )}
           </div>
         </main>
-        {/* EngineeringActionPanel */}
         <aside className="forge-ctl">
           {currentRun && <div className="forge-status"><StatusBadge status={currentRun.status} /><code>{currentRun.runId}</code></div>}
           <div className="forge-ctl-hint">{t("mar.controls")}</div>
           <AgentComposer ctx={ctx} planet="mars" placeholder={t("mar.composer-ph")} />
-                    <WorkspaceTasks ctx={ctx} planet="mars" />
-          <div className="ws-statusbar"><span>{files.length} FILES</span><span>{mode.toUpperCase()}</span><span className="right">mars</span></div>
+          <WorkspaceTasks ctx={ctx} planet="mars" />
+          <div className="ws-statusbar"><span className="right">mars</span></div>
         </aside>
       </div>
     </WorkspaceFrame>

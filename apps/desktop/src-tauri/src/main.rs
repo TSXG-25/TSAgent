@@ -168,6 +168,10 @@ fn ide_start(app: AppHandle, ide: State<Ide>, workspace: String) -> Result<IdeIn
         .join("code-server");
     let ext_dir = data_dir.join("extensions");
     std::fs::create_dir_all(&ext_dir).map_err(|e| e.to_string())?;
+    // The hosted instance is app-managed, so its bound workspace is
+    // always trusted — seed user settings to skip the Restricted Mode
+    // prompt instead of letting it degrade the IDE.
+    seed_code_server_settings(&data_dir.join("User"))?;
     let mut child = Command::new(code_server_program())
         .args([
             "--bind-addr",
@@ -223,6 +227,24 @@ fn ide_start(app: AppHandle, ide: State<Ide>, workspace: String) -> Result<IdeIn
     let info = ide_info(&proc);
     *guard = Some(proc);
     Ok(info)
+}
+
+/// Write `security.workspace.trust.enabled=false` into the isolated
+/// user-data dir's settings.json, preserving any existing keys — the
+/// hosted instance opens its bound workspace without Restricted Mode.
+fn seed_code_server_settings(user_dir: &std::path::Path) -> Result<(), String> {
+    std::fs::create_dir_all(user_dir).map_err(|e| e.to_string())?;
+    let path = user_dir.join("settings.json");
+    let mut settings: serde_json::Value = std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_else(|| serde_json::json!({}));
+    let obj = settings.as_object_mut().ok_or("settings.json not an object")?;
+    obj.insert(
+        "security.workspace.trust.enabled".to_string(),
+        serde_json::json!(false),
+    );
+    std::fs::write(&path, settings.to_string()).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -288,7 +310,7 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_listen_port;
+    use super::{parse_listen_port, seed_code_server_settings};
 
     #[test]
     fn parses_the_standalone_listen_line() {
@@ -308,5 +330,24 @@ mod tests {
             parse_listen_port("info  HTTP server listening on http://0.0.0.0:8080/"),
             None
         );
+    }
+
+    #[test]
+    fn seeds_workspace_trust_and_preserves_existing_settings() {
+        let dir = std::env::temp_dir().join(format!("tsagent-ide-test-{}", std::process::id()));
+        let user_dir = dir.join("User");
+        std::fs::create_dir_all(&user_dir).unwrap();
+        std::fs::write(
+            user_dir.join("settings.json"),
+            r#"{"workbench.colorTheme": "Default Dark+"}"#,
+        )
+        .unwrap();
+        seed_code_server_settings(&user_dir).unwrap();
+        let parsed: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(user_dir.join("settings.json")).unwrap())
+                .unwrap();
+        assert_eq!(parsed["security.workspace.trust.enabled"], false);
+        assert_eq!(parsed["workbench.colorTheme"], "Default Dark+");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

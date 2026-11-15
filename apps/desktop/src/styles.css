@@ -3344,6 +3344,7 @@ html[data-fx="standard"] .ws-root::after { animation: none; }
 .forge-save { margin-left: 8px; background: var(--planet-accent); border: none; border-radius: 2px; color: #0a0d12; font-size: 10px; font-weight: 600; padding: 5px 14px; cursor: pointer; }
 .forge-code { flex: 1; overflow-y: auto; font-family: var(--font-mono); font-size: 12px; }
 .forge-ide { width: 100%; height: 100%; border: none; background: #1e1e1e; display: block; }
+.forge-ide-host { overflow: hidden; }
 .forge-ide-toggle { margin-left: auto; background: transparent; border: 1px solid var(--border-base); border-radius: 2px; color: var(--text-muted); font-size: 10px; padding: 5px 12px; cursor: pointer; }
 .forge-ide-toggle:hover:not(:disabled) { border-color: var(--planet-accent); color: var(--planet-accent); }
 .forge-ide-toggle:disabled { opacity: .45; cursor: default; }

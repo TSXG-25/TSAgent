@@ -148,6 +148,7 @@
 - 修缺口（UI 层）：`await ideBridge.start()` 解决时会话/目录已切换，原代码 `setIde` 会把旧 root 实例挂到新 scope。提取 `MarsIdeSession`（MercurySearchSession 同型）：`bindScope` 变更即 release 并标记在途 start 失效，迟到的 start 解决被丢弃且幂等 stop——不绑定旧会话、不留未管理实例。
 - `ctx.workspacePath` 经 WI-03 贯通为生效根（绑定路径或后端默认根），IDE 与文件编辑器同源；非 Tauri `ideBridge=null` 按钮禁用+如实提示，textarea 编辑仍可用。
 - 回归：`marsIdeSession.test.ts`（fake bridge 断言收到 root/toggle 停止/作用域切换丢弃迟到绑定/卸载释放/启动失败不留实例）5 项全过，挂入 `npm test`；`cargo test parse_listen_port` 既有断言保留。
+- UI 重构（实测反馈）：Mars 精简为"常驻 code-server + agent 栏"——移除 mode 轨/文件树/textarea 编辑器/`ForgeDocumentSession`/启停按钮；`MarsIdeSession.bindScope` 改为随作用域自动启动（票据在入口绑定：清理阶段被超越的 bind 不再发起 spawn，迟到 start 按票据丢弃+幂等 kill）；目录控件内嵌 IDE 面板头部（`ctx.workspaceUserBound`/`onWorkspaceBound` 贯通）；隔离 user-data-dir 预置 `security.workspace.trust.enabled=false` 消除 Restricted Mode；agent 任务与 IDE 共享同一会话工作区根（写文件即落 IDE 所见目录）。
 - 未做：真实 WebView/终端/剪贴板/宿主退出验收单列。
 
 ### WI-07 / P1 — Uranus 在独立上下文中完整执行

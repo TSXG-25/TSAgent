@@ -173,6 +173,9 @@
   - MarsWorkspace 文件列表守卫改读 live ref（原比较同闭包旧值无效）。
   - MarsIdeSession 代次票据：`release()`/重绑定递增 gen 作废旧 start——覆盖"启动中卸载"与"A→B→A"两条遗漏路径。
 - 验收闭环：`test_subprocess_graph_upstream_writes_downstream_reads`——真实 sidecar 子进程+假 Ollama 端点：n1 经 write_file 工具真实落盘、`{artifacts:n1}` 注入真实路径、n2 经 read_file 工具真实读取（tool 结果含上游内容）后写交付物，两节点 COMPLETED。`test_resolve_session_workspace_mirrors_admission` 覆盖绑定/未绑定/幂等路径。
+- 复核修正（P2 两项，第二轮）：
+  - `WorkspaceDirBar` 删除 `listDirectory("")` 旧回退（该接口返回 Home 仅作选择器入口）：合同改为接收已解析的 `ResolvedDir{path, userBound}`——如实展示实际生效路径，"自动"徽标独立标记 `ws-auto-*`/未绑定 resolver 根，用户绑定根才显示解绑。
+  - Mars 文件列表抽 `WorkspaceFileList` 纯模型：加载与响应归属绑定 `sessionId|workspacePath` 作用域——同会话改绑触发重载并先清旧列表、迟到响应按序号丢弃、解析完成（`""`→真实路径）自动重试早前失败。回归 `marsFileList.test.ts` 覆盖改绑、迟到、重试、同域去重四路。
 - 未做：浏览器/Tauri 九台实测、code-server 嵌入实测、真实 ffmpeg/Ollama 媒体链路——外部验收单列。
 
 ### WI-08 / P2 — 跨台验收与文档收口

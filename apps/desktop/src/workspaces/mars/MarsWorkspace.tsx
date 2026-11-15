@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { SCENES } from "../../app/scenes";
 import { WorkspaceFrame } from "../../design-system/WorkspaceFrame";
 import AgentComposer from "../../app/AgentComposer";
@@ -11,6 +11,7 @@ import type { WorkspaceFileSummary } from "../../types/service";
 import { ideBridge } from "../../service/tauriBridge";
 import { ForgeDocumentSession } from "./documentSession";
 import { MarsIdeSession } from "./ideSession";
+import { WorkspaceFileList } from "./fileListSession";
 
 /** Forge per hand-drawn spec §6 — mode rail | file tree | tabs+editor w/
  *  line numbers | right control rail | AgentComposer. Code mode first. */
@@ -32,7 +33,6 @@ export default function MarsWorkspace({ ctx }: { ctx: RunCtx }) {
   const currentRun = useWorkspaceCurrentRun(ctx, "mars");
   const scene = SCENES[4];
   const [mode, setMode] = useState("code");
-  const [files, setFiles] = useState<WorkspaceFileSummary[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [, bump] = useState(0);
   // The session binds the document (path + workspace identity + baseline +
@@ -87,25 +87,24 @@ export default function MarsWorkspace({ ctx }: { ctx: RunCtx }) {
     }
   }
 
-  const liveSession = useRef(sessionId);
-  liveSession.current = sessionId;
-  useEffect(() => {
-    const target = sessionId;
-    service
-      .listWorkspaceFiles({
+  // 文件列表绑定到已解析的作用域（session|workspace）——同会话改绑
+  // 触发重载，迟到响应只在作用域仍活时落地；解析完成也自动重试。
+  const fileScope = `${sessionId}|${ctx.workspacePath ?? ""}`;
+  const fileList = useMemo(
+    () => new WorkspaceFileList((sid) =>
+      service.listWorkspaceFiles({
         tenantId: service.identity.tenantId,
-        sessionId: target,
+        sessionId: sid,
         requestId: requestIdForRun(0),
-      })
-      .then((list) => {
-        // a slow A response must not land on session B's list — compare
-        // against the live ref, not a stale closure value
-        if (liveSession.current === target) setFiles(list);
-      })
-      .catch((e) => {
-        if (liveSession.current === target) setErr(String(e));
-      });
-  }, [service, sessionId]);
+      })),
+    [service],
+  );
+  useEffect(() => {
+    fileList.listener = () => bump((v) => v + 1);
+    void fileList.bindScope(fileScope, sessionId);
+    return () => { fileList.listener = null; };
+  }, [fileList, fileScope, sessionId]);
+  const files = fileList.files;
 
   async function openFile(path: string) {
     setErr(null);
@@ -145,7 +144,7 @@ export default function MarsWorkspace({ ctx }: { ctx: RunCtx }) {
               {f.path}
             </button>
           ))}
-          {err && <p className="omni-empty" style={{ color: "var(--st-danger,#ff5a4f)" }}>{err}</p>}
+          {(err || fileList.error) && <p className="omni-empty" style={{ color: "var(--st-danger,#ff5a4f)" }}>{err ?? fileList.error}</p>}
         </aside>
         {/* Tabs + editor */}
         <main className="forge-editor">

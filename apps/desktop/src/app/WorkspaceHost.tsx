@@ -79,7 +79,15 @@ export default function WorkspaceHost({ ctx }: { ctx: RunCtx }) {
   const Workspace = LAZY[scene.id];
   return (
     <>
-      {scene.id !== "sun" && <WorkspaceDirBar ctx={wctx} path={active && active.bound && !active.workspaceId.startsWith("ws-auto-") ? active.path : ""} onBound={refreshWsPath} />}
+      {scene.id !== "sun" && (
+        <WorkspaceDirBar ctx={wctx} onBound={refreshWsPath}
+          resolved={active ? {
+            path: active.path,
+            // 应用管理根（ws-auto-*）与未绑定 resolver 根都算"自动"，
+            // 如实展示实际路径，只把用户选择标为可解绑。
+            userBound: active.bound && !active.workspaceId.startsWith("ws-auto-"),
+          } : null} />
+      )}
       <Suspense fallback={<div className="ws-loading">Loading {scene.workspace}…</div>}>
         <Workspace ctx={wctx} />
       </Suspense>

@@ -53,7 +53,8 @@
 
 - `code-server` 已安装并经 `brew services` 启动：`127.0.0.1:8080` 监听正常（302 → 登录页，password auth）。嵌入可用性本身不再是环境问题。
 - Tauri 宿主现状：仅 `sidecar_spawn`/`sidecar_write`/`sidecar_close`（stdio JSONL 专用），尚无 `ide_start/status/stop`。宿主适配器属 FE-04B，按计划在链路验证通过后实施。
-- **剩余验证项（真实环境，未执行）**：Tauri host 启停 code-server 进程、WebView 加载、终端、快捷键/剪贴板；brew 实例为 password auth，嵌入时需确定独立实例的 auth 配置（`--auth none` 或 token 注入），不得把 brew 常驻实例当作桌面托管实例。
+- **独立实例探针（本机已验证）**：`code-server --bind-addr 127.0.0.1:0 --auth none <workspace>` 可启动——监听端口打印在 stdout（host 可解析）、`/healthz` 返回 `{"status":"alive"}` 可作就绪探针、`?folder=<path>` 直达 workspace 返回 200、`--auth none` 覆盖 config.yaml 的 password。注意共享 `user-data-dir`（`~/.local/share/code-server`），托管实例如需隔离应另传 `--user-data-dir`。
+- **剩余验证项（真实环境，未执行）**：Tauri host 启停 code-server 进程、WebView 加载、终端、快捷键/剪贴板；不得把 brew 常驻实例当作桌面托管实例。
 
 ## FE-03 — 审批、产物与可发现性 · 已交付
 

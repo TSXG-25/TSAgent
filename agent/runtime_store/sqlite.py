@@ -614,6 +614,7 @@ class SqliteRuntimeStore:
                     child_session_id TEXT NOT NULL DEFAULT '',
                     status TEXT NOT NULL DEFAULT 'PENDING',
                     detail TEXT NOT NULL DEFAULT '',
+                    driver_writer_id TEXT NOT NULL DEFAULT '',
                     updated_at TEXT NOT NULL,
                     store_generation TEXT NOT NULL,
                     PRIMARY KEY (tenant_id, execution_id, node_id)
@@ -836,6 +837,16 @@ class SqliteRuntimeStore:
             if "task_id" not in head_columns:
                 connection.execute(
                     "ALTER TABLE run_heads ADD COLUMN task_id TEXT NOT NULL DEFAULT ''"
+                )
+            graph_node_columns = {
+                str(row["name"])
+                for row in connection.execute(
+                    "PRAGMA table_info(graph_execution_nodes)"
+                )
+            }
+            if "driver_writer_id" not in graph_node_columns:
+                connection.execute(
+                    "ALTER TABLE graph_execution_nodes ADD COLUMN driver_writer_id TEXT NOT NULL DEFAULT ''"
                 )
             schedule_columns = {
                 str(row["name"])
@@ -2844,6 +2855,7 @@ class SqliteRuntimeStore:
         child_session_id: str = "",
         status: str = "PENDING",
         detail: str = "",
+        driver_writer_id: str = "",
     ) -> "GraphExecutionNodeRecord":
         tenant_id = _require_text(tenant_id, "tenant_id")
         execution_id = _require_text(execution_id, "execution_id")
@@ -2855,21 +2867,22 @@ class SqliteRuntimeStore:
                 INSERT INTO graph_execution_nodes
                     (tenant_id, execution_id, node_id, graph_id, session_id,
                      position, task_id, run_id, child_session_id, status,
-                     detail, updated_at, store_generation)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     detail, driver_writer_id, updated_at, store_generation)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (tenant_id, execution_id, node_id) DO UPDATE SET
                     task_id = excluded.task_id,
                     run_id = excluded.run_id,
                     child_session_id = excluded.child_session_id,
                     status = excluded.status,
                     detail = excluded.detail,
+                    driver_writer_id = excluded.driver_writer_id,
                     updated_at = excluded.updated_at
                 """,
                 (
                     tenant_id, execution_id, node_id, str(graph_id),
                     str(session_id), int(position), str(task_id), str(run_id),
-                    str(child_session_id), str(status), str(detail), now,
-                    self.store_generation,
+                    str(child_session_id), str(status), str(detail),
+                    str(driver_writer_id), now, self.store_generation,
                 ),
             )
             return GraphExecutionNodeRecord(
@@ -2878,7 +2891,8 @@ class SqliteRuntimeStore:
                 session_id=str(session_id), position=int(position),
                 task_id=str(task_id), run_id=str(run_id),
                 child_session_id=str(child_session_id), status=str(status),
-                detail=str(detail), updated_at=now,
+                detail=str(detail), driver_writer_id=str(driver_writer_id),
+                updated_at=now,
                 store_generation=self.store_generation,
             )
 
@@ -2893,7 +2907,7 @@ class SqliteRuntimeStore:
                 """
                 SELECT tenant_id, execution_id, node_id, graph_id, session_id,
                        position, task_id, run_id, child_session_id, status,
-                       detail, updated_at, store_generation
+                       detail, driver_writer_id, updated_at, store_generation
                 FROM graph_execution_nodes
                 WHERE tenant_id = ? AND execution_id = ?
                 ORDER BY position ASC
@@ -2913,6 +2927,7 @@ class SqliteRuntimeStore:
                     child_session_id=str(r["child_session_id"]),
                     status=str(r["status"]),
                     detail=str(r["detail"]),
+                    driver_writer_id=str(r["driver_writer_id"]),
                     updated_at=str(r["updated_at"]),
                     store_generation=str(r["store_generation"]),
                 )
@@ -4332,21 +4347,45 @@ class SqliteRuntimeStore:
 
     def converge_orphaned_graph_execution_nodes(self) -> int:
         """Startup sweep: an open graph node row (PENDING/ADMITTED/RUNNING)
-        only advances while its in-process driver lives. After a restart
-        no driver owns it — mark it INTERRUPTED instead of leaving a
-        permanent pending state. Run-bound nodes still project their real
-        status from the run head at read time, so this never hides a run's
-        own converged outcome."""
+        only advances while its in-process driver lives — but several
+        service instances may share one database, so 'this instance just
+        started' is not proof that every driver is dead. A node converges
+        only when ALL of the following hold:
+
+        - it has no bound Run (run-bound rows project the authoritative
+          head at read time and never need this sweep);
+        - its driver writer holds no unexpired run worker lease anywhere —
+          a live lease is positive proof the owning instance still runs;
+        - no row in the same execution was updated inside the lease grace
+          window — a just-seeded or mid-flight execution looks exactly
+          like this row, and the driver's own next upsert is the freshest
+          evidence it is alive.
+        """
+        now = _now()
+        lease_grace = (
+            datetime.now(timezone.utc) - timedelta(seconds=WORKER_LEASE_SECONDS)
+        ).isoformat().replace("+00:00", "Z")
         with self._write_transaction() as connection:
             cursor = connection.execute(
                 """
-                UPDATE graph_execution_nodes
+                UPDATE graph_execution_nodes AS target
                 SET status = 'INTERRUPTED',
-                    detail = 'graph driver lost on restart',
+                    detail = 'graph driver lost: no live writer lease',
                     updated_at = ?
-                WHERE status IN ('PENDING', 'ADMITTED', 'RUNNING')
+                WHERE target.status IN ('PENDING', 'ADMITTED', 'RUNNING')
+                  AND target.run_id = ''
+                  AND target.driver_writer_id NOT IN (
+                      SELECT writer_id FROM run_worker_leases
+                      WHERE expires_at > ?
+                  )
+                  AND NOT EXISTS (
+                      SELECT 1 FROM graph_execution_nodes sibling
+                      WHERE sibling.tenant_id = target.tenant_id
+                        AND sibling.execution_id = target.execution_id
+                        AND sibling.updated_at > ?
+                  )
                 """,
-                (_now(),),
+                (now, now, lease_grace),
             )
             return cursor.rowcount
 

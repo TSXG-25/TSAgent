@@ -76,6 +76,7 @@ class FakeAgentServiceClient extends UnavailableDesktopAgentServiceClient {
   readonly events = new Map<string, RunEvent[]>();
   readonly eventCursors: number[] = [];
   sessionId = identity.sessionId;
+  readonly listRunsExcludes = new Set<string>();
   private heldGetRun: ((value: RunSnapshot) => void) | null = null;
   holdGetRun = false;
 
@@ -99,7 +100,9 @@ class FakeAgentServiceClient extends UnavailableDesktopAgentServiceClient {
   async ready(): Promise<void> {}
 
   async listRuns(): Promise<RunSnapshot[]> {
-    return [...this.snapshots.values()].filter((s) => s.sessionId === this.sessionId);
+    return [...this.snapshots.values()].filter(
+      (s) => s.sessionId === this.sessionId && !this.listRunsExcludes.has(s.runId),
+    );
   }
 
   async startRun(request: StartRunRequest): Promise<RunHandle> {
@@ -353,6 +356,29 @@ test("openRun path: foreign-session snapshot returns a view but never enters thi
   // through the authoritative listRuns of its owning session.
   client.setSession("session-2");
   await controller.reload();
+  controller.selectRun("run-2");
+  assert.equal(controller.getState().activeRunId, "run-2");
+  controller.stopAllPolling();
+});
+
+test("openRun path: a target beyond the listRuns page is admitted by an explicit refresh", async () => {
+  // Review probe: listRuns returns only the most recent page — a target
+  // older than the page must still land after reload via the explicit
+  // refreshRun in openRun, not via a bigger page.
+  const client = new FakeAgentServiceClient(snapshot("completed"), []);
+  const controller = new RunController(client, { pollIntervalMs: 1000 });
+  await controller.initialize();
+
+  const foreign: RunSnapshot = { ...snapshot("completed"), sessionId: "session-2", runId: "run-2" };
+  client.snapshots.set("run-2", foreign);
+  // Simulate the page boundary — run-2 exists but is outside listRuns.
+  client.listRunsExcludes.add("run-2");
+  client.setSession("session-2");
+  await controller.reload();
+  assert.equal(controller.getState().runs.find((r) => r.runId === "run-2"), undefined);
+
+  const view = await controller.refreshRun("run-2", "session-2");
+  assert.equal(view?.sessionId, "session-2");
   controller.selectRun("run-2");
   assert.equal(controller.getState().activeRunId, "run-2");
   controller.stopAllPolling();

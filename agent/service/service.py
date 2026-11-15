@@ -1799,6 +1799,7 @@ class AgentService:
                 session_id=request.session_id,
                 position=position,
                 status="PENDING",
+                driver_writer_id=self._contexts.writer_id,
             )
 
         # 图执行在 Service 管理的后台任务里推进 — run_graph 在接纳
@@ -1893,6 +1894,9 @@ class AgentService:
                 child_session_id=n.child_session_id,
                 status=status,
                 detail=detail,
+                # 标记方是被杀/退出的驱动自身（in-process），保留原
+                # driver_writer_id — 收敛谓词仍按原驱动判活。
+                driver_writer_id=n.driver_writer_id,
             )
 
     async def list_graph_executions(self, request: Any) -> list[Any]:
@@ -1967,6 +1971,7 @@ class AgentService:
                         session_id=request.session_id,
                         status="SKIPPED",
                         detail="predecessor not COMPLETED",
+                        driver_writer_id=self._contexts.writer_id,
                     )
                     continue
                 request_text = str(node.get("request_text", "")).strip()
@@ -2009,6 +2014,7 @@ class AgentService:
                     run_id="",
                     child_session_id=child_session,
                     status="ADMITTED",
+                    driver_writer_id=self._contexts.writer_id,
                 )
                 started = await self.start_run(
                     StartRunRequest(
@@ -2040,6 +2046,7 @@ class AgentService:
                     run_id=started.run_id,
                     child_session_id=child_session,
                     status="RUNNING",
+                    driver_writer_id=self._contexts.writer_id,
                 )
                 managed = self._runs.get(started.run_id)
                 if managed is not None and managed.task is not None:
@@ -2071,6 +2078,7 @@ class AgentService:
                     run_id=started.run_id,
                     child_session_id=child_session,
                     status=snapshot.status.value,
+                    driver_writer_id=self._contexts.writer_id,
                 )
         except asyncio.CancelledError:
             self._graph_mark_unfinished(

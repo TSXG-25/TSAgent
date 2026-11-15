@@ -319,7 +319,19 @@ def test_subprocess_health_shutdown_stdout_is_protocol_only(tmp_path: Path) -> N
 
 
 def test_subprocess_start_run_returns_before_background_completion(tmp_path: Path) -> None:
-    process = _spawn_sidecar(tmp_path, extra_env={"TSAGENT_LLM_TIMEOUT": "0.05"})
+    process = _spawn_sidecar(tmp_path, extra_env={
+        # Provider 必须确定性不可达 — 本机 Ollama 活着时真实推理会拖慢
+        # Run 终态并把 shutdown 拖过 wait 超时；死端口 + 零冷却立即失败。
+        "OLLAMA_BASE_URL": "http://127.0.0.1:1/v1",
+        "TSAGENT_OLLAMA_TIMEOUT": "0.05",
+        "TSAGENT_LLM_PROVIDER": "ollama",
+        "TSAGENT_LLM_PROVIDER_RETRIES": "1",
+        "TSAGENT_LLM_PROVIDER_COOLDOWN": "0",
+        "TSAGENT_LLM_PROVIDER_RETRY_AFTER": "0",
+        "OPENAI_API_KEY": "",
+        "LLM_API_KEY": "",
+        "P2_SECONDARY_API_KEY": "",
+    })
     started_at = time.monotonic()
     try:
         _send(
@@ -3224,7 +3236,19 @@ def test_subprocess_ws02_workspace_and_delegation_chain(tmp_path: Path) -> None:
     通过 stdio JSONL 完成 文件写/读/列 + 父 Run → delegate_run →
     子 Run 接纳 的完整链路；后台 provider 不要求可用，断言的是
     目录、持久事实与身份合同。"""
-    process = _spawn_sidecar(tmp_path, extra_env={"TSAGENT_LLM_TIMEOUT": "0.05"})
+    process = _spawn_sidecar(tmp_path, extra_env={
+        # Provider 必须确定性不可达 — 本机 Ollama 活着时真实推理会拖慢
+        # Run 终态并把 shutdown 拖过 wait 超时；死端口 + 零冷却立即失败。
+        "OLLAMA_BASE_URL": "http://127.0.0.1:1/v1",
+        "TSAGENT_OLLAMA_TIMEOUT": "0.05",
+        "TSAGENT_LLM_PROVIDER": "ollama",
+        "TSAGENT_LLM_PROVIDER_RETRIES": "1",
+        "TSAGENT_LLM_PROVIDER_COOLDOWN": "0",
+        "TSAGENT_LLM_PROVIDER_RETRY_AFTER": "0",
+        "OPENAI_API_KEY": "",
+        "LLM_API_KEY": "",
+        "P2_SECONDARY_API_KEY": "",
+    })
     base = {"tenant_id": "tenant-1", "user_id": "user-1", "session_id": "s-ws02"}
     ws_root = tmp_path / "workspace"
     try:
@@ -3536,10 +3560,20 @@ def test_graph_execution_head_projection_and_restart_convergence(
                     request_id="req-1", execution_id="gexec:g-x:r1"))
             assert summary.steps[0].status == head.run_status
             assert summary.steps[0].status != "SKIPPED"
-            # 无 Run 的未完成节点 — 驱动若中断将永不再推进。
+            # 无 Run 的未完成节点 — 驱动若中断将永不再推进。种子行的
+            # updated_at 回拨出 worker 租约宽限期，模拟"驱动早已死亡"；
+            # 新鲜行会被当作存活中实例而跳过（多进程共享库合同）。
             store.upsert_graph_execution_node(
                 "t", "gexec:g-x:r1", "n2",
-                graph_id="g-x", session_id="s", position=1, status="PENDING")
+                graph_id="g-x", session_id="s", position=1, status="PENDING",
+                driver_writer_id="dead-writer")
+            stale = "2000-01-01T00:00:00Z"
+            with store._write_transaction() as connection:
+                connection.execute(
+                    "UPDATE graph_execution_nodes SET updated_at = ? "
+                    "WHERE tenant_id = 't' AND execution_id = 'gexec:g-x:r1'",
+                    (stale,),
+                )
         finally:
             await service.close()
 
@@ -3552,8 +3586,8 @@ def test_graph_execution_head_projection_and_restart_convergence(
                     "t", "gexec:g-x:r1")
             }
             assert rows["n2"].status == "INTERRUPTED"
-            # n1 的存储行保持种子值（SKIPPED 不是 open 态，收敛不动它），
-            # 但读路径仍投影 head — 存储行从来不是权威。
+            # n1 绑定了 Run — 收敛只处理无绑定的 open 行，存储行保持种子
+            # 值；读路径仍投影 head — 存储行从来不是权威。
             assert rows["n1"].status == "SKIPPED"
             summary2 = await service2.get_graph_execution(
                 GraphExecutionLookupRequest(
@@ -3564,6 +3598,37 @@ def test_graph_execution_head_projection_and_restart_convergence(
             assert summary2.steps[1].status == "INTERRUPTED"
         finally:
             await service2.close()
+
+    asyncio.run(scenario())
+
+
+def test_graph_convergence_preserves_live_instance_nodes(
+    tmp_path: Path,
+) -> None:
+    """多实例共享库：实例 B 打开同库不得把存活实例 A 的 open 节点标
+    INTERRUPTED — 收敛只针对有死亡证据的驱动。"""
+    import asyncio
+
+    import tests.test_ha_r1_harness as harness
+
+    async def scenario() -> None:
+        service_a, store_a = harness.service_at(tmp_path)
+        try:
+            store_a.upsert_graph_execution_node(
+                "t", "gexec:live:r1", "n1",
+                graph_id="g-x", session_id="s", position=0,
+                status="PENDING", driver_writer_id="writer-a")
+            # 实例 B 打开同库 — A 的行刚更新（宽限期内），且即便过期
+            # 也要看 writer 租约 — 无条件收敛会误伤。
+            service_b = _workspace_file_service(tmp_path)
+            try:
+                rows = store_a.list_graph_execution_nodes(
+                    "t", "gexec:live:r1")
+                assert rows[0].status == "PENDING"
+            finally:
+                await service_b.close()
+        finally:
+            await service_a.close()
 
     asyncio.run(scenario())
 

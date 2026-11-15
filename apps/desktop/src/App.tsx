@@ -166,8 +166,11 @@ function App() {
           selectSession(sid);
           // Cross-session targets are not written into the old catalog —
           // selectRun only accepts cataloged runs, so the new session's
-          // catalog must commit first.
+          // catalog must commit first. listRuns returns only the most
+          // recent page, so the requested run is then refreshed into the
+          // catalog explicitly — a target older than the page still lands.
           await controller.reload();
+          if (view) await controller.refreshRun(runId);
         }
         if (view) controller.selectRun(runId);
         navigate("/w/sun");

@@ -95,6 +95,7 @@ class GraphExecutionNodeRecord:
     child_session_id: str
     status: str
     detail: str
+    driver_writer_id: str
     updated_at: str
     store_generation: str
 

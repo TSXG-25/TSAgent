@@ -224,7 +224,7 @@
 
 ### 已知未闭环项
 
-- **FE-04 code-server**：已安装并在 `127.0.0.1:8080` 运行（password auth）——嵌入前置满足；Tauri WebView/终端/快捷键实测与 FE-04B 宿主适配仍未做，Mars 维持受控编辑器路径，不声明 IDE 能力。
+- **FE-04 code-server**：FE-04B 宿主适配已实现——`ide_start/status/stop` 托管隔离 standalone 实例（独立 user-data/extensions 目录、15s 就绪超时、重绑重启、退出 kill+reap），CSP 放行 frame，Mars IDE toggle 绑定会话 workspace；**真实 WebView/终端/剪贴板/退出验收仍未执行**，验收通过前不声明 IDE 能力。
 - ~~Uranus 图重载/profile~~：已在 `fb40312a` 闭环——DAG 画布保存/回读/节点配置/执行叠加/`{artifacts:<node_id>}` 上游引用全部落地。
 - **Neptune**：`glb`/3D 仍是不支持格式（如实显示 unsupported）；Mock client 的 `readArtifactPreview` 恒回 unsupported，预览链路只经真实 sidecar 离线验证。
 - ~~WS-02 外部验证~~：已在 `d6584f93` 闭环——`test_subprocess_ws02_workspace_and_delegation_chain` 以真实 `python -m agent.service.local_sidecar` 子进程 + 假 Provider 覆盖 workspace 绑定、read/write 与委派子 Run；`test_sidecar_coldstart.py` 覆盖冷启动授权工具可见性。
@@ -233,4 +233,4 @@
 
 1. 浏览器 + Tauri 手工：九台切换、并行任务、目录绑定/改绑、冷启动、跨会话 Run/证据跳转、图片视频实际播放。
 2. 本地 ffmpeg + provider（优先 Ollama）：真实发起一次 MP4 生成/渲染，核对文件存在、可播放、所属 Run/目录正确。
-3. Mars 原生编辑键盘/剪贴板/终端与 code-server 生命周期：前置已满足（code-server 运行于 8080），待真实环境嵌入实测。
+3. Mars 原生编辑键盘/剪贴板/终端与 code-server 生命周期：FE-04B 已接入（host 命令 + iframe 嵌入 + 会话生命周期清理），待真实环境验收。

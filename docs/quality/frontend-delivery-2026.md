@@ -52,9 +52,9 @@
 ## FE-04A — 嵌入链路验证 · 前置已满足，待嵌入实测
 
 - `code-server` 已安装并经 `brew services` 启动：`127.0.0.1:8080` 监听正常（302 → 登录页，password auth）。嵌入可用性本身不再是环境问题。
-- Tauri 宿主现状：仅 `sidecar_spawn`/`sidecar_write`/`sidecar_close`（stdio JSONL 专用），尚无 `ide_start/status/stop`。宿主适配器属 FE-04B，按计划在链路验证通过后实施。
+- Tauri 宿主：`ide_start`/`ide_status`/`ide_stop` 已接入（FE-04B，本轮）——隔离 standalone 实例（独立 `--user-data-dir`/`--extensions-dir`）、stdout 端口行作就绪信号（15s 超时）、绑定目录变更即重启、`ide_stop`/应用退出时 kill+reap；CSP 放行 `frame-src`/`connect-src http://127.0.0.1:*`；Mars 编辑区提供 IDE toggle + iframe `?folder=<ws>`，会话/目录变更与离页自动停止。brew 常驻实例仍不是托管实例。
 - **独立实例探针（本机已验证）**：`code-server --bind-addr 127.0.0.1:0 --auth none <workspace>` 可启动——监听端口打印在 stdout（host 可解析）、`/healthz` 返回 `{"status":"alive"}` 可作就绪探针、`?folder=<path>` 直达 workspace 返回 200、`--auth none` 覆盖 config.yaml 的 password。注意共享 `user-data-dir`（`~/.local/share/code-server`），托管实例如需隔离应另传 `--user-data-dir`。
-- **剩余验证项（真实环境，未执行）**：Tauri host 启停 code-server 进程、WebView 加载、终端、快捷键/剪贴板；不得把 brew 常驻实例当作桌面托管实例。
+- **剩余验证项（真实环境，未执行）**：Tauri 应用内实际启停、WebView 加载、终端、快捷键/剪贴板、退出生命周期——host 命令与嵌入 UI 已实现但未在真实 WebView 验收。
 
 ## FE-03 — 审批、产物与可发现性 · 已交付
 

@@ -221,12 +221,15 @@ fn ide_start(app: AppHandle, ide: State<Ide>, workspace: String) -> Result<IdeIn
             }
         }
     });
-    let port = match rx.recv_timeout(Duration::from_secs(15)) {
+    // 30s, not a fast-path timeout — a cold VS Code server booting while
+    // the host rebuilds itself (cargo saturating cores) can legitimately
+    // take well over 15s to reach its listen line.
+    let port = match rx.recv_timeout(Duration::from_secs(30)) {
         Ok(port) => port,
         Err(_) => {
             let _ = child.kill();
             let _ = child.wait();
-            return Err("code-server did not report a listen port within 15s".to_string());
+            return Err("code-server did not report a listen port within 30s".to_string());
         }
     };
     let proc = IdeProc {
@@ -289,20 +292,26 @@ exports.deactivate = () => {};
 fn seed_active_editor_extension(ext_dir: &std::path::Path) -> Result<(), String> {
     let dir = ext_dir.join("tsagent-active-editor");
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    std::fs::write(
-        dir.join("package.json"),
-        serde_json::json!({
-            "name": "tsagent-active-editor",
-            "publisher": "tsagent",
-            "version": "0.0.1",
-            "engines": { "vscode": "^1.74.0" },
-            "activationEvents": ["onStartupFinished"],
-            "main": "./extension.js",
-        })
-        .to_string(),
-    )
-    .map_err(|e| e.to_string())?;
-    std::fs::write(dir.join("extension.js"), ACTIVE_EDITOR_JS).map_err(|e| e.to_string())
+    // Idempotent writes — a touched mtime would make code-server rescan
+    // and rewrite its extension manifest on every launch.
+    let pkg = serde_json::json!({
+        "name": "tsagent-active-editor",
+        "publisher": "tsagent",
+        "version": "0.0.1",
+        "engines": { "vscode": "^1.74.0" },
+        "activationEvents": ["onStartupFinished"],
+        "main": "./extension.js",
+    })
+    .to_string();
+    for (file, content) in [
+        (dir.join("package.json"), pkg),
+        (dir.join("extension.js"), ACTIVE_EDITOR_JS.to_string()),
+    ] {
+        if std::fs::read_to_string(&file).ok().as_deref() != Some(content.as_str()) {
+            std::fs::write(&file, content).map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
 }
 
 #[tauri::command]

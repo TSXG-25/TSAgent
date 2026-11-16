@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { t } from "./i18n";
+import { splitIdeContext } from "./ideContext";
 import { MarkdownText, rel, statusLabel } from "./ui";
 import type { RunCtx } from "./runCtx";
 import type { RunView } from "../types";
@@ -17,13 +18,18 @@ function RunExchange({ run }: { run: RunView }) {
   const thinkingMsgs = conv.filter((m) => m.role !== "user" && !isStream(m));
   const liveReply = conv.filter(isStream).slice(-1)[0];
   const showLive = liveReply !== undefined && !(run.output && run.output.text);
+  const req = splitIdeContext(run.request ?? "");
   return (
     <div className="sess-run">
       <div className="sess-run-sep"><code>{run.runId.replace("run-", "#")}</code><em>{statusLabel(run.status)}</em></div>
-      {run.request && (
+      {req.text && (
         <article className="msg3 user">
-          <div className="msg3-head"><span>{t("chat.you")}</span><time>{rel(run.createdAt)}</time></div>
-          <div className="msg3-body"><MarkdownText text={run.request} /></div>
+          <div className="msg3-head">
+            <span>{t("chat.you")}</span>
+            {req.file && <em className="req-ctx" title={req.file}>IDE · {req.file.split("/").pop()}</em>}
+            <time>{rel(run.createdAt)}</time>
+          </div>
+          <div className="msg3-body"><MarkdownText text={req.text} /></div>
         </article>
       )}
       <ThinkingChain events={run.events} messages={thinkingMsgs} />

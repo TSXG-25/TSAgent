@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { SCENES } from "../../app/scenes";
 import { WorkspaceFrame } from "../../design-system/WorkspaceFrame";
 import { t } from "../../app/i18n";
@@ -7,6 +7,7 @@ import { WorkspaceRail } from "../../app/WorkspaceRail";
 import { WorkspaceDirBar } from "../../app/WorkspaceDirBar";
 import { ideBridge } from "../../service/tauriBridge";
 import { MarsIdeSession } from "./ideSession";
+import { ideFilePrefix } from "../../app/ideContext";
 
 /** Mars = hosted code-server IDE + agent rail. The IDE is always-on: it
  *  auto-starts on the session's resolved workspace and follows every
@@ -51,9 +52,16 @@ export default function MarsWorkspace({ ctx }: { ctx: RunCtx }) {
     if (!bridge || !workspacePath) return undefined;
     return async () => {
       const path = await bridge.activeFile();
-      return path.startsWith(`${workspacePath}/`) ? t("mar.ide-file-ctx", { path }) : "";
+      return path.startsWith(`${workspacePath}/`) ? ideFilePrefix(path) : "";
     };
   }, [workspacePath]);
+
+  /** Rail width — user-adjustable by dragging the left edge, persisted
+   *  per workstation. flexBasis + min-width:0 keep it exact: unbreakable
+   *  content (paths, code) can never push the panel wider mid-stream. */
+  const [railW, setRailW] = useState(() => Number(localStorage.getItem("tsagent.railW.mars")) || 340);
+  useEffect(() => localStorage.setItem("tsagent.railW.mars", String(railW)), [railW]);
+  const drag = useRef<{ x: number; w: number } | null>(null);
 
   return (
     <WorkspaceFrame scene={scene} ctx={ctx}>
@@ -78,7 +86,16 @@ export default function MarsWorkspace({ ctx }: { ctx: RunCtx }) {
             )}
           </div>
         </main>
-        <aside className="forge-ctl">
+        <aside className="forge-ctl" style={{ flexBasis: railW }}>
+          <div
+            className="rail-resize"
+            role="separator"
+            aria-orientation="vertical"
+            onPointerDown={(e) => { drag.current = { x: e.clientX, w: railW }; e.currentTarget.setPointerCapture(e.pointerId); }}
+            onPointerMove={(e) => { const d = drag.current; if (d) setRailW(Math.min(720, Math.max(260, d.w + (d.x - e.clientX)))); }}
+            onPointerUp={() => { drag.current = null; }}
+            onPointerCancel={() => { drag.current = null; }}
+          />
           <WorkspaceRail ctx={ctx} planet="mars" placeholder={t("mar.composer-ph")} sendContext={sendContext} />
           <div className="ws-statusbar"><span className="right">mars</span></div>
         </aside>

@@ -5,6 +5,7 @@ import { createRecordSession } from "../src/app/sessionWorkspace";
 import { sendNewRecord } from "../src/app/delegate";
 import { sendForView } from "../src/app/WorkspaceRail";
 import { isOmniSession } from "../src/app/sessionWorkspace";
+import { ideFilePrefix, splitIdeContext } from "../src/app/ideContext";
 import { openRecord } from "../src/app/WorkspaceRail";
 import type { RunCtx } from "../src/app/runCtx";
 
@@ -121,4 +122,15 @@ test("omni visibility — claimed records stay on their workstation", () => {
   // A delegated child session is unclaimed by construction — the
   // @-bridge keeps it Omni-visible.
   assert.equal(isOmniSession({}), true);
+});
+
+test("ide context round-trip — the record keeps the file, the bubble keeps the text", () => {
+  const sent = `${ideFilePrefix("/proj/a/main.py")}解释下代码`;
+  const req = splitIdeContext(sent);
+  assert.equal(req.file, "/proj/a/main.py");
+  assert.equal(req.text, "解释下代码");
+  // Untagged records render verbatim — no chip, no stripping.
+  const plain = splitIdeContext("解释下代码");
+  assert.equal(plain.file, "");
+  assert.equal(plain.text, "解释下代码");
 });

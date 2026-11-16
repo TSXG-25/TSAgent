@@ -310,7 +310,6 @@ const zh = {
   // mars
   "mar.controls": "控制 / Agent 操作",
   "mar.composer-ph": "交给 Forge 的任务…",
-  "mar.ide-file-ctx": "[IDE 当前文件] {path}",
   "mar.ide-na": "仅桌面端（Tauri）可用",
   "mar.ide-nows": "先给会话绑定目录",
   "mar.ide-starting": "IDE 启动中…",
@@ -702,7 +701,6 @@ const en: Record<keyof typeof zh, string> = {
   // mars
   "mar.controls": "Controls / Agent Actions",
   "mar.composer-ph": "Task for Forge…",
-  "mar.ide-file-ctx": "[IDE open file] {path}",
   "mar.ide-na": "Desktop app (Tauri) only",
   "mar.ide-nows": "Bind a folder to this session first",
   "mar.ide-starting": "Starting IDE…",

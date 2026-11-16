@@ -311,6 +311,43 @@ fn seed_active_editor_extension(ext_dir: &std::path::Path) -> Result<(), String>
             std::fs::write(&file, content).map_err(|e| e.to_string())?;
         }
     }
+    // Folder drops alone are ignored — the installed-extensions manifest
+    // is the authoritative list, so the reporter must be registered here
+    // (as a VSIX install would) or activate() never runs.
+    let manifest_path = ext_dir.join("extensions.json");
+    let mut manifest: Vec<serde_json::Value> = std::fs::read_to_string(&manifest_path)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default();
+    manifest.retain(|e| {
+        e["identifier"]["id"].as_str() != Some("tsagent.tsagent-active-editor")
+    });
+    let dir_str = dir.to_str().ok_or("extensions dir not utf-8")?;
+    manifest.push(serde_json::json!({
+        "identifier": { "id": "tsagent.tsagent-active-editor" },
+        "version": "0.0.1",
+        "location": {
+            "$mid": 1,
+            "scheme": "file",
+            "fsPath": dir_str,
+            "path": dir_str,
+        },
+        "relativeLocation": "tsagent-active-editor",
+        "metadata": {
+            "isBuiltin": false,
+            "isApplicationScoped": false,
+            "isPreReleaseVersion": false,
+            "pinned": false,
+            "installedTimestamp": std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or_default(),
+        },
+    }));
+    let manifest_str = serde_json::to_string(&manifest).map_err(|e| e.to_string())?;
+    if std::fs::read_to_string(&manifest_path).ok() != Some(manifest_str.clone()) {
+        std::fs::write(&manifest_path, manifest_str).map_err(|e| e.to_string())?;
+    }
     Ok(())
 }
 

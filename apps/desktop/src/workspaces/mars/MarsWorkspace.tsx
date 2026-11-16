@@ -42,6 +42,19 @@ export default function MarsWorkspace({ ctx }: { ctx: RunCtx }) {
     ? { path: workspacePath, userBound: ctx.workspaceUserBound ?? false }
     : null;
 
+  /** Send-time context: the file focused in the hosted IDE travels with
+   *  the request so "解释下代码" knows what "这" points at. Paths outside
+   *  the bound workspace (a stale marker from a previous scope) never
+   *  leak into the request. */
+  const sendContext = useMemo(() => {
+    const bridge = ideBridge;
+    if (!bridge || !workspacePath) return undefined;
+    return async () => {
+      const path = await bridge.activeFile();
+      return path.startsWith(`${workspacePath}/`) ? t("mar.ide-file-ctx", { path }) : "";
+    };
+  }, [workspacePath]);
+
   return (
     <WorkspaceFrame scene={scene} ctx={ctx}>
       <div className="forge mars-ide">
@@ -66,7 +79,7 @@ export default function MarsWorkspace({ ctx }: { ctx: RunCtx }) {
           </div>
         </main>
         <aside className="forge-ctl">
-          <WorkspaceRail ctx={ctx} planet="mars" placeholder={t("mar.composer-ph")} />
+          <WorkspaceRail ctx={ctx} planet="mars" placeholder={t("mar.composer-ph")} sendContext={sendContext} />
           <div className="ws-statusbar"><span className="right">mars</span></div>
         </aside>
       </div>

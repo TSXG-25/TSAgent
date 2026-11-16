@@ -11,6 +11,7 @@ import { decideSessionApproval, useSessionApprovals } from "../../app/approvals"
 import type { RunCtx } from "../../app/runCtx";
 import type { ApprovalSummary, DirectoryListing, ParticipantSummary, SessionSummary, WorkspaceSummary } from "../../types/service";
 import { fetchSessionSnapshot, RefreshGate } from "./sessionSnapshot";
+import { isOmniSession } from "../../app/sessionWorkspace";
 import OmniLanding from "./OmniLanding";
 
 /** Omni v3 — task-workbench layout per review:
@@ -80,7 +81,10 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
   };
   // Omni aggregates every tenant session — hydrate the tenant-wide
   // catalog once per mount and let the rail filter by workstation.
-  const [planetFilter, setPlanetFilter] = useState<string>("all");
+  // Omni lists its own records by default; other planets stay an
+  // explicit opt-in so workstation history never leaks into the
+  // aggregate view unprompted.
+  const [planetFilter, setPlanetFilter] = useState<string>("");
   useEffect(() => { void ctx.controller.loadTenantCatalog(); }, [ctx.controller]);
   const [wsMenu, setWsMenu] = useState<string | null>(null);
   const [editWs, setEditWs] = useState<{ wsId: string; name: string; paths: string[]; primary: string } | null>(null);
@@ -241,7 +245,7 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
   const filtered = sessions
     .slice()
     .sort((a, b) => (b.latestUpdatedAt ?? "").localeCompare(a.latestUpdatedAt ?? ""))
-    .filter((s) => planetFilter === "all" || (s.planet ?? "") === planetFilter)
+    .filter((s) => planetFilter === "all" || (planetFilter === "" ? isOmniSession(s) : (s.planet ?? "") === planetFilter))
     .filter((s) => !query || titleOf(s.sessionId, s.latestRunId).includes(query) || s.sessionId.includes(query));
 
   return (
@@ -270,7 +274,7 @@ export default function SunWorkspace({ ctx }: { ctx: RunCtx }) {
             <div className="omni-search omni-planet-filter">
               <select onChange={(e) => setPlanetFilter(e.target.value)} value={planetFilter}>
                 <option value="all">{t("sun.filter-all")}</option>
-                <option value="">{t("sun.filter-unclaimed")}</option>
+                <option value="">{t("sun.filter-omni")}</option>
                 {SCENES.map((sc) => (
                   <option key={sc.id} value={sc.id}>{sc.workspace}</option>
                 ))}

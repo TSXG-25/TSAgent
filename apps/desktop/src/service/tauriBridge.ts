@@ -67,12 +67,16 @@ export const ideBridge: {
   start(workspace: string): Promise<IdeInfo>;
   status(): Promise<IdeInfo | null>;
   stop(): Promise<void>;
+  activeFile(): Promise<string>;
 } | null =
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window
     ? {
         start: (workspace) => invoke<IdeInfo>("ide_start", { workspace }),
         status: () => invoke<IdeInfo | null>("ide_status"),
         stop: () => invoke<void>("ide_stop"),
+        // Focused editor in the hosted code-server — "" when nothing is
+        // open or the hosted instance is not running.
+        activeFile: () => invoke<string>("ide_active_file"),
       }
     : null;
 

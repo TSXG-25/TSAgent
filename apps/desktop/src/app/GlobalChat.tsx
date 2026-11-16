@@ -4,6 +4,7 @@ import { Icon, MarkdownText } from "./ui";
 import { useScrollFollow } from "./useScrollFollow";
 import { submitToPlanet } from "./delegate";
 import { selectWorkspaceRun } from "./workspaceSelection";
+import { isOmniSession } from "./sessionWorkspace";
 import { draftKey, useDraft, clearDraftIfUnchanged } from "./draftStore";
 import { t } from "./i18n";
 import type { SessionSummary } from "../types/service";
@@ -79,7 +80,10 @@ export default function GlobalChat({ ctx, onClose, embedded = false, instant = f
 
   const allSessions = [
     { sessionId, runCount: -1 },
-    ...sessions.filter((x) => x.sessionId !== sessionId),
+    // Workstation-claimed records stay on their own rail — Omni lists
+    // only what it owns (unclaimed sessions plus delegated children,
+    // which are unclaimed by construction).
+    ...sessions.filter((x) => x.sessionId !== sessionId && isOmniSession(x)),
   ];
 
   return (

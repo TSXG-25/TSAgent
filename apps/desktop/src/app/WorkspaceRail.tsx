@@ -4,7 +4,7 @@ import { Icon, StatusBadge, rel, statusLabel } from "./ui";
 import type { RunCtx } from "./runCtx";
 import type { SessionSummary } from "../types/service";
 import { PLANET_GLYPH } from "./scenes";
-import { sendNewRecord } from "./delegate";
+import { sendNewRecord, submitToPlanet } from "./delegate";
 import AgentComposer from "./AgentComposer";
 import { WorkspaceThread } from "./WorkspaceThread";
 import { useWorkspaceCurrentRun } from "./workspaceSelection";
@@ -27,7 +27,27 @@ export function openRecord(
  *  thread: the selected session's own transcript + composer; "+" returns
  *        home. Records stay on the workstation — nothing here reads or
  *        writes another planet's view. */
-export function WorkspaceRail({ ctx, planet, placeholder }: { ctx: RunCtx; planet: string; placeholder?: string }) {
+/** Send for the rail's current view — `sendContext` (e.g. the hosted
+ *  IDE's focused file) is resolved at send time and prepended to the
+ *  request; home files a fresh record, thread continues the session. */
+export async function sendForView(
+  ctx: RunCtx,
+  planet: string,
+  view: "home" | "thread",
+  to: string,
+  body: string,
+  files: string[],
+  options: { model?: string },
+  sendContext?: () => Promise<string>,
+): Promise<{ runId: string; sessionId: string }> {
+  const prefix = (await sendContext?.()) ?? "";
+  const text = prefix ? `${prefix}\n${body}` : body;
+  if (view === "home") return sendNewRecord(ctx, planet, to, text, files, options);
+  const runId = await submitToPlanet(ctx, to, text, files, options);
+  return { runId, sessionId: ctx.sessionId };
+}
+
+export function WorkspaceRail({ ctx, planet, placeholder, sendContext }: { ctx: RunCtx; planet: string; placeholder?: string; sendContext?: () => Promise<string> }) {
   // The session's record is the default surface — home is an explicit
   // destination reached through "+", never a transient state.
   const [view, setView] = useState<"home" | "thread">("thread");
@@ -71,9 +91,7 @@ export function WorkspaceRail({ ctx, planet, placeholder }: { ctx: RunCtx; plane
         ctx={ctx}
         planet={planet}
         placeholder={placeholder}
-        onSend={view === "home"
-          ? (to, body, files, options) => sendNewRecord(ctx, planet, to, body, files, options)
-          : undefined}
+        onSend={(to, body, files, options) => sendForView(ctx, planet, view, to, body, files, options, sendContext)}
       />
     </div>
   );

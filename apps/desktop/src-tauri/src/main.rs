@@ -178,7 +178,11 @@ fn ide_start(app: AppHandle, ide: State<Ide>, workspace: String) -> Result<IdeIn
     // always trusted — seed user settings to skip the Restricted Mode
     // prompt instead of letting it degrade the IDE.
     seed_code_server_settings(&data_dir.join("User"))?;
+    // Bundle the active-editor reporter so rails can offer the focused
+    // file as submission context.
+    seed_active_editor_extension(&ext_dir)?;
     let mut child = Command::new(code_server_program())
+        .env("TSAGENT_ACTIVE_FILE", active_editor_marker(&data_dir))
         .args([
             "--bind-addr",
             "127.0.0.1:0",
@@ -253,6 +257,67 @@ fn seed_code_server_settings(user_dir: &std::path::Path) -> Result<(), String> {
     std::fs::write(&path, settings.to_string()).map_err(|e| e.to_string())
 }
 
+/// Marker file the bundled extension keeps in sync with code-server's
+/// focused editor — workspace rails attach it to submissions so
+/// "explain this code" resolves without the user retyping the path.
+fn active_editor_marker(data_dir: &std::path::Path) -> std::path::PathBuf {
+    data_dir.join("active-editor.json")
+}
+
+/// The extension reports through `TSAGENT_ACTIVE_FILE`, which `ide_start`
+/// points at the marker inside the isolated user-data dir.
+const ACTIVE_EDITOR_JS: &str = r#"const vscode = require("vscode");
+const fs = require("fs");
+const out = process.env.TSAGENT_ACTIVE_FILE || "";
+function report() {
+  if (!out) return;
+  const ed = vscode.window.activeTextEditor;
+  const p = ed && ed.document.uri.scheme === "file" ? ed.document.uri.fsPath : "";
+  try {
+    const tmp = out + ".tmp";
+    fs.writeFileSync(tmp, JSON.stringify({ path: p }));
+    fs.renameSync(tmp, out);
+  } catch {}
+}
+exports.activate = (ctx) => {
+  ctx.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(report));
+  report();
+};
+exports.deactivate = () => {};
+"#;
+
+fn seed_active_editor_extension(ext_dir: &std::path::Path) -> Result<(), String> {
+    let dir = ext_dir.join("tsagent-active-editor");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    std::fs::write(
+        dir.join("package.json"),
+        serde_json::json!({
+            "name": "tsagent-active-editor",
+            "publisher": "tsagent",
+            "version": "0.0.1",
+            "engines": { "vscode": "^1.74.0" },
+            "activationEvents": ["onStartupFinished"],
+            "main": "./extension.js",
+        })
+        .to_string(),
+    )
+    .map_err(|e| e.to_string())?;
+    std::fs::write(dir.join("extension.js"), ACTIVE_EDITOR_JS).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn ide_active_file(app: AppHandle) -> Result<String, String> {
+    let marker = active_editor_marker(
+        &app.path()
+            .app_data_dir()
+            .map_err(|e| e.to_string())?
+            .join("code-server"),
+    );
+    let raw = std::fs::read_to_string(&marker).unwrap_or_default();
+    let parsed: serde_json::Value = serde_json::from_str(&raw).unwrap_or_default();
+    Ok(parsed["path"].as_str().unwrap_or_default().to_string())
+}
+
 #[tauri::command]
 fn ide_status(ide: State<Ide>) -> Result<Option<IdeInfo>, String> {
     let mut guard = ide.0.lock().map_err(|_| "ide lock".to_string())?;
@@ -289,7 +354,8 @@ fn main() {
             sidecar_close,
             ide_start,
             ide_status,
-            ide_stop
+            ide_stop,
+            ide_active_file
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
@@ -316,7 +382,7 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_listen_port, seed_code_server_settings};
+    use super::{parse_listen_port, seed_active_editor_extension, seed_code_server_settings};
 
     #[test]
     fn parses_the_standalone_listen_line() {
@@ -354,6 +420,22 @@ mod tests {
                 .unwrap();
         assert_eq!(parsed["security.workspace.trust.enabled"], false);
         assert_eq!(parsed["workbench.colorTheme"], "Default Dark+");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn seeds_the_active_editor_reporter_as_a_loadable_extension() {
+        let dir = std::env::temp_dir().join(format!("tsagent-ext-test-{}", std::process::id()));
+        seed_active_editor_extension(&dir).unwrap();
+        let ext = dir.join("tsagent-active-editor");
+        let pkg: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(ext.join("package.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(pkg["main"], "./extension.js");
+        assert!(std::fs::read_to_string(ext.join("extension.js"))
+            .unwrap()
+            .contains("onDidChangeActiveTextEditor"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

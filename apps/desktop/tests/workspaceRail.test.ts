@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { MockAgentServiceClient } from "../src/service/mockAgentService";
 import { createRecordSession } from "../src/app/sessionWorkspace";
 import { sendNewRecord } from "../src/app/delegate";
+import { sendForView } from "../src/app/WorkspaceRail";
+import { isOmniSession } from "../src/app/sessionWorkspace";
 import { openRecord } from "../src/app/WorkspaceRail";
 import type { RunCtx } from "../src/app/runCtx";
 
@@ -40,7 +42,7 @@ test("an auto-managed source root is not inherited — the record resolves its o
   assert.equal(resolved.workspaceId, `ws-auto-${fresh}`);
 });
 
-function fakeCtx(service: MockAgentServiceClient, startRun: (req: { sessionId: string }) => Promise<{ runId: string }>) {
+function fakeCtx(service: MockAgentServiceClient, startRun: (req: { sessionId: string; requestText: string }) => Promise<{ runId: string }>) {
   const selected: string[] = [];
   const ctx = {
     service,
@@ -86,4 +88,37 @@ test("re-picking the current record opens the thread, not just the session", () 
   // not depend on the sessionId-change effect.
   assert.deepEqual(selected, ["session-mars-old"]);
   assert.deepEqual(views, ["thread"]);
+});
+
+test("the send-time context prefixes the request on both views", async () => {
+  const service = new MockAgentServiceClient([], identity);
+  await boundSource(service, "session-mars-old", "/proj/a");
+  const seen: string[] = [];
+  const { ctx } = fakeCtx(service, async (req) => { seen.push(req.requestText); return { runId: "r" }; });
+  const file = () => Promise.resolve("[IDE 当前文件] /proj/a/main.py");
+  await sendForView(ctx, "mars", "home", "mars", "解释下代码", [], {}, file);
+  await sendForView(ctx, "mars", "thread", "mars", "解释下代码", [], {}, file);
+  assert.equal(seen[0], "[IDE 当前文件] /proj/a/main.py\n解释下代码");
+  assert.equal(seen[1], "[IDE 当前文件] /proj/a/main.py\n解释下代码");
+});
+
+test("no resolved context — the request goes out untouched", async () => {
+  const service = new MockAgentServiceClient([], identity);
+  await boundSource(service, "session-mars-old", "/proj/a");
+  const seen: string[] = [];
+  const { ctx } = fakeCtx(service, async (req) => { seen.push(req.requestText); return { runId: "r" }; });
+  await sendForView(ctx, "mars", "thread", "mars", "解释下代码", [], {}, () => Promise.resolve(""));
+  await sendForView(ctx, "mars", "thread", "mars", "解释下代码", [], {});
+  assert.equal(seen[0], "解释下代码");
+  assert.equal(seen[1], "解释下代码");
+});
+
+test("omni visibility — claimed records stay on their workstation", () => {
+  assert.equal(isOmniSession({ planet: "mars" }), false);
+  assert.equal(isOmniSession({ planet: "venus" }), false);
+  assert.equal(isOmniSession({ planet: "sun" }), true);
+  assert.equal(isOmniSession({ planet: "" }), true);
+  // A delegated child session is unclaimed by construction — the
+  // @-bridge keeps it Omni-visible.
+  assert.equal(isOmniSession({}), true);
 });

@@ -50,3 +50,10 @@ export async function createRecordSession(
   }
   return session.sessionId;
 }
+
+/** Omni visibility — records belong to the workstation that filed them;
+ *  a session surfaces on Omni only while it is unclaimed or claimed by
+ *  Omni itself. Cross-workstation linkage still happens through explicit
+ *  @-delegation: its derived child session stays unclaimed and therefore
+ *  remains Omni-visible. */
+export const isOmniSession = (s: { planet?: string }): boolean => !s.planet || s.planet === "sun";

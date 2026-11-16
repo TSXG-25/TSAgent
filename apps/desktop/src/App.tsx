@@ -215,7 +215,6 @@ function App() {
     return (
       <div className="app-loading">
         <div>{visibleServiceError ? `${visibleServiceError.code}: ${visibleServiceError.message}` : `Connecting to ${runtimeLabel}…`}</div>
-        <div style={{fontSize:10,opacity:.5}}>loading:[{(controllerState.debugLoadingScopes ?? []).join(",")}] loaded:{String(controllerState.debugLoadedOnce)}</div>
       </div>
     );
   }

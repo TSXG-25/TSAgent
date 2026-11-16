@@ -54,6 +54,14 @@ export const iconPaths: Record<IconName, string> = {
   x: "m6 6 12 12M18 6 6 18",
 };
 
+/** Relative "n分钟前" stamp for message and list rows. */
+export const rel = (iso: string) => {
+  const d = Date.now() - Date.parse(iso);
+  if (!iso || Number.isNaN(d)) return "";
+  const m = Math.floor(d / 60000);
+  return m < 1 ? "刚刚" : m < 60 ? `${m}分钟前` : m < 1440 ? `${Math.floor(m / 60)}小时前` : `${Math.floor(m / 1440)}天前`;
+};
+
 /** Localized status labels — one vocabulary across timeline, buttons and
  *  summaries so cancelling / cancelled / waiting-approval / failed never blur. */
 export function statusLabel(status: RunStatus): string {

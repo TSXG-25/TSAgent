@@ -4,7 +4,7 @@ import { ThinkingChain } from "./ThinkingChain";
 import { pickFolder, setSidecarPicker } from "../../service/tauriBridge";
 import { WorkspaceFrame } from "../../design-system/WorkspaceFrame";
 import AgentComposer from "../../app/AgentComposer";
-import { requestIdForRun, StatusBadge, Icon, MarkdownText, statusLabel, stageLabel } from "../../app/ui";
+import { requestIdForRun, StatusBadge, Icon, MarkdownText, rel, statusLabel, stageLabel } from "../../app/ui";
 import { t, tk } from "../../app/i18n";
 import { useScrollFollow } from "../../app/useScrollFollow";
 import { decideSessionApproval, useSessionApprovals } from "../../app/approvals";
@@ -19,13 +19,6 @@ import OmniLanding from "./OmniLanding";
  *  AgentComposer | collapsible context slot | status footer.
  *  All data real: sessions.latestStatus, run request/status/events/
  *  artifacts/approvals. Nothing fabricated. */
-
-const rel = (iso: string) => {
-  const d = Date.now() - Date.parse(iso);
-  if (!iso || Number.isNaN(d)) return "";
-  const m = Math.floor(d / 60000);
-  return m < 1 ? "刚刚" : m < 60 ? `${m}分钟前` : m < 1440 ? `${Math.floor(m / 60)}小时前` : `${Math.floor(m / 1440)}天前`;
-};
 
 /** task duration — createdAt → durable terminal mark when one exists,
  *  else latest event timestamp, else now. Event-evidenced only. */

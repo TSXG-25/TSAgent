@@ -17,14 +17,17 @@ export async function submitToPlanet(
   targetPlanet: string,
   requestText: string,
   attachments: string[] = [],
-  options: { model?: string } = {},
+  options: { model?: string; sessionId?: string } = {},
 ): Promise<string> {
   // No explicit workspaceRoot — admission resolves the session's durable
   // binding itself, so a stale ctx path can never become the run root.
+  // options.sessionId overrides the context session — the workstation
+  // "new task" flow creates its session inside the send itself, after
+  // this ctx snapshot was taken.
   const prevActiveId = ctx.activeRun?.runId ?? "";
   const view = await ctx.controller.startRun({
     tenantId: ctx.service.identity.tenantId,
-    sessionId: ctx.sessionId,
+    sessionId: options.sessionId ?? ctx.sessionId,
     originPlanet: targetPlanet,
     contextRefs: attachments,
     metadata: metadataFor(options),

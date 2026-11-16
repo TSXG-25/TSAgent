@@ -1,17 +1,10 @@
 import { useEffect } from "react";
 import { t } from "./i18n";
-import { MarkdownText, statusLabel } from "./ui";
+import { MarkdownText, rel, statusLabel } from "./ui";
 import type { RunCtx } from "./runCtx";
 import type { RunView } from "../types";
 import { workspaceRuns } from "./workspaceSelection";
 import { ThinkingChain } from "../workspaces/sun/ThinkingChain";
-
-const rel = (iso: string) => {
-  const d = Date.now() - Date.parse(iso);
-  if (!iso || Number.isNaN(d)) return "";
-  const m = Math.floor(d / 60000);
-  return m < 1 ? "刚刚" : m < 60 ? `${m}分钟前` : m < 1440 ? `${Math.floor(m / 60)}小时前` : `${Math.floor(m / 1440)}天前`;
-};
 
 const LIVE = ["active", "blocked", "pending"];
 

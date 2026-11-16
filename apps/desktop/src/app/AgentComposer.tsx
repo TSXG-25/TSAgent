@@ -18,7 +18,7 @@ const BUSY = new Set(["active", "pending"]);
 const PLANETS = ["sun","mercury","venus","earth","mars","jupiter","saturn","uranus","neptune","pluto"];
 const MODELS = ["deepseek-chat", "deepseek-reasoner"];
 
-export default function AgentComposer({ ctx, planet, placeholder, contextPrefix }: { ctx: RunCtx; planet?: string; placeholder?: string; contextPrefix?: string }) {
+export default function AgentComposer({ ctx, planet, placeholder, contextPrefix, beforeSend }: { ctx: RunCtx; planet?: string; placeholder?: string; contextPrefix?: string; beforeSend?: () => Promise<string | undefined> }) {
   const target = planet ?? "sun";
   const key = draftKey(ctx.service.identity.tenantId, ctx.sessionId, target);
   const [draft, setDraft] = useDraft(key);
@@ -108,12 +108,14 @@ export default function AgentComposer({ ctx, planet, placeholder, contextPrefix 
     try {
       const to = m ? m[1].toLowerCase() : target;
       const body = contextPrefix ? `${contextPrefix}\n${m ? m[2] : body0}` : (m ? m[2] : body0);
+      const sessionId = await beforeSend?.();
       const runId = await submitToPlanet(ctx, to, body, files, {
         ...(model !== "default" ? { model } : {}),
+        ...(sessionId ? { sessionId } : {}),
       });
       // The workstation the send targeted now owns this task — its rail
       // selects it without navigating away from where the user is.
-      selectWorkspaceRun(ctx.service.identity.tenantId, ctx.sessionId, to, runId);
+      selectWorkspaceRun(ctx.service.identity.tenantId, sessionId ?? ctx.sessionId, to, runId);
       if (files.length) {
         window.dispatchEvent(new CustomEvent("tsagent:run-attachments", { detail: { runId, files } }));
       }

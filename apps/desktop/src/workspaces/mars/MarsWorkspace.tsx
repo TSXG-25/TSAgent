@@ -1,13 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { SCENES } from "../../app/scenes";
 import { WorkspaceFrame } from "../../design-system/WorkspaceFrame";
-import AgentComposer from "../../app/AgentComposer";
-import { StatusBadge } from "../../app/ui";
 import { t } from "../../app/i18n";
 import type { RunCtx } from "../../app/runCtx";
-import { useWorkspaceCurrentRun } from "../../app/workspaceSelection";
-import { WorkspaceTasks } from "../../app/WorkspaceTasks";
-import { WorkspaceThread } from "../../app/WorkspaceThread";
+import { WorkspaceRail } from "../../app/WorkspaceRail";
 import { WorkspaceDirBar } from "../../app/WorkspaceDirBar";
 import { ideBridge } from "../../service/tauriBridge";
 import { MarsIdeSession } from "./ideSession";
@@ -17,9 +13,10 @@ import { MarsIdeSession } from "./ideSession";
  *  rebind/unbind, so there is no start/stop control. Agent tasks run
  *  against the same session workspace root — files an agent writes land
  *  in the directory code-server shows. The dir bar lives inside the IDE
- *  pane header (the only place binding is needed). */
+ *  pane header (the only place binding is needed). The rail keeps the
+ *  workstation's own records: "+" opens its home (recent sessions) and a
+ *  send there files a fresh session; @-mentions are the only bridge out. */
 export default function MarsWorkspace({ ctx }: { ctx: RunCtx }) {
-  const currentRun = useWorkspaceCurrentRun(ctx, "mars");
   const scene = SCENES[4];
   const [, bump] = useState(0);
 
@@ -69,10 +66,7 @@ export default function MarsWorkspace({ ctx }: { ctx: RunCtx }) {
           </div>
         </main>
         <aside className="forge-ctl">
-          {currentRun && <div className="forge-status"><StatusBadge status={currentRun.status} /><code>{currentRun.runId}</code></div>}
-          <WorkspaceThread ctx={ctx} planet="mars" />
-          <AgentComposer ctx={ctx} planet="mars" placeholder={t("mar.composer-ph")} />
-          <WorkspaceTasks ctx={ctx} planet="mars" />
+          <WorkspaceRail ctx={ctx} planet="mars" placeholder={t("mar.composer-ph")} />
           <div className="ws-statusbar"><span className="right">mars</span></div>
         </aside>
       </div>

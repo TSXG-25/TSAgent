@@ -80,10 +80,14 @@ export class MarsIdeSession {
     }
   }
 
-  /** Invalidate every outstanding ticket and kill the hosted instance
-   *  (or a just-resolved stale start). Safe to call on unmount/exit. */
+  /** Invalidate every outstanding ticket, unbind the scope and kill the
+   *  hosted instance (or a just-resolved stale start). `scopeKey` is
+   *  cleared — a released session claims no binding, so a later bind of
+   *  the same scope must start fresh (StrictMode effect remount relies
+   *  on this: cleanup-release then a same-scope bindScope re-mount). */
   async release(): Promise<void> {
     this.gen++;
+    this.scopeKey = "";
     this.error = null;
     this.busy = false;
     await this.kill();

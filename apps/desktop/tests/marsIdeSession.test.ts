@@ -152,6 +152,21 @@ test("start failure records the error and leaves no instance", async () => {
   assert.ok(calls.includes("start:/ws/a"));
 });
 
+test("release unbinds the scope — a same-scope rebind starts fresh", async () => {
+  const { bridge, calls } = fakeBridge();
+  const ide = new MarsIdeSession(bridge);
+  await ide.bindScope("s1|/ws/a", "/ws/a");
+  assert.ok(ide.info);
+  calls.length = 0;
+  // StrictMode effect remount: cleanup releases, the second mount re-binds
+  // the same scope — it must not dedupe against the released scopeKey.
+  await ide.release();
+  await ide.bindScope("s1|/ws/a", "/ws/a");
+  assert.deepEqual(calls, ["stop", "stop", "start:/ws/a"]);
+  assert.equal(ide.info?.workspace, "/ws/a");
+  assert.equal(ide.error, null);
+});
+
 test("a failed scope retries the auto-start on rebind", async () => {
   const { bridge, calls, failWith } = fakeBridge();
   failWith("listen port timeout");

@@ -7,6 +7,7 @@ import { t } from "../../app/i18n";
 import type { RunCtx } from "../../app/runCtx";
 import { useWorkspaceCurrentRun } from "../../app/workspaceSelection";
 import { WorkspaceTasks } from "../../app/WorkspaceTasks";
+import { WorkspaceThread } from "../../app/WorkspaceThread";
 import { WorkspaceDirBar } from "../../app/WorkspaceDirBar";
 import { ideBridge } from "../../service/tauriBridge";
 import { MarsIdeSession } from "./ideSession";
@@ -69,7 +70,7 @@ export default function MarsWorkspace({ ctx }: { ctx: RunCtx }) {
         </main>
         <aside className="forge-ctl">
           {currentRun && <div className="forge-status"><StatusBadge status={currentRun.status} /><code>{currentRun.runId}</code></div>}
-          <div className="forge-ctl-hint">{t("mar.controls")}</div>
+          <WorkspaceThread ctx={ctx} planet="mars" />
           <AgentComposer ctx={ctx} planet="mars" placeholder={t("mar.composer-ph")} />
           <WorkspaceTasks ctx={ctx} planet="mars" />
           <div className="ws-statusbar"><span className="right">mars</span></div>

@@ -21,6 +21,7 @@ export async function submitToPlanet(
 ): Promise<string> {
   // No explicit workspaceRoot — admission resolves the session's durable
   // binding itself, so a stale ctx path can never become the run root.
+  const prevActiveId = ctx.activeRun?.runId ?? "";
   const view = await ctx.controller.startRun({
     tenantId: ctx.service.identity.tenantId,
     sessionId: ctx.sessionId,
@@ -30,6 +31,12 @@ export async function submitToPlanet(
     requestId: requestIdForRun(0),
     requestText,
   });
+  // startRun claims the session-global activeRun for whatever it just
+  // created — that is Omni's view. A workstation submission owns only its
+  // per-planet rail selection; restore the previous global selection so
+  // sending on Mars never hijacks what Omni's chat shows. Omni-aimed
+  // submissions keep the new run selected as before.
+  if (targetPlanet !== "sun" && prevActiveId) ctx.controller.selectRun(prevActiveId);
   return view.runId;
 }
 

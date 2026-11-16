@@ -74,6 +74,7 @@ class EffectAuthorization:
 
     requested_outcomes: tuple[RequestedOutcome, ...]
     write_scopes: tuple[str, ...]
+    prohibited_outcomes: tuple[RequestedOutcome, ...] = ()
 
     @classmethod
     def from_state(cls, state: Mapping[str, Any], user_input: str) -> "EffectAuthorization":
@@ -104,6 +105,7 @@ class EffectAuthorization:
         return cls(
             requested_outcomes=outcomes,
             write_scopes=write_targets,
+            prohibited_outcomes=tuple(prohibited),
         )
 
     @property
@@ -112,17 +114,20 @@ class EffectAuthorization:
 
     @property
     def requires_execution(self) -> bool:
-        return any(
-            outcome in self.requested_outcomes
-            for outcome in (
-                RequestedOutcome.CODE_EXECUTION,
-                RequestedOutcome.COMMAND_EXECUTION,
-            )
-        )
+        return self.code_execution_allowed or self.command_execution_allowed
 
     @property
     def command_execution_allowed(self) -> bool:
-        return RequestedOutcome.COMMAND_EXECUTION in self.requested_outcomes
+        """Any file-mutation grant carries command execution — a run that
+        writes files may verify what it wrote — unless execution was
+        explicitly prohibited. Declared outcomes stay untouched so this
+        rides as a *permission*, never a plan requirement."""
+        if RequestedOutcome.COMMAND_EXECUTION in self.prohibited_outcomes:
+            return False
+        return (
+            RequestedOutcome.COMMAND_EXECUTION in self.requested_outcomes
+            or RequestedOutcome.FILE_MUTATION in self.requested_outcomes
+        )
 
     @property
     def code_execution_allowed(self) -> bool:

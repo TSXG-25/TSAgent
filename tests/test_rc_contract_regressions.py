@@ -416,7 +416,19 @@ def test_c_toolset_is_gated_by_authorized_outcomes():
     assert "write_file" in names
     assert "edit_file" in names
     assert "read_file" in names
-    # CODE_EXECUTION / COMMAND_EXECUTION were never authorized.
+    # FILE_MUTATION implies command execution — the run may verify what
+    # it wrote — while CODE_EXECUTION stays declared-only.
+    assert "shell" in names
+    assert "run_python" not in names
+
+    read_only = EffectAuthorization(
+        requested_outcomes=(
+            RequestedOutcome.USER_VISIBLE_OUTPUT,
+            RequestedOutcome.FILE_READ,
+        ),
+        write_scopes=(),
+    )
+    names = set(build_toolset(read_only))
     assert "shell" not in names
     assert "run_python" not in names
 

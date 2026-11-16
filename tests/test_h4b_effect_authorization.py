@@ -1,6 +1,7 @@
 """H4b EffectAuthorization: intent-declared outcomes and write scopes."""
 
 from agent.cognition.effect_authorization import EffectAuthorization
+from agent.cognition.execution_need import RequestedOutcome
 
 
 def _state(**values):
@@ -60,3 +61,30 @@ def test_execution_plan_with_command_step_is_allowed() -> None:
     tool_plan = type("Plan", (), {"executor": "tool", "steps": [step]})()
 
     assert authorization.validate_plan(tool_plan) is None
+
+
+def test_file_mutation_implied_command_execution_is_permissive() -> None:
+    authorization = EffectAuthorization.from_state(
+        _state(requested_outcomes=["FILE_READ", "FILE_MUTATION"]),
+        "写一个冒泡排序",
+    )
+
+    # Granted at the tool surface but never declared — validate_plan must
+    # not demand a shell step the user never asked for.
+    assert authorization.command_execution_allowed is True
+    assert authorization.requires_execution is True
+    assert RequestedOutcome.COMMAND_EXECUTION not in authorization.requested_outcomes
+    assert authorization.validate_tool_action("shell", {}) is None
+
+
+def test_prohibited_execution_overrides_the_file_mutation_grant() -> None:
+    authorization = EffectAuthorization.from_state(
+        _state(
+            requested_outcomes=["FILE_MUTATION"],
+            goal_state={"prohibited_effects": ["COMMAND_EXECUTION"]},
+        ),
+        "写一个冒泡排序",
+    )
+
+    assert authorization.command_execution_allowed is False
+    assert authorization.validate_tool_action("shell", {}) is not None

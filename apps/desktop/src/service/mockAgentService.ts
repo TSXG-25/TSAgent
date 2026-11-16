@@ -281,7 +281,7 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
       createdAt: new Date().toISOString(),
       runCount: 0,
       latestRunId: "",
-      latestStatus: "idle",
+      latestStatus: "",
       latestUpdatedAt: new Date().toISOString(),
       planet: request.planet ?? "",
     };

@@ -436,7 +436,9 @@ function mapSession(value: unknown): SessionSummary {
     createdAt: requiredString(raw.created_at, "created_at"),
     runCount: Number(raw.run_count ?? 0),
     latestRunId: optionalString(raw.latest_run_id) ?? "",
-    latestStatus: optionalString(raw.latest_status) ?? "",
+    // latest_status rides the backend RUN_STATUS vocabulary — decode at
+    // the boundary like every other status field, never pass through.
+    latestStatus: raw.latest_status ? mapStatus(raw.latest_status) : "",
     latestUpdatedAt: optionalString(raw.latest_updated_at) ?? "",
     workspaceId: optionalString(raw.workspace_id) ?? "",
     planet: optionalString(raw.planet) ?? "",

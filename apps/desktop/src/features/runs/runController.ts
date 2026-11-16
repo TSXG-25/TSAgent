@@ -18,6 +18,9 @@ export interface RunControllerState {
   isLoading: boolean;
   error: ServiceErrorDTO | null;
   operationState: "idle" | "starting" | "resuming" | "cancelling" | "pausing";
+  /** Debug surface — which scopes are still loading. */
+  debugLoadingScopes?: string[];
+  debugLoadedOnce?: boolean;
 }
 
 export interface RunControllerOptions {
@@ -101,6 +104,8 @@ export class RunController {
       isLoading: this.loadingScopes.size > 0 || !this.loadedOnce,
       error: this.currentError,
       operationState: this.operationState,
+      debugLoadingScopes: [...this.loadingScopes],
+      debugLoadedOnce: this.loadedOnce,
     };
   }
 

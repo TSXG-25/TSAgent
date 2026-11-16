@@ -302,6 +302,36 @@ test("LC07 getRun projects the public snapshot and maps CANCELLING exactly", asy
   assert.equal(transport.calls[0]?.params.request_id, "get_run-lookup-1");
 });
 
+test("LC07b listSessions decodes backend latest_status into the run vocabulary", async () => {
+  const transport = new StubTransport();
+  transport.enqueue("list_sessions", [
+    {
+      tenant_id: "tenant-1",
+      session_id: "session-mars-1",
+      user_id: "user-1",
+      created_at: "2026-08-11T00:00:00Z",
+      run_count: 2,
+      latest_run_id: "run-1",
+      latest_status: "RUNNING",
+      latest_updated_at: "2026-08-11T00:00:01Z",
+    },
+    {
+      tenant_id: "tenant-1",
+      session_id: "session-mars-2",
+      user_id: "user-1",
+      created_at: "2026-08-11T00:00:00Z",
+      run_count: 0,
+      latest_run_id: "",
+      latest_status: "",
+      latest_updated_at: "2026-08-11T00:00:01Z",
+    },
+  ]);
+  const client = new LocalAgentServiceClient(transport, deterministicClientOptions);
+  const sessions = await client.listSessions({ tenantId: "tenant-1", userId: "user-1", requestId: "ls-1" });
+  assert.equal(sessions[0]?.latestStatus, "active");
+  assert.equal(sessions[1]?.latestStatus, "");
+});
+
 test("LC08 listArtifacts projects opaque references without exposing paths", async () => {
   const transport = new StubTransport();
   transport.enqueue("list_artifacts", [

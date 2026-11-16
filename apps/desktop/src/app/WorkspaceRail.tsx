@@ -3,11 +3,23 @@ import { t } from "./i18n";
 import { Icon, StatusBadge, rel, statusLabel } from "./ui";
 import type { RunCtx } from "./runCtx";
 import type { SessionSummary } from "../types/service";
-import type { RunStatus } from "../types";
 import { PLANET_GLYPH } from "./scenes";
+import { sendNewRecord } from "./delegate";
 import AgentComposer from "./AgentComposer";
 import { WorkspaceThread } from "./WorkspaceThread";
-import { useWorkspaceCurrentRun, workspaceRuns } from "./workspaceSelection";
+import { useWorkspaceCurrentRun } from "./workspaceSelection";
+
+/** Open a record's thread — unconditional: re-picking the session the
+ *  rail already shows must still leave home, so the view transition
+ *  cannot ride the sessionId-change effect alone. */
+export function openRecord(
+  ctx: Pick<RunCtx, "selectSession">,
+  setView: (view: "home" | "thread") => void,
+  sessionId: string,
+): void {
+  ctx.selectSession(sessionId);
+  setView("thread");
+}
 
 /** Workstation rail — two states mirroring the Cline pattern.
  *  home: entry hero + RECENT sessions + composer (a send files a fresh
@@ -16,7 +28,6 @@ import { useWorkspaceCurrentRun, workspaceRuns } from "./workspaceSelection";
  *        home. Records stay on the workstation — nothing here reads or
  *        writes another planet's view. */
 export function WorkspaceRail({ ctx, planet, placeholder }: { ctx: RunCtx; planet: string; placeholder?: string }) {
-  const service = ctx.service;
   // The session's record is the default surface — home is an explicit
   // destination reached through "+", never a transient state.
   const [view, setView] = useState<"home" | "thread">("thread");
@@ -30,25 +41,10 @@ export function WorkspaceRail({ ctx, planet, placeholder }: { ctx: RunCtx; plane
 
   const openHome = () => { setHomeEpoch((e) => e + 1); setView("home"); };
 
-  /** Home sends = new records: file a fresh planet-claimed session, make
-   *  it current, and hand its id to the submitter so the run lands there
-   *  even though this ctx still points at the previous session. */
-  const newSessionForSend = async () => {
-    const s = await service.createSession({
-      tenantId: service.identity.tenantId,
-      userId: service.identity.userId,
-      sessionId: `session-${planet}-${crypto.randomUUID().slice(0, 8)}`,
-      requestId: `rail-new-${planet}-${Date.now()}`,
-      planet,
-    });
-    ctx.selectSession(s.sessionId);
-    return s.sessionId;
-  };
-
   return (
     <div className={`rail rail-${view}`}>
       {view === "home" ? (
-        <RailHome ctx={ctx} planet={planet} epoch={homeEpoch} onPick={(id) => ctx.selectSession(id)} />
+        <RailHome ctx={ctx} planet={planet} epoch={homeEpoch} onPick={(id) => openRecord(ctx, setView, id)} />
       ) : (
         <>
           <div className="rail-head">
@@ -75,7 +71,9 @@ export function WorkspaceRail({ ctx, planet, placeholder }: { ctx: RunCtx; plane
         ctx={ctx}
         planet={planet}
         placeholder={placeholder}
-        beforeSend={view === "home" ? newSessionForSend : undefined}
+        onSend={view === "home"
+          ? (to, body, files, options) => sendNewRecord(ctx, planet, to, body, files, options)
+          : undefined}
       />
     </div>
   );
@@ -117,7 +115,7 @@ function RailHome({ ctx, planet, epoch, onPick }: { ctx: RunCtx; planet: string;
           <button type="button" className="rail-recent-row" key={s.sessionId} onClick={() => onPick(s.sessionId)}>
             <span className="rail-recent-title">{titleOf(s)}</span>
             <span className="rail-recent-meta">
-              <em className={`sess-st ${(s.latestStatus || "").toLowerCase()}`}>{statusLabel((s.latestStatus || "queued") as RunStatus)}</em>
+              {s.latestStatus && <em className={`sess-st ${s.latestStatus}`}>{statusLabel(s.latestStatus)}</em>}
               <time>{rel(s.latestUpdatedAt)}</time>
             </span>
           </button>

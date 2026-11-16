@@ -1,4 +1,5 @@
 import { requestIdForRun } from "./ui";
+import { createRecordSession } from "./sessionWorkspace";
 import type { RunCtx } from "./runCtx";
 import type { RunView } from "../types";
 
@@ -41,6 +42,29 @@ export async function submitToPlanet(
   // submissions keep the new run selected as before.
   if (targetPlanet !== "sun" && prevActiveId) ctx.controller.selectRun(prevActiveId);
   return view.runId;
+}
+
+/** Workstation "new task" send — files the submission on a freshly
+ *  created planet-claimed session (inheriting the current workspace
+ *  binding), then adopts it. Ordering is the contract: the record is
+ *  created and bound first but never selected; only a successful
+ *  admission selects it. A failed send leaves the current session, the
+ *  home view and the session-keyed draft exactly as they were. */
+export async function sendNewRecord(
+  ctx: RunCtx,
+  railPlanet: string,
+  targetPlanet: string,
+  requestText: string,
+  attachments: string[] = [],
+  options: { model?: string } = {},
+): Promise<{ runId: string; sessionId: string }> {
+  const sessionId = await createRecordSession(ctx.service, railPlanet, ctx.sessionId);
+  const runId = await submitToPlanet(ctx, targetPlanet, requestText, attachments, {
+    ...options,
+    sessionId,
+  });
+  ctx.selectSession(sessionId);
+  return { runId, sessionId };
 }
 
 /** Explicit delegation ("继续基于当前任务") — the parent run is a required

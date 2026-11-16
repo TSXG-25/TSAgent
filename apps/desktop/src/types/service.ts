@@ -428,7 +428,8 @@ export interface SessionSummary {
   createdAt: string;
   runCount: number;
   latestRunId: string;
-  latestStatus: string;
+  /** Latest run status decoded at the client boundary ("" = no runs). */
+  latestStatus: RunStatus | "";
   latestUpdatedAt: string;
   /** Workspace this session is filed under ("" = recent/ungrouped). */
   workspaceId?: string;

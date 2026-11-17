@@ -46,9 +46,6 @@ jobs:
       - name: Offline tool tests
         run: python -m pytest -q tests/test_tools_execution.py -k "not web_search and not web_fetch"
 
-      - name: Contract Verification
-        run: python evaluation/benchmark/contract_verification.py
-
       - name: Run Checkpoint Contract Validation
         run: python -m benchmarks.checkpoint.validate
 

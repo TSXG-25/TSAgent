@@ -80,7 +80,10 @@ export default function WorkspaceHost({ ctx }: { ctx: RunCtx }) {
   };
   const Workspace = LAZY[scene.id];
   return (
-    <>
+    // .ws-host is the column that owns the dirbar-to-workspace order —
+    // the route host is a row flex, so a bare fragment would drop the
+    // bar as a vertical strip on the left edge instead of a top bar.
+    <div className="ws-host">
       {/* Mars embeds the dir controls inside its IDE pane; other
        *  workstations get the shared bar above the workspace. */}
       {scene.id !== "sun" && scene.id !== "mars" && (
@@ -95,6 +98,6 @@ export default function WorkspaceHost({ ctx }: { ctx: RunCtx }) {
       <Suspense fallback={<div className="ws-loading">Loading {scene.workspace}…</div>}>
         <Workspace ctx={wctx} />
       </Suspense>
-    </>
+    </div>
   );
 }

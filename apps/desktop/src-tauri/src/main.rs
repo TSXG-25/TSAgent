@@ -152,14 +152,17 @@ fn ide_info(proc: &IdeProc) -> IdeInfo {
     }
 }
 
-#[tauri::command]
-fn ide_start(app: AppHandle, ide: State<Ide>, workspace: String) -> Result<IdeInfo, String> {
-    let mut guard = ide.0.lock().map_err(|_| "ide lock".to_string())?;
-    if let Some(mut proc) = guard.take() {
+/// `async` runs this sync body on Tauri's thread pool — the boot wait
+/// below must never block the main (WebView) thread, and the registry
+/// lock is only held for the take/store, never across the boot wait.
+#[tauri::command(async)]
+fn ide_start(app: AppHandle, ide: State<'_, Ide>, workspace: String) -> Result<IdeInfo, String> {
+    let previous = ide.0.lock().map_err(|_| "ide lock".to_string())?.take();
+    if let Some(mut proc) = previous {
         let alive = proc.child.try_wait().map(|s| s.is_none()).unwrap_or(false);
         if alive && proc.workspace == workspace {
             let info = ide_info(&proc);
-            *guard = Some(proc);
+            store_ide(&ide, proc)?;
             return Ok(info);
         }
         let _ = proc.child.kill();
@@ -238,8 +241,19 @@ fn ide_start(app: AppHandle, ide: State<Ide>, workspace: String) -> Result<IdeIn
         workspace,
     };
     let info = ide_info(&proc);
-    *guard = Some(proc);
+    store_ide(&ide, proc)?;
     Ok(info)
+}
+
+/// One hosted instance at a time — a start that finished while another
+/// was booting replaces it, and the replaced child is killed and reaped.
+fn store_ide(ide: &Ide, proc: IdeProc) -> Result<(), String> {
+    let replaced = ide.0.lock().map_err(|_| "ide lock".to_string())?.replace(proc);
+    if let Some(mut old) = replaced {
+        let _ = old.child.kill();
+        let _ = old.child.wait();
+    }
+    Ok(())
 }
 
 /// Write `security.workspace.trust.enabled=false` into the isolated

@@ -1,0 +1,373 @@
+:root {
+  color-scheme: dark;
+  font-family: "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  background: #0c121c;
+  color: #e5e7f4;
+  --bg: #0c121c;
+  --sidebar: #101722;
+  --panel: #141b27;
+  --panel-raised: #19202f;
+  --hover: #1d2536;
+  --selected: #232c3f;
+  --border: #252e41;
+  --border-light: #2e3950;
+  --text: #e6e8f5;
+  --muted: #9195aa;
+  --faint: #686c7c;
+  --blue: #9abaff;
+  --green: #7ad5a9;
+  --amber: #e4b66b;
+  --red: #e78b98;
+  --mono: "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+
+body { min-width: 960px; min-height: 100vh; margin: 0; background: var(--bg); }
+
+button, textarea { font: inherit; }
+
+button { color: inherit; }
+
+button:focus-visible, textarea:focus-visible { outline: 2px solid rgba(154, 186, 255, 0.75); outline-offset: 2px; }
+
+button:disabled { cursor: default; }
+
+code, kbd { font-family: var(--mono); }
+
+kbd { display: inline-flex; align-items: center; justify-content: center; min-width: 21px; height: 18px; padding: 0 4px; border: 1px solid #333f57; border-bottom-color: #3f4d6a; border-radius: 4px; color: #85899c; background: #161e2b; font-size: 9px; }
+
+h1, h2, p { margin: 0; }
+
+h1 { max-width: 790px; color: #e9ebf8; font-size: clamp(22px, 2.1vw, 30px); font-weight: 650; letter-spacing: -0.045em; line-height: 1.2; }
+
+/* Shared shell pass: larger sidebar type and a blue-to-violet surface. */
+
+body { background: #08090b; }
+
+/* Visual polish pass: cohesion on the cool navy surface. */
+
+::selection { color: #eef2ff; background: rgba(118, 152, 225, 0.32); }
+
+textarea { caret-color: #9abaff; }
+
+:root {
+  --cyber-blue: #6ea8ff;
+  --cyber-cyan: #5fd2ff;
+  --grid-line: rgba(96, 150, 255, 0.055);
+  --grid-line-strong: rgba(96, 150, 255, 0.12);
+  --metal-hi: rgba(170, 200, 255, 0.1);
+}
+
+@property --comet {
+syntax: "<angle>"; initial-value: 0deg; inherits: false; 
+}
+
+@keyframes grid-breathe { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
+
+@keyframes scan-sweep { 0% { transform: translateY(-10%); } 100% { transform: translateY(560%); } }
+
+/* --- Metallic panel surfaces --- */
+
+@keyframes panel-breathe {
+  0%, 100% { box-shadow: inset 0 1px 0 var(--metal-hi), 0 22px 60px rgba(0, 0, 0, 0.5); }
+  50% { box-shadow: inset 0 1px 0 var(--metal-hi), 0 0 0 1px rgba(110, 168, 255, 0.3), 0 18px 64px rgba(34, 84, 190, 0.32); }
+}
+
+/* --- Control-room dashboard modules (dsh-worktable style) --- */
+
+@keyframes comet-spin { to { --comet: 360deg; } }
+
+@keyframes live-pulse { 0%, 100% { box-shadow: 0 0 4px rgba(122, 213, 169, 0.4); } 50% { box-shadow: 0 0 13px rgba(122, 213, 169, 0.85); } }
+
+@keyframes dot-throb { 0%, 100% { box-shadow: 0 0 4px rgba(154, 186, 255, 0.4); } 50% { box-shadow: 0 0 13px rgba(154, 186, 255, 0.9); } }
+
+@keyframes badge-glow { 0%, 100% { box-shadow: 0 0 0 rgba(110, 168, 255, 0); } 50% { box-shadow: 0 0 12px rgba(110, 168, 255, 0.45); } }
+
+@keyframes ring-pulse { 0% { box-shadow: 0 0 0 0 rgba(126, 164, 255, 0.5); } 70% { box-shadow: 0 0 0 7px rgba(126, 164, 255, 0); } 100% { box-shadow: 0 0 0 0 rgba(126, 164, 255, 0); } }
+
+@keyframes line-flow { to { background-position: 0 12px; } }
+
+@keyframes track-shimmer { to { background-position: -220% 0; } }
+
+@keyframes mark-pulse { 0%, 100% { box-shadow: 0 0 32px rgba(105, 72, 218, 0.4); } 50% { box-shadow: 0 0 62px rgba(122, 92, 236, 0.68); } }
+
+@media (prefers-reduced-motion: reduce) {
+*, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+}
+
+:root {
+  --edge-hi: rgba(150, 190, 255, 0.5);
+  --edge-mid: rgba(70, 105, 180, 0.28);
+  --edge-lo: rgba(24, 36, 66, 0.55);
+  --cut-frame: linear-gradient(150deg, var(--edge-hi), var(--edge-mid) 38%, var(--edge-lo) 68%, rgba(140, 175, 240, 0.34));
+  --hex-chip: polygon(25% 5%, 75% 5%, 98% 50%, 75% 95%, 25% 95%, 2% 50%);
+}
+
+@keyframes hex-flicker {
+  0%, 100% { opacity: 0.55; }
+  8% { opacity: 0.22; }
+  11% { opacity: 0.72; }
+  33% { opacity: 0.4; }
+  55% { opacity: 0.16; }
+  58% { opacity: 0.65; }
+  82% { opacity: 0.35; }
+}
+
+/* --- Beveled frame recipe: outer gradient edge + inset surface --- */
+
+@keyframes frame-glow {
+  0%, 100% { filter: drop-shadow(0 0 0 rgba(110, 168, 255, 0)); }
+  50% { filter: drop-shadow(0 0 16px rgba(110, 168, 255, 0.4)); }
+}
+
+@keyframes marker-glow { 0%, 100% { filter: drop-shadow(0 0 0 rgba(126, 164, 255, 0)); } 50% { filter: drop-shadow(0 0 7px rgba(126, 164, 255, 0.85)); } }
+
+@keyframes dot-throb-f { 0%, 100% { filter: drop-shadow(0 0 2px rgba(154, 186, 255, 0.4)); } 50% { filter: drop-shadow(0 0 6px rgba(154, 186, 255, 0.9)); } }
+
+@keyframes live-pulse-f { 0%, 100% { filter: drop-shadow(0 0 2px rgba(122, 213, 169, 0.4)); } 50% { filter: drop-shadow(0 0 6px rgba(122, 213, 169, 0.85)); } }
+
+@keyframes badge-glow-f { 0%, 100% { filter: drop-shadow(0 0 0 rgba(110, 168, 255, 0)); } 50% { filter: drop-shadow(0 0 6px rgba(110, 168, 255, 0.5)); } }
+
+@keyframes mark-pulse-f { 0%, 100% { filter: drop-shadow(0 0 10px rgba(105, 72, 218, 0.45)); } 50% { filter: drop-shadow(0 0 24px rgba(122, 92, 236, 0.75)); } }
+
+:root {
+  --edge-hi: rgba(200, 225, 255, 0.85);
+  --edge-mid: rgba(105, 145, 225, 0.55);
+  --edge-lo: rgba(16, 26, 52, 0.92);
+  --cut-frame: linear-gradient(150deg, var(--edge-hi) 0%, var(--edge-mid) 30%, var(--edge-lo) 62%, rgba(150, 190, 250, 0.6) 100%);
+  --grid-line: rgba(96, 150, 255, 0.09);
+  --grid-line-strong: rgba(96, 150, 255, 0.17);
+}
+
+/* --- Panels: 2px beveled frame + bigger chamfers + cast shadow --- */
+
+@keyframes frame-glow-2 {
+  0%, 100% { filter: drop-shadow(0 24px 48px rgba(0, 0, 0, 0.6)); }
+  50% { filter: drop-shadow(0 24px 48px rgba(0, 0, 0, 0.6)) drop-shadow(0 0 22px rgba(110, 168, 255, 0.55)); }
+}
+
+body::before { animation: hex-flicker-2 7s steps(1, end) infinite; }
+
+@keyframes hex-flicker-2 {
+  0%, 100% { opacity: 0.85; }
+  8% { opacity: 0.3; }
+  11% { opacity: 1; }
+  33% { opacity: 0.55; }
+  55% { opacity: 0.25; }
+  58% { opacity: 0.9; }
+  82% { opacity: 0.5; }
+}
+
+@keyframes mark-idle { 0%, 100% { filter: drop-shadow(0 0 4px rgba(110, 168, 255, 0.3)); } 50% { filter: drop-shadow(0 0 9px rgba(110, 168, 255, 0.6)); } }
+
+@keyframes rail-sweep { 0% { transform: translateX(-20vw); } 62%, 100% { transform: translateX(115vw); } }
+
+@keyframes diagonal-breathe {
+  0% { opacity: 0; transform: skewX(-16deg) translateX(-40vw); }
+  16% { opacity: 1; }
+  62% { opacity: 1; }
+  82% { opacity: 0; transform: skewX(-16deg) translateX(140vw); }
+  100% { opacity: 0; transform: skewX(-16deg) translateX(140vw); }
+}
+
+@keyframes line-breathe {
+  0% { opacity: 0; background-position: -45% 0, 0 0; }
+  16% { opacity: 1; }
+  58% { opacity: 1; }
+  80% { opacity: 0; background-position: 145% 0, 0 0; }
+  100% { opacity: 0; background-position: 145% 0, 0 0; }
+}
+
+@keyframes aurora-breathe {
+  0%, 100% { opacity: 0.5; background-position: 8% 12%, 88% 78%, 48% 6%; }
+  50% { opacity: 0.95; background-position: 26% 34%, 66% 56%, 66% 24%; }
+}
+
+@keyframes aurora-drift {
+  0%, 100% { opacity: 0.55; transform: translate3d(-2.5%, -1.5%, 0); background-position: 6% 10%, 90% 80%, 46% 4%; }
+  50% { opacity: 0.95; transform: translate3d(2.5%, 2%, 0); background-position: 24% 32%, 68% 58%, 68% 22%; }
+}
+
+@keyframes rune-sweep-x {
+  0% { background-position: -140px 0, 0 center, 0 0; }
+  82%, 100% { background-position: calc(100% + 140px) 0, 0 center, 0 0; }
+}
+
+@keyframes rune-sweep-y {
+  0% { background-position: 0 -140px, center 0, 0 0; }
+  82%, 100% { background-position: 0 calc(100% + 140px), center 0, 0 0; }
+}
+
+/* --- Gusset plate: etched circuit traces + a signal pulse --- */
+
+@keyframes plate-signal {
+  0% { background-position: -41px -27px, 0 0, 0 0; }
+  32% { background-position: -19px -27px, 0 0, 0 0; }
+  58% { background-position: -19px -13px, 0 0, 0 0; }
+  82%, 100% { background-position: -1px -13px, 0 0, 0 0; }
+}
+
+/* --- Plate circuit: all traces kept inside the triangle --- */
+
+@keyframes plate-signal {
+  0% { background-position: -39px -37px, 0 0, 0 0; }
+  32% { background-position: -11px -37px, 0 0, 0 0; }
+  58% { background-position: -11px -23px, 0 0, 0 0; }
+  82%, 100% { background-position: 7px -23px, 0 0, 0 0; }
+}
+
+:root {
+  --font-display: "Orbitron", "SF Pro Display", -apple-system, sans-serif;
+  --font-ui: "Rajdhani", "SF Pro Text", -apple-system, sans-serif;
+}
+
+h1 { font-family: var(--font-display); font-weight: 700; letter-spacing: -0.01em; }
+
+/* --- The gusset plate rests ON the two rune bands --- */
+
+/* --- Denser circuit etching inside the triangle --- */
+
+:root {
+  --blue: #6ee7ff;
+  --cyber-blue: #3fe8ff;
+  --neon-cyan: #3fe8ff;
+  --neon-magenta: #ff4fd8;
+  --neon-violet: #a06bff;
+  --neon-amber: #ffb454;
+  --green: #4df0ad;
+  --amber: #ffb454;
+  --red: #ff6b8a;
+}
+
+body::before { opacity: .4; }
+
+/* ---------- nameplate ---------- */
+
+/* ---------- radial stage + rings ---------- */
+
+/* mechanical strut — core deploys a link arm to the hot sector */
+
+/* ---------- core ---------- */
+
+/* ---------- sectors ---------- */
+
+/* ---------- FX ---------- */
+
+/* ---------- console ---------- */
+
+/* ---------- intel ---------- */
+
+@keyframes rail-deploy { from { transform: scaleY(0); } }
+
+/* ---------- topbar controls ---------- */
+
+/* ---------- keyframes ---------- */
+
+@keyframes mc-dot-breathe { 50% { opacity: .45; } }
+
+@keyframes holo-scan { 0% { clip-path: polygon(0 0, 4% 0, 4% 100%, 0 100%); opacity: 0; } 40% { opacity: 1; } 100% { clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%); opacity: 1; } }
+
+@keyframes scanline-drop { from { top: 0; opacity: .9; } to { top: 100%; opacity: 0; } }
+
+@keyframes holo-row-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+:root {
+  --ink: #eef4ff;
+  --ink-dim: rgba(238,245,255,.62);
+  --ink-line: rgba(238,245,255,.5);
+  --ink-hair: rgba(238,245,255,.16);
+  --void-0: #04070c;
+  --void-1: #070d16;
+  --void-2: #0c1322;
+}
+
+@keyframes ring-rotate { to { stroke-dashoffset: -100%; } }
+
+@keyframes label-unlock { from { opacity: 0; filter: brightness(2.2); } to { opacity: 1; filter: brightness(1); } }
+
+@keyframes lock-title-in { 0% { opacity: 0; letter-spacing: .85em; transform: translate(-50%, -50%) scale(1.12); filter: blur(6px); } 16% { opacity: 1; color: rgba(210, 240, 255, .98); text-shadow: 0 0 26px rgba(120,200,255,.85), 0 0 60px rgba(80,160,255,.4); transform: translate(-50%, -50%) scale(1); filter: blur(0); } 70% { opacity: 1; } 100% { opacity: 0; letter-spacing: .42em; transform: translate(-50%, -50%) scale(.96); } }
+
+/* workspace entry flash (transition) */
+
+@keyframes ws-flash-in { 0% { opacity: 0; clip-path: inset(50% 0); } 60% { opacity: 1; clip-path: inset(0); } 100% { opacity: 1; } }
+
+@keyframes drawer-in { from { transform: translateX(24px); opacity: 0; } }
+
+/* ══ Blockade skin pass — translucent plates, hairline seams, amber focus ══ */
+
+body { background: var(--bg-root); font-family: var(--font-body); }
+
+/* — focus: input edges turn accent — */
+
+input:focus, textarea:focus, select:focus {
+  outline: none;
+  border-color: var(--planet-accent) !important;
+  box-shadow: 0 0 0 1px var(--planet-accent), 0 0 18px color-mix(in srgb, var(--planet-accent) 18%, transparent);
+}
+
+/* — scrollbars — */
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,.12); border-radius: 2px; }
+
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,.22); }
+
+@keyframes pulse-dot { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+
+@keyframes ps-menu-in { 0% { opacity: 0; transform: translateY(-10px) scale(.97); filter: blur(6px); } 100% { opacity: 1; transform: none; filter: none; } }
+
+@keyframes ps-item-in { 0% { opacity: 0; transform: translateX(-6px); } 100% { opacity: 1; transform: none; } }
+
+@keyframes dock-in { from { transform: translateX(24px); opacity: 0; } }
+
+@keyframes sj-sweep { 0% { opacity: 0; transform: translateX(-18%); } 22% { opacity: 1; transform: translateX(0); } 80% { opacity: 1; } 100% { opacity: 0; transform: translateX(10%); } }
+
+@keyframes sj-core { 0% { opacity: 0; transform: scale(.88) translateY(10px); } 26% { opacity: 1; transform: scale(1); } 74% { opacity: 1; } 100% { opacity: 0; transform: scale(1.04) translateY(-6px); } }
+
+@keyframes sj-glyph { 0% { transform: scale(.5) rotate(-24deg); } 30% { transform: scale(1) rotate(0deg); } 100% { transform: scale(1.15); } }
+
+@keyframes ws-reveal-ring { 0% { clip-path: circle(160% at var(--rx) var(--ry)); opacity: 1; } 55% { clip-path: circle(0% at var(--rx) var(--ry)); opacity: 1; } 100% { clip-path: circle(0% at var(--rx) var(--ry)); opacity: 0; } }
+
+@keyframes ws-reveal-wave { 0% { transform: scale(.2); opacity: 1; } 100% { transform: scale(24); opacity: 0; } }
+
+/* ══ S3 glow = running ══ */
+
+@property --lg {
+syntax: "<angle>"; initial-value: 0deg; inherits: false; 
+}
+
+@keyframes live-flow { to { --lg: 360deg; } }
+
+@keyframes caret-blink { 50% { opacity: 0; } }
+
+@keyframes st-ping { from { transform: scale(1); opacity: .8; } to { transform: scale(1.5); opacity: 0; } }
+
+/* T8 event row insert */
+
+@keyframes row-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+
+@keyframes row-fade { from { opacity: 1; } to { opacity: 0; } }
+
+@keyframes ws-collapse { to { clip-path: circle(0% at var(--rx,50%) var(--ry,50%)); } }
+
+@keyframes delegate-pulse { 0% { opacity: 1; box-shadow: inset 0 0 60px color-mix(in srgb, var(--delegate-accent) 20%, transparent); } 100% { opacity: 0; } }
+
+/* T0 boot veil — once per session, click to skip */
+
+@keyframes boot-fade { 0% { opacity: 1; } 70% { opacity: 1; } 100% { opacity: 0; visibility: hidden; } }
+
+@keyframes boot-tag { 0% { opacity: 0; transform: translateY(8px); } 30% { opacity: 1; transform: none; } 85% { opacity: 1; } 100% { opacity: 0; } }
+
+/* ══ Omni v3 — task workbench (review pass) ══ */
+
+/* L0-L4 depth ramp */
+
+:root { --L0: #060a12; --L1: #0b1220; --L2: #111d2e; --L3: #19283d; --L4: #20334b; }
+
+@keyframes caret-blink { 50% { opacity: 0; } }
+
+@keyframes thinkpulse { 50% { opacity: .4; } }

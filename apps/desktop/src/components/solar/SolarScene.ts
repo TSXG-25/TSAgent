@@ -274,12 +274,12 @@ export class SolarScene {
   private pulseT = -1;
   private composer?: EffectComposer;
   private bloomPass?: UnrealBloomPass;
-  private distortUniforms = { tDiffuse: { value: null }, uWave: { value: -1 }, uIntensity: { value: 0 }, uCenter: { value: new THREE.Vector2(0.5, 0.5) }, uAspect: { value: 1 } };
+  private distortUniforms: { [uniform: string]: THREE.IUniform } = { tDiffuse: { value: null }, uWave: { value: -1 }, uIntensity: { value: 0 }, uCenter: { value: new THREE.Vector2(0.5, 0.5) }, uAspect: { value: 1 } };
   private transitions = 0;
   private nextPulse = 7;
   private travelers: { points: THREE.Points; def: PlanetDef; phase: number }[] = [];
   private simGrid?: THREE.LineSegments;
-  private simGridUniforms = { uNav: { value: 0 }, uWave: { value: -1 }, uColor: { value: new THREE.Color(0x6fd4ff) } };
+  private simGridUniforms: { [uniform: string]: THREE.IUniform } = { uNav: { value: 0 }, uWave: { value: -1 }, uColor: { value: new THREE.Color(0x6fd4ff) } };
   private futures = new Map<PlanetKey, THREE.Line>();
   private flows: { curve: THREE.CatmullRomCurve3; line: THREE.Line; pts: THREE.Points; t: number; speed: number; target: PlanetKey; fade: number }[] = [];
   private nextFlow = 2;
@@ -302,7 +302,7 @@ export class SolarScene {
     this.bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.55, 0.85, 0.72);
     this.composer.addPass(this.bloomPass);
     const distort = new ShaderPass({
-      uniforms: this.distortUniforms as never,
+      uniforms: this.distortUniforms,
       vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position,1.0); }",
       fragmentShader: `uniform sampler2D tDiffuse; uniform float uWave; uniform float uIntensity; uniform vec2 uCenter; uniform float uAspect;
         varying vec2 vUv;
@@ -519,7 +519,7 @@ export class SolarScene {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(verts), 3));
     const mat = new THREE.ShaderMaterial({
-      uniforms: this.simGridUniforms as never,
+      uniforms: this.simGridUniforms,
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
       vertexShader: `varying vec3 vPos; void main(){ vPos = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
       fragmentShader: `uniform float uNav; uniform float uWave; uniform vec3 uColor; varying vec3 vPos;

@@ -38,70 +38,72 @@ async def serve(
 ) -> int:
     """Serve one request and one response per JSONL line.
 
-    ``subscribe_events`` is a long poll — it dispatches on a background
-    task so the serial loop keeps answering approvals, cancels, and
-    shutdown while it is pending.  All response writes serialize on one
-    lock so protocol lines never interleave.
+    Every request dispatches on its own task — responses correlate by
+    ``id``, so a slow call (a Finder dialog, a web search) or a pending
+    ``subscribe_events`` long poll never stalls approvals, cancels or
+    reads.  ``shutdown`` first lets in-flight calls answer.  All
+    response writes serialize on one lock so protocol lines never
+    interleave; the first failed write stops reading new requests.
     """
 
     import asyncio
+    import traceback
+
+    from .serializer import internal_error_response, protocol_error_response
 
     # The Service may have been constructed outside an event loop — start
     # the scheduler here so an idle sidecar still fires due schedules.
     dispatcher._service._maybe_start_scheduler()
 
     write_lock = asyncio.Lock()
+    transport_dead = asyncio.Event()
+    calls: set[asyncio.Task] = set()
     subscriptions: set[asyncio.Task] = set()
 
-    async def _emit(response: LocalRpcResponse) -> bool:
-        """Write one protocol line; False when the transport is dead."""
+    async def _emit(response: LocalRpcResponse) -> None:
+        if transport_dead.is_set():
+            return
         try:
             async with write_lock:
                 _write_response(stdout, response)
         except (BrokenPipeError, OSError):
             print("local transport disconnected", file=diagnostics)
-            return False
-        return True
+            transport_dead.set()
 
-    async def _run_subscription(request: LocalRpcRequest) -> None:
-        response = await dispatcher.dispatch(request)
+    async def _handle(request: LocalRpcRequest, line: str) -> None:
+        try:
+            response = await dispatcher.dispatch(request)
+        except Exception:
+            traceback.print_exc(file=diagnostics)
+            response = internal_error_response(_request_id_hint(line))
         await _emit(response)
 
     try:
-        while True:
+        while not transport_dead.is_set():
             line = await asyncio.to_thread(stdin.readline)
-            if not line:
+            if not line or transport_dead.is_set():
                 break
             try:
                 request = LocalRpcRequest.from_json_line(line)
-                if request.method is LocalTransportMethod.SUBSCRIBE_EVENTS:
-                    task = asyncio.create_task(_run_subscription(request))
-                    subscriptions.add(task)
-                    task.add_done_callback(subscriptions.discard)
-                    continue
-                response = await dispatcher.dispatch(request)
             except LocalProtocolError as error:
-                from .serializer import protocol_error_response
-
-                response = protocol_error_response(_request_id_hint(line), error)
-            except Exception:
-                import traceback
-                from .serializer import internal_error_response
-
-                traceback.print_exc(file=diagnostics)
-                response = internal_error_response(_request_id_hint(line))
-
-            if not await _emit(response):
-                break
-            if dispatcher.shutdown_requested:
-                break
+                await _emit(protocol_error_response(_request_id_hint(line), error))
+                continue
+            if request.method is LocalTransportMethod.SHUTDOWN:
+                await asyncio.gather(*calls)
+                await _handle(request, line)
+                if dispatcher.shutdown_requested:
+                    break
+                continue
+            task = asyncio.create_task(_handle(request, line))
+            pool = subscriptions if request.method is LocalTransportMethod.SUBSCRIBE_EVENTS else calls
+            pool.add(task)
+            task.add_done_callback(pool.discard)
     finally:
         # EOF/shutdown cancels still-pending subscriptions rather than
-        # waiting out their poll windows.
+        # waiting out their poll windows; ordinary calls run to completion.
         for task in tuple(subscriptions):
             task.cancel()
-        if subscriptions:
-            await asyncio.gather(*subscriptions, return_exceptions=True)
+        await asyncio.gather(*subscriptions, *calls, return_exceptions=True)
         # close() waits for normal Service tasks but never creates a
         # USER_CANCEL intent.  EOF is a transport event, not a business action.
         await dispatcher.close()

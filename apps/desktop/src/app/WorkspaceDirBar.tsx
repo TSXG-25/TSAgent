@@ -22,18 +22,13 @@ export function WorkspaceDirBar({ ctx, resolved, onBound }: { ctx: RunCtx; resol
 
   const bind = (picked: { name: string; path: string }) => {
     setBusy(true);
-    const tenantId = service.identity.tenantId;
     void service.upsertWorkspace({
-      tenantId,
       sessionId: ctx.sessionId,
-      requestId: `dir-ws-${Date.now()}`,
       workspaceId: picked.path,
       displayName: picked.name,
       path: picked.path,
     }).then(() => service.assignSessionWorkspace({
-      tenantId,
       sessionId: ctx.sessionId,
-      requestId: `dir-as-${Date.now()}`,
       workspaceId: picked.path,
     })).then(onBound).finally(() => setBusy(false));
   };
@@ -41,9 +36,7 @@ export function WorkspaceDirBar({ ctx, resolved, onBound }: { ctx: RunCtx; resol
   const unbind = () => {
     setBusy(true);
     void service.assignSessionWorkspace({
-      tenantId: service.identity.tenantId,
       sessionId: ctx.sessionId,
-      requestId: `dir-un-${Date.now()}`,
       workspaceId: "",
     }).then(onBound).finally(() => setBusy(false));
   };

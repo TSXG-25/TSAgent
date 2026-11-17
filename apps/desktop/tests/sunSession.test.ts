@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 import { AgentServiceClientError } from "../src/types/service";
 import type { ListApprovalsRequest, ListParticipantsRequest } from "../src/types/service";

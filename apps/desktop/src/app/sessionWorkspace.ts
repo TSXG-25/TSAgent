@@ -7,11 +7,9 @@ export async function resolveBoundPath(
   service: DesktopAgentServiceClient,
   sessionId: string,
 ): Promise<string> {
-  const tenantId = service.identity.tenantId;
-  const userId = service.identity.userId;
   const [sessions, workspaces] = await Promise.all([
-    service.listSessions({ tenantId, userId, requestId: `wsp-s-${Date.now()}` }),
-    service.listWorkspaces({ tenantId, sessionId, requestId: `wsp-w-${Date.now()}` }),
+    service.listSessions({}),
+    service.listWorkspaces({ sessionId }),
   ]);
   const workspaceId = sessions.find((s) => s.sessionId === sessionId)?.workspaceId ?? "";
   return workspaces.find((w) => w.workspaceId === workspaceId)?.path ?? "";
@@ -28,23 +26,14 @@ export async function createRecordSession(
   planet: string,
   sourceSessionId: string,
 ): Promise<string> {
-  const tenantId = service.identity.tenantId;
-  const current = await service.resolveSessionWorkspace({
-    tenantId,
-    sessionId: sourceSessionId,
-  });
+  const current = await service.resolveSessionWorkspace({ sessionId: sourceSessionId });
   const session = await service.createSession({
-    tenantId,
-    userId: service.identity.userId,
     sessionId: `session-${planet}-${crypto.randomUUID().slice(0, 8)}`,
-    requestId: `rail-new-${planet}-${Date.now()}`,
     planet,
   });
   if (current.bound && !current.workspaceId.startsWith("ws-auto-")) {
     await service.assignSessionWorkspace({
-      tenantId,
       sessionId: session.sessionId,
-      requestId: `rail-as-${Date.now()}`,
       workspaceId: current.workspaceId,
     });
   }

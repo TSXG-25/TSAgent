@@ -2774,7 +2774,8 @@ class RunEvent:
     workflow_id: str | None
     stage_id: str | None
     task_id: str | None
-    event_type: EventType
+    # Internal progress events keep arbitrary names (see __post_init__).
+    event_type: EventType | str
     timestamp: str
     payload: Mapping[str, JSONValue] = field(default_factory=dict)
     run_revision: int = 0

@@ -89,11 +89,6 @@ export function toServiceError(error: unknown): ServiceErrorDTO {
   };
 }
 
-export function requestIdForRun(sequenceHint: number): string {
-  const randomId = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${sequenceHint}`;
-  return `desktop-${randomId}`;
-}
-
 export function Icon({ name, size = 16, className = "", ...props }: { name: IconName; size?: number; className?: string } & SVGProps<SVGSVGElement>) {
   return (
     <svg

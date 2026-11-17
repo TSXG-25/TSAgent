@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 import { MockAgentServiceClient } from "../src/service/mockAgentService";
 import { createRecordSession } from "../src/app/sessionWorkspace";
@@ -12,13 +12,13 @@ import type { RunCtx } from "../src/app/runCtx";
 const identity = { tenantId: "t", userId: "u", sessionId: "s-boot" };
 
 async function boundSource(service: MockAgentServiceClient, sessionId: string, path: string) {
-  await service.createSession({ tenantId: "t", userId: "u", sessionId, requestId: `c-${sessionId}` });
+  await service.createSession({ sessionId, requestId: `c-${sessionId}` });
   await service.upsertWorkspace({
-    tenantId: "t", sessionId, requestId: `w-${sessionId}`,
+    sessionId, requestId: `w-${sessionId}`,
     workspaceId: path, displayName: "proj", path,
   });
   await service.assignSessionWorkspace({
-    tenantId: "t", sessionId, requestId: `a-${sessionId}`, workspaceId: path,
+    sessionId, requestId: `a-${sessionId}`, workspaceId: path,
   });
 }
 
@@ -26,19 +26,19 @@ test("a home new-record session inherits the user-bound project dir", async () =
   const service = new MockAgentServiceClient([], identity);
   await boundSource(service, "session-mars-old", "/proj/a");
   const fresh = await createRecordSession(service as never, "mars", "session-mars-old");
-  const resolved = await service.resolveSessionWorkspace({ tenantId: "t", sessionId: fresh });
+  const resolved = await service.resolveSessionWorkspace({ sessionId: fresh });
   assert.equal(resolved.workspaceId, "/proj/a");
   assert.equal(resolved.path, "/proj/a");
 });
 
 test("an auto-managed source root is not inherited — the record resolves its own", async () => {
   const service = new MockAgentServiceClient([], identity);
-  await service.createSession({ tenantId: "t", userId: "u", sessionId: "session-mars-old", requestId: "c0" });
+  await service.createSession({ sessionId: "session-mars-old", requestId: "c0" });
   // Resolving the unbound source registers+binds its app-managed auto root.
-  const source = await service.resolveSessionWorkspace({ tenantId: "t", sessionId: "session-mars-old" });
+  const source = await service.resolveSessionWorkspace({ sessionId: "session-mars-old" });
   assert.ok(source.workspaceId.startsWith("ws-auto-"));
   const fresh = await createRecordSession(service as never, "mars", "session-mars-old");
-  const resolved = await service.resolveSessionWorkspace({ tenantId: "t", sessionId: fresh });
+  const resolved = await service.resolveSessionWorkspace({ sessionId: fresh });
   assert.notEqual(resolved.workspaceId, source.workspaceId);
   assert.equal(resolved.workspaceId, `ws-auto-${fresh}`);
 });

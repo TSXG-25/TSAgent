@@ -405,7 +405,6 @@ async function waitForTerminal(
   let latest: RunSnapshot | undefined;
   while (Date.now() < deadline) {
     latest = await client.getRun({
-      tenantId: currentIdentity.tenantId,
       sessionId: currentIdentity.sessionId,
       runId,
     });
@@ -421,7 +420,6 @@ async function readAllEvents(
   runId: string,
 ): Promise<RunEvent[]> {
   return client.readEvents({
-    tenantId: currentIdentity.tenantId,
     sessionId: currentIdentity.sessionId,
     runId,
     afterSequence: -1,
@@ -451,7 +449,7 @@ async function captureRun(
     };
   } catch (error) {
     const snapshot = runId
-      ? await environment.client.getRun({ tenantId: environment.currentIdentity.tenantId, sessionId: environment.currentIdentity.sessionId, runId }).catch(() => undefined)
+      ? await environment.client.getRun({ sessionId: environment.currentIdentity.sessionId, runId }).catch(() => undefined)
       : undefined;
     const events = runId ? await readAllEvents(environment.client, environment.currentIdentity, runId).catch(() => []) : [];
     return {
@@ -567,7 +565,7 @@ async function runDt02Dt03Dt07(): Promise<[CaseResult, CaseResult, CaseResult]> 
     const restartTransport = new TauriSidecarTransport(restartBridge, { requestTimeoutMs: 120_000 });
     const restartClient = new LocalAgentServiceClient(restartTransport, { identity: environment.currentIdentity });
     try {
-      const snapshot = await restartClient.getRun({ tenantId: environment.currentIdentity.tenantId, sessionId: environment.currentIdentity.sessionId, runId: capture.runId });
+      const snapshot = await restartClient.getRun({ sessionId: environment.currentIdentity.sessionId, runId: capture.runId });
       const events = await readAllEvents(restartClient, environment.currentIdentity, capture.runId);
       const artifacts = artifactViews(snapshot);
       const rehydrated = snapshot.runId === capture.runId && events.length > 0;
@@ -611,7 +609,7 @@ async function runDt04(): Promise<CaseResult> {
     const reconnected = new LocalAgentServiceClient(reconnectedTransport, { identity: environment.currentIdentity });
     try {
       const snapshot = await waitForTerminal(reconnected, environment.currentIdentity, handle.runId);
-      const remaining = await reconnected.readEvents({ tenantId: environment.currentIdentity.tenantId, sessionId: environment.currentIdentity.sessionId, runId: handle.runId, afterSequence: cursor });
+      const remaining = await reconnected.readEvents({ sessionId: environment.currentIdentity.sessionId, runId: handle.runId, afterSequence: cursor });
       const combined = [...firstEvents, ...remaining];
       const noGap = combined.every((event, index) => event.sequenceNumber === index + 1);
       const noDuplicate = duplicateCount(combined) === 0;
@@ -651,18 +649,18 @@ async function runDt06(): Promise<CaseResult> {
   try {
     const request = requestFor("DT06", environment.currentIdentity, "请生成一个很长的多章节分析，在生成过程中保持运行，最后输出完整结果。 ");
     const handle = await environment.client.startRun(request);
-    let snapshot = await environment.client.getRun({ tenantId: environment.currentIdentity.tenantId, sessionId: environment.currentIdentity.sessionId, runId: handle.runId });
+    let snapshot = await environment.client.getRun({ sessionId: environment.currentIdentity.sessionId, runId: handle.runId });
     const activeDeadline = Date.now() + Number(process.env.DESKTOP4C_ACTIVE_WAIT_MS ?? "15_000");
     while (snapshot.status === "pending" && Date.now() < activeDeadline) {
       await sleep(250);
-      snapshot = await environment.client.getRun({ tenantId: environment.currentIdentity.tenantId, sessionId: environment.currentIdentity.sessionId, runId: handle.runId });
+      snapshot = await environment.client.getRun({ sessionId: environment.currentIdentity.sessionId, runId: handle.runId });
     }
     if (snapshot.status !== "active") {
       const events = await readAllEvents(environment.client, environment.currentIdentity, handle.runId).catch(() => []);
       const providerError = providerFailure(snapshot, undefined);
       return safeCaseResult("DT06", { result: providerError ? "PROVIDER_ERROR" : "DEFERRED", runtime_correctness: providerError ? "PASS" : "DEFERRED", capability_outcome: "DEFERRED", run_id: handle.runId, terminal_status: snapshot.status, events_seen: eventTypes(events), event_sequences: events.map((event) => event.sequenceNumber), artifacts: artifactViews(snapshot), run_output_present: Boolean(snapshot.output?.text?.trim()), runtime_invariants: { cancel_not_sent_before_active: true }, diagnostics: environment.sidecarDiagnostics(), notes: ["Provider did not reach an active wait boundary"] });
     }
-    const cancelling = await environment.client.cancelRun({ tenantId: environment.currentIdentity.tenantId, sessionId: environment.currentIdentity.sessionId, runId: handle.runId, requestId: `desktop4c-dt06-cancel-${handle.runId}`, requestedBy: environment.currentIdentity.userId });
+    const cancelling = await environment.client.cancelRun({ sessionId: environment.currentIdentity.sessionId, runId: handle.runId, requestId: `desktop4c-dt06-cancel-${handle.runId}`, requestedBy: environment.currentIdentity.userId });
     const finalSnapshot = await waitForTerminal(environment.client, environment.currentIdentity, handle.runId);
     const events = await readAllEvents(environment.client, environment.currentIdentity, handle.runId);
     const runtime = cancelling.status === "cancelling" && finalSnapshot.status === "cancelled" && terminalEventMatches(finalSnapshot, events) && !events.some((event) => event.eventType === "run_completed");

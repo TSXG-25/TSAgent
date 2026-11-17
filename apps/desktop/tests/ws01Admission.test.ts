@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 import { RunController } from "../src/features/runs/runController";
 import { submitToPlanet, delegateToPlanet } from "../src/app/delegate";
@@ -52,11 +52,12 @@ class ParallelClient extends UnavailableDesktopAgentServiceClient {
   async startRun(request: StartRunRequest): Promise<RunHandle> {
     this.startRequests.push(request);
     await this.gate;
+    const requestId = request.requestId ?? `minted-${this.startRequests.length}`;
     return {
-      tenantId: request.tenantId,
+      tenantId: "t",
       sessionId: request.sessionId,
-      runId: `run-${request.requestId}`,
-      requestId: request.requestId,
+      runId: `run-${requestId}`,
+      requestId,
       status: "active",
       revision: 1,
       createdAt: "t",
@@ -80,7 +81,6 @@ class ParallelClient extends UnavailableDesktopAgentServiceClient {
 
 function startRequest(requestId: string): StartRunRequest {
   return {
-    tenantId: identity.tenantId,
     sessionId: identity.sessionId,
     requestId,
     requestText: `text ${requestId}`,
@@ -155,6 +155,7 @@ function ctxWith(runs: RunView[], service?: MockAgentServiceClient): RunCtx {
     selectRun: () => {},
     openRun: () => {},
     openNewTask: () => {},
+    reportError: () => {},
     refreshActiveRun: () => {},
     cancelActiveRun: () => {},
     resumeActiveRun: () => {},
@@ -184,7 +185,7 @@ test("WS-01: submitToPlanet always records originPlanet and admits independent t
   const r1 = await submitToPlanet(ctx, "mercury", "task one");
   const r2 = await submitToPlanet(ctx, "mercury", "task two");
   assert.notEqual(r1, r2);
-  const snaps = await service.listRuns({ tenantId: identity.tenantId, sessionId: "s1" });
+  const snaps = await service.listRuns({ sessionId: "s1" });
   const s1 = snaps.find((s) => s.runId === r1);
   const s2 = snaps.find((s) => s.runId === r2);
   assert.equal(s1?.originPlanet, "mercury");
@@ -198,7 +199,7 @@ test("WS-01: delegateToPlanet anchors on the explicit parent, not the session ac
   const parent = runView("run-parent", "s1", "sun");
   const taskId = await delegateToPlanet(ctx, parent, "neptune", "child task");
   assert.ok(taskId);
-  const tasks = await service.listTasks({ tenantId: identity.tenantId, sessionId: "s1" });
+  const tasks = await service.listTasks({ sessionId: "s1" });
   const child = tasks.find((task) => task.taskId === taskId);
   assert.equal(child?.originPlanet, "neptune");
   assert.equal(child?.parentTaskId, "task-run-parent");

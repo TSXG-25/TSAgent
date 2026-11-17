@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useReducer, useState } from "react";
 import type { CapabilitySummary, DesktopAgentServiceClient, ProfileSummary, SettingsSummary, SkillSummary, WorkspaceSummary } from "../types/service";
 import type { RunView } from "../types";
-import { Icon, requestIdForRun } from "./ui";
+import { Icon } from "./ui";
 import { PROVIDERS, SettingsForm } from "./settingsForm";
 import { t, useLang, setLang, type Lang } from "./i18n";
 
@@ -26,37 +26,28 @@ export default function GlobalSettings({ service, sessionId, onClose, runs = [] 
 
   useEffect(() => {
     let stale = false;
+    const fail = (e: unknown) => { if (!stale) setError(e instanceof Error ? e.message : String(e)); };
     service.getSettings({
-      tenantId: service.identity.tenantId,
       sessionId,
-      requestId: requestIdForRun(0),
-    }).then((s) => {
+      }).then((s) => {
       if (stale) return;
       setSettings(s);
       // 恢复已保存的模型而非首项 — 非首项模型重开不再跳回列表头。
       form.load(s);
       bump();
-    }).catch((e) => setError(String(e)));
+    }).catch(fail);
     service.listProfiles({
-      tenantId: service.identity.tenantId,
       sessionId,
-      requestId: requestIdForRun(0),
-    }).then((p) => { if (!stale) setProfiles(p); }).catch(() => {});
+      }).then((p) => { if (!stale) setProfiles(p); }).catch(fail);
     service.listCapabilities({
-      tenantId: service.identity.tenantId,
       sessionId,
-      requestId: requestIdForRun(0),
-    }).then((c) => { if (!stale) setCapabilities(c); }).catch(() => {});
+      }).then((c) => { if (!stale) setCapabilities(c); }).catch(fail);
     service.listSkills({
-      tenantId: service.identity.tenantId,
       sessionId,
-      requestId: requestIdForRun(0),
-    }).then((s) => { if (!stale) setSkills(s); }).catch(() => {});
+      }).then((s) => { if (!stale) setSkills(s); }).catch(fail);
     service.listWorkspaces({
-      tenantId: service.identity.tenantId,
       sessionId,
-      requestId: requestIdForRun(0),
-    }).then((w) => { if (!stale) setWorkspaces(w); }).catch(() => {});
+      }).then((w) => { if (!stale) setWorkspaces(w); }).catch(fail);
     return () => { stale = true; };
   }, [service, form]);
 
@@ -82,9 +73,7 @@ export default function GlobalSettings({ service, sessionId, onClose, runs = [] 
     setSaving(true); setSaved(false); setError(null);
     try {
       const next = await service.updateSettings({
-        tenantId: service.identity.tenantId,
         sessionId,
-        requestId: requestIdForRun(0),
         ...form.toSaveRequest(),
       });
       setSettings(next); setSaved(true);

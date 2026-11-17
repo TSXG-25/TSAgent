@@ -155,3 +155,10 @@ get_settings / update_settings           — provider/model config
    abort on navigation is normal, not an error.
 8. **Response envelopes are strict** — `exactKeys({id, ok, result})`; an
    extra key or a numeric `id` fails the whole response.
+9. **Responses arrive out of order.** The stdio sidecar dispatches every
+   request concurrently (a Finder dialog must not stall approvals);
+   correlate by `id`, never by position. `shutdown` waits for in-flight
+   calls to answer first.
+10. **`create_session { planet }` claims only an unclaimed session.** The
+    first claim wins; the returned summary carries the real owner, so a
+    foreign-owned session can be viewed without being stolen.

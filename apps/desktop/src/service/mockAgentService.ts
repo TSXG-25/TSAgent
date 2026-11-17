@@ -109,9 +109,7 @@ function keyForCancel(tenantId: string, runId: string, requestId: string): strin
 }
 
 function cancelDigest(request: CancelRunRequest): string {
-  return digestText(
-    [request.tenantId, request.sessionId, request.runId, request.requestedBy].join("\u0000"),
-  );
+  return digestText([request.sessionId, request.runId, request.requestedBy].join("\u0000"));
 }
 
 function clientError(
@@ -209,7 +207,7 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
 
   async createTask(request: CreateTaskRequest): Promise<TaskHandle> {
     const task: TaskRecord = {
-      tenantId: request.tenantId,
+      tenantId: this.identity.tenantId,
       sessionId: request.sessionId,
       taskId: request.taskId ?? `task-${Math.random().toString(16).slice(2, 10)}`,
       parentTaskId: request.parentTaskId ?? "",
@@ -275,17 +273,18 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
 
   async createSession(request: CreateSessionRequest): Promise<SessionSummary> {
     const session: SessionSummary = {
-      tenantId: request.tenantId,
+      tenantId: this.identity.tenantId,
       sessionId: request.sessionId || `session-${Math.random().toString(16).slice(2, 10)}`,
-      userId: request.userId,
+      userId: this.identity.userId,
       createdAt: new Date().toISOString(),
       runCount: 0,
       latestRunId: "",
       latestStatus: "",
       latestUpdatedAt: new Date().toISOString(),
-      planet: request.planet ?? "",
+      // first claim wins — same ownership contract as the sidecar store
+      planet: this.sessionPlanets.get(request.sessionId) || request.planet || "",
     };
-    if (request.planet) this.sessionPlanets.set(session.sessionId, request.planet);
+    if (session.planet) this.sessionPlanets.set(session.sessionId, session.planet);
     const existing = this.extraSessions.findIndex((s) => s.sessionId === session.sessionId);
     if (existing >= 0) this.extraSessions[existing] = { ...this.extraSessions[existing], planet: session.planet };
     else this.extraSessions = [session, ...this.extraSessions];
@@ -547,13 +546,13 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
       score: request.score ?? 0, verdict,
       notes: request.notes ?? "", createdAt: new Date().toISOString(),
     };
-    this.evals = [{ summary: ev, tenantId: request.tenantId, sessionId: request.sessionId }, ...this.evals];
+    this.evals = [{ summary: ev, tenantId: this.identity.tenantId, sessionId: request.sessionId }, ...this.evals];
     return ev;
   }
 
   async listEvaluations(request: ListEvaluationsRequest): Promise<EvaluationSummary[]> {
     return this.evals
-      .filter((e) => e.tenantId === request.tenantId && (request.allSessions || e.sessionId === request.sessionId))
+      .filter((e) => e.tenantId === this.identity.tenantId && (request.allSessions || e.sessionId === request.sessionId))
       .map((e) => e.summary);
   }
 
@@ -698,7 +697,6 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
 
   async delegateRun(request: DelegateRunRequest): Promise<DelegateRunResult> {
     const task = await this.createTask({
-      tenantId: request.tenantId,
       sessionId: request.sessionId,
       requestId: request.requestId,
       parentTaskId: request.parentRunId ? `task-${request.parentRunId}` : "",
@@ -804,7 +802,7 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
   }
 
   async listHistory(request: ListHistoryRequest): Promise<HistoryEntry[]> {
-    return this.listRuns({ tenantId: this.identity.tenantId, sessionId: request.sessionId })
+    return this.listRuns({ sessionId: request.sessionId })
       .then((runs) => runs.slice(0, request.limit ?? 200).map((run) => ({
         runId: run.runId,
         taskId: "",
@@ -816,20 +814,17 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
   }
 
   async startRun(request: StartRunRequest): Promise<RunHandle> {
-    if (!request.tenantId || !request.sessionId || !request.requestId || !request.requestText.trim()) {
-      throw clientError("INVALID_REQUEST", "A tenant, session, request ID, and request text are required.", {
-        requestId: request.requestId,
-      });
+    const requestId = request.requestId ?? `mock-start-${crypto.randomUUID()}`;
+    if (!request.sessionId || !requestId.trim() || !request.requestText.trim()) {
+      throw clientError("INVALID_REQUEST", "A session, request ID, and request text are required.", { requestId });
     }
 
     const digest = request.requestDigest ?? digestText(request.requestText);
-    const requestKey = keyForRequest(request.tenantId, request.requestId);
+    const requestKey = keyForRequest(this.identity.tenantId, requestId);
     const existing = this.requestIndex.get(requestKey);
     if (existing) {
       if (existing.digest !== digest) {
-        throw clientError("IDEMPOTENCY_CONFLICT", "The request ID is already used for different request content.", {
-          requestId: request.requestId,
-        });
+        throw clientError("IDEMPOTENCY_CONFLICT", "The request ID is already used for different request content.", { requestId });
       }
       const existingRun = this.snapshots.get(existing.runId);
       if (existingRun) return toHandle(clone(existingRun));
@@ -838,8 +833,8 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
     const run = createNewRun(request.requestText, this.nextRunSequence);
     this.nextRunSequence += 1;
     const snapshot = toServiceSnapshot(run, {
-      tenantId: request.tenantId,
-      requestId: request.requestId,
+      tenantId: this.identity.tenantId,
+      requestId,
       revision: 1,
     });
     snapshot.sessionId = request.sessionId;
@@ -865,15 +860,16 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
   }
 
   async cancelRun(request: CancelRunRequest): Promise<RunSnapshot> {
-    if (!request.requestId.trim() || !request.requestedBy.trim()) {
+    const requestId = request.requestId ?? `mock-cancel-${crypto.randomUUID()}`;
+    if (!requestId.trim() || !request.requestedBy.trim()) {
       throw clientError("INVALID_REQUEST", "A cancellation request ID and requester are required.", {
-        requestId: request.requestId,
+        requestId,
         runId: request.runId,
       });
     }
 
     const snapshot = this.getScopedRun(request);
-    const cancelKey = keyForCancel(request.tenantId, request.runId, request.requestId);
+    const cancelKey = keyForCancel(this.identity.tenantId, request.runId, requestId);
     const digest = cancelDigest(request);
     const previous = this.cancelIndex.get(cancelKey);
     if (previous) {
@@ -936,7 +932,7 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
 
   async resumeRun(request: ResumeRunRequest): Promise<RunHandle> {
     const snapshot = this.getScopedRun(request);
-    const resumeKey = keyForResume(request.tenantId, request.runId, request.resumeRequestId);
+    const resumeKey = keyForResume(this.identity.tenantId, request.runId, request.resumeRequestId);
     const previous = this.resumeIndex.get(resumeKey);
     if (previous) {
       if (previous.checkpointId !== request.checkpointId || previous.action !== request.action) {
@@ -1160,9 +1156,9 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
     });
   }
 
-  private getScopedRun(request: { tenantId: string; sessionId: string; runId: string }): RunSnapshot {
+  private getScopedRun(request: { sessionId: string; runId: string }): RunSnapshot {
     const snapshot = this.snapshots.get(request.runId);
-    if (!snapshot || snapshot.tenantId !== request.tenantId || snapshot.sessionId !== request.sessionId) {
+    if (!snapshot || snapshot.tenantId !== this.identity.tenantId || snapshot.sessionId !== request.sessionId) {
       // Keep scope mismatches indistinguishable from missing Runs.
       throw clientError("RUN_NOT_FOUND", "Run not found.");
     }

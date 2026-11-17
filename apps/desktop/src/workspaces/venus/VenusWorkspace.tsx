@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { SCENES } from "../../app/scenes";
 import { WorkspaceFrame } from "../../design-system/WorkspaceFrame";
 import AgentComposer from "../../app/AgentComposer";
+import { draftKey, prefillDraft } from "../../app/draftStore";
 import { MarkdownText } from "../../app/ui";
 import { t } from "../../app/i18n";
 import type { RunCtx } from "../../app/runCtx";
@@ -49,7 +50,6 @@ export default function VenusWorkspace({ ctx }: { ctx: RunCtx }) {
     let staleFlag = false;
     setContent(null);
     void service.readArtifact({
-      tenantId: service.identity.tenantId,
       sessionId: cur.run.sessionId,
       runId: cur.run.runId,
       artifactId: cur.artifact.artifactId,
@@ -89,9 +89,7 @@ export default function VenusWorkspace({ ctx }: { ctx: RunCtx }) {
           {cur ? (
             <>
               <header className="muse-title"><strong>{cur.artifact.path.split("/").pop()}</strong><code>{cur.run.runId}</code>{applied && <span className="muse-applied">{t("ven.applied", { name: applied })}</span>}
-                <button className="ven-link" type="button" onClick={() => window.dispatchEvent(new CustomEvent("tsagent:composer-draft", {
-                  detail: { text: t("ven.edit-prefill", { path: cur.artifact.path, runId: cur.run.runId }) },
-                }))}>{t("ven.edit-this")}</button>
+                <button className="ven-link" type="button" onClick={() => prefillDraft(draftKey(service.identity.tenantId, ctx.sessionId, "venus"), t("ven.edit-prefill", { path: cur.artifact.path, runId: cur.run.runId }))}>{t("ven.edit-this")}</button>
               </header>
               <div className="muse-body">
                 {content?.stale && <p className="omni-empty">{t("art.stale")}</p>}

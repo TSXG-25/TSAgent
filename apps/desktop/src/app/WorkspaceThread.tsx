@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { usePoll } from "./usePoll";
 import { t } from "./i18n";
 import { splitIdeContext } from "./ideContext";
 import { MarkdownText, rel, statusLabel } from "./ui";
@@ -7,7 +8,6 @@ import type { RunView } from "../types";
 import { workspaceRuns } from "./workspaceSelection";
 import { ThinkingChain } from "../workspaces/sun/ThinkingChain";
 
-const LIVE = ["active", "blocked", "pending"];
 
 /** One run's exchange — request bubble, thinking record, streamed reply and
  *  durable output. Same message contract as Omni's thread; a workstation's
@@ -60,22 +60,20 @@ export function WorkspaceThread({ ctx, planet }: { ctx: RunCtx; planet: string }
     .slice()
     .sort((a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? ""));
   const runIds = mine.map((r) => r.runId).join(",");
-  const liveIds = mine.filter((r) => LIVE.includes(r.status)).map((r) => r.runId).join(",");
+  // Active/pending runs are long-polled by the controller; only runs parked
+  // on an approval need polling here to notice they moved on.
+  const blockedIds = mine.filter((r) => r.status === "blocked").map((r) => r.runId).join(",");
 
-  // Catalog slices arrive without messages — hydrate each run once, then
-  // poll only while non-terminal so streamed replies land in place.
+  // Catalog slices arrive without messages — hydrate each run once.
+  // Refresh errors surface through the controller's error banner.
   useEffect(() => {
     for (const id of runIds.split(",")) {
       if (id) void ctx.controller.refreshRun(id, sessionId).catch(() => {});
     }
   }, [ctx.controller, sessionId, runIds]);
-  useEffect(() => {
-    if (!liveIds) return;
-    const tick = setInterval(() => {
-      for (const id of liveIds.split(",")) void ctx.controller.refreshRun(id, sessionId).catch(() => {});
-    }, 4000);
-    return () => clearInterval(tick);
-  }, [ctx.controller, sessionId, liveIds]);
+  usePoll(() => {
+    for (const id of blockedIds.split(",")) void ctx.controller.refreshRun(id, sessionId).catch(() => {});
+  }, blockedIds ? 4000 : null, [ctx.controller, sessionId, blockedIds]);
 
   return (
     <div className="ws-thread">

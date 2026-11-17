@@ -4,7 +4,6 @@ import type {
   ParticipantSummary,
   SessionSummary,
 } from "../../types/service";
-import { requestIdForRun } from "../../app/ui";
 
 export interface SessionSnapshot {
   /** The session these scoped results were fetched for — the caller drops
@@ -24,21 +23,14 @@ export async function fetchSessionSnapshot(
 ): Promise<SessionSnapshot> {
   const [sessions, approvals, participants] = await Promise.all([
     service.listSessions({
-      tenantId: service.identity.tenantId,
-      userId: service.identity.userId,
-      requestId: requestIdForRun(0),
-    }),
+      }),
     service.listApprovals({
-      tenantId: service.identity.tenantId,
       sessionId,
-      requestId: requestIdForRun(0),
       status: "PENDING",
     }),
     service.listParticipants({
-      tenantId: service.identity.tenantId,
       sessionId,
-      requestId: requestIdForRun(0),
-    }).catch(() => [] as ParticipantSummary[]),
+      }).catch(() => [] as ParticipantSummary[]),
   ]);
   return { sessionId, sessions, approvals, participants };
 }

@@ -53,9 +53,7 @@ export function parseRunParams(request: string): ParamValues | null {
 }
 
 export function buildEvalRequest(input: {
-  tenantId: string;
   sessionId: string;
-  requestId: string;
   runId: string;
   verdict: EvaluationVerdict;
   vals: ParamValues | null;
@@ -63,9 +61,7 @@ export function buildEvalRequest(input: {
 }): RecordEvaluationRequest {
   const snapshot = input.vals ? `params: ${JSON.stringify(input.vals)}` : "";
   return {
-    tenantId: input.tenantId,
     sessionId: input.sessionId,
-    requestId: input.requestId,
     name: `bio-sim-${Date.now().toString(36)}`,
     runId: input.runId,
     baselineRef: "baseline:defaults",

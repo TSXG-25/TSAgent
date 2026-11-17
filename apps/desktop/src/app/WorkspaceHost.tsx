@@ -42,7 +42,6 @@ export default function WorkspaceHost({ ctx }: { ctx: RunCtx }) {
     if (!sessionId) return;
     const target = sessionId;
     void ctx.service.resolveSessionWorkspace({
-      tenantId: ctx.service.identity.tenantId,
       sessionId: target,
     }).then((r) => {
       // Live-scope check via ref — the closure's sessionId is stale by

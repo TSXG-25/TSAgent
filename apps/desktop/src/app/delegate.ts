@@ -1,4 +1,3 @@
-import { requestIdForRun } from "./ui";
 import { createRecordSession } from "./sessionWorkspace";
 import type { RunCtx } from "./runCtx";
 import type { RunView } from "../types";
@@ -27,12 +26,10 @@ export async function submitToPlanet(
   // this ctx snapshot was taken.
   const prevActiveId = ctx.activeRun?.runId ?? "";
   const view = await ctx.controller.startRun({
-    tenantId: ctx.service.identity.tenantId,
     sessionId: options.sessionId ?? ctx.sessionId,
     originPlanet: targetPlanet,
     contextRefs: attachments,
     metadata: metadataFor(options),
-    requestId: requestIdForRun(0),
     requestText,
   });
   // startRun claims the session-global activeRun for whatever it just
@@ -83,11 +80,9 @@ export async function delegateToPlanet(
   const { service } = ctx;
   const metadata = metadataFor(options);
   const result = await service.delegateRun({
-    tenantId: service.identity.tenantId,
     // the parent run owns the delegation scope — session switching must not
     // mis-anchor the child task/handoff onto a different session
     sessionId: parentRun.sessionId,
-    requestId: requestIdForRun(0),
     parentRunId: parentRun.runId,
     contextRefs: attachments,
     requestText,
@@ -97,9 +92,7 @@ export async function delegateToPlanet(
   // requestText carries verified refs/agent label, workspaceRoot and
   // agentProfile carry the same config spawn_subtask would pass.
   const view = await ctx.controller.startRun({
-    tenantId: service.identity.tenantId,
     sessionId: parentRun.sessionId,
-    requestId: requestIdForRun(0),
     requestText: result?.requestText ?? requestText,
     taskId: result?.taskId ?? "",
     originPlanet: targetPlanet,

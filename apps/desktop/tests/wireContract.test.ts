@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { LocalAgentServiceClient } from "../src/service/localAgentServiceClient";
@@ -48,7 +48,7 @@ test("start_run params match the wire fixture", async () => {
   };
   const c = client(t);
   const result = await c.startRun({
-    tenantId: "t", sessionId: "s", requestId: "r1", requestText: "x",
+    sessionId: "s", requestId: "r1", requestText: "x",
     taskId: "task-1", workspaceRoot: "/w", originPlanet: "mars",
     contextRefs: ["file:a"],
     metadata: { agent_profile: { model_ref: "m" }, delegation_depth: 1 },
@@ -72,7 +72,7 @@ test("get_run params match the wire fixture", async () => {
     output: null, failure_summary: null, resume_summary: null,
   };
   const c = client(t);
-  const result = await c.getRun({ tenantId: "t", sessionId: "s", runId: "run-1" });
+  const result = await c.getRun({ sessionId: "s", runId: "run-1" });
   const params = t.calls[0].params as Record<string, unknown>;
   const expected = fixture.methods.get_run.request;
   assert.deepEqual(Object.keys(params).sort(), Object.keys(expected).sort());
@@ -124,7 +124,7 @@ test("delegate_run params and mapped fields match the fixture", async () => {
   };
   const c = client(t);
   const result = await c.delegateRun({
-    tenantId: "t", sessionId: "s", requestId: "r5",
+    sessionId: "s", requestId: "r5",
     parentRunId: "run-1", requestText: "x",
     targetPlanet: "mars", profileId: "p1", contextRefs: [],
   });
@@ -144,7 +144,7 @@ test("run_graph steps carry node status per the fixture", async () => {
   t.responses.run_graph = fixture.methods.run_graph.response;
   const c = client(t);
   const steps = await c.runGraph({
-    tenantId: "t", sessionId: "s", requestId: "r6",
+    sessionId: "s", requestId: "r6",
     graphId: "g-1", parentRunId: "run-1",
   });
   const params = t.calls[0].params as Record<string, unknown>;

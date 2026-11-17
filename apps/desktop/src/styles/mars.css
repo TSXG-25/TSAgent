@@ -1,0 +1,138 @@
+/* ---------- layout ---------- */
+
+.mc-scroll { display: flex; flex-direction: row; height: 100%; overflow: hidden; }
+
+.mc-scroll[data-accent="violet"] { --accent-glow: #9b7cff; }
+
+.mc-scroll[data-accent="ice"] { --accent-glow: #7dd3fc; }
+
+.mc-scroll[data-accent="green"] { --accent-glow: #34d399; }
+
+.mc-scroll[data-accent="amber"] { --accent-glow: #ffb454; }
+
+.mc-main { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow-y: auto; overflow-x: clip; padding: 24px 30px 30px; }
+
+.mc-main::-webkit-scrollbar { width: 10px; }
+
+.mc-main::-webkit-scrollbar-thumb { background: rgba(70,100,150,.35); border-radius: 5px; }
+
+/* ---------- thread ---------- */
+
+.mc-msg { padding: 8px 4px 8px 12px; background: linear-gradient(90deg, rgba(235,246,255,.05), transparent 75%); border: none; border-left: 2px solid rgba(140,175,220,.3); position: relative; }
+
+.mc-msg.user { border-left-color: rgba(125,211,252,.65); background: linear-gradient(90deg, rgba(125,211,252,.07), transparent 75%); margin-left: 12px; }
+
+.mc-msg.assistant { border-left-color: rgba(66,217,255,.45); margin-right: 18px; }
+
+.mc-msg.out { border-left-color: rgba(52,211,153,.6); }
+
+.mc-msg.failure { border-left-color: rgba(251,113,133,.7); }
+
+.mc-msg-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 4px; }
+
+.mc-msg-head span { font-family: var(--font-display); font-size: 8px; font-weight: 700; letter-spacing: .22em; color: var(--accent-glow, #42d9ff); }
+
+.mc-msg.user .mc-msg-head span { color: #7dd3fc; }
+
+.mc-msg.failure .mc-msg-head span { color: #fb7185; }
+
+.mc-msg-head time { font-family: var(--font-mono); font-size: 8px; color: rgba(148,163,184,.55); }
+
+.mc-msg-body { font-size: 11.5px; line-height: 1.55; color: #dce6f4; white-space: pre-wrap; word-break: break-word; }
+
+.mc-send {
+  display: grid; place-items: center; width: 34px; height: 34px; flex-shrink: 0; cursor: pointer;
+  background: linear-gradient(160deg, rgba(66,217,255,.32), rgba(155,124,255,.2));
+  border: 1px solid rgba(66,217,255,.4); color: #42d9ff;
+  clip-path: polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%);
+  box-shadow: inset 0 1.5px 0 rgba(255,255,255,.4), inset 0 -2px 0 rgba(5,12,28,.5), 0 8px 18px -6px rgba(0,0,0,.5);
+  transition: all .22s ease;
+}
+
+.mc-send:hover { background: linear-gradient(135deg, rgba(66,217,255,.4), rgba(155,124,255,.4)); box-shadow: inset 0 1.5px 0 rgba(255,255,255,.4), inset 0 -2px 0 rgba(5,12,28,.5), 0 0 18px rgba(66,217,255,.4); color: #fff; }
+
+/* ---------- pseudo-3D parallax consumers ---------- */
+
+/* ---------- contrast: white hard-frame accents + deeper darks ---------- */
+
+.mc-msg-head span { color: color-mix(in srgb, var(--accent-glow, #42d9ff) 70%, #fff); }
+
+/* ---------- nameplate ---------- */
+
+/* ---------- sectors → gunmetal armor plates: dark shell, silver edge ---------- */
+
+/* locked selection stays lit after mouse leaves — calmer than hover */
+
+/* ---------- right console ---------- */
+
+.mc-msg { border-left-color: rgba(238,245,255,.24); background: linear-gradient(90deg, rgba(238,245,255,.04), transparent 75%); }
+
+.mc-msg.assistant { border-left-color: rgba(238,245,255,.5); }
+
+.mc-msg.user { border-left-color: rgba(125,211,252,.65); }
+
+.mc-msg-head span { color: var(--ink-dim); }
+
+.mc-msg.out .mc-msg-head span, .mc-msg.out { border-left-color: rgba(52,211,153,.65); }
+
+.mc-msg.failure { border-left-color: rgba(251,113,133,.7); }
+
+.mc-msg.failure .mc-msg-head span { color: #fb7185; }
+
+.mc-send { background: var(--ink); color: var(--void-0); border: none; }
+
+.mc-send:hover { background: #fff; box-shadow: 0 0 18px rgba(238,245,255,.45); }
+
+/* ---------- reskin pt.2: desaturate structure, keep glow for accents ---------- */
+
+.mc-msg-head time { color: var(--ink); }
+
+/* ---------- mecha geometry pass: heavy asymmetric cuts, bolts, seams ---------- */
+
+.mc-send { clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px)); }
+
+/* ---------- perimeter mech frame: ticked rails + corner arms ---------- */
+
+/* ---------- core presence + readable content text ---------- */
+
+.mc-msg-body { font-size: 12.5px; line-height: 1.6; }
+
+.mc-main { padding: 0; }
+
+.mc-scroll { --accent-glow: var(--scene-accent, #42d9ff); }
+
+.mc-scroll { flex: 1; min-width: 0; }
+
+.mc-main { flex: 1; min-width: 0; }
+
+.forge-editor { width: 100%; height: calc(100% - 48px); min-height: 300px; background: transparent; border: none; outline: none; color: var(--text-main); font-family: monospace; font-size: 12px; resize: none; }
+
+/* — star map chrome is amber; workspaces take the planet accent — */
+
+.mc-scroll { --planet-accent: var(--focus); }
+
+.mc-send { clip-path: none; border-radius: 2px; background: none; border: 1px solid var(--border-strong); box-shadow: none; color: var(--text-main); }
+
+.mc-send:hover { border-color: var(--focus); color: var(--focus); }
+
+.forge-edit { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--surface-1, #13151a); border: 1px solid var(--line, rgba(255,255,255,.08)); border-radius: 4px; overflow: hidden; }
+
+/* ══ hand-drawn: Forge / Archive / Chronos / Laboratory / Media ══ */
+
+.forge { display: flex; flex: 1; min-height: 0; gap: 10px; }
+
+.forge-editor { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--surface-1); border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+
+.forge-code { flex: 1; overflow-y: auto; font-family: var(--font-mono); font-size: 12px; }
+
+.forge-ide { width: 100%; height: 100%; border: none; background: #1e1e1e; display: block; }
+
+.forge-ide-host { overflow: hidden; }
+
+.forge-ctl { flex: 0 0 340px; min-width: 0; position: relative; display: flex; flex-direction: column; gap: 10px; background: var(--surface-1); border: 1px solid var(--line); border-radius: 4px; padding: 12px; }
+
+.forge-ctl .agent-composer { margin-top: auto; padding: 0; border: none; }
+
+/* WS-07 — single multiline editor replacing per-line textareas. */
+
+.forge-editor { flex: 1; width: 100%; min-height: 0; resize: none; background: transparent; border: none; outline: none; color: var(--text-base); font-family: var(--font-mono); font-size: 12px; line-height: 1.6; padding: 10px 12px; tab-size: 2; }

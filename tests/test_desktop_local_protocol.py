@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import re
 from pathlib import Path
 
 import pytest
@@ -32,30 +31,8 @@ from agent.service.local_protocol import (
     encode_response,
 )
 
-_DESKTOP_TRANSPORT_TS = (
-    Path(__file__).resolve().parents[1]
-    / "apps"
-    / "desktop"
-    / "src"
-    / "service"
-    / "localTransport.ts"
-)
-
-
-def _ts_transport_methods() -> tuple[str, ...]:
-    """The TS allowlist is the second copy of the protocol's method table; the
-    wire names must line up exactly or a method silently cannot be called."""
-    match = re.search(
-        r"LOCAL_TRANSPORT_METHODS\s*=\s*\[(.*?)\]\s*as const",
-        _DESKTOP_TRANSPORT_TS.read_text(encoding="utf-8"),
-        re.DOTALL,
-    )
-    assert match, f"could not find LOCAL_TRANSPORT_METHODS in {_DESKTOP_TRANSPORT_TS}"
-    return tuple(re.findall(r'"([a-z_]+)"', match.group(1)))
-
-
-def test_desktop_method_allowlist_matches_ts_transport() -> None:
-    assert LOCAL_TRANSPORT_METHODS == _ts_transport_methods()
+def test_method_allowlist_is_the_enum() -> None:
+    # The TS copy is generated from this enum — see tests/test_wire_schema.py.
     assert tuple(method.value for method in LocalTransportMethod) == LOCAL_TRANSPORT_METHODS
 
 

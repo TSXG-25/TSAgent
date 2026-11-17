@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 
 /** Uranus DAG canvas model — definition_json ↔ canvas round-trip,

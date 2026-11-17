@@ -104,17 +104,36 @@ import {
   type LocalTransport,
   type LocalTransportMethod,
 } from "./localTransport";
+import type {
+  WireParams,
+  WireResult,
+  WireDelegationResult,
+  WireGraphRunStepSummary,
+  WireWorkspaceFileContent,
+  WireApprovalSummary,
+  WireArtifactSummary,
+  WireEvaluationSummary,
+  WireFailureSummary,
+  WireHandoffSummary,
+  WireHealthResult,
+  WireHistoryEntry,
+  WireMotifSummary,
+  WireProfileSummary,
+  WireResumeSummary,
+  WireRunEvent,
+  WireRunHandle,
+  WireRunOutput,
+  WireRunSnapshot,
+  WireScheduleSummary,
+  WireSessionSummary,
+  WireSettingsSummary,
+  WireTaskHandle,
+  WireTaskSnapshot,
+  WireWorkflowGraphSummary,
+  WireWorkspaceSummary,
+} from "./wire.generated";
 
-export type LocalClientOperation =
-  | "get_run"
-  | "get_task"
-  | "list_artifacts"
-  | "read_artifact"
-  | "read_artifact_preview"
-  | "read_events"
-  | "resolve_session_workspace"
-  | "cancel_run"
-  | "pause_run";
+export type LocalClientOperation = LocalTransportMethod;
 
 export interface LocalAgentServiceClientOptions {
   /** Identity is explicit configuration; there is no default user fallback. */
@@ -202,8 +221,7 @@ function mapResumeAction(value: unknown): ResumeAction | null {
   return value as ResumeAction;
 }
 
-function mapRunHandle(value: unknown): RunHandle {
-  const raw = isRecord(value) ? value : (() => { throw new Error("RunHandle is not an object"); })();
+function mapRunHandle(raw: WireRunHandle): RunHandle {
   const createdAt = requiredString(raw.created_at, "created_at");
   return {
     tenantId: requiredString(raw.tenant_id, "tenant_id"),
@@ -229,25 +247,21 @@ function mapVerifierSummary(value: unknown): VerifierSummary | undefined {
   };
 }
 
-function mapResumeSummary(value: unknown, status: RunStatus): ResumeSummary | undefined {
-  if (value === null || value === undefined) return undefined;
-  const raw = isRecord(value) ? value : (() => { throw new Error("resume_summary is not an object"); })();
-  const action = mapResumeAction(raw.action);
-  const reasonCode = typeof raw.reason_code === "string" ? raw.reason_code : "UNKNOWN";
-  const summary = typeof raw.summary === "string" ? raw.summary : reasonCode;
+function mapResumeSummary(raw: WireResumeSummary | null | undefined, status: RunStatus): ResumeSummary | undefined {
+  if (raw === null || raw === undefined) return undefined;
+  // The wire summary carries the decision only — no checkpoint id or source
+  // stage — so the resume request lets the service pick the checkpoint.
   return {
-    checkpointId: optionalString(raw.checkpoint_id) ?? "",
-    action,
-    reason: summary,
-    sourceStage: optionalString(raw.source_stage) ?? "",
-    ...(optionalString(raw.resumed_at) ? { resumedAt: raw.resumed_at as string } : {}),
+    checkpointId: "",
+    action: mapResumeAction(raw.action),
+    reason: raw.summary || raw.reason_code,
+    sourceStage: "",
     outcome: status === "completed" ? "completed" : "ready",
   };
 }
 
-function mapFailureSummary(value: unknown): FailureSummary | undefined {
-  if (value === null || value === undefined) return undefined;
-  const raw = isRecord(value) ? value : (() => { throw new Error("failure_summary is not an object"); })();
+function mapFailureSummary(raw: WireFailureSummary | null | undefined): FailureSummary | undefined {
+  if (raw === null || raw === undefined) return undefined;
   return {
     code: requiredString(raw.code, "failure code"),
     message: typeof raw.message === "string" ? raw.message : "Run failed",
@@ -255,9 +269,8 @@ function mapFailureSummary(value: unknown): FailureSummary | undefined {
   };
 }
 
-function mapOutput(value: unknown): RunOutputSummary | undefined {
-  if (value === null || value === undefined) return undefined;
-  const raw = isRecord(value) ? value : (() => { throw new Error("output is not an object"); })();
+function mapOutput(raw: WireRunOutput | null | undefined): RunOutputSummary | undefined {
+  if (raw === null || raw === undefined) return undefined;
   return {
     runId: requiredString(raw.run_id, "output.run_id"),
     revision: numberValue(raw.revision, "output.revision"),
@@ -268,8 +281,7 @@ function mapOutput(value: unknown): RunOutputSummary | undefined {
   };
 }
 
-function mapArtifact(value: unknown, fallbackRunId: string): ArtifactSummary {
-  const raw = isRecord(value) ? value : (() => { throw new Error("artifact is not an object"); })();
+function mapArtifact(raw: WireArtifactSummary, fallbackRunId: string): ArtifactSummary {
   const artifactType = requiredString(raw.artifact_type, "artifact_type");
   const type = artifactType === "python" || artifactType === "json" ? artifactType : "text";
   const reference = requiredString(raw.reference, "artifact.reference");
@@ -299,8 +311,7 @@ function mapArtifact(value: unknown, fallbackRunId: string): ArtifactSummary {
   };
 }
 
-function mapMotif(value: unknown): MotifSummary {
-  const raw = isRecord(value) ? value : (() => { throw new Error("motif is not an object"); })();
+function mapMotif(raw: WireMotifSummary): MotifSummary {
   return {
     motifId: requiredString(raw.motif_id, "motif_id"),
     text: optionalString(raw.text) ?? "",
@@ -315,8 +326,7 @@ function mapMotif(value: unknown): MotifSummary {
   };
 }
 
-function mapWorkflowGraph(value: unknown): WorkflowGraphSummary {
-  const raw = isRecord(value) ? value : (() => { throw new Error("workflow graph is not an object"); })();
+function mapWorkflowGraph(raw: WireWorkflowGraphSummary): WorkflowGraphSummary {
   return {
     graphId: requiredString(raw.graph_id, "graph_id"),
     name: optionalString(raw.name) ?? "",
@@ -327,8 +337,7 @@ function mapWorkflowGraph(value: unknown): WorkflowGraphSummary {
   };
 }
 
-function mapEvaluation(value: unknown): EvaluationSummary {
-  const raw = isRecord(value) ? value : (() => { throw new Error("evaluation is not an object"); })();
+function mapEvaluation(raw: WireEvaluationSummary): EvaluationSummary {
   return {
     evalId: requiredString(raw.eval_id, "eval_id"),
     name: optionalString(raw.name) ?? "",
@@ -342,8 +351,7 @@ function mapEvaluation(value: unknown): EvaluationSummary {
   };
 }
 
-function mapWorkspace(value: unknown): WorkspaceSummary {
-  const raw = isRecord(value) ? value : (() => { throw new Error("workspace is not an object"); })();
+function mapWorkspace(raw: WireWorkspaceSummary): WorkspaceSummary {
   return {
     workspaceId: requiredString(raw.workspace_id, "workspace_id"),
     displayName: optionalString(raw.display_name) ?? "",
@@ -357,8 +365,7 @@ function mapWorkspace(value: unknown): WorkspaceSummary {
   };
 }
 
-function mapSettings(value: unknown): SettingsSummary {
-  const raw = isRecord(value) ? value : (() => { throw new Error("settings is not an object"); })();
+function mapSettings(raw: WireSettingsSummary): SettingsSummary {
   return {
     providerMode: optionalString(raw.provider_mode) ?? "",
     activeProvider: optionalString(raw.active_provider) ?? "",
@@ -368,8 +375,7 @@ function mapSettings(value: unknown): SettingsSummary {
   };
 }
 
-function mapProfile(value: unknown): ProfileSummary {
-  const raw = isRecord(value) ? value : (() => { throw new Error("profile is not an object"); })();
+function mapProfile(raw: WireProfileSummary): ProfileSummary {
   return {
     profileId: requiredString(raw.profile_id, "profile_id"),
     displayName: optionalString(raw.display_name) ?? "",
@@ -381,8 +387,7 @@ function mapProfile(value: unknown): ProfileSummary {
   };
 }
 
-function mapSchedule(value: unknown): ScheduleSummary {
-  const raw = isRecord(value) ? value : (() => { throw new Error("schedule is not an object"); })();
+function mapSchedule(raw: WireScheduleSummary): ScheduleSummary {
   return {
     scheduleId: requiredString(raw.schedule_id, "schedule_id"),
     sessionId: requiredString(raw.session_id, "session_id"),
@@ -400,8 +405,7 @@ function mapSchedule(value: unknown): ScheduleSummary {
   };
 }
 
-function mapHistory(value: unknown): HistoryEntry {
-  const raw = isRecord(value) ? value : (() => { throw new Error("history entry is not an object"); })();
+function mapHistory(raw: WireHistoryEntry): HistoryEntry {
   return {
     runId: requiredString(raw.run_id, "run_id"),
     taskId: optionalString(raw.task_id) ?? "",
@@ -412,8 +416,7 @@ function mapHistory(value: unknown): HistoryEntry {
   };
 }
 
-function mapHandoff(value: unknown): HandoffSummary {
-  const raw = isRecord(value) ? value : (() => { throw new Error("handoff is not an object"); })();
+function mapHandoff(raw: WireHandoffSummary): HandoffSummary {
   return {
     handoffId: requiredString(raw.handoff_id, "handoff_id"),
     sourceRunId: optionalString(raw.source_run_id) ?? "",
@@ -427,8 +430,7 @@ function mapHandoff(value: unknown): HandoffSummary {
   };
 }
 
-function mapSession(value: unknown): SessionSummary {
-  const raw = isRecord(value) ? value : (() => { throw new Error("session is not an object"); })();
+function mapSession(raw: WireSessionSummary): SessionSummary {
   return {
     tenantId: requiredString(raw.tenant_id, "tenant_id"),
     sessionId: requiredString(raw.session_id, "session_id"),
@@ -445,8 +447,7 @@ function mapSession(value: unknown): SessionSummary {
   };
 }
 
-function mapApproval(value: unknown): ApprovalSummary {
-  const raw = isRecord(value) ? value : (() => { throw new Error("approval is not an object"); })();
+function mapApproval(raw: WireApprovalSummary): ApprovalSummary {
   return {
     approvalId: requiredString(raw.approval_id, "approval_id"),
     runId: requiredString(raw.run_id, "run_id"),
@@ -461,8 +462,7 @@ function mapApproval(value: unknown): ApprovalSummary {
   };
 }
 
-function mapTaskHandle(value: unknown): TaskHandle {
-  const raw = isRecord(value) ? value : (() => { throw new Error("task handle is not an object"); })();
+function mapTaskHandle(raw: WireTaskHandle): TaskHandle {
   return {
     tenantId: requiredString(raw.tenant_id, "tenant_id"),
     sessionId: requiredString(raw.session_id, "session_id"),
@@ -474,8 +474,7 @@ function mapTaskHandle(value: unknown): TaskHandle {
   };
 }
 
-function mapTaskRecord(value: unknown): TaskRecord {
-  const raw = isRecord(value) ? value : (() => { throw new Error("task snapshot is not an object"); })();
+function mapTaskRecord(raw: WireTaskSnapshot): TaskRecord {
   return {
     ...mapTaskHandle(raw),
     status: optionalString(raw.status) ?? "CREATED",
@@ -484,8 +483,42 @@ function mapTaskRecord(value: unknown): TaskRecord {
   };
 }
 
-function mapSnapshot(value: unknown): RunSnapshot {
-  const raw = isRecord(value) ? value : (() => { throw new Error("RunSnapshot is not an object"); })();
+function mapWorkspaceFile(raw: WireWorkspaceFileContent): WorkspaceFileContent {
+  return {
+    path: requiredString(raw.path, "path"),
+    text: raw.text,
+    digest: raw.digest,
+    redacted: raw.redacted,
+    workspaceRoot: raw.workspace_root,
+  };
+}
+
+function mapDelegation(raw: WireDelegationResult): DelegateRunResult {
+  return {
+    taskId: requiredString(raw.task_id, "task_id"),
+    handoffId: requiredString(raw.handoff_id, "handoff_id"),
+    sessionId: raw.session_id,
+    targetPlanet: raw.target_planet,
+    requestText: raw.request_text,
+    workspaceRoot: raw.workspace_root,
+    agentProfile: { ...raw.agent_profile },
+  };
+}
+
+function mapGraphStep(raw: WireGraphRunStepSummary): GraphRunStepSummary {
+  // SKIPPED steps carry empty ids — only status reports the outcome.
+  return {
+    nodeId: requiredString(raw.node_id, "node_id"),
+    taskId: raw.task_id,
+    runId: raw.run_id,
+    sessionId: raw.session_id,
+    status: raw.status,
+    executionId: raw.execution_id,
+    detail: raw.detail,
+  };
+}
+
+function mapSnapshot(raw: WireRunSnapshot): RunSnapshot {
   const status = mapStatus(raw.status);
   const runId = requiredString(raw.run_id, "run_id");
   const artifacts = Array.isArray(raw.artifacts)
@@ -518,8 +551,7 @@ function mapSnapshot(value: unknown): RunSnapshot {
   };
 }
 
-function mapEvent(value: unknown): RunEvent {
-  const raw = isRecord(value) ? value : (() => { throw new Error("RunEvent is not an object"); })();
+function mapEvent(raw: WireRunEvent): RunEvent {
   const payload = raw.payload === undefined ? {} : isRecord(raw.payload) ? raw.payload : (() => { throw new Error("event.payload is not an object"); })();
   return {
     eventId: requiredString(raw.event_id, "event_id"),
@@ -537,8 +569,7 @@ function mapEvent(value: unknown): RunEvent {
   };
 }
 
-function mapEvents(value: unknown, afterSequence: number): RunEvent[] {
-  if (!Array.isArray(value)) throw new Error("read_events result is not an array");
+function mapEvents(value: WireRunEvent[], afterSequence: number): RunEvent[] {
   const byId = new Map<string, RunEvent>();
   for (const item of value) {
     const event = mapEvent(item);
@@ -554,8 +585,7 @@ function mapEvents(value: unknown, afterSequence: number): RunEvent[] {
   return [...byId.values()].sort((left, right) => left.sequenceNumber - right.sequenceNumber);
 }
 
-function mapHealth(value: unknown): HealthSnapshot {
-  const raw = isRecord(value) ? value : (() => { throw new Error("health result is not an object"); })();
+function mapHealth(raw: WireHealthResult): HealthSnapshot {
   if (raw.status !== "ok") throw new Error("health status is not ok");
   return {
     status: "ok",
@@ -594,93 +624,58 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
   }
 
   async listRuns(scope: SessionScope): Promise<RunSnapshot[]> {
-    const params: LocalRpcParams = {
-      tenant_id: scope.tenantId,
-      user_id: this.identity.userId,
-      session_id: scope.sessionId,
-      request_id: this.nextRequestId("get_run"),
+    const params: WireParams<"list_runs"> = {
+      ...this.ids(scope, "get_run"),
       limit: 100,
+      ...(scope.originPlanet !== undefined ? { origin_planet: scope.originPlanet } : {}),
     };
-    if (scope.originPlanet !== undefined) params.origin_planet = scope.originPlanet;
     return this.project(async () => {
-      const result = (await this.call("list_runs", params)) as unknown;
-      const items = Array.isArray(result) ? result : ((result as { runs?: unknown[] }).runs ?? []);
-      const snapshots = items.map((value) => mapSnapshot(value));
-      for (const snapshot of snapshots) {
-        this.rememberSnapshot(snapshot);
-      }
+      const snapshots = (await this.call("list_runs", params)).map(mapSnapshot);
+      for (const snapshot of snapshots) this.rememberSnapshot(snapshot);
       return snapshots;
     });
   }
 
   async createTask(request: CreateTaskRequest): Promise<TaskHandle> {
-    const params: LocalRpcParams = {
-      tenant_id: request.tenantId,
-      user_id: this.identity.userId,
-      session_id: request.sessionId,
-      request_id: request.requestId,
+    return mapTaskHandle(await this.call("create_task", {
+      ...this.ids(request, "create_task"),
       task_id: request.taskId ?? "",
       parent_task_id: request.parentTaskId ?? "",
       origin_planet: request.originPlanet ?? "",
       owner_profile_id: request.ownerProfileId ?? "",
-    };
-    return mapTaskHandle(await this.call("create_task", params));
+    }));
   }
 
   async listTasks(scope: SessionScope): Promise<TaskRecord[]> {
-    const params: LocalRpcParams = {
-      tenant_id: scope.tenantId,
-      user_id: this.identity.userId,
-      session_id: scope.sessionId,
-      request_id: this.nextRequestId("get_task"),
-    };
-    const result = (await this.call("list_tasks", params)) as unknown[];
-    return result.map((value) => mapTaskRecord(value));
+    return (await this.call("list_tasks", this.ids(scope, "get_task"))).map(mapTaskRecord);
   }
 
   async getTask(request: TaskLookupRequest): Promise<TaskRecord> {
-    const params: LocalRpcParams = {
-      tenant_id: request.tenantId,
-      user_id: this.identity.userId,
-      session_id: request.sessionId,
-      request_id: request.requestId,
-      task_id: request.taskId,
-    };
-    return mapTaskRecord(await this.call("get_task", params));
+    return mapTaskRecord(await this.call("get_task", { ...this.ids(request, "get_task"), task_id: request.taskId }));
   }
 
   async listApprovals(request: ListApprovalsRequest): Promise<ApprovalSummary[]> {
-    const params: LocalRpcParams = {
-      tenant_id: request.tenantId,
-      user_id: this.identity.userId,
-      session_id: request.sessionId,
-      request_id: request.requestId,
+    return (await this.call("list_approvals", {
+      ...this.ids(request, "list_approvals"),
       run_id: request.runId ?? "",
       status: request.status ?? "",
       limit: request.limit ?? 200,
-    };
-    const result = (await this.call("list_approvals", params)) as unknown[];
-    return result.map((value) => mapApproval(value));
+    })).map(mapApproval);
   }
 
   async decideApproval(request: DecideApprovalRequest): Promise<ApprovalSummary> {
-    const params: LocalRpcParams = {
-      tenant_id: request.tenantId,
-      user_id: this.identity.userId,
-      session_id: request.sessionId,
-      request_id: request.requestId,
+    return mapApproval(await this.call("decide_approval", {
+      ...this.ids(request, "decide_approval"),
       run_id: request.runId,
       approval_id: request.approvalId,
       decision: request.decision,
       decided_by: request.decidedBy ?? this.identity.userId,
-    };
-    return mapApproval(await this.call("decide_approval", params));
+    }));
   }
 
   async upsertWorkspace(request: UpsertWorkspaceRequest): Promise<WorkspaceSummary> {
     return mapWorkspace(await this.call("upsert_workspace", {
-      tenant_id: request.tenantId, user_id: this.identity.userId,
-      session_id: request.sessionId, request_id: request.requestId,
+      ...this.ids(request, "upsert_workspace"),
       workspace_id: request.workspaceId,
       display_name: request.displayName ?? "",
       path: request.path ?? "",
@@ -692,18 +687,12 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
   }
 
   async listWorkspaces(request: ListWorkspacesRequest): Promise<WorkspaceSummary[]> {
-    const result = (await this.call("list_workspaces", {
-      tenant_id: request.tenantId, user_id: this.identity.userId,
-      session_id: request.sessionId, request_id: request.requestId,
-      limit: request.limit ?? 50,
-    })) as unknown[];
-    return result.map((value) => mapWorkspace(value));
+    return (await this.call("list_workspaces", { ...this.ids(request, "list_workspaces"), limit: request.limit ?? 50 })).map(mapWorkspace);
   }
 
   async updateSettings(request: UpdateSettingsRequest): Promise<SettingsSummary> {
     return mapSettings(await this.call("update_settings", {
-      tenant_id: request.tenantId, user_id: this.identity.userId,
-      session_id: request.sessionId, request_id: request.requestId,
+      ...this.ids(request, "update_settings"),
       provider_mode: request.providerMode ?? "",
       deepseek_model: request.deepseekModel ?? "",
       ollama_model: request.ollamaModel ?? "",
@@ -711,16 +700,12 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
   }
 
   async getSettings(request: GetSettingsRequest): Promise<SettingsSummary> {
-    return mapSettings(await this.call("get_settings", {
-      tenant_id: request.tenantId, user_id: this.identity.userId,
-      session_id: request.sessionId, request_id: request.requestId,
-    }));
+    return mapSettings(await this.call("get_settings", this.ids(request, "get_settings")));
   }
 
   async upsertProfile(request: UpsertProfileRequest): Promise<ProfileSummary> {
     return mapProfile(await this.call("upsert_profile", {
-      tenant_id: request.tenantId, user_id: this.identity.userId,
-      session_id: request.sessionId, request_id: request.requestId,
+      ...this.ids(request, "upsert_profile"),
       profile_id: request.profileId,
       display_name: request.displayName ?? "",
       planet_affinity: request.planetAffinity ?? "",
@@ -731,18 +716,12 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
   }
 
   async listProfiles(request: ListProfilesRequest): Promise<ProfileSummary[]> {
-    const result = (await this.call("list_profiles", {
-      tenant_id: request.tenantId, user_id: this.identity.userId,
-      session_id: request.sessionId, request_id: request.requestId,
-      limit: request.limit ?? 200,
-    })) as unknown[];
-    return result.map((value) => mapProfile(value));
+    return (await this.call("list_profiles", { ...this.ids(request, "list_profiles"), limit: request.limit ?? 200 })).map(mapProfile);
   }
 
   async createSchedule(request: CreateScheduleRequest): Promise<ScheduleSummary> {
     return mapSchedule(await this.call("create_schedule", {
-      tenant_id: request.tenantId, user_id: this.identity.userId,
-      session_id: request.sessionId, request_id: request.requestId,
+      ...this.ids(request, "create_schedule"),
       request_text: request.requestText,
       interval_seconds: request.intervalSeconds,
       target_planet: request.targetPlanet ?? "",
@@ -752,488 +731,311 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
   }
 
   async listSchedules(request: ListSchedulesRequest): Promise<ScheduleSummary[]> {
-    const result = (await this.call("list_schedules", {
-      tenant_id: request.tenantId, user_id: this.identity.userId,
-      session_id: request.sessionId, request_id: request.requestId,
-      limit: request.limit ?? 200,
-    })) as unknown[];
-    return result.map((value) => mapSchedule(value));
+    return (await this.call("list_schedules", { ...this.ids(request, "list_schedules"), limit: request.limit ?? 200 })).map(mapSchedule);
   }
 
   async updateSchedule(request: UpdateScheduleRequest): Promise<ScheduleSummary> {
     return mapSchedule(await this.call("update_schedule", {
-      tenant_id: request.tenantId, user_id: this.identity.userId,
-      session_id: request.sessionId, request_id: request.requestId,
-      schedule_id: request.scheduleId, status: request.status,
+      ...this.ids(request, "update_schedule"),
+      schedule_id: request.scheduleId,
+      status: request.status,
     }));
   }
 
-  async listCapabilities(request: ListCapabilitiesRequest): Promise<CapabilitySummary[]> {
-    return ((await this.call("list_capabilities", {
-      tenant_id: request.tenantId,
-      session_id: request.sessionId,
-      request_id: request.requestId,
-    })) as Array<{ capability?: unknown; tools?: unknown }>).map((raw) => ({
+  async listCapabilities(_request: ListCapabilitiesRequest): Promise<CapabilitySummary[]> {
+    return (await this.call("list_capabilities", {})).map((raw) => ({
       capability: requiredString(raw.capability, "capability"),
-      tools: Array.isArray(raw.tools) ? raw.tools.map(String) : [],
+      tools: raw.tools.map(String),
     }));
   }
 
   async webSearch(request: WebSearchRequest): Promise<WebSearchResult> {
-    const raw = await this.call("web_search", {
-      tenant_id: request.tenantId,
-      session_id: request.sessionId,
-      request_id: request.requestId,
-      query: request.query,
-      max_results: request.maxResults ?? 8,
-    }) as { provider?: unknown; content?: unknown; sources?: unknown };
-    return {
-      provider: optionalString(raw.provider) ?? "",
-      content: optionalString(raw.content) ?? "",
-      sources: Array.isArray(raw.sources) ? raw.sources as Array<Record<string, unknown>> : [],
-    };
+    const raw = await this.call("web_search", { query: request.query, max_results: request.maxResults ?? 8 });
+    return { provider: raw.provider, content: raw.content, sources: raw.sources };
   }
 
   async recordEvaluation(request: RecordEvaluationRequest): Promise<EvaluationSummary> {
-    const raw = (await this.call("record_evaluation", {
-      tenant_id: request.tenantId, user_id: this.identity.userId,
-      session_id: request.sessionId, request_id: request.requestId,
-      name: request.name ?? "", run_id: request.runId ?? "",
+    return mapEvaluation(await this.call("record_evaluation", {
+      ...this.ids(request, "record_evaluation"),
+      name: request.name ?? "",
+      run_id: request.runId ?? "",
       baseline_ref: request.baselineRef ?? "",
       candidate_ref: request.candidateRef ?? "",
-      score: request.score ?? 0, verdict: request.verdict ?? "neutral",
-      notes: request.notes ?? "", eval_id: request.evalId ?? "",
-    })) as Record<string, unknown>;
-    return mapEvaluation(raw);
+      score: request.score ?? 0,
+      verdict: request.verdict ?? "neutral",
+      notes: request.notes ?? "",
+      eval_id: request.evalId ?? "",
+    }));
   }
 
   async listEvaluations(request: ListEvaluationsRequest): Promise<EvaluationSummary[]> {
-    const result = (await this.call("list_evaluations", {
-      tenant_id: request.tenantId, user_id: this.identity.userId,
-      session_id: request.sessionId, request_id: request.requestId,
+    return (await this.call("list_evaluations", {
+      ...this.ids(request, "list_evaluations"),
       all_sessions: request.allSessions ?? false,
       limit: request.limit ?? 200,
-    })) as Array<Record<string, unknown>>;
-    return result.map((v) => mapEvaluation(v));
+    })).map(mapEvaluation);
   }
 
   async listWorkspaceFiles(request: ListWorkspaceFilesRequest): Promise<WorkspaceFileSummary[]> {
-    const result = (await this.call("list_workspace_files", {
-      tenant_id: request.tenantId, user_id: this.identity.userId,
-      session_id: request.sessionId, request_id: request.requestId,
-      limit: request.limit ?? 500,
-    })) as Array<Record<string, unknown>>;
-    return result.map((raw) => ({
-      path: requiredString(raw.path, "path"),
-      size: Number(raw.size ?? 0),
-      modifiedAt: optionalString(raw.modified_at) ?? "",
-    }));
+    return (await this.call("list_workspace_files", { ...this.ids(request, "list_workspace_files"), limit: request.limit ?? 500 }))
+      .map((raw) => ({ path: requiredString(raw.path, "path"), size: raw.size, modifiedAt: raw.modified_at }));
   }
 
   async readWorkspaceFile(request: WorkspaceFileRequest): Promise<WorkspaceFileContent> {
-    const raw = (await this.call("read_workspace_file", {
-      tenant_id: request.tenantId, user_id: this.identity.userId,
-      session_id: request.sessionId, request_id: request.requestId,
-      path: request.path,
-    })) as Record<string, unknown>;
-    return {
-      path: requiredString(raw.path, "path"),
-      text: optionalString(raw.text) ?? "",
-      digest: optionalString(raw.digest) ?? "",
-      redacted: Boolean(raw.redacted),
-      workspaceRoot: optionalString(raw.workspace_root) ?? "",
-    };
+    return mapWorkspaceFile(await this.call("read_workspace_file", { ...this.ids(request, "read_workspace_file"), path: request.path }));
   }
 
   async writeWorkspaceFile(request: WorkspaceFileRequest): Promise<WorkspaceFileContent> {
-    const raw = (await this.call("write_workspace_file", {
-      tenant_id: request.tenantId, user_id: this.identity.userId,
-      session_id: request.sessionId, request_id: request.requestId,
-      path: request.path, content: request.content ?? "",
+    return mapWorkspaceFile(await this.call("write_workspace_file", {
+      ...this.ids(request, "write_workspace_file"),
+      path: request.path,
+      content: request.content ?? "",
       base_digest: request.baseDigest ?? "",
       workspace_root: request.workspaceRoot ?? "",
-    })) as Record<string, unknown>;
-    return {
-      path: requiredString(raw.path, "path"),
-      text: optionalString(raw.text) ?? "",
-      digest: optionalString(raw.digest) ?? "",
-      redacted: Boolean(raw.redacted),
-      workspaceRoot: optionalString(raw.workspace_root) ?? "",
-    };
-  }
-
-  async upsertWorkflowGraph(request: UpsertWorkflowGraphRequest): Promise<WorkflowGraphSummary> {
-    const raw = (await this.call("upsert_workflow_graph", {
-      tenant_id: request.tenantId, user_id: this.identity.userId,
-      session_id: request.sessionId, request_id: request.requestId,
-      graph_id: request.graphId, name: request.name ?? "",
-      definition: request.definition ?? {},
-      owner: request.owner ?? this.identity.userId,
-    })) as Record<string, unknown>;
-    return mapWorkflowGraph(raw);
-  }
-
-  async createMotif(request: CreateMotifRequest): Promise<MotifSummary> {
-    const raw = (await this.call("create_motif", {
-      tenant_id: request.tenantId, user_id: this.identity.userId,
-      session_id: request.sessionId, request_id: request.requestId,
-      text: request.text, motif_id: request.motifId ?? "",
-      source: request.source ?? "user",
-    })) as Record<string, unknown>;
-    return mapMotif(raw);
-  }
-
-  async assignMotif(request: AssignMotifRequest): Promise<DelegateRunResult> {
-    return this.call("assign_motif", {
-      tenant_id: request.tenantId, user_id: this.identity.userId,
-      session_id: request.sessionId, request_id: request.requestId,
-      motif_id: request.motifId, parent_run_id: request.parentRunId,
-    }) as Promise<DelegateRunResult>;
-  }
-
-  async resolveMotif(request: ResolveMotifRequest): Promise<MotifSummary[]> {
-    const result = (await this.call("resolve_motif", {
-      tenant_id: request.tenantId, user_id: this.identity.userId,
-      session_id: request.sessionId, request_id: request.requestId,
-      motif_id: request.motifId, resolution_run_id: request.resolutionRunId,
-      resolution: request.resolution,
-    })) as Array<Record<string, unknown>>;
-    return result.map((v) => mapMotif(v));
-  }
-
-  async reportMotif(request: ReportMotifRequest): Promise<MotifSummary[]> {
-    const result = (await this.call("report_motif", {
-      tenant_id: request.tenantId, user_id: this.identity.userId,
-      session_id: request.sessionId, request_id: request.requestId,
-      motif_id: request.motifId, resolution_run_id: request.resolutionRunId,
-      resolution: request.resolution,
-    })) as Array<Record<string, unknown>>;
-    return result.map((v) => mapMotif(v));
-  }
-
-  async rejectMotif(request: RejectMotifRequest): Promise<MotifSummary[]> {
-    const result = (await this.call("reject_motif", {
-      tenant_id: request.tenantId, user_id: this.identity.userId,
-      session_id: request.sessionId, request_id: request.requestId,
-      motif_id: request.motifId,
-    })) as Array<Record<string, unknown>>;
-    return result.map((v) => mapMotif(v));
-  }
-
-  async listMotifs(request: ListMotifsRequest): Promise<MotifSummary[]> {
-    const result = (await this.call("list_motifs", {
-      tenant_id: request.tenantId, user_id: this.identity.userId,
-      session_id: request.sessionId, request_id: request.requestId,
-      status: request.status ?? "", limit: request.limit ?? 100,
-    })) as Array<Record<string, unknown>>;
-    return result.map((v) => mapMotif(v));
-  }
-
-  async runGraph(request: RunWorkflowGraphRequest): Promise<GraphRunStepSummary[]> {
-    const result = (await this.call("run_graph", {
-      tenant_id: request.tenantId, user_id: this.identity.userId,
-      session_id: request.sessionId, request_id: request.requestId,
-      graph_id: request.graphId, parent_run_id: request.parentRunId ?? "",
-      origin_planet: request.originPlanet ?? "",
-    })) as Array<Record<string, unknown>>;
-    return result.map((raw) => ({
-      nodeId: requiredString(raw.node_id, "node_id"),
-      // SKIPPED steps carry empty ids — only status reports the outcome.
-      taskId: optionalString(raw.task_id) ?? "",
-      runId: optionalString(raw.run_id) ?? "",
-      sessionId: optionalString(raw.session_id) ?? "",
-      status: optionalString(raw.status) ?? "",
-      executionId: optionalString(raw.execution_id) ?? "",
-      detail: optionalString(raw.detail) ?? "",
     }));
   }
 
+  async upsertWorkflowGraph(request: UpsertWorkflowGraphRequest): Promise<WorkflowGraphSummary> {
+    return mapWorkflowGraph(await this.call("upsert_workflow_graph", {
+      ...this.ids(request, "upsert_workflow_graph"),
+      graph_id: request.graphId,
+      name: request.name ?? "",
+      definition: request.definition ?? {},
+      owner: request.owner ?? this.identity.userId,
+    }));
+  }
+
+  async createMotif(request: CreateMotifRequest): Promise<MotifSummary> {
+    return mapMotif(await this.call("create_motif", {
+      ...this.ids(request, "create_motif"),
+      text: request.text,
+      motif_id: request.motifId ?? "",
+      source: request.source ?? "user",
+    }));
+  }
+
+  async assignMotif(request: AssignMotifRequest): Promise<DelegateRunResult> {
+    return mapDelegation(await this.call("assign_motif", {
+      ...this.ids(request, "assign_motif"),
+      motif_id: request.motifId,
+      parent_run_id: request.parentRunId,
+    }));
+  }
+
+  async resolveMotif(request: ResolveMotifRequest): Promise<MotifSummary[]> {
+    return (await this.call("resolve_motif", {
+      ...this.ids(request, "resolve_motif"),
+      motif_id: request.motifId,
+      resolution_run_id: request.resolutionRunId,
+      resolution: request.resolution,
+    })).map(mapMotif);
+  }
+
+  async reportMotif(request: ReportMotifRequest): Promise<MotifSummary[]> {
+    return (await this.call("report_motif", {
+      ...this.ids(request, "report_motif"),
+      motif_id: request.motifId,
+      resolution_run_id: request.resolutionRunId,
+      resolution: request.resolution,
+    })).map(mapMotif);
+  }
+
+  async rejectMotif(request: RejectMotifRequest): Promise<MotifSummary[]> {
+    return (await this.call("reject_motif", { ...this.ids(request, "reject_motif"), motif_id: request.motifId })).map(mapMotif);
+  }
+
+  async listMotifs(request: ListMotifsRequest): Promise<MotifSummary[]> {
+    return (await this.call("list_motifs", {
+      ...this.ids(request, "list_motifs"),
+      status: request.status ?? "",
+      limit: request.limit ?? 100,
+    })).map(mapMotif);
+  }
+
+  async runGraph(request: RunWorkflowGraphRequest): Promise<GraphRunStepSummary[]> {
+    return (await this.call("run_graph", {
+      ...this.ids(request, "run_graph"),
+      graph_id: request.graphId,
+      parent_run_id: request.parentRunId ?? "",
+      origin_planet: request.originPlanet ?? "",
+    })).map(mapGraphStep);
+  }
+
   async getGraphExecution(request: GraphExecutionLookupRequest): Promise<GraphExecutionSummary> {
-    const raw = (await this.call("get_graph_execution", {
-      tenant_id: request.tenantId, user_id: this.identity.userId,
-      session_id: request.sessionId, request_id: request.requestId,
-      execution_id: request.executionId,
-    })) as Record<string, unknown>;
-    if (!isRecord(raw)) throw new Error("get_graph_execution result is not an object");
-    const steps = (Array.isArray(raw.steps) ? raw.steps : []) as Array<Record<string, unknown>>;
+    const raw = await this.call("get_graph_execution", { ...this.ids(request, "get_graph_execution"), execution_id: request.executionId });
     return {
       executionId: requiredString(raw.execution_id, "execution_id"),
-      graphId: optionalString(raw.graph_id) ?? "",
-      sessionId: optionalString(raw.session_id) ?? "",
-      steps: steps.map((s) => ({
-        nodeId: requiredString(s.node_id, "node_id"),
-        taskId: optionalString(s.task_id) ?? "",
-        runId: optionalString(s.run_id) ?? "",
-        sessionId: optionalString(s.session_id) ?? "",
-        status: optionalString(s.status) ?? "",
-        executionId: optionalString(s.execution_id) ?? "",
-        detail: optionalString(s.detail) ?? "",
-      })),
+      graphId: raw.graph_id,
+      sessionId: raw.session_id,
+      steps: raw.steps.map(mapGraphStep),
     };
   }
 
-  async listGraphExecutions(request: { tenantId: string; sessionId: string; requestId: string }): Promise<GraphExecutionRef[]> {
-    const result = (await this.call("list_graph_executions", {
-      tenant_id: request.tenantId, user_id: this.identity.userId,
-      session_id: request.sessionId, request_id: request.requestId,
-    })) as Array<Record<string, unknown>>;
-    return (Array.isArray(result) ? result : []).map((raw) => ({
+  async listGraphExecutions(request: { sessionId: string; requestId?: string }): Promise<GraphExecutionRef[]> {
+    return (await this.call("list_graph_executions", this.ids(request, "list_graph_executions"))).map((raw) => ({
       executionId: requiredString(raw.execution_id, "execution_id"),
-      graphId: optionalString(raw.graph_id) ?? "",
-      updatedAt: optionalString(raw.updated_at) ?? "",
+      graphId: raw.graph_id,
+      updatedAt: raw.updated_at,
     }));
   }
 
   async listWorkflowGraphs(request: ListWorkflowGraphsRequest): Promise<WorkflowGraphSummary[]> {
-    const result = (await this.call("list_workflow_graphs", {
-      tenant_id: request.tenantId, user_id: this.identity.userId,
-      session_id: request.sessionId, request_id: request.requestId,
-      limit: request.limit ?? 200,
-    })) as Array<Record<string, unknown>>;
-    return result.map((v) => mapWorkflowGraph(v));
+    return (await this.call("list_workflow_graphs", { ...this.ids(request, "list_workflow_graphs"), limit: request.limit ?? 200 })).map(mapWorkflowGraph);
   }
 
-  async listWorkflows(request: ListWorkflowsRequest): Promise<WorkflowDefinitionSummary[]> {
-    const result = (await this.call("list_workflows", {
-      tenant_id: request.tenantId, user_id: this.identity.userId,
-      session_id: request.sessionId, request_id: request.requestId,
-    })) as Array<Record<string, unknown>>;
-    return result.map((raw) => ({
+  async listWorkflows(_request: ListWorkflowsRequest): Promise<WorkflowDefinitionSummary[]> {
+    return (await this.call("list_workflows", {})).map((raw) => ({
       workflowId: requiredString(raw.workflow_id, "workflow_id"),
-      description: optionalString(raw.description) ?? "",
-      version: optionalString(raw.version) ?? "",
+      description: raw.description,
+      version: raw.version,
     }));
   }
 
   async searchArtifacts(request: SearchArtifactsRequest): Promise<JupiterArtifactSummary[]> {
-    const result = (await this.call("search_artifacts", {
-      tenant_id: request.tenantId, user_id: this.identity.userId,
-      session_id: request.sessionId, request_id: request.requestId,
+    return (await this.call("search_artifacts", {
+      ...this.ids(request, "search_artifacts"),
       query: request.query ?? "",
       all_sessions: request.allSessions ?? false,
       limit: request.limit ?? 200,
-    })) as Array<Record<string, unknown>>;
-    return result.map((raw) => ({
-      sessionId: optionalString(raw.session_id) ?? "",
-      runId: optionalString(raw.run_id) ?? "",
-      artifactId: optionalString(raw.artifact_id) ?? "",
-      artifactType: optionalString(raw.artifact_type) ?? "",
-      reference: optionalString(raw.reference) ?? "",
-      digest: optionalString(raw.digest) ?? "",
-      exists: Boolean(raw.exists),
-      verified: Boolean(raw.verified),
-      producerTaskId: optionalString(raw.producer_task_id) ?? "",
-      updatedAt: optionalString(raw.updated_at) ?? "",
+    })).map((raw) => ({
+      sessionId: raw.session_id,
+      runId: raw.run_id,
+      artifactId: raw.artifact_id,
+      artifactType: raw.artifact_type,
+      reference: raw.reference,
+      digest: raw.digest,
+      exists: raw.exists,
+      verified: raw.verified,
+      producerTaskId: raw.producer_task_id,
+      updatedAt: raw.updated_at,
     }));
   }
 
   async listParticipants(request: ListParticipantsRequest): Promise<ParticipantSummary[]> {
-    const result = (await this.call("list_participants", {
-      tenant_id: request.tenantId, user_id: this.identity.userId,
-      session_id: request.sessionId, request_id: request.requestId,
-    })) as Array<Record<string, unknown>>;
-    return result.map((raw) => ({
-      participantId: optionalString(raw.participant_id) ?? "",
-      role: optionalString(raw.role) ?? "",
-      joinedAt: optionalString(raw.joined_at) ?? "",
+    return (await this.call("list_participants", this.ids(request, "list_participants"))).map((raw) => ({
+      participantId: raw.participant_id,
+      role: raw.role,
+      joinedAt: raw.joined_at,
     }));
   }
 
   async listFacts(request: ListFactsRequest): Promise<FactRecordSummary[]> {
-    const result = (await this.call("list_facts", {
-      tenant_id: request.tenantId, user_id: this.identity.userId,
-      session_id: request.sessionId, request_id: request.requestId,
-      scope: request.scope ?? "", limit: request.limit ?? 500,
-    })) as Array<Record<string, unknown>>;
-    return result.map((raw) => ({
-      category: optionalString(raw.category) ?? "",
-      key: optionalString(raw.key) ?? "",
-      value: optionalString(raw.value) ?? "",
-      scope: optionalString(raw.scope) ?? "",
-      evidenceId: optionalString(raw.evidence_id) ?? "",
-      sourceKind: optionalString(raw.source_kind) ?? "",
-      sourceRef: optionalString(raw.source_ref) ?? "",
-      revision: Number(raw.revision ?? 1),
-      createdAt: optionalString(raw.created_at) ?? "",
+    return (await this.call("list_facts", {
+      ...this.ids(request, "list_facts"),
+      scope: request.scope ?? "",
+      limit: request.limit ?? 500,
+    })).map((raw) => ({
+      category: raw.category,
+      key: raw.key,
+      value: raw.value,
+      scope: raw.scope,
+      evidenceId: raw.evidence_id,
+      sourceKind: raw.source_kind,
+      sourceRef: raw.source_ref,
+      revision: raw.revision,
+      createdAt: raw.created_at,
     }));
   }
 
   async forgetFact(request: ForgetFactRequest): Promise<FactForgetResult> {
-    const raw = (await this.call("forget_fact", {
-      tenant_id: request.tenantId, user_id: this.identity.userId,
-      session_id: request.sessionId, request_id: request.requestId,
-      category: request.category, key: request.key,
+    const raw = await this.call("forget_fact", {
+      ...this.ids(request, "forget_fact"),
+      category: request.category,
+      key: request.key,
       scope: request.scope ?? "",
-    })) as Record<string, unknown>;
-    return {
-      category: optionalString(raw.category) ?? "",
-      key: optionalString(raw.key) ?? "",
-      removed: Boolean(raw.removed),
-    };
+    });
+    return { category: raw.category, key: raw.key, removed: raw.removed };
   }
 
   async delegateRun(request: DelegateRunRequest): Promise<DelegateRunResult> {
-    const raw = await this.call("delegate_run", {
-      tenant_id: request.tenantId, user_id: this.identity.userId,
-      session_id: request.sessionId, request_id: request.requestId,
+    return mapDelegation(await this.call("delegate_run", {
+      ...this.ids(request, "delegate_run"),
       parent_run_id: request.parentRunId,
       request_text: request.requestText,
       target_planet: request.targetPlanet ?? "",
       profile_id: request.profileId ?? "",
       context_refs: request.contextRefs ?? [],
-    }) as Record<string, unknown>;
-    return {
-      taskId: requiredString(raw.task_id, "task_id"),
-      handoffId: requiredString(raw.handoff_id, "handoff_id"),
-      sessionId: optionalString(raw.session_id) ?? "",
-      targetPlanet: optionalString(raw.target_planet) ?? "",
-      requestText: optionalString(raw.request_text) ?? undefined,
-      workspaceRoot: optionalString(raw.workspace_root) ?? undefined,
-      agentProfile:
-        raw.agent_profile && typeof raw.agent_profile === "object"
-          ? (raw.agent_profile as Record<string, unknown>)
-          : undefined,
-    };
+    }));
   }
 
-  async listSkills(request: ListSkillsRequest): Promise<SkillSummary[]> {
-    return ((await this.call("list_skills", {
-      tenant_id: request.tenantId,
-      session_id: request.sessionId,
-      request_id: request.requestId,
-    })) as Array<{ skill_id?: unknown; name?: unknown; description?: unknown }>).map((raw) => ({
+  async listSkills(_request: ListSkillsRequest): Promise<SkillSummary[]> {
+    return (await this.call("list_skills", {})).map((raw) => ({
       skillId: requiredString(raw.skill_id, "skill_id"),
-      name: optionalString(raw.name) ?? "",
-      description: optionalString(raw.description) ?? "",
+      name: raw.name,
+      description: raw.description,
     }));
   }
 
   async listHistory(request: ListHistoryRequest): Promise<HistoryEntry[]> {
-    const params: LocalRpcParams = {
-      tenant_id: request.tenantId,
-      user_id: this.identity.userId,
-      session_id: request.sessionId,
-      request_id: request.requestId,
-      limit: request.limit ?? 200,
-    };
-    const result = (await this.call("list_history", params)) as unknown[];
-    return result.map((value) => mapHistory(value));
+    return (await this.call("list_history", { ...this.ids(request, "list_history"), limit: request.limit ?? 200 })).map(mapHistory);
   }
 
   async listHandoffs(request: ListHandoffsRequest): Promise<HandoffSummary[]> {
-    const params: LocalRpcParams = {
-      tenant_id: request.tenantId,
-      user_id: this.identity.userId,
-      session_id: request.sessionId,
-      request_id: request.requestId,
-      limit: request.limit ?? 500,
-    };
-    const result = (await this.call("list_handoffs", params)) as unknown[];
-    return result.map((value) => mapHandoff(value));
+    return (await this.call("list_handoffs", { ...this.ids(request, "list_handoffs"), limit: request.limit ?? 500 })).map(mapHandoff);
   }
 
   async createSession(request: CreateSessionRequest): Promise<SessionSummary> {
-    const params: LocalRpcParams = {
-      tenant_id: request.tenantId,
-      user_id: request.userId,
-      session_id: request.sessionId,
-      request_id: request.requestId,
-      planet: request.planet ?? "",
-    };
-    return mapSession(await this.call("create_session", params));
+    return mapSession(await this.call("create_session", { ...this.ids(request, "create_session"), planet: request.planet ?? "" }));
   }
 
   async deleteSession(request: CreateSessionRequest): Promise<{ removed: boolean }> {
-    const params: LocalRpcParams = {
-      tenant_id: request.tenantId,
-      user_id: request.userId,
-      session_id: request.sessionId,
-      request_id: request.requestId,
-    };
-    return (await this.call("delete_session", params)) as { removed: boolean };
+    const raw = await this.call("delete_session", this.ids(request, "delete_session"));
+    return { removed: raw.removed };
   }
 
   async assignSessionWorkspace(
     request: AssignSessionWorkspaceRequest,
   ): Promise<{ sessionId: string; workspaceId: string }> {
-    this.assertIdentity(request);
-    const result = (await this.call("assign_session_workspace", {
-      tenant_id: request.tenantId, user_id: this.identity.userId,
-      session_id: request.sessionId, request_id: request.requestId,
-      workspace_id: request.workspaceId,
-    })) as { session_id: string; workspace_id: string };
-    return { sessionId: result.session_id, workspaceId: result.workspace_id };
+    const raw = await this.call("assign_session_workspace", { ...this.ids(request, "assign_session_workspace"), workspace_id: request.workspaceId });
+    return { sessionId: raw.session_id, workspaceId: raw.workspace_id };
   }
 
   async resolveSessionWorkspace(
     request: SessionScope,
   ): Promise<{ sessionId: string; workspaceId: string; path: string; bound: boolean }> {
-    this.assertIdentity(request);
-    const result = (await this.call("resolve_session_workspace", {
-      tenant_id: request.tenantId, user_id: this.identity.userId,
-      session_id: request.sessionId, request_id: this.nextRequestId("resolve_session_workspace"),
-    })) as { session_id: string; workspace_id: string; path: string; bound: boolean };
-    return {
-      sessionId: result.session_id,
-      workspaceId: result.workspace_id ?? "",
-      path: result.path ?? "",
-      bound: result.bound === true,
-    };
+    const raw = await this.call("resolve_session_workspace", this.ids(request, "resolve_session_workspace"));
+    return { sessionId: raw.session_id, workspaceId: raw.workspace_id, path: raw.path, bound: raw.bound };
   }
 
   async deleteWorkspace(request: DeleteWorkspaceRequest): Promise<{ removed: boolean }> {
-    this.assertIdentity(request);
-    return (await this.call("delete_workspace", {
-      tenant_id: request.tenantId, user_id: this.identity.userId,
-      session_id: request.sessionId, request_id: request.requestId,
-      workspace_id: request.workspaceId,
-    })) as { removed: boolean };
+    const raw = await this.call("delete_workspace", { ...this.ids(request, "delete_workspace"), workspace_id: request.workspaceId });
+    return { removed: raw.removed };
   }
 
   async pickFolder(): Promise<{ path: string | null }> {
-    return (await this.call("pick_folder", {} as LocalRpcParams)) as { path: string | null };
+    return this.call("pick_folder", {});
   }
 
   async pickFiles(): Promise<{ paths: string[] }> {
-    return (await this.call("pick_files", {} as LocalRpcParams)) as { paths: string[] };
+    return this.call("pick_files", {});
   }
 
   async attachFiles(request: AttachFilesRequest): Promise<{ contextRefs: string[] }> {
-    return (await this.call("attach_files", {
-      tenant_id: request.tenantId,
-      user_id: request.userId,
-      session_id: request.sessionId,
-      request_id: request.requestId,
-      paths: request.paths,
-    } as LocalRpcParams)) as { contextRefs: string[] };
+    const raw = await this.call("attach_files", { ...this.ids(request, "attach_files"), paths: request.paths });
+    return { contextRefs: raw.context_refs };
   }
 
   async listDirectory(path: string): Promise<DirectoryListing> {
-    return (await this.call("list_directory", { path } as LocalRpcParams)) as DirectoryListing;
+    const raw = await this.call("list_directory", { path });
+    return { path: raw.path, parent: raw.parent, dirs: raw.dirs, ...(raw.home !== undefined ? { home: raw.home } : {}) };
   }
 
   async revealPath(path: string): Promise<{ revealed: boolean }> {
-    return (await this.call("reveal_path", { path } as LocalRpcParams)) as { revealed: boolean };
+    return this.call("reveal_path", { path });
   }
 
   async listSessions(request: ListSessionsRequest): Promise<SessionSummary[]> {
-    const params: LocalRpcParams = {
-      tenant_id: request.tenantId,
-      user_id: request.userId,
-      request_id: request.requestId,
+    return (await this.call("list_sessions", {
+      tenant_id: this.identity.tenantId,
+      user_id: this.identity.userId,
+      request_id: request.requestId ?? this.nextRequestId("list_sessions"),
       limit: request.limit ?? 500,
-    };
-    const result = (await this.call("list_sessions", params)) as unknown[];
-    return result.map((value) => mapSession(value));
+    })).map(mapSession);
   }
 
   async startRun(request: StartRunRequest): Promise<RunHandle> {
-    this.assertIdentity(request);
-    const params: LocalRpcParams = {
-      tenant_id: request.tenantId,
-      user_id: this.identity.userId,
-      session_id: request.sessionId,
-      request_id: request.requestId,
+    const params: WireParams<"start_run"> = {
+      ...this.ids(request, "start_run"),
       request_text: request.requestText,
       task_id: request.taskId ?? "",
       workspace_root: request.workspaceRoot ?? "",
@@ -1254,8 +1056,8 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
   }
 
   async cancelRun(request: CancelRunRequest): Promise<RunSnapshot> {
-    const params: LocalRpcParams = {
-      ...this.lookupParams(request, "cancel_run", request.requestId),
+    const params: WireParams<"cancel_run"> = {
+      ...this.lookupParams(request, "cancel_run"),
       requested_by: request.requestedBy,
     };
     return this.project(async () => {
@@ -1266,13 +1068,9 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
   }
 
   async resumeRun(request: ResumeRunRequest): Promise<RunHandle> {
-    this.assertIdentity(request);
-    const params: LocalRpcParams = {
-      tenant_id: request.tenantId,
-      user_id: this.identity.userId,
-      session_id: request.sessionId,
+    const params: WireParams<"resume_run"> = {
+      ...this.ids({ sessionId: request.sessionId, requestId: request.resumeRequestId }, "resume_run"),
       run_id: request.runId,
-      request_id: request.resumeRequestId,
       request_text: "",
       checkpoint_id: request.checkpointId,
       action: request.action,
@@ -1281,8 +1079,8 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
   }
 
   async pauseRun(request: PauseRunRequest): Promise<RunHandle> {
-    const params: LocalRpcParams = {
-      ...this.lookupParams(request, "pause_run", request.requestId),
+    const params: WireParams<"pause_run"> = {
+      ...this.lookupParams(request, "pause_run"),
       requested_by: request.requestedBy ?? "",
     };
     return this.project(async () => mapRunHandle(await this.call("pause_run", params)));
@@ -1290,59 +1088,40 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
 
   async listArtifacts(request: ListArtifactsRequest): Promise<ArtifactSummary[]> {
     const params = this.lookupParams(request, "list_artifacts");
-    return this.project(async () => {
-      const value = await this.call("list_artifacts", params);
-      if (!Array.isArray(value)) throw new Error("list_artifacts result is not an array");
-      return value.map((item) => mapArtifact(item, request.runId));
-    });
+    return this.project(async () => (await this.call("list_artifacts", params)).map((item) => mapArtifact(item, request.runId)));
   }
 
   async readArtifact(request: ReadArtifactRequest): Promise<ArtifactContent> {
-    const params: LocalRpcParams = {
-      ...this.lookupParams(request, "read_artifact"),
-      artifact_id: request.artifactId,
-    };
+    const params: WireParams<"read_artifact"> = { ...this.lookupParams(request, "read_artifact"), artifact_id: request.artifactId };
     return this.project(async () => {
       const raw = await this.call("read_artifact", params);
-      if (!isRecord(raw)) throw new Error("read_artifact result is not an object");
       return {
         artifactId: requiredString(raw.artifact_id, "artifact_id"),
         reference: requiredString(raw.reference, "artifact.reference"),
-        text: typeof raw.text === "string" ? raw.text : "",
-        stale: raw.stale === true,
-        result: typeof raw.result === "string" ? raw.result : "ok",
+        text: raw.text,
+        stale: raw.stale,
+        result: raw.result,
       };
     });
   }
 
   async readArtifactPreview(request: ReadArtifactRequest): Promise<ArtifactPreview> {
-    const params: LocalRpcParams = {
-      ...this.lookupParams(request, "read_artifact_preview"),
-      artifact_id: request.artifactId,
-    };
+    const params: WireParams<"read_artifact_preview"> = { ...this.lookupParams(request, "read_artifact_preview"), artifact_id: request.artifactId };
     return this.project(async () => {
       const raw = await this.call("read_artifact_preview", params);
-      if (!isRecord(raw)) throw new Error("read_artifact_preview result is not an object");
       return {
         artifactId: requiredString(raw.artifact_id, "artifact_id"),
-        mime: typeof raw.mime === "string" ? raw.mime : "",
-        dataB64: typeof raw.data_b64 === "string" ? raw.data_b64 : "",
-        size: typeof raw.size === "number" ? raw.size : 0,
-        stale: raw.stale === true,
-        result: typeof raw.result === "string" ? raw.result : "ok",
+        mime: raw.mime,
+        dataB64: raw.data_b64,
+        size: raw.size,
+        stale: raw.stale,
+        result: raw.result,
       };
     });
   }
 
   async readEvents(request: EventStreamRequest): Promise<RunEvent[]> {
-    if (!Number.isInteger(request.afterSequence) || request.afterSequence < -1) {
-      throw new AgentServiceClientError({
-        code: "CURSOR_INVALID",
-        message: "event cursor is invalid",
-        retryable: false,
-        runId: request.runId,
-      });
-    }
+    const params = this.eventParams(request);
     if (request.limit !== undefined && (!Number.isInteger(request.limit) || request.limit < 1)) {
       throw new AgentServiceClientError({
         code: "INVALID_REQUEST",
@@ -1351,31 +1130,12 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
         runId: request.runId,
       });
     }
-    const afterSequence = Math.max(0, request.afterSequence);
-    const params = {
-      ...this.lookupParams(request, "read_events"),
-      after_sequence: afterSequence,
-      ...(request.limit === undefined ? {} : { limit: request.limit }),
-    };
-    return this.project(async () => mapEvents(await this.call("read_events", params), afterSequence));
+    return this.project(async () => mapEvents(await this.call("read_events", params), params.after_sequence ?? 0));
   }
 
   async subscribeEvents(request: EventStreamRequest): Promise<RunEvent[]> {
-    if (!Number.isInteger(request.afterSequence) || request.afterSequence < -1) {
-      throw new AgentServiceClientError({
-        code: "CURSOR_INVALID",
-        message: "event cursor is invalid",
-        retryable: false,
-        runId: request.runId,
-      });
-    }
-    const afterSequence = Math.max(0, request.afterSequence);
-    const params = {
-      ...this.lookupParams(request, "read_events"),
-      after_sequence: afterSequence,
-      ...(request.limit === undefined ? {} : { limit: request.limit }),
-    };
-    return this.project(async () => mapEvents(await this.call("subscribe_events", params), afterSequence));
+    const params = this.eventParams(request);
+    return this.project(async () => mapEvents(await this.call("subscribe_events", params), params.after_sequence ?? 0));
   }
 
   async shutdown(): Promise<void> {
@@ -1390,19 +1150,40 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
     await this.transport.close();
   }
 
-  private lookupParams(
-    request: { tenantId: string; sessionId: string; runId: string },
+  /** Identity-complete scope every session-bound request carries. */
+  private ids(
+    request: { sessionId: string; requestId?: string },
     operation: LocalClientOperation,
-    requestId = this.nextRequestId(operation),
-  ): LocalRpcParams {
-    this.assertIdentity(request);
+  ): { tenant_id: string; user_id: string; session_id: string; request_id: string } {
     return {
-      tenant_id: request.tenantId,
+      tenant_id: this.identity.tenantId,
       user_id: this.identity.userId,
       session_id: request.sessionId,
-      run_id: request.runId,
-      request_id: requestId,
+      request_id: request.requestId ?? this.nextRequestId(operation),
     };
+  }
+
+  private eventParams(request: EventStreamRequest): WireParams<"read_events"> {
+    if (!Number.isInteger(request.afterSequence) || request.afterSequence < -1) {
+      throw new AgentServiceClientError({
+        code: "CURSOR_INVALID",
+        message: "event cursor is invalid",
+        retryable: false,
+        runId: request.runId,
+      });
+    }
+    return {
+      ...this.lookupParams(request, "read_events"),
+      after_sequence: Math.max(0, request.afterSequence),
+      ...(request.limit === undefined ? {} : { limit: request.limit }),
+    };
+  }
+
+  private lookupParams(
+    request: { sessionId: string; runId: string; requestId?: string },
+    operation: LocalClientOperation,
+  ): WireParams<"get_run"> {
+    return { ...this.ids(request, operation), run_id: request.runId };
   }
 
   private nextRequestId(operation: LocalClientOperation): string {
@@ -1416,25 +1197,13 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
     return `desktop-${operation}-${uuid}`;
   }
 
-  private assertIdentity(request: { tenantId: string; sessionId: string }): void {
-    // sessionId is a locator — sessions are first-class and the user can
-    // switch between them; only the tenant scope is an identity invariant.
-    if (request.tenantId !== this.identity.tenantId) {
-      throw new AgentServiceClientError({
-        code: "IDENTITY_MISMATCH",
-        message: "request identity does not match the local desktop session",
-        retryable: false,
-      });
-    }
-  }
-
   private rememberSnapshot(snapshot: RunSnapshot): void {
     this.knownSnapshots.set(snapshot.runId, clone(snapshot));
   }
 
-  private async call(method: LocalTransportMethod, params: LocalRpcParams): Promise<unknown> {
+  private async call<M extends LocalTransportMethod>(method: M, params: WireParams<M>): Promise<WireResult<M>> {
     try {
-      return await this.transport.request<LocalRpcParams, unknown>(method, params);
+      return await this.transport.request<LocalRpcParams, WireResult<M>>(method, params as LocalRpcParams);
     } catch (error) {
       if (error instanceof AgentServiceClientError) throw error;
       // Aborted fetches (navigation, component unmount, cleanup) are not

@@ -107,10 +107,7 @@ function RailHome({ ctx, planet, epoch, onPick }: { ctx: RunCtx; planet: string;
     let alive = true;
     void ctx.controller.loadTenantCatalog(planet);
     void service.listSessions({
-      tenantId: service.identity.tenantId,
-      userId: service.identity.userId,
-      requestId: `rail-list-${planet}-${Date.now()}`,
-    }).then((list) => { if (alive) setSessions(list); }).catch(() => {});
+      }).then((list) => { if (alive) setSessions(list); }).catch(ctx.reportError);
     return () => { alive = false; };
   }, [service, planet, epoch, ctx.controller]);
 

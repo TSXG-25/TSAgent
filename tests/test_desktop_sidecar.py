@@ -1098,6 +1098,14 @@ def test_http_sidecar_enforces_host_and_origin(tmp_path: Path) -> None:
         status, acao = request("POST", "/rpc", headers={"Host": host})
         assert status in (200, 400)
         assert acao is None
+
+        # missing Content-Length → 411, the handler does not crash
+        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+        conn.putrequest("POST", "/rpc", skip_host=True)
+        conn.putheader("Host", host)
+        conn.endheaders()
+        assert conn.getresponse().status == 411
+        conn.close()
     finally:
         assert sidecar_loops, "sidecar never published its loop"
         asyncio.run_coroutine_threadsafe(
@@ -1743,6 +1751,49 @@ def test_sidecar_subscription_does_not_block_control(tmp_path: Path) -> None:
     asyncio.run(scenario())
 
 
+def test_sidecar_slow_call_does_not_block_later_calls(tmp_path: Path) -> None:
+    """一个慢请求（如等待用户关闭的 Finder 对话框）挂起时，后续普通
+    请求照常应答；shutdown 先等在途请求应答再退出。"""
+    import asyncio
+    import io
+    import json
+
+    import tests.test_ha_r1_harness as harness
+    from agent.service.local_sidecar.dispatcher import SidecarDispatcher
+    from agent.service.local_sidecar.server import serve
+
+    class GatedDispatcher(SidecarDispatcher):
+        def __init__(self, *args, **kwargs) -> None:
+            super().__init__(*args, **kwargs)
+            self.release = asyncio.Event()
+
+        async def dispatch(self, request):
+            if request.id == "slow":
+                await self.release.wait()
+            elif request.id == "fast":
+                self.release.set()
+            return await super().dispatch(request)
+
+    async def scenario() -> None:
+        service, _store = harness.service_at(tmp_path)
+        dispatcher = GatedDispatcher(service, diagnostics=io.StringIO())
+        stdin = io.StringIO("".join(
+            json.dumps({"id": rid, "method": method, "params": {}}) + "\n"
+            for rid, method in (("slow", "health"), ("fast", "health"), ("x", "shutdown"))
+        ))
+        stdout = io.StringIO()
+        # 串行分发时 slow 永远等不到 fast，wait_for 超时即失败。
+        rc = await asyncio.wait_for(
+            serve(dispatcher, stdin=stdin, stdout=stdout, diagnostics=io.StringIO()),
+            timeout=5,
+        )
+        assert rc == 0
+        ids = [json.loads(line)["id"] for line in stdout.getvalue().splitlines()]
+        assert ids == ["fast", "slow", "x"]
+
+    asyncio.run(scenario())
+
+
 def test_sidecar_exits_on_broken_transport(tmp_path: Path) -> None:
     """A09: 普通响应写入失败后主循环立即退出 — 不再继续分发
     后续请求；后台订阅和 dispatcher 都被清理。"""
@@ -1764,27 +1815,63 @@ def test_sidecar_exits_on_broken_transport(tmp_path: Path) -> None:
             self.methods.append(request.method.value)
             return await super().dispatch(request)
 
+    import threading
+
+    write_failed = threading.Event()
+
     class DeadStdout(io.StringIO):
         def write(self, _s):
+            write_failed.set()
             raise BrokenPipeError("transport gone")
 
+    class GatedStdin:
+        """Lines after the first health are only readable once a write
+        has failed — the later requests arrive after the transport died."""
+
+        def __init__(self, lines: list[str]) -> None:
+            self._lines = lines
+
+        def readline(self) -> str:
+            if not self._lines:
+                return ""
+            if len(self._lines) <= 2:
+                write_failed.wait(timeout=5)
+            return self._lines.pop(0)
+
     async def scenario() -> None:
-        service, _store = harness.service_at(tmp_path)
+        service, store = harness.service_at(tmp_path)
+        # 仅有 CREATED 预留的 Run — 订阅挂起，不会先于 health 写响应。
+        from agent.service.contracts import StartRunRequest
+        from agent.service.run_projector import encode_request_reference
+
+        store.reserve_service_start(
+            "t", "s",
+            requested_run_id="run-sub",
+            request_id="r1",
+            request_digest="d1",
+            writer_id="w1",
+            external_reference=encode_request_reference(
+                StartRunRequest(
+                    tenant_id="t", user_id="u", session_id="s",
+                    request_id="r1", request_text="x"),
+                run_id="run-sub",
+            ),
+        )
         dispatcher = CountingDispatcher(
             service, diagnostics=io.StringIO()
         )
-        stdin = io.StringIO(
+        stdin = GatedStdin([
             json.dumps({"id": "sub-1", "method": "subscribe_events",
                         "params": {"tenant_id": "t", "user_id": "u",
-                                   "session_id": "s", "run_id": "r",
-                                   "request_id": "q1"}}) + "\n"
-            + json.dumps({"id": "h1", "method": "health",
-                          "params": {}}) + "\n"
-            + json.dumps({"id": "h2", "method": "health",
-                          "params": {}}) + "\n"
-            + json.dumps({"id": "x", "method": "shutdown",
-                          "params": {}}) + "\n"
-        )
+                                   "session_id": "s", "run_id": "run-sub",
+                                   "request_id": "q1"}}) + "\n",
+            json.dumps({"id": "h1", "method": "health",
+                        "params": {}}) + "\n",
+            json.dumps({"id": "h2", "method": "health",
+                        "params": {}}) + "\n",
+            json.dumps({"id": "x", "method": "shutdown",
+                        "params": {}}) + "\n",
+        ])
         started = time.monotonic()
         rc = await asyncio.wait_for(
             serve(dispatcher, stdin=stdin, stdout=DeadStdout(),
@@ -3934,6 +4021,22 @@ def test_graph_execute_without_parent_run_provisions_graph_task(
             await service.close()
 
     asyncio.run(scenario())
+
+
+def test_session_planet_claim_first_wins(tmp_path: Path) -> None:
+    """工作台认领会话：未认领时第一次认领生效；已归属其它台的会话被
+    别的台选中时保持原归属，返回的 head 携带真实归属。"""
+    service = _workspace_file_service(tmp_path)
+    store = service._store
+    try:
+        assert store.ensure_session("t", "s1", "u").planet == ""
+        assert store.ensure_session("t", "s1", "u", planet="mars").planet == "mars"
+        assert store.ensure_session("t", "s1", "u", planet="neptune").planet == "mars"
+        assert store.ensure_session("t", "s1", "u").planet == "mars"
+        [head] = [h for h in store.list_sessions("t") if h.session_id == "s1"]
+        assert head.planet == "mars"
+    finally:
+        _run(service.close())
 
 
 def test_cross_workstation_offline_chain(tmp_path: Path) -> None:

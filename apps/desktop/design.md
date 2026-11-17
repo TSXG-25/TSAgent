@@ -1,9 +1,15 @@
 # TSAgent Desktop — Design Spec (Blockade Skin)
 
+> **Status: superseded for layout/visual decisions.** `docs/ui/planet-workspace-ui.md`
+> v1.0 is the authoritative spec for workspace layout and visuals; this file is
+> kept for the color-token vocabulary (`design-system/tokens.css`) and historical
+> context. Functional contracts are unchanged. See
+> `docs/quality/desktop-frontend-debt.md` §2.6/§P3.
+
 Division-style HUD language: translucent glass plates float over a live field,
 hairline seams separate surfaces, a single accent marks what has focus.
 Source of truth: `src/design-system/tokens.css` + the `/* ══ Blockade skin pass ══ */`
-block in `src/styles.css`. **Read this before adding any new page/component.**
+block in `src/styles/base.css`. **Read this before adding any new page/component.**
 
 ## 1. Color
 

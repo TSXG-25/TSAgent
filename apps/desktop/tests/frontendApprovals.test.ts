@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 
 /** FE-03: 共享会话审批状态 — 单一轮询存储、单一 decide 入口、

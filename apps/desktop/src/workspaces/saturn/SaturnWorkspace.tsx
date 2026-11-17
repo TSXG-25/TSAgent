@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { usePoll } from "../../app/usePoll";
 import { SCENES } from "../../app/scenes";
 import { WorkspaceFrame } from "../../design-system/WorkspaceFrame";
 import AgentComposer from "../../app/AgentComposer";
-import { requestIdForRun } from "../../app/ui";
 import { t } from "../../app/i18n";
 import type { RunCtx } from "../../app/runCtx";
 import { useWorkspaceCurrentRun } from "../../app/workspaceSelection";
@@ -25,11 +25,11 @@ export default function SaturnWorkspace({ ctx }: { ctx: RunCtx }) {
   const [planet, setPlanet] = useState("");
   const [creating, setCreating] = useState(false);
 
-  const req = useCallback(() => ({ tenantId: service.identity.tenantId, sessionId: ctx.sessionId, requestId: requestIdForRun(0) }), [service, ctx.sessionId]);
+  const req = useCallback(() => ({ sessionId: ctx.sessionId }), [service, ctx.sessionId]);
   const refresh = useCallback(async () => {
     try { setSchedules(await service.listSchedules(req())); } catch (e) { setErr(String(e)); }
   }, [service, req]);
-  useEffect(() => { void refresh(); const t = setInterval(() => void refresh(), 10_000); return () => clearInterval(t); }, [refresh]);
+  usePoll(() => void refresh(), 10_000, [refresh]);
 
   async function toggle(s: ScheduleSummary) {
     try { await service.updateSchedule({ ...req(), scheduleId: s.scheduleId, status: s.status === "ACTIVE" ? "PAUSED" : "ACTIVE" }); await refresh(); }

@@ -46,9 +46,8 @@ function isLiveStatus(status: RunView["status"]): boolean {
   return status === "pending" || status === "active" || status === "cancelling";
 }
 
-function locator(snapshot: Pick<RunSnapshot, "tenantId" | "sessionId" | "runId">): GetRunRequest {
+function locator(snapshot: Pick<RunSnapshot, "sessionId" | "runId">): GetRunRequest {
   return {
-    tenantId: snapshot.tenantId,
     sessionId: snapshot.sessionId,
     runId: snapshot.runId,
   };
@@ -65,12 +64,15 @@ export class RunController {
   private readonly runs = new Map<string, RunView>();
   private readonly cursors = new Map<string, CursorState>();
   private readonly listeners = new Set<Listener>();
-  private readonly pollTimers = new Map<string, ReturnType<typeof globalThis.setInterval>>();
+  private readonly pollTimers = new Map<string, { stop(): void }>();
   private pollingStopped = false;
   private readonly inFlight = new Set<string>();
   private readonly pollIntervalMs: number;
   private activeRunId = "";
   private currentError: ServiceErrorDTO | null = null;
+  // What raised currentError — a background read clears only an error it
+  // raised itself; operation errors stay until dismissed or superseded.
+  private errorSource: string | null = null;
   private readonly controlOps = new Map<string, "resuming" | "cancelling" | "pausing">();
   private startingCount = 0;
   private get operationState(): RunControllerState["operationState"] {
@@ -117,11 +119,10 @@ export class RunController {
     const seq = (this.scopeSeq.get(sessionId) ?? 0) + 1;
     this.scopeSeq.set(sessionId, seq);
     this.loadingScopes.add(sessionId);
-    this.currentError = null;
     this.emit();
     try {
       await this.client.ready();
-      const snapshots = await this.client.listRuns({ tenantId: this.client.identity.tenantId, sessionId });
+      const snapshots = await this.client.listRuns({ sessionId });
       if (seq !== this.scopeSeq.get(sessionId)) return;
       for (const [runId, view] of this.runs) {
         if (view.sessionId === sessionId) {
@@ -133,10 +134,11 @@ export class RunController {
       if (seq !== this.scopeSeq.get(sessionId)) return;
       for (const view of views) this.runs.set(view.runId, view);
       if (!this.runs.has(this.activeRunId)) this.activeRunId = views[0]?.runId ?? "";
+      this.clearErrorFrom(`scope:${sessionId}`);
       this.emit();
       for (const view of views) this.startPollingIfLive(view);
     } catch (error) {
-      if (seq === this.scopeSeq.get(sessionId)) this.setError(error);
+      if (seq === this.scopeSeq.get(sessionId)) this.setError(error, `scope:${sessionId}`);
     } finally {
       if (seq === this.scopeSeq.get(sessionId)) {
         this.loadingScopes.delete(sessionId);
@@ -155,12 +157,10 @@ export class RunController {
     const seq = (this.scopeSeq.get(key) ?? 0) + 1;
     this.scopeSeq.set(key, seq);
     this.loadingScopes.add(key);
-    this.currentError = null;
     this.emit();
     try {
       await this.client.ready();
       const snapshots = await this.client.listRuns({
-        tenantId: this.client.identity.tenantId,
         sessionId: "",
         originPlanet,
       });
@@ -182,10 +182,11 @@ export class RunController {
       if (seq !== this.scopeSeq.get(key)) return;
       for (const view of views) this.runs.set(view.runId, view);
       if (!this.runs.has(this.activeRunId)) this.activeRunId = views[0]?.runId ?? "";
+      this.clearErrorFrom(key);
       this.emit();
       for (const view of views) this.startPollingIfLive(view);
     } catch (error) {
-      if (seq === this.scopeSeq.get(key)) this.setError(error);
+      if (seq === this.scopeSeq.get(key)) this.setError(error, key);
     } finally {
       if (seq === this.scopeSeq.get(key)) {
         this.loadingScopes.delete(key);
@@ -227,7 +228,6 @@ export class RunController {
     if (this.controlOps.has(runId)) return current;
 
     const request: ResumeRunRequest = {
-      tenantId: current.tenantId ?? this.client.identity.tenantId,
       sessionId: current.sessionId,
       runId: current.runId,
       resumeRequestId: `${current.runId}.resume-${crypto.randomUUID()}`,
@@ -258,7 +258,6 @@ export class RunController {
     this.emit();
     try {
       const snapshot = await this.client.cancelRun({
-        tenantId: current.tenantId ?? this.client.identity.tenantId,
         sessionId: current.sessionId,
         runId: current.runId,
         requestId: `cancel-${current.runId}`,
@@ -282,10 +281,8 @@ export class RunController {
     this.emit();
     try {
       await this.client.pauseRun({
-        tenantId: current.tenantId ?? this.client.identity.tenantId,
         sessionId: current.sessionId,
         runId: current.runId,
-        requestId: `pause-${current.runId}-${crypto.randomUUID()}`,
         requestedBy: this.client.identity.userId,
       });
       this.inFlight.delete(runId);
@@ -310,20 +307,19 @@ export class RunController {
         message: "refreshRun requires a session locator for a run that is not in the catalog",
         retryable: false,
       });
-      this.setError(error);
+      this.setError(error, `run:${runId}`);
       throw error;
     }
     this.inFlight.add(runId);
     try {
       const request = locator({
-        tenantId: current?.tenantId ?? this.client.identity.tenantId,
         sessionId: runSessionId,
         runId,
       });
       const snapshot = await this.client.getRun(request);
       return await this.applySnapshot(snapshot, current, prefetchedEvents);
     } catch (error) {
-      this.setError(error);
+      this.setError(error, `run:${runId}`);
       throw error;
     } finally {
       this.inFlight.delete(runId);
@@ -375,7 +371,7 @@ export class RunController {
     // view carries its own session locator, so a refreshed run lands in
     // its owning scope without a per-session write gate.
     this.runs.set(snapshot.runId, next);
-    this.currentError = null;
+    this.clearErrorFrom(`run:${snapshot.runId}`);
     this.emit();
     if (isLiveStatus(next.status)) this.startPollingIfLive(next);
     else this.stopPolling(snapshot.runId);
@@ -437,7 +433,7 @@ export class RunController {
     // On transport failure the loop backs off by pollIntervalMs and retries.
     let running = true;
     const timer = { stop: () => { running = false; } };
-    this.pollTimers.set(view.runId, timer as unknown as ReturnType<typeof globalThis.setInterval>);
+    this.pollTimers.set(view.runId, timer);
     const runId = view.runId;
     void (async () => {
       while (running) {
@@ -445,7 +441,6 @@ export class RunController {
           const cursor = this.cursors.get(runId);
           const current = this.runs.get(runId) ?? view;
           const pushed = await this.client.subscribeEvents({
-            tenantId: current.tenantId ?? this.client.identity.tenantId,
             sessionId: current.sessionId,
             runId,
             afterSequence: cursor?.lastSequence ?? -1,
@@ -464,20 +459,27 @@ export class RunController {
   private stopPolling(runId: string): void {
     const timer = this.pollTimers.get(runId);
     if (!timer) return;
-    if (typeof timer === "object" && "stop" in timer) (timer as unknown as { stop(): void }).stop();
-    else globalThis.clearInterval(timer);
+    timer.stop();
     this.pollTimers.delete(runId);
   }
 
   dismissError(): void {
     if (!this.currentError) return;
     this.currentError = null;
+    this.errorSource = null;
     this.emit();
   }
 
-  private setError(error: unknown): void {
+  private setError(error: unknown, source: string | null = null): void {
     this.currentError = serviceError(error);
+    this.errorSource = source;
     this.emit();
+  }
+
+  private clearErrorFrom(source: string): void {
+    if (this.errorSource !== source) return;
+    this.currentError = null;
+    this.errorSource = null;
   }
 
   private emit(): void {

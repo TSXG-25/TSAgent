@@ -1,0 +1,100 @@
+.jup-tabs { display: flex; gap: 8px; }
+
+.jup-tabs button { background: none; border: 1px solid var(--border-base); color: var(--text-muted); padding: 6px 14px; font-size: 10px; letter-spacing: .18em; cursor: pointer; }
+
+.jup-tabs button.on { color: var(--planet-accent); border-color: var(--planet-accent); }
+
+/* — selection language: accent bar + fill, hover lift — */
+
+.jup-tabs button { border-radius: 2px; }
+
+.jup-tabs button.on { color: var(--planet-accent); border-color: var(--planet-accent); background: var(--focus-fill); }
+
+/* selection: neutral lift + short accent bar on the top edge */
+
+/* tabs: underline, no boxes */
+
+.jup-tabs { gap: 18px; border-bottom: 1px solid var(--border-base); }
+
+.jup-tabs button, .jup-tabs button.on { border: none; background: none; padding: 8px 0; font-size: 12px; letter-spacing: .02em; text-transform: none; }
+
+.jup-tabs button { color: var(--text-muted); }
+
+.jup-tabs button.on { color: var(--text-main); box-shadow: inset 0 -2px 0 var(--planet-accent); }
+
+.jup-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 14px; background: none; border: none; border-left: 2px solid transparent; color: var(--text-main); font-size: 12px; text-align: left; cursor: pointer; }
+
+.jup-row:hover { background: rgba(255,255,255,.04); }
+
+.jup-row.on { background: rgba(255,255,255,.06); border-left-color: var(--planet-accent); }
+
+.jup-detail { flex: 0 0 340px; overflow-y: auto; background: var(--surface-1, #13151a); border: 1px solid var(--line, rgba(255,255,255,.08)); border-radius: 4px; padding: 14px; }
+
+.jup { display: flex; flex: 1; min-height: 0; flex-direction: column; gap: 8px; }
+
+.jup-tabs { display: flex; gap: 4px; padding: 8px 12px; background: var(--surface-1); border: 1px solid var(--line); border-radius: 4px; }
+
+.jup-tabs button { padding: 6px 14px; background: none; border: none; color: var(--text-muted); font-size: 12px; cursor: pointer; border-bottom: 2px solid transparent; }
+
+.jup-tabs button.on { color: var(--text-main); border-color: var(--planet-accent); }
+
+.jup-q { margin-left: auto; background: rgba(255,255,255,.035); border: 1px solid var(--border-base); border-radius: 2px; color: var(--text-main); font-size: 11px; padding: 5px 9px; }
+
+.jup-split { flex: 1; min-height: 0; display: flex; gap: 10px; }
+
+.jup-list { flex: 1; min-width: 0; background: var(--surface-1); border: 1px solid var(--line); border-radius: 4px; padding: 12px; overflow-y: auto; }
+
+.jup-row { display: flex; flex-direction: column; gap: 2px; width: 100%; padding: 8px 10px; background: none; border: 1px solid transparent; border-radius: 3px; color: var(--text-muted); font-size: 12px; text-align: left; cursor: pointer; }
+
+.jup-row.on { border-color: var(--planet-accent); color: var(--text-main); }
+
+.jup-row small { color: var(--text-faint); }
+
+.jup-inspect { flex: 0 0 280px; background: var(--surface-1); border: 1px solid var(--line); border-radius: 4px; padding: 12px; overflow-y: auto; }
+
+.jup-inspect h4 { margin: 0 0 8px; font-size: 10px; color: var(--text-faint); }
+
+.jup-perm { display: flex; justify-content: space-between; padding: 5px 8px; font-size: 11px; color: var(--text-muted); border-bottom: 1px solid var(--line); }
+
+.jup-detail { margin-top: 10px; font-family: var(--font-mono); font-size: 9.5px; color: var(--text-faint); white-space: pre-wrap; }
+
+/* inset dividers inside glass read as etched seams, not solid bars */
+
+.jup-tabs, .muse-title, .nav-view header, .modal-heading, .mp-head, .agent-composer {
+  border-bottom-color: rgba(160,190,255,.09);
+}
+
+/* rail row (generic session-like list item) */
+
+/* Jupiter memory galaxy (dsh-xingxi 星云) */
+
+.jup-cloud-toggle { margin-left: auto; background: none; border: 1px solid rgba(160,190,255,.2); border-radius: 4px; color: var(--text-faint); font-size: 9px; padding: 2px 8px; cursor: pointer; }
+
+.jup-cloud-toggle:hover { color: var(--planet-accent); border-color: var(--planet-accent); }
+
+.jup-cloud { position: relative; height: 300px; margin-bottom: 10px; border-radius: 8px; overflow: hidden;
+  background: radial-gradient(80% 90% at 50% 40%, color-mix(in srgb, var(--planet-accent) 8%, transparent) 0%, transparent 70%), rgba(6,9,14,.6);
+  border: 1px solid rgba(160,190,255,.08); }
+
+.jup-star { position: absolute; width: var(--star-size,3.5px); height: var(--star-size,3.5px); border-radius: 50%;
+  border: none; padding: 0; cursor: pointer; transform: translate(-50%,-50%);
+  background: hsl(var(--star-hue,210) 65% 72%);
+  box-shadow: 0 0 6px hsl(var(--star-hue,210) 70% 65%), 0 0 14px hsl(var(--star-hue,210) 60% 55% / .5);
+  transition: transform 150ms; }
+
+.jup-star:hover { transform: translate(-50%,-50%) scale(1.8); }
+
+.jup-star.on { transform: translate(-50%,-50%) scale(2);
+  box-shadow: 0 0 8px #fff, 0 0 18px hsl(var(--star-hue,210) 80% 65%); }
+
+.jup-cloud-note { position: absolute; bottom: 8px; right: 10px; font-size: 9.5px; color: var(--text-faint); pointer-events: none; }
+
+.jup-list { display: flex; flex-direction: column; }
+
+.jup-cloud { flex: 1; min-height: 300px; margin-bottom: 0; }
+
+.jup-row { position: relative; }
+
+.jup-forget { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font-style: normal; font-size: 11px; color: var(--text-faint); cursor: pointer; }
+
+.jup-forget:hover { color: #f0b0ba; }

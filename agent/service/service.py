@@ -720,7 +720,7 @@ class AgentService:
             )
         return {"removed": True, "session_id": request.session_id}
 
-    async def pick_folder(self, request: Any) -> Any:
+    async def pick_folder(self) -> Any:
         """Open the macOS native 'choose folder' dialog — real Finder picker
         for the desktop client, even when it runs in a dev browser."""
         import asyncio
@@ -737,7 +737,7 @@ class AgentService:
         path = out.decode().strip().rstrip("/")
         return {"path": path or None}
 
-    async def pick_files(self, request: Any) -> Any:
+    async def pick_files(self) -> Any:
         """macOS native 'choose file' dialog — multi-select Finder picker,
         same local-user trust boundary as pick_folder."""
         import asyncio
@@ -852,15 +852,15 @@ class AgentService:
         removed = self._store.delete_workspace(request.tenant_id, request.workspace_id)
         return {"removed": removed}
 
-    async def reveal_path(self, request: Any) -> Any:
-        """Open a path in the OS file manager — Finder on macOS. Params carry
-        a plain `path`, same local-user trust boundary as list_directory."""
+    async def reveal_path(self, path: str) -> Any:
+        """Open a path in the OS file manager — Finder on macOS. Same
+        local-user trust boundary as list_directory."""
         import asyncio
         import os
         import sys
         from pathlib import Path
 
-        raw = str(getattr(request, "path", "") or "").strip()
+        raw = path.strip()
         if not raw:
             return {"revealed": False}
         target = Path(raw).expanduser()
@@ -876,12 +876,12 @@ class AgentService:
         await proc.wait()
         return {"revealed": proc.returncode == 0}
 
-    async def list_directory(self, request: Any) -> Any:
-        """List subdirectories for the in-page folder picker. Params carry a
-        plain `path` — the desktop is a local user, no tenant scoping on fs."""
+    async def list_directory(self, path: str) -> Any:
+        """List subdirectories for the in-page folder picker — the desktop
+        is a local user, no tenant scoping on fs."""
         import os
         from pathlib import Path
-        raw = str(getattr(request, "path", "") or "").strip()
+        raw = path.strip()
         base = Path(raw).expanduser() if raw else Path.home()
         if not base.is_dir():
             return {"path": str(base), "parent": str(base.parent), "dirs": [], "error": "not a directory"}
@@ -894,19 +894,17 @@ class AgentService:
     async def list_sessions(self, request: Any) -> list[Any]:
         self._ensure_open()
         heads = self._store.list_sessions(request.tenant_id, limit=request.limit)
+        stats = self._store.session_run_stats(request.tenant_id)
         result = []
         for head in heads:
             if SUBTASK_SESSION_MARKER in head.session_id:
                 # Delegated child runs live under derived sessions — they are
                 # run internals, not user sessions; keep them off pickers.
                 continue
-            session_runs = self._store.list_run_heads(
-                head.tenant_id, head.session_id, limit=2000
-            )
-            latest = session_runs[0] if session_runs else None
+            run_count, latest = stats.get(head.session_id, (0, None))
             result.append(
                 self._session_summary(
-                    head, run_count=len(session_runs), latest_run=latest
+                    head, run_count=run_count, latest_run=latest
                 )
             )
         return result

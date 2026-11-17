@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { submitToPlanet } from "./delegate";
 import { selectWorkspaceRun, useWorkspaceCurrentRun } from "./workspaceSelection";
-import { Icon, requestIdForRun } from "./ui";
+import { Icon } from "./ui";
 import type { RunCtx } from "./runCtx";
-import { draftKey, useDraft, clearDraftIfUnchanged } from "./draftStore";
+import { draftKey, useDraft, clearDraftIfUnchanged, useDraftFocus } from "./draftStore";
+import { rememberRunAttachments } from "./runAttachments";
 import { t } from "./i18n";
 
 const BUSY = new Set(["active", "pending"]);
@@ -16,7 +17,7 @@ const BUSY = new Set(["active", "pending"]);
  *  GlobalChat and workspace composers share one draft; cleared only after the
  *  request is accepted. */
 const PLANETS = ["sun","mercury","venus","earth","mars","jupiter","saturn","uranus","neptune","pluto"];
-const MODELS = ["deepseek-chat", "deepseek-reasoner"];
+const DEEPSEEK_MODELS = ["deepseek-chat", "deepseek-reasoner"];
 
 export default function AgentComposer({ ctx, planet, placeholder, contextPrefix, onSend }: { ctx: RunCtx; planet?: string; placeholder?: string; contextPrefix?: string; onSend?: (to: string, body: string, files: string[], options: { model?: string }) => Promise<{ runId: string; sessionId: string }> }) {
   const target = planet ?? "sun";
@@ -34,17 +35,8 @@ export default function AgentComposer({ ctx, planet, placeholder, contextPrefix,
   const [wsFilter, setWsFilter] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const composingRef = useRef(false);
-  // Landing suggestion chips prefill the draft — never submit it.
-  useEffect(() => {
-    const onDraft = (e: Event) => {
-      const value = (e as CustomEvent).detail?.text;
-      if (typeof value !== "string") return;
-      setDraft({ ...draft, text: value });
-      textareaRef.current?.focus();
-    };
-    window.addEventListener("tsagent:composer-draft", onDraft);
-    return () => window.removeEventListener("tsagent:composer-draft", onDraft);
-  });
+  // Landing chips / search results prefill this draft — never submit it.
+  useDraftFocus(key, textareaRef);
   const refLabel = (ref: string) => ref.split(":").slice(1).join(":").split("/").pop() ?? ref;
   const toggleRef = (ref: string) => setFiles((x) => x.includes(ref) ? x.filter((f) => f !== ref) : [...x, ref]);
   const openPicker = () => {
@@ -52,10 +44,8 @@ export default function AgentComposer({ ctx, planet, placeholder, contextPrefix,
     if (pickerOpen) return;
     setWsError(null); setWsFiles(null);
     void ctx.service.listWorkspaceFiles({
-      tenantId: ctx.service.identity.tenantId,
       sessionId: ctx.sessionId,
-      requestId: requestIdForRun(0),
-    }).then(setWsFiles).catch((e) => setWsError(String(e instanceof Error ? e.message : e)));
+      }).then(setWsFiles).catch((e) => setWsError(String(e instanceof Error ? e.message : e)));
   };
   const pickFromFinder = () => {
     const pick = ("__TAURI_INTERNALS__" in window)
@@ -64,10 +54,7 @@ export default function AgentComposer({ ctx, planet, placeholder, contextPrefix,
       : ctx.service.pickFiles().then((r) => r.paths);
     void pick
       .then((paths) => paths.length === 0 ? { contextRefs: [] as string[] } : ctx.service.attachFiles({
-        tenantId: ctx.service.identity.tenantId,
-        userId: ctx.service.identity.userId,
         sessionId: ctx.sessionId,
-        requestId: requestIdForRun(0),
         paths,
       }))
       .then((r) => {
@@ -83,6 +70,14 @@ export default function AgentComposer({ ctx, planet, placeholder, contextPrefix,
   const pct = Math.min(estTokens / 1000000, 1);
   const R = 9, C = 2 * Math.PI * R;
   const [model, setModel] = useState("default");
+  // Model choices come from the runtime's provider settings — an ollama
+  // deployment cannot run deepseek-* names, and vice versa.
+  const [models, setModels] = useState<string[]>(DEEPSEEK_MODELS);
+  useEffect(() => {
+    void ctx.service.getSettings({ sessionId: ctx.sessionId }).then((s) => {
+      setModels(s.providerMode === "local" && s.ollamaModel ? [s.ollamaModel] : DEEPSEEK_MODELS);
+    }).catch(() => {});
+  }, [ctx.service, ctx.sessionId]);
   const [modelOpen, setModelOpen] = useState(false);
   // Workstation composers control the run selected on *this* planet's
   // rail — never the session-global activeRun, which may belong to
@@ -115,9 +110,7 @@ export default function AgentComposer({ ctx, planet, placeholder, contextPrefix,
       // The workstation the send targeted now owns this task — its rail
       // selects it without navigating away from where the user is.
       selectWorkspaceRun(ctx.service.identity.tenantId, sent.sessionId, to, sent.runId);
-      if (files.length) {
-        window.dispatchEvent(new CustomEvent("tsagent:run-attachments", { detail: { runId: sent.runId, files } }));
-      }
+      if (files.length) rememberRunAttachments(sent.runId, files);
       // Only the submitted-and-unmodified draft is cleared — anything typed
       // while the request was in flight stays.
       clearDraftIfUnchanged(key, submitted);
@@ -196,7 +189,7 @@ export default function AgentComposer({ ctx, planet, placeholder, contextPrefix,
           </button>
           {modelOpen && (
             <div className="ac-modelmenu">
-              {["default", ...MODELS].map((m) => (
+              {["default", ...models].map((m) => (
                 <button className={`ac-mrow ${model === m ? "on" : ""}`} key={m} onClick={() => { setModel(m); setModelOpen(false); }} type="button">
                   <span>{m === "default" ? t("composer.model-default") : m}</span>{model === m && <i>✓</i>}
                 </button>

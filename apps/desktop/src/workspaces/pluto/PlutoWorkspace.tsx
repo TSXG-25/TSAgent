@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { usePoll } from "../../app/usePoll";
 import { SCENES } from "../../app/scenes";
 import { WorkspaceFrame } from "../../design-system/WorkspaceFrame";
-import { requestIdForRun } from "../../app/ui";
 import AgentComposer from "../../app/AgentComposer";
 import { t, type I18nKey } from "../../app/i18n";
 import type { RunCtx } from "../../app/runCtx";
@@ -25,11 +25,11 @@ export default function PlutoWorkspace({ ctx }: { ctx: RunCtx }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const req = useCallback(() => ({ tenantId: service.identity.tenantId, sessionId: ctx.sessionId, requestId: requestIdForRun(0) }), [service, ctx.sessionId]);
+  const req = useCallback(() => ({ sessionId: ctx.sessionId }), [service, ctx.sessionId]);
   const refresh = useCallback(async () => {
     try { setMotifs(await service.listMotifs(req())); setErr(null); } catch (e) { setErr(String(e)); }
   }, [service, req]);
-  useEffect(() => { void refresh(); const t = setInterval(() => void refresh(), 8000); return () => clearInterval(t); }, [refresh]);
+  usePoll(() => void refresh(), 8000, [refresh]);
 
   const cur = motifs.find((m) => m.motifId === sel) ?? motifs[0];
   const done = motifs.filter((m) => m.status === "resolved");
@@ -51,16 +51,12 @@ export default function PlutoWorkspace({ ctx }: { ctx: RunCtx }) {
     await act(async () => {
       const parent = currentRun;
       const r = await service.assignMotif({
-        tenantId: service.identity.tenantId,
         sessionId: ctx.sessionId,
-        requestId: requestIdForRun(0),
         motifId: m.motifId,
         parentRunId: parent?.runId ?? "",
       });
       await ctx.controller.startRun({
-        tenantId: service.identity.tenantId,
         sessionId: ctx.sessionId,
-        requestId: requestIdForRun(0),
         requestText: r.requestText ?? `[母题探索] ${m.text}`,
         taskId: r.taskId,
         workspaceRoot: r.workspaceRoot,
@@ -77,7 +73,7 @@ export default function PlutoWorkspace({ ctx }: { ctx: RunCtx }) {
     setEvRuns([]); setEvId("");
     if (!cur?.assignedTaskId) return;
     let alive = true;
-    void service.getTask({ tenantId: service.identity.tenantId, sessionId: ctx.sessionId, requestId: requestIdForRun(0), taskId: cur.assignedTaskId })
+    void service.getTask({ sessionId: ctx.sessionId, taskId: cur.assignedTaskId })
       .then(async (task) => {
         const views = (await Promise.all(task.runIds.map((id) => ctx.controller.refreshRun(id, task.sessionId)))).filter((v): v is RunView => Boolean(v));
         if (alive) setEvRuns(views);

@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import test from "node:test";
+import { test } from "vitest";
 import {
   AgentServiceClientError,
 } from "../src/types/service";
@@ -210,6 +210,20 @@ function snapshot(status = "CANCELLING"): Record<string, unknown> {
   };
 }
 
+test("LC-ids identity and request ids are filled by the client, fresh per call", async () => {
+  const transport = new StubTransport();
+  const client = new LocalAgentServiceClient(transport, deterministicClientOptions);
+  transport.enqueue("pause_run", snapshot("RUNNING"));
+  transport.enqueue("pause_run", snapshot("RUNNING"));
+  await client.pauseRun({ sessionId: "session-9", runId: "run-1" });
+  await client.pauseRun({ sessionId: "session-9", runId: "run-1" });
+  const [first, second] = transport.calls.map((call) => call.params);
+  assert.equal(first.tenant_id, "tenant-1");
+  assert.equal(first.user_id, "user-1");
+  assert.equal(first.session_id, "session-9");
+  assert.notEqual(first.request_id, second.request_id);
+});
+
 test("LC01 health round-trip", async () => {
   const bridge = new FakeBridge();
   const transport = new TauriSidecarTransport(bridge, {
@@ -295,7 +309,7 @@ test("LC07 getRun projects the public snapshot and maps CANCELLING exactly", asy
   const transport = new StubTransport();
   transport.enqueue("get_run", snapshot("CANCELLING"));
   const client = new LocalAgentServiceClient(transport, deterministicClientOptions);
-  const result = await client.getRun({ tenantId: "tenant-1", sessionId: "session-1", runId: "run-1" });
+  const result = await client.getRun({ sessionId: "session-1", runId: "run-1" });
   assert.equal(result.status, "cancelling");
   assert.equal(result.runId, "run-1");
   assert.equal(transport.calls[0]?.params.user_id, "user-1");
@@ -327,7 +341,7 @@ test("LC07b listSessions decodes backend latest_status into the run vocabulary",
     },
   ]);
   const client = new LocalAgentServiceClient(transport, deterministicClientOptions);
-  const sessions = await client.listSessions({ tenantId: "tenant-1", userId: "user-1", requestId: "ls-1" });
+  const sessions = await client.listSessions({ requestId: "ls-1" });
   assert.equal(sessions[0]?.latestStatus, "active");
   assert.equal(sessions[1]?.latestStatus, "");
 });
@@ -350,7 +364,7 @@ test("LC08 listArtifacts projects opaque references without exposing paths", asy
     },
   ]);
   const client = new LocalAgentServiceClient(transport, deterministicClientOptions);
-  const [artifact] = await client.listArtifacts({ tenantId: "tenant-1", sessionId: "session-1", runId: "run-1" });
+  const [artifact] = await client.listArtifacts({ sessionId: "session-1", runId: "run-1" });
   assert.equal(artifact?.type, "python");
   assert.equal(artifact?.reference, "workspace://run-1/output/result.py");
   assert.equal(artifact?.displayName, "output/result.py");
@@ -366,7 +380,6 @@ test("LC08b readArtifact maps the request locator and content payload", async ()
   });
   const client = new LocalAgentServiceClient(transport, deterministicClientOptions);
   const content = await client.readArtifact({
-    tenantId: "tenant-1",
     sessionId: "session-1",
     runId: "run-1",
     artifactId: "artifact-1",
@@ -387,7 +400,7 @@ test("LC08c startRun maps contextRefs to context_refs", async () => {
   });
   const client = new LocalAgentServiceClient(transport, deterministicClientOptions);
   await client.startRun({
-    tenantId: "tenant-1", sessionId: "session-1", requestId: "req-1",
+    sessionId: "session-1", requestId: "req-1",
     requestText: "read the note", contextRefs: ["file:note.md"],
   });
   assert.deepEqual(transport.calls[0]?.params.context_refs, ["file:note.md"]);
@@ -401,7 +414,7 @@ test("LC09 readEvents enforces the exclusive cursor and deduplicates within a ba
     { event_id: "event-2", sequence_number: 2, event_type: "run_started", tenant_id: "tenant-1", session_id: "session-1", run_id: "run-1", workflow_id: null, stage_id: null, task_id: null, run_revision: 2, timestamp: "t2", payload: {} },
   ]);
   const client = new LocalAgentServiceClient(transport, deterministicClientOptions);
-  const events = await client.readEvents({ tenantId: "tenant-1", sessionId: "session-1", runId: "run-1", afterSequence: 0 });
+  const events = await client.readEvents({ sessionId: "session-1", runId: "run-1", afterSequence: 0 });
   assert.deepEqual(events.map((event) => event.eventId), ["event-1", "event-2"]);
   assert.equal(transport.calls[0]?.params.after_sequence, 0);
 });
@@ -419,7 +432,7 @@ test("LC10 startRun maps identity and returns the durable handle", async () => {
     updated_at: "2026-08-11T00:00:00Z",
   });
   const client = new LocalAgentServiceClient(transport, deterministicClientOptions);
-  const handle = await client.startRun({ tenantId: "tenant-1", sessionId: "session-1", requestId: "start-1", requestText: "hello" });
+  const handle = await client.startRun({ sessionId: "session-1", requestId: "start-1", requestText: "hello" });
   assert.equal(handle.status, "pending");
   assert.equal(transport.calls[0]?.params.user_id, "user-1");
   assert.equal(transport.calls[0]?.params.request_text, "hello");
@@ -438,7 +451,7 @@ test("LC11 resumeRun maps all public resume actions", async () => {
     updated_at: "2026-08-11T00:00:04Z",
   });
   const client = new LocalAgentServiceClient(transport, deterministicClientOptions);
-  const handle = await client.resumeRun({ tenantId: "tenant-1", sessionId: "session-1", runId: "run-1", resumeRequestId: "resume-1", checkpointId: "checkpoint-1", action: "REPLAY_FROM_STAGE" });
+  const handle = await client.resumeRun({ sessionId: "session-1", runId: "run-1", resumeRequestId: "resume-1", checkpointId: "checkpoint-1", action: "REPLAY_FROM_STAGE" });
   assert.equal(handle.status, "active");
   assert.equal(transport.calls[0]?.params.action, "REPLAY_FROM_STAGE");
 });
@@ -448,8 +461,8 @@ test("LC12 cancelRun preserves CANCELLING and TIMED_OUT remains distinct", async
   transport.enqueue("cancel_run", snapshot("CANCELLING"));
   transport.enqueue("get_run", snapshot("TIMED_OUT"));
   const client = new LocalAgentServiceClient(transport, deterministicClientOptions);
-  const cancelling = await client.cancelRun({ tenantId: "tenant-1", sessionId: "session-1", runId: "run-1", requestId: "cancel-1", requestedBy: "desktop" });
-  const timedOut = await client.getRun({ tenantId: "tenant-1", sessionId: "session-1", runId: "run-1" });
+  const cancelling = await client.cancelRun({ sessionId: "session-1", runId: "run-1", requestId: "cancel-1", requestedBy: "desktop" });
+  const timedOut = await client.getRun({ sessionId: "session-1", runId: "run-1" });
   assert.equal(cancelling.status, "cancelling");
   assert.equal(timedOut.status, "timed_out");
 });
@@ -459,7 +472,7 @@ test("LC13 ServiceError mapping remains stable", async () => {
   transport.enqueue("get_run", new AgentServiceClientError({ code: "RUN_NOT_FOUND", message: "run was not found", retryable: false }));
   const client = new LocalAgentServiceClient(transport, deterministicClientOptions);
   await assert.rejects(
-    client.getRun({ tenantId: "tenant-1", sessionId: "session-1", runId: "missing" }),
+    client.getRun({ sessionId: "session-1", runId: "missing" }),
     (error: unknown) => error instanceof AgentServiceClientError && error.code === "RUN_NOT_FOUND" && error.message === "run was not found",
   );
 });
@@ -539,14 +552,12 @@ test("LC16 real Python sidecar JSONL smoke", async () => {
     const health = await client.health();
     assert.equal(health.protocolVersion, "desktop-local-jsonl-v1");
     const handle = await client.startRun({
-      tenantId: "tenant-1",
       sessionId: "session-1",
       requestId: "desktop-smoke-start",
       requestText: "生成一个最小结果",
     });
     assert.ok(handle.runId);
     const snapshot = await client.getRun({
-      tenantId: "tenant-1",
       sessionId: "session-1",
       runId: handle.runId,
     });

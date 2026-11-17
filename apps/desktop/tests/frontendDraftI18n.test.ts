@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 
 /** FE-01: 草稿契约（tenant/session/target 键、sessionStorage、受理后清空、

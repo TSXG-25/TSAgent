@@ -1,7 +1,7 @@
 import { UnavailableDesktopAgentServiceClient } from "../src/service/clientFactory";
 import { AgentServiceClientError } from "../src/types/service";
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { RunController } from "../src/features/runs/runController";
 import type {
   ArtifactSummary,

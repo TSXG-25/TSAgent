@@ -19,6 +19,23 @@
 
 再加上 session 状态有三份事实来源、轮询有七处、CSS 是 40 多轮叠加的覆盖层，任何改动都很难局部推断其影响。
 
+## 0.1 偿还进展（2026-11-17）
+
+本轮按 §4 的顺序执行，以下条目已落地并有离线回归：
+
+- **CI 覆盖 desktop**：`ci.yml` 增加 desktop job（typecheck + vitest + build + `src-tauri` cargo test）→ §4 P0-2。
+- **统一测试入口**：引入 Vitest + Testing Library + jsdom，`npm test` 一条命令跑完；新增 `tests/dom/` DOM 测试（TaskTray、SessionRail、RunThread、ApprovalCards）→ §4 P2-1 部分。
+- **合同代码生成**：`agent/service/wire_schema.py` 成为 wire 方法表与参数/结果类型的唯一来源，`scripts/gen_wire_types.py` 生成 `src/service/wire.generated.ts`；`tests/test_wire_schema.py` 做漂移检查。`localTransport.ts` 不再维护第二份手写方法表 → §4 P2-3、§2.1 大头。
+- **请求构造下沉**：identity 校验与 `requestId` 生成移入 `LocalAgentServiceClient`，UI 只传业务参数；`as never` 47→3，`as unknown as` 清零 → §4 P0-4 / P1-2。
+- **删除 window 事件总线**：`tsagent:composer-draft` 走 `draftStore.prefillDraft`，`tsagent:run-attachments` 走 `runAttachments` 模块，`tsagent:new-session`（无发送方的死监听）删除 → §4 P1-4。
+- **轮询收敛**：`app/usePoll.ts` 提供"立即 + 间隔 + deps 重启 + 最新闭包"的共享轮询；TaskTray、SunWorkspace、WorkspaceThread、Pluto、Saturn、Uranus 全部收敛，组件内 `setInterval` 只剩 App 心跳 → §4 P1-3。
+- **SunWorkspace 拆分**：596→101 行；拆出 `useSunSessions`、`SessionRail`、`RunThread`、`ApprovalCards`、`useSunDialogs` → §4 P2-2。
+- **CSS 拆分**：`styles.css` 拆为 `src/styles/`（base + shared + 各星球 + omni），barrel 按原顺序 `@import`；删除 1307 条引用已失效 class 的规则（444 个死类，如旧 sidebar/thread/forge/omni2 布局）。`!important` 从 14 处保留——它们大多是防护性 reset（`content: none`、reduced-motion），逐条去除需要浏览器验证，留作外部验证项 → §4 P3-2 部分。
+- **后端 `list_sessions` N+1**：store 新增 `session_run_stats`（窗口函数一次取回每 session 的 run 数 + 最新 run），service 不再每行 `list_run_heads(limit=2000)`。
+- **吞错收敛**：删除会话/工作区/选目录/加载失败走 `ctx.reportError` 全局横幅；剩余 `.catch(() => {})` 8 处（刷新竞态丢弃、RefreshGate 丢弃这类语义正确的忽略）。
+
+仍开放：session 三份事实来源（§2.5 上半）、`service.setSession()` 可变 identity、`MODELS` 硬编码、`localStorage` 旧偏好值迁移、SolarScene 巨型文件、§2.8 文案收尾，以及全部需要真实浏览器/Tauri 联调的视觉与生命周期验证。
+
 ---
 
 ## 1. 现状速览
@@ -198,9 +215,9 @@ Mock 手写(2.3) ───┘                     │
 ### P0 —— 恢复反馈回路（先做，成本低）
 
 1. ~~**修复 HEAD 上的红测试**~~ 已完成：白名单测试改为解析 `localTransport.ts` 对比 Python 枚举，不再维护第三份手写列表。
-2. **把 desktop 纳入 CI**：在 `ci.yml` 增加 Node job，跑 `npm ci && npm run typecheck && npm test && npm run build`（工作目录 `apps/desktop`）。
+2. ~~**把 desktop 纳入 CI**~~ 已完成（2026-11-17）：desktop job 跑 typecheck + vitest + build + `src-tauri` cargo test。
 3. ~~**把 UI 实际用到的方法补进 `types/service.ts` 的接口**~~ 已完成：`assignSessionWorkspace`、`deleteWorkspace`、`pickFolder`、`listDirectory` 已并入 `WorkspaceClient`，Mock/Unavailable 同步实现，`SunWorkspace.tsx` 的 `as unknown as` 与 `?.()` 已删除。
-4. **清除 `as never`**：逐个改成满足真实 Request 类型的对象。如果是 identity 字段反复拼装导致的，就在 client 层统一注入 identity（见 P1-2），而不是在每个调用点强转。
+4. ~~**清除 `as never`**~~ 基本完成（2026-11-17）：47→3（SolarScene、MissionControl 残留）；identity/requestId 由 client 统一注入。
 5. ~~**HTTP 传输压平错误码**~~ 已完成（原对接文档 §10-1）：`rpcErrorToClientError` 由 stdio/HTTP 两种传输共用，HTTP 响应也经过信封校验。
 6. ~~**Tauri sidecar 缺 `--database`**~~ 已完成（原对接文档 §10-10）：sidecar 默认 `~/.tsagent/runtime.db`。
 
@@ -208,20 +225,20 @@ Mock 手写(2.3) ───┘                     │
 
 1. **Session 单一来源**：选定一个所有者（建议 App 或 RunController 持有 `selectedSessionId`），`RunCtx.sessionId` 只读暴露。删除 `service.setSession()` 的可变 identity，改为每次调用显式传 session 定位符；`service-wire.md` 已经说明 session 是定位符，不是身份。确认 `delegate.ts:48` 的子 Run session 语义，并补测试。
 2. **请求构造下沉**：`tenantId/userId/requestId` 的拼装移到 client 内部，UI 只传业务参数，从而消除大部分 `as never` 和重复代码。
-3. **轮询收敛**：Run 刷新只走 RunController 的订阅链，删除 `SunWorkspace.tsx:149-157` 的 3 秒轮询。审批、任务等列表做一个共享的数据 hook（一个循环、多个订阅者），替换 TaskTray、SunOrchestration、SunWorkspace 各自的轮询。
-4. **删除 window 事件总线**：`tsagent:run-attachments` / `tsagent:new-session` 改成通过 ctx 或 controller 显式传递。
+3. ~~**轮询收敛**~~ 已完成（2026-11-17）：共享 `app/usePoll.ts`（立即执行 + deps 重启 + 最新闭包）；组件内 `setInterval` 只剩 App 的 30s 心跳。
+4. ~~**删除 window 事件总线**~~ 已完成（2026-11-17）：draft prefill 走 `draftStore.prefillDraft`，run 附件走 `runAttachments` 模块，无发送方的 `tsagent:new-session` 监听删除。
 5. **吞错改为可见错误**：`.catch(() => {})` 统一改成在组件内显示错误态，或交给 controller 的 `setError`。只有导航中断这类"中止"错误可以忽略（`service-wire.md` 陷阱 7），并且要写明理由。
 
 ### P2 —— 可测试性与结构
 
-1. 引入 DOM 测试运行器（Vitest + Testing Library，加依赖前先确认版本发布满 7 天），优先覆盖 `delegateToPlanet`、session 切换、工作区归档、Composer 发送守卫这几个 bug 高发路径。
-2. 拆分 `SunWorkspace.tsx`：会话侧栏（含工作区归档/拖拽）、对话线程、对话框各自成组件，数据逻辑抽成 hook，让它们可以单独测试。
-3. **[可选]** 合同代码生成：Python dataclass 作为唯一来源，生成 TS DTO、方法清单和 snake/camel 映射，可以从根上消除 §2.1 的大部分副本。成本较高，建议在 P0-1 的一致性测试落地并观察一段时间后再决定。
+1. ~~引入 DOM 测试运行器~~ 已完成（2026-11-17）：Vitest + Testing Library + jsdom，`npm test` 统一入口；`tests/dom/` 已覆盖 TaskTray/SessionRail/RunThread/ApprovalCards，delegateToPlanet 等路径待继续补。
+2. ~~拆分 `SunWorkspace.tsx`~~ 已完成（2026-11-17）：596→101 行；`useSunSessions` / `SessionRail` / `RunThread` / `ApprovalCards` / `useSunDialogs`。
+3. ~~**[可选]** 合同代码生成~~ 已完成（2026-11-17）：`agent/service/wire_schema.py` 为唯一来源，`scripts/gen_wire_types.py` 生成 `src/service/wire.generated.ts`，`tests/test_wire_schema.py` 做漂移检查。
 
 ### P3 —— 视觉层
 
-1. 先定一份唯一的设计规范（`planet-workspace-ui.md` 或当前的 DSH pass，二选一），删除或归档另外两份，在 `design.md` 顶部写明。
-2. 按组件把 `styles.css` 拆成多个文件，逐段删除被覆盖、不再生效的旧规则（用 `.ws-root::before` 这类重复选择器做切入点），消除 `!important`。每删一段就截图对比。
+1. ~~先定一份唯一的设计规范~~ 已完成（2026-11-17）：`design.md` 顶部声明由 `docs/ui/planet-workspace-ui.md` v1.0 接管版式/视觉；design.md 仅保留色板词表与历史上下文。
+2. 部分完成（2026-11-17）：`styles.css` 已拆为 `src/styles/` 分文件（barrel 按原序 `@import` 保持级联），并删除 1307 条死规则（444 个失效 class）。`!important` 的逐条清理依赖截图/浏览器验证，仍为外部验证项。
 3. 文案统一进字典，`localStorage` 偏好值改用稳定 id（与显示文案无关），并处理一次旧值迁移，或直接清理旧键。
 
 ---

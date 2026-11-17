@@ -1,0 +1,79 @@
+/* ══ U5: Venus §5.3 / Neptune §5.9 / Earth §5.4 / Pluto §5.10 ══ */
+
+/* Venus — docs | ≤68ch reading + retrograde version rail | revision rail */
+
+.ven-meta { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--text-faint); }
+
+.ven-meta code { color: var(--text-muted); }
+
+/* ══ hand-drawn: Muse / Lab / Genesis ══ */
+
+.muse { display: flex; flex: 1; min-height: 0; gap: 10px; }
+
+.muse-left { flex: 0 0 220px; display: flex; flex-direction: column; gap: 8px; }
+
+.muse-block { background: var(--surface-1); border: 1px solid var(--line); border-radius: 4px; padding: 10px; overflow-y: auto; }
+
+.muse-block h4 { margin: 0 0 6px; font-size: 10px; color: var(--text-faint); }
+
+.muse-file { display: block; width: 100%; padding: 6px 8px; background: none; border: none; border-radius: 2px; color: var(--text-muted); font-size: 12px; text-align: left; cursor: pointer; }
+
+.muse-file.on { background: var(--accent-fill); color: var(--text-main); }
+
+.muse-style textarea { width: 100%; background: rgba(255,255,255,.03); border: 1px solid var(--border-base); border-radius: 2px; color: var(--text-muted); font-family: var(--font-mono); font-size: 10.5px; padding: 8px; resize: none; }
+
+.muse-main { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--surface-1); border: 1px solid var(--line); border-radius: 4px; }
+
+.muse-title { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+
+.muse-title code { color: var(--text-faint); font-size: 10px; }
+
+.muse-applied { margin-left: auto; font-size: 10px; color: var(--planet-accent); }
+
+.muse-body { flex: 1; overflow-y: auto; padding: 18px; }
+
+.muse-body pre { font-size: 12.5px; line-height: 1.7; white-space: pre-wrap; font-family: var(--font-serif); color: var(--text-main); }
+
+.muse-right { flex: 0 0 230px; background: var(--surface-1); border: 1px solid var(--line); border-radius: 4px; padding: 12px; }
+
+.muse-right h4 { margin: 0 0 8px; font-size: 10px; color: var(--text-faint); }
+
+.muse-presets { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+.muse-preset { display: flex; flex-direction: column; gap: 4px; padding: 8px; background: none; border: 1px solid var(--border-base); border-radius: 3px; color: var(--text-muted); font-size: 10px; cursor: pointer; }
+
+.muse-preset.on { border-color: var(--planet-accent); color: var(--text-main); }
+
+.muse-swatch { height: 34px; border-radius: 2px; }
+
+.muse-reco { margin-top: 12px; padding: 10px; background: rgba(255,255,255,.03); border: 1px dashed var(--border-base); border-radius: 3px; }
+
+.muse-reco p { font-size: 10.5px; color: var(--text-muted); line-height: 1.5; }
+
+/* FE-05 — run links / snapshots / media meta */
+
+.ven-link { background: none; border: none; padding: 0; color: var(--planet-accent, var(--text-main)); font-family: var(--font-mono); font-size: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+
+.ven-link:focus-visible { outline: 1px solid var(--planet-accent); outline-offset: 2px; }
+
+.muse-preset, .lab-elem, .chron-card, .jup-row, .gen-row { border-radius: 8px; }
+
+/* ══ panel shape & material — machined bezel + recessed wells + grain ══ */
+
+/* 1. machined bezel: dark inner line inside the lit border = milled rim */
+
+/* 2. accent eyebrow: 2px planet-tinted machined strip along panel top edge */
+
+/* 3. recessed wells — content areas sink: inset shadow + darker floor */
+
+.muse-body, .forge-code, .nav-view-body, .lab-brain-stage, .jup-detail, .gen-answer, .md-code, .gen-report-body, .muse-reco {
+  box-shadow: inset 0 2px 14px rgba(0,0,0,.42);
+}
+
+.muse-body, .forge-code, .nav-view-body, .lab-brain-stage, .jup-detail, .gen-answer, .gen-report-body {
+  background: rgba(8,11,16,.5);
+  border-radius: 8px;
+  margin: 10px;
+}
+
+.muse-body { margin: 10px 14px; }

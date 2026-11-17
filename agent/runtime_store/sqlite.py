@@ -1416,6 +1416,39 @@ class SqliteRuntimeStore:
                 )
             return self._head_contract(row)
 
+    def session_run_stats(
+        self,
+        tenant_id: str,
+    ) -> dict[str, tuple[int, "RunHead"]]:
+        """Per-session run count + latest run (by updated_at) in one query —
+        the session catalog's aggregate, avoiding one list_run_heads per
+        session row."""
+        tenant_id = _require_text(tenant_id, "tenant_id")
+        with self._lock:
+            self._ensure_open()
+            rows = self._connection.execute(
+                """
+                SELECT tenant_id, session_id, run_id, request_id, task_id,
+                       current_revision, current_digest, current_writer_id,
+                       current_fence_token, store_generation, run_status, updated_at,
+                       run_count
+                FROM (
+                    SELECT *, COUNT(*) OVER (PARTITION BY session_id) AS run_count,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY session_id ORDER BY updated_at DESC
+                           ) AS rn
+                    FROM run_heads
+                    WHERE tenant_id = ? AND store_generation = ?
+                )
+                WHERE rn = 1
+                """,
+                (tenant_id, self.store_generation),
+            ).fetchall()
+            return {
+                str(row["session_id"]): (int(row["run_count"]), self._head_contract(row))
+                for row in rows
+            }
+
     def list_run_heads(
         self,
         tenant_id: str,
@@ -3045,7 +3078,8 @@ class SqliteRuntimeStore:
     ) -> "SessionHead":
         """Idempotent session registration; every scope-ful write path
         calls this so sessions exist as first-class entities. A non-empty
-        ``planet`` claims workstation ownership for the session."""
+        ``planet`` claims workstation ownership of an unclaimed session;
+        the first claim wins and the returned head carries the owner."""
         tenant_id = _require_text(tenant_id, "tenant_id")
         session_id = _require_text(session_id, "session_id")
         planet = str(planet)
@@ -3059,7 +3093,7 @@ class SqliteRuntimeStore:
                 (tenant_id, session_id),
             ).fetchone()
             if row is not None:
-                if planet and str(row["planet"]) != planet:
+                if planet and not str(row["planet"]):
                     connection.execute(
                         "UPDATE session_heads SET planet = ? WHERE tenant_id = ? AND session_id = ?",
                         (planet, tenant_id, session_id),

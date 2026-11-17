@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 import { VENUS_PRESETS, styleContext } from "../src/workspaces/venus/venusStyle";
 import { mediaDelegationRequest } from "../src/workspaces/neptune/neptuneOps";

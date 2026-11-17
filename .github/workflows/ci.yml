@@ -73,6 +73,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-lock.txt
+
+      - name: Install locked Python dependencies
+        run: python -m pip install --upgrade pip && python -m pip install -r requirements-lock.txt
+
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
@@ -95,3 +105,29 @@ jobs:
       - name: Production build
         working-directory: apps/desktop
         run: npm run build
+
+  tauri-host-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri
+
+      # generate_context! resolves frontendDist at compile time; the host
+      # unit tests do not serve the frontend, so an empty dist suffices.
+      - name: Host unit tests
+        working-directory: apps/desktop/src-tauri
+        run: mkdir -p ../dist && cargo test --locked

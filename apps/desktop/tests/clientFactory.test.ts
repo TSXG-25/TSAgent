@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import {
   createAgentServiceClientFromConfig,
 } from "../src/service/clientFactory";
@@ -70,7 +70,7 @@ test("D4A01 omitted mode is an explicit Mock client", async () => {
   assert.equal(client.mode, "mock");
   assert.equal(client.identity.sessionId, "session-desktop-mock");
   await client.ready();
-  assert.ok((await client.listRuns({ tenantId: client.identity.tenantId, sessionId: "session-11af" })).length > 0);
+  assert.ok((await client.listRuns({ sessionId: "session-11af" })).length > 0);
 });
 
 test("D4A02 local mode requires tenant and user identity", async () => {
@@ -100,7 +100,7 @@ test("D4A04 invalid mode is a configuration error, not an implicit Mock selectio
     client.ready(),
     (error: unknown) => error instanceof AgentServiceClientError && error.code === "INVALID_REQUEST",
   );
-  await assert.rejects(client.listRuns({ tenantId: client.identity.tenantId, sessionId: client.identity.sessionId }), (error: unknown) => error instanceof AgentServiceClientError);
+  await assert.rejects(client.listRuns({ sessionId: client.identity.sessionId }), (error: unknown) => error instanceof AgentServiceClientError);
 });
 
 test("D4A05 local health and requests use one configured desktop identity", async () => {
@@ -113,7 +113,6 @@ test("D4A05 local health and requests use one configured desktop identity", asyn
 
   await client.ready();
   const handle = await client.startRun({
-    tenantId: "tenant-1",
     sessionId: "session-1",
     requestId: "start-1",
     requestText: "hello",
@@ -134,23 +133,3 @@ test("D4A05 local health and requests use one configured desktop identity", asyn
   await client.close();
 });
 
-test("D4A06 local scope mismatch is rejected before transport side effects", async () => {
-  const process = new FakeSidecarProcess();
-  const client = createAgentServiceClientFromConfig({
-    mode: "local",
-    identity: { tenantId: "tenant-1", userId: "user-1", sessionId: "session-1" },
-    bridge: fakeBridge(process),
-  });
-
-  await assert.rejects(
-    client.startRun({
-      tenantId: "tenant-2",
-      sessionId: "session-2",
-      requestId: "start-2",
-      requestText: "must be rejected",
-    }),
-    (error: unknown) => error instanceof AgentServiceClientError && error.code === "IDENTITY_MISMATCH",
-  );
-  assert.equal(process.requests.length, 0);
-  await client.close();
-});

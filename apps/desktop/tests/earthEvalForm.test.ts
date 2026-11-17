@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 import { MockAgentServiceClient } from "../src/service/mockAgentService";
 import { EARTH_VERDICTS, buildEvalRequest, composerContext, defaultParamValues, evalCandidateRef, parseRunParams } from "../src/workspaces/earth/earthEvalForm";
@@ -6,7 +6,7 @@ import { EARTH_VERDICTS, buildEvalRequest, composerContext, defaultParamValues, 
 /** A23: Earth 实验裁决合同 — 人工裁决词表由单一合同约束 UI/Mock/Store；
  *  滑块参数作为运行输入进入 Composer，同时是 eval 记录的 candidate 身份。 */
 
-const ids = { tenantId: "t", sessionId: "s", requestId: "r", runId: "run-1" };
+const ids = { sessionId: "s", runId: "run-1" };
 
 test("every public verdict builds a request carrying that verdict", () => {
   const vals = defaultParamValues();
@@ -31,11 +31,11 @@ test("mock accepts each public verdict and lists it back unchanged", async () =>
   const vals = defaultParamValues();
   for (const verdict of EARTH_VERDICTS) {
     const stored = await mock.recordEvaluation(
-      buildEvalRequest({ ...ids, requestId: `req-${verdict}`, verdict, vals, notes: "" }),
+      buildEvalRequest({ ...ids, verdict, vals, notes: "" }),
     );
     assert.equal(stored.verdict, verdict);
   }
-  const listed = await mock.listEvaluations({ tenantId: "t", sessionId: "s", requestId: "r-list" });
+  const listed = await mock.listEvaluations({ sessionId: "s", requestId: "r-list" });
   assert.deepEqual(
     EARTH_VERDICTS.map((v) => listed.find((e) => e.notes.includes("params") && e.verdict === v)?.verdict),
     [...EARTH_VERDICTS],
@@ -62,13 +62,13 @@ test("foreign run without the params prefix does not fabricate sliders", () => {
 });
 
 test("mock scopes evaluations to the requesting session", async () => {
-  const mock = new MockAgentServiceClient();
+  const mock = new MockAgentServiceClient([], { tenantId: "t", userId: "u", sessionId: "s" });
   await mock.recordEvaluation(buildEvalRequest({ ...ids, verdict: "keep_candidate", vals: defaultParamValues(), notes: "" }));
   // 同会话可见；另一会话不可见。
-  assert.equal((await mock.listEvaluations({ tenantId: "t", sessionId: "s", requestId: "r1" })).length, 1);
-  assert.equal((await mock.listEvaluations({ tenantId: "t", sessionId: "session-b", requestId: "r2" })).length, 0);
+  assert.equal((await mock.listEvaluations({ sessionId: "s", requestId: "r1" })).length, 1);
+  assert.equal((await mock.listEvaluations({ sessionId: "session-b", requestId: "r2" })).length, 0);
   // allSessions 与真实服务一致 — 跨会话列出同一 tenant 的记录。
-  assert.equal((await mock.listEvaluations({ tenantId: "t", sessionId: "session-b", requestId: "r3", allSessions: true })).length, 1);
+  assert.equal((await mock.listEvaluations({ sessionId: "session-b", requestId: "r3", allSessions: true })).length, 1);
 });
 
 test("mock rejects a verdict outside the human vocabulary", async () => {

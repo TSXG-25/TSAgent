@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 import { MarsIdeSession, type IdeBridgeLike } from "../src/workspaces/mars/ideSession";
 import type { IdeInfo } from "../src/service/tauriBridge";

@@ -1,7 +1,7 @@
 import { AgentServiceClientError } from "../src/types/service";
 import { UnavailableDesktopAgentServiceClient } from "../src/service/clientFactory";
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { RunController } from "../src/features/runs/runController";
 import type {
   PauseRunRequest,
@@ -102,7 +102,7 @@ class FakeAgentServiceClient extends UnavailableDesktopAgentServiceClient {
 
   async startRun(request: StartRunRequest): Promise<RunHandle> {
     const next = snapshot("active");
-    next.requestId = request.requestId;
+    next.requestId = request.requestId ?? "minted-start";
     next.requestText = request.requestText;
     this.snapshots.set(next.runId, next);
     this.events.set(next.runId, [event(1, "event-1", "run_created")]);
@@ -110,7 +110,7 @@ class FakeAgentServiceClient extends UnavailableDesktopAgentServiceClient {
       tenantId: next.tenantId,
       sessionId: next.sessionId,
       runId: next.runId,
-      requestId: request.requestId,
+      requestId: next.requestId,
       status: "active",
       revision: next.revision,
       createdAt: next.createdAt,
@@ -134,7 +134,7 @@ class FakeAgentServiceClient extends UnavailableDesktopAgentServiceClient {
   }
 
   async resumeRun(_request: ResumeRunRequest): Promise<RunHandle> {
-    return this.startRun({ tenantId: identity.tenantId, sessionId: identity.sessionId, requestId: "resume-1", requestText: "resume" });
+    return this.startRun({ sessionId: identity.sessionId, requestId: "resume-1", requestText: "resume" });
   }
 
   async listArtifacts(_request: ListArtifactsRequest): Promise<ArtifactSummary[]> {
@@ -201,7 +201,6 @@ test("4B03 startRun returns a hydrated active Run without waiting for terminal c
   await controller.loadScope("session-1");
 
   const run = await controller.startRun({
-    tenantId: identity.tenantId,
     sessionId: identity.sessionId,
     requestId: "request-2",
     requestText: "write a result",
@@ -275,22 +274,20 @@ test("4B06 chained subscribe applies returned events without re-reading", async 
   controller.stopAllPolling();
 });
 
-test("4B07 pause requests mint distinct idempotency ids", async () => {
-  const requests: string[] = [];
+test("4B07 pause requests leave the idempotency id to the client", async () => {
+  const requests: PauseRunRequest[] = [];
   class PauseClient extends FakeAgentServiceClient {
     async pauseRun(request: PauseRunRequest): Promise<RunHandle> {
-      requests.push(request.requestId);
-      return { tenantId: identity.tenantId, sessionId: identity.sessionId, runId: "run-1", requestId: request.requestId, status: "blocked", revision: 2, createdAt: "", updatedAt: "" };
+      requests.push(request);
+      return { tenantId: identity.tenantId, sessionId: identity.sessionId, runId: "run-1", requestId: "minted", status: "blocked", revision: 2, createdAt: "", updatedAt: "" };
     }
   }
   const client = new PauseClient(snapshot("active"), [event(1, "event-1", "run_created")]);
   const controller = new RunController(client, { pollIntervalMs: 1000 });
   await controller.loadScope("session-1");
   await controller.pauseRun("run-1");
-  await controller.pauseRun("run-1");
-  assert.equal(requests.length, 2);
-  assert.notEqual(requests[0], requests[1]);
-  assert.match(requests[0]!, /^pause-run-1-/);
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0]!.requestId, undefined, "each pause gesture gets a fresh id minted by the client");
   controller.stopAllPolling();
 });
 
@@ -395,5 +392,38 @@ test("catalog isolation: a scope reload replaces only that session's slice", asy
     "the late session-1 response must not enter session-2's slice",
   );
   assert.deepEqual(slice("session-1"), ["run-1"]);
+  controller.stopAllPolling();
+});
+
+test("error ownership: a background refresh never clears an operation error", async () => {
+  class FailingCancelClient extends FakeAgentServiceClient {
+    override async cancelRun(_request: CancelRunRequest): Promise<RunSnapshot> {
+      throw new AgentServiceClientError({ code: "RUN_NOT_CANCELLABLE", message: "cancel rejected", retryable: false });
+    }
+  }
+  const client = new FailingCancelClient(snapshot("active"), [event(1, "event-1", "run_created")]);
+  const controller = new RunController(client, { pollIntervalMs: 1000 });
+  await controller.loadScope("session-1");
+
+  await assert.rejects(controller.cancelRun("run-1"));
+  assert.equal(controller.getState().error?.code, "RUN_NOT_CANCELLABLE");
+  await controller.refreshRun("run-1");
+  await controller.loadScope("session-1");
+  assert.equal(controller.getState().error?.code, "RUN_NOT_CANCELLABLE", "unrelated reads must not hide the operation error");
+  controller.stopAllPolling();
+});
+
+test("error ownership: a refresh error clears once the same run refreshes again", async () => {
+  const client = new FakeAgentServiceClient(snapshot("active"), [event(1, "event-1", "run_created")]);
+  const controller = new RunController(client, { pollIntervalMs: 1000 });
+  await controller.loadScope("session-1");
+
+  const saved = client.snapshots.get("run-1")!;
+  client.snapshots.delete("run-1");
+  await assert.rejects(controller.refreshRun("run-1"));
+  assert.equal(controller.getState().error?.code, "INTERNAL_ERROR");
+  client.snapshots.set("run-1", saved);
+  await controller.refreshRun("run-1");
+  assert.equal(controller.getState().error, null);
   controller.stopAllPolling();
 });

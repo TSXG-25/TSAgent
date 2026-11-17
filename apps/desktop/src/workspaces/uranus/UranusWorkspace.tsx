@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePoll } from "../../app/usePoll";
 import { SCENES, PLANET_SCENES } from "../../app/scenes";
 import { WorkspaceFrame } from "../../design-system/WorkspaceFrame";
 import AgentComposer from "../../app/AgentComposer";
-import { requestIdForRun } from "../../app/ui";
 import { t } from "../../app/i18n";
 import type { RunCtx } from "../../app/runCtx";
 import { WorkspaceTasks } from "../../app/WorkspaceTasks";
@@ -45,7 +45,7 @@ export default function UranusWorkspace({ ctx }: { ctx: RunCtx }) {
   const [name, setName] = useState("");
   const [err, setErr] = useState<string | null>(null);
 
-  const req = useCallback(() => ({ tenantId: service.identity.tenantId, sessionId: ctx.sessionId, requestId: requestIdForRun(0) }), [service, ctx.sessionId]);
+  const req = useCallback(() => ({ sessionId: ctx.sessionId }), [service, ctx.sessionId]);
   const sessionId = ctx.sessionId;
   /** Response gate — an in-flight getGraphExecution for execution A must
    *  not commit after B is selected or the session moved. */
@@ -103,12 +103,8 @@ export default function UranusWorkspace({ ctx }: { ctx: RunCtx }) {
   }, [refreshExecution]);
 
   // 未终态的执行自动轮询 — 终态后停止。
-  useEffect(() => {
-    if (!execSel || !shownExecution) return;
-    if (shownExecution.steps.every((s) => TERMINAL.test(s.status ?? ""))) return;
-    const timer = globalThis.setInterval(() => { void refreshExecution(execSel); }, 2000);
-    return () => globalThis.clearInterval(timer);
-  }, [execSel, shownExecution, refreshExecution]);
+  const execRunning = !!execSel && !!shownExecution && !shownExecution.steps.every((s) => TERMINAL.test(s.status ?? ""));
+  usePoll(() => void refreshExecution(execSel!), execRunning ? 2000 : null, [execSel]);
 
   const selected = canvas.nodes.find((n) => n.id === selNode) ?? null;
 

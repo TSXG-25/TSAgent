@@ -56,12 +56,9 @@ export default function GlobalChat({ ctx, onClose, embedded = false, instant = f
   const refreshSessions = useCallback(async () => {
     try {
       setSessions(await service.listSessions({
-        tenantId: service.identity.tenantId,
-        userId: service.identity.userId,
-        requestId: `chat-${Date.now()}`,
-      }));
-    } catch { /* list unavailable */ }
-  }, [service]);
+        }));
+    } catch (error) { ctx.reportError(error); }
+  }, [service, ctx.reportError]);
 
   useEffect(() => { void refreshSessions(); }, [refreshSessions]);
   useEffect(() => { thread.onContentGrow(); }, [activeRun?.conversation.length, activeRun?.output]);
@@ -101,10 +98,8 @@ export default function GlobalChat({ ctx, onClose, embedded = false, instant = f
                   setCreating(true);
                   try {
                     const s = await service.createSession({
-                      tenantId: service.identity.tenantId, userId: service.identity.userId,
                       sessionId: `session-${Date.now().toString(36)}`,
-                      requestId: `chat-new-${Date.now()}`,
-                    });
+                      });
                     await refreshSessions(); selectSession(s.sessionId); setPickerOpen(false);
                   } catch (err) { setNotice(String(err)); } finally { setCreating(false); }
                 }} disabled={creating} type="button">{creating ? "…" : t("chat.new-session")}</button>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Routes, Route, useNavigate, useLocation, Link } from "react-router-dom";
 import type { ServiceErrorDTO } from "./types/service";
 import { createAgentServiceClient } from "./service/clientFactory";
@@ -47,7 +47,7 @@ function SceneJump({ path }: { path: string }) {
 import Cursor from "./components/Cursor";
 import { resolveScene } from "./app/scenes";
 import type { RunCtx } from "./app/runCtx";
-import { Icon, toServiceError, requestIdForRun } from "./app/ui";
+import { Icon, toServiceError } from "./app/ui";
 import "./styles.css";
 import "./design-system/tokens.css";
 
@@ -68,7 +68,7 @@ function App() {
     const ping = async () => {
       const t0 = performance.now();
       try {
-        await service.getSettings({ tenantId: service.identity.tenantId, sessionId: service.identity.sessionId, requestId: `telemetry-${Date.now()}` });
+        await service.getSettings({ sessionId: service.identity.sessionId });
         if (!dead) setLatency(Math.round(performance.now() - t0));
       } catch { if (!dead) setLatency(null); }
     };
@@ -117,6 +117,8 @@ function App() {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatInstant, setChatInstant] = useState(false);
   const [serviceError, setServiceError] = useState<ServiceErrorDTO | null>(null);
+  // Stable identity — consumers may list it in effect/callback deps.
+  const reportError = useCallback((error: unknown) => setServiceError(toServiceError(error)), []);
   const isResuming = controllerState.operationState === "resuming";
   const isCancelling = controllerState.operationState === "cancelling";
 
@@ -139,20 +141,11 @@ function App() {
   }, []);
 
   function selectSessionFor(planet: string, id: string) {
-    void service.listSessions({
-      tenantId: service.identity.tenantId,
-      userId: service.identity.userId,
-      requestId: `sess-lookup-${Date.now()}`,
-    }).then((list) => {
-      const target = list.find((s) => s.sessionId === id);
-      if (target?.planet && target.planet !== planet) return; // foreign-owned — view only, no claim
-      return service.createSession({
-        tenantId: service.identity.tenantId,
-        userId: service.identity.userId,
-        sessionId: id,
-        requestId: `claim-${planet}-${Date.now()}`,
-        planet,
-      }).then(() => undefined);
+    // Claims an unclaimed session; a foreign-owned one keeps its owner
+    // (first claim wins in the store) and is only viewed here.
+    void service.createSession({
+      sessionId: id,
+      planet,
     }).then(() => {
       setPlanetSessions((m) => ({ ...m, [planet]: id }));
       void controller.loadScope(id);
@@ -170,10 +163,7 @@ function App() {
       pending = (async () => {
         const sid = `session-${planet}-${crypto.randomUUID().slice(0, 8)}`;
         await service.createSession({
-          tenantId: service.identity.tenantId,
-          userId: service.identity.userId,
           sessionId: sid,
-          requestId: `scope-${planet}-${Date.now()}`,
           planet,
         });
         setPlanetSessions((m) => (m[planet] ? m : { ...m, [planet]: sid }));
@@ -190,10 +180,7 @@ function App() {
     // Claim Sun's bootstrap session, then hydrate every known scope — each
     // loadScope only touches its own session's catalog entries.
     void service.createSession({
-      tenantId: service.identity.tenantId,
-      userId: service.identity.userId,
       sessionId,
-      requestId: `scope-sun-${Date.now()}`,
       planet: "sun",
     }).catch((error) => setServiceError(toServiceError(error)));
     void controller.loadScope(sessionId);
@@ -214,7 +201,7 @@ function App() {
   if (controllerState.isLoading && !activeRun) {
     return (
       <div className="app-loading">
-        <div>{visibleServiceError ? `${visibleServiceError.code}: ${visibleServiceError.message}` : `Connecting to ${runtimeLabel}…`}</div>
+        <div>{visibleServiceError ? `${visibleServiceError.code}: ${visibleServiceError.message}` : t("app.connecting", { runtime: runtimeLabel })}</div>
       </div>
     );
   }
@@ -261,8 +248,8 @@ function App() {
   async function createRun(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
     const submitted = requestDraftState;
-    const request = requestDraft.trim() || "生成一个 Python 程序，计算 9 的平方并保存";
-    const requestId = requestIdForRun(runs.length + 1);
+    const request = requestDraft.trim();
+    if (!request) return;
     // Submission target follows where the user is: inside a workstation the
     // global new-task modal creates that workstation's task (its own
     // session + durable originPlanet); from the map/Omni it targets Sun.
@@ -271,9 +258,7 @@ function App() {
       setServiceError(null);
       const targetSession = target === "sun" ? sessionId : await ensurePlanet(target);
       await controller.startRun({
-        tenantId: service.identity.tenantId,
         sessionId: targetSession,
-        requestId,
         requestText: request,
         contextRefs: submitted.files,
         originPlanet: target,
@@ -318,6 +303,7 @@ function App() {
     selectRun,
     openRun,
     openNewTask: () => setIsCreateOpen(true),
+    reportError,
     refreshActiveRun: () => void refreshActiveRun(),
     cancelActiveRun: () => void cancelActiveRun(),
     resumeActiveRun: () => void resumeActiveRun(),
@@ -348,7 +334,7 @@ function App() {
           </button>
         )}
         {activeRun && (
-          <button className="run-capsule" title="Open task tray" type="button">
+          <button className="run-capsule" onClick={() => openRun(activeRun.runId, activeRun.sessionId)} title={t("app.open-run")} type="button">
             <span className={`st-dot ${activeRun.status}`} />
             <code>{activeRun.runId}</code>
             <strong>{activeRun.status.toUpperCase()}</strong>
@@ -356,9 +342,9 @@ function App() {
         )}
         <span className="topbar-spacer" />
         <TaskTray ctx={ctx} />
-        <button className="topbar-button" onClick={() => setIsCreateOpen(true)} title="New task (⌘N)" type="button"><Icon name="plus" size={15} /></button>
-        <button className="topbar-button" onClick={() => setIsSettingsOpen(true)} title="Global settings" type="button"><Icon name="settings" size={15} /></button>
-        {scene && <Link className="topbar-button" to="/" title="星图视图" type="button"><Icon name="layers" size={15} /></Link>}
+        <button className="topbar-button" onClick={() => setIsCreateOpen(true)} title={t("app.new-task-title")} type="button"><Icon name="plus" size={15} /></button>
+        <button className="topbar-button" onClick={() => setIsSettingsOpen(true)} title={t("app.settings")} type="button"><Icon name="settings" size={15} /></button>
+        {scene && <Link className="topbar-button" to="/" title={t("app.starmap")} type="button"><Icon name="layers" size={15} /></Link>}
       </header>
 
       {visibleServiceError && <div className="service-error-banner" role="alert"><span className="service-error-icon"><Icon name="x" size={13} /></span><div><strong>{tk(`err.${visibleServiceError.code}`) ?? visibleServiceError.code}</strong><span>{visibleServiceError.code}: {visibleServiceError.message}</span></div><button onClick={() => { setServiceError(null); controller.dismissError(); }} title={t("err.dismiss")} type="button"><Icon name="x" size={13} /></button></div>}
@@ -399,15 +385,15 @@ function App() {
         <div className="modal-backdrop" onMouseDown={() => setIsCreateOpen(false)}>
           <div className="create-modal glass" onMouseDown={(event) => event.stopPropagation()}>
             <header className="modal-heading">
-              <div><h2>New Task</h2></div>
+              <div><h2>{t("app.new-task")}</h2></div>
               <button className="modal-close" onClick={() => setIsCreateOpen(false)} type="button"><Icon name="x" size={16} /></button>
             </header>
             <form className="create-form" onSubmit={createRun}>
-              <div className="field"><label>请求</label>
-                <textarea autoFocus onChange={(e) => setRequestDraft(e.target.value)} placeholder="例如：生成一个 Python 程序，计算 7 的平方并保存" rows={5} value={requestDraft} /></div>
+              <div className="field"><label>{t("app.request")}</label>
+                <textarea autoFocus onChange={(e) => setRequestDraft(e.target.value)} placeholder={t("app.request-placeholder")} rows={5} value={requestDraft} /></div>
               <div className="modal-footer">
                 <span className="omni-meta">{runtimeLabel} · AgentService Contract</span>
-                <button className="btn primary" type="submit">Create Run</button>
+                <button className="btn primary" disabled={!requestDraft.trim()} type="submit">{t("app.create-run")}</button>
               </div>
             </form>
           </div>
@@ -424,8 +410,8 @@ function TelemetryBar({ latency, running }: { latency: number | null; running: n
   if (motionTier() === "minimal") return null;
   return (
     <div className="telemetry" aria-live="off">
-      {latency !== null && <span className="tm-item"><em>{latency}ms</em><i>延迟</i></span>}
-      <span className="tm-item"><em>{running}</em><i>运行中</i></span>
+      {latency !== null && <span className="tm-item"><em>{latency}ms</em><i>{t("app.latency")}</i></span>}
+      <span className="tm-item"><em>{running}</em><i>{t("app.running")}</i></span>
     </div>
   );
 }

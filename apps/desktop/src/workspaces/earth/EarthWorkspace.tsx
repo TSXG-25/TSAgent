@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from "react";
 import { SCENES } from "../../app/scenes";
 import { WorkspaceFrame } from "../../design-system/WorkspaceFrame";
 import AgentComposer from "../../app/AgentComposer";
-import { requestIdForRun } from "../../app/ui";
 import { t } from "../../app/i18n";
 import type { RunCtx } from "../../app/runCtx";
 import { WorkspaceTasks } from "../../app/WorkspaceTasks";
@@ -29,10 +28,8 @@ export default function EarthWorkspace({ ctx }: { ctx: RunCtx }) {
   const refreshEvals = useCallback(async () => {
     try {
       const list = await ctx.service.listEvaluations({
-        tenantId: ctx.service.identity.tenantId,
         sessionId,
-        requestId: requestIdForRun(0),
-      });
+        });
       setEvals(list);
     } catch (err) {
       // 读取失败要可见 —— 不吞成空列表。
@@ -47,8 +44,8 @@ export default function EarthWorkspace({ ctx }: { ctx: RunCtx }) {
       // 裁决绑定本台选中的实验 Run 及其已提交参数快照——不是全局任务，
       // 也不是当前滑块值；非本 Composer 发起的 Run 参数未知，不伪造。
       await ctx.service.recordEvaluation(buildEvalRequest({
-        tenantId: ctx.service.identity.tenantId, sessionId: ctx.sessionId,
-        requestId: requestIdForRun(0), runId: currentRun?.runId ?? "",
+        sessionId: ctx.sessionId,
+        runId: currentRun?.runId ?? "",
         verdict, vals: parseRunParams(currentRun?.request ?? ""), notes: notes.trim(),
       }));
       setNotes(""); await refreshEvals();

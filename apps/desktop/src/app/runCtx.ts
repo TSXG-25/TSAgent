@@ -38,6 +38,8 @@ export interface RunCtx {
    *  the Sun thread — the single entry point for "go to this run". */
   openRun: (runId: string, sessionId?: string) => void;
   openNewTask: () => void;
+  /** Surface a failed service call in the app-wide error banner. */
+  reportError: (error: unknown) => void;
   refreshActiveRun: () => void;
   cancelActiveRun: () => void;
   resumeActiveRun: () => void;

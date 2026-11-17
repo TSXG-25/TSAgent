@@ -22,9 +22,11 @@ npm run dev
 ```
 
 `VITE_TSAGENT_SESSION_ID` 可选；未提供时在一次 App composition-root 生命周期内生成一次，
-不会在每次创建 Run 时变化。local 模式需要 Tauri host 注入
-`window.__TSAGENT_SIDECAR_BRIDGE__`。健康检查失败或配置缺失只显示 Backend unavailable，
-绝不会自动回退到 Mock。
+不会在每次创建 Run 时变化。在 Tauri 应用里，local 模式由 host 注入
+`window.__TSAGENT_SIDECAR_BRIDGE__`；纯浏览器开发时没有该 bridge，
+client 自动走 loopback HTTP transport（`VITE_TSAGENT_SIDECAR_URL`，默认
+`http://127.0.0.1:8765`），需要先用 `python -m agent.service.local_sidecar --http`
+启动 sidecar。健康检查失败或配置缺失只显示 Backend unavailable，绝不会自动回退到 Mock。
 
 构建静态产物：
 
@@ -34,10 +36,15 @@ npm run build
 
 ## 当前覆盖
 
-- Run 列表与 Run Inspector；
-- Conversation / Workflow / Stage / Task 状态；
+- Omni（Sun）会话工作台：tenant 级会话侧栏（搜索 / 工作台过滤 / 工作区归档与拖拽）、
+  整会话 Run 线程、审批卡片、Artifact 列表与 `readArtifact` 预览；
+- 星球工作台：Mercury（检索）、Venus（文稿）、Earth（评估）、Mars（IDE / code-server）、
+  Jupiter（运行检索）、Saturn（调度）、Uranus（图编辑）、Neptune（溯源）、Pluto（动机）；
+- 全局 Composer：跨工作台的 `@planet` 委派、草稿按 tenant/session/target 持久化、
+  附件记录与会话归属；
+- Run 列表与 Run Inspector；Conversation / Workflow / Stage / Task 状态；
 - Checkpoint 与 `RESUME_EXACT` 请求交互；
-- Artifact metadata、opaque reference、源码预览占位与 Verifier 状态；
+- Artifact metadata、opaque reference、内容预览与 Verifier 状态；
 - 使用 exclusive `afterSequence` 的 append-only 事件时间线；
 - `event_id` 去重、`sequence_number` 排序与断开后续读模拟；
 - `cancelRun()` 的显式取消请求、稳定 request ID 与幂等错误投影；
@@ -45,7 +52,8 @@ npm run build
 - `TIMED_OUT` 状态展示，以及取消/超时后已验证部分产物和未执行任务的保留摘要；
 - 取消按钮只在 `ACTIVE` 显示，断开、卸载或事件重连不会隐式调用取消；
 - `RUN_NOT_FOUND`、幂等冲突、非法 Resume、cursor 过期等 Service Error 展示；
-- 从请求输入创建一个新的 Run；运行时由 composition root 显式决定。
+- 从请求输入创建一个新的 Run；运行时由 composition root 显式决定；
+- 中英文 i18n（`app/i18n.ts`），随系统语言选择。
 
 ## 前端边界
 
@@ -95,11 +103,14 @@ FastAPI、WebSocket，也不在页面中隐式 fallback 到 Mock。
 
 Desktop-1 已冻结 `docs/adr/0025-desktop-local-transport-contract.md` 定义的
 stdin/stdout JSON Lines envelope。Desktop-2 已实现 Python sidecar，Desktop-3 已实现
-真实 Local client contract；在 `VITE_AGENT_SERVICE_MODE=local` 时页面通过该入口运行。协议只允许 `health`、`start_run`、`get_run`、`resume_run`、`cancel_run`、
-`list_artifacts`、`read_events`、`shutdown` 八个方法，业务身份与幂等仍由
-AgentService DTO 负责。由于当前协议尚无 `list_runs`，local client 的 Run 列表只包含
-当前 client 实例已经通过 `getRun` 观察到的 Run；历史 Run 浏览必须在后续公开
-AgentService 查询合同中实现，前端不得绕过 Service 读取 SQLite。
+真实 Local client contract；在 `VITE_AGENT_SERVICE_MODE=local` 时页面通过该入口运行。
+
+协议方法表与 wire 类型的唯一来源是 `agent/service/wire_schema.py`；
+`scripts/gen_wire_types.py` 生成 `src/service/wire.generated.ts`
+（方法清单、`WireParams`/`WireResult` 映射），`tests/test_wire_schema.py`
+对生成的产物做漂移检查。协议已包含 `list_runs`、`list_sessions`、
+`list_artifacts`、`read_artifact`、`read_events`、`subscribe_events` 等 60+
+方法，历史 Run 与会话浏览走这些查询合同，前端不读取 SQLite。
 
 Desktop-2 sidecar 的本地启动入口为：
 
@@ -111,15 +122,17 @@ python -m agent.service.local_sidecar \
 
 sidecar 的 stdout 只输出 JSONL 响应，诊断信息输出 stderr。
 
-`RunSnapshot`、`ArtifactSummary` 和 `RunEvent` 是稳定的公开 DTO。Artifact 内容当前仅允许 Mock preview；客户端不提交任意本地路径，也不读取 SQLite、checkpoint payload 或 Runtime 内部对象。
+`RunSnapshot`、`ArtifactSummary` 和 `RunEvent` 是稳定的公开 DTO。Artifact 内容经
+`read_artifact` 合同在 Mock 与 Local 两侧都可用；客户端不提交任意本地路径，也不读取
+SQLite、checkpoint payload 或 Runtime 内部对象。
 
 ## 边界
 
 原始展示剧本仍在 `src/mocks/runData.ts`，但页面不直接导入它；Mock Adapter 负责把剧本转换为 ADR-0021 DTO，再由 view mapper 投影成界面模型。
 
-当前仍不包含 Tauri Rust 壳、REST、Pause、拖拽
-Workflow 编辑器或真实 Provider Desktop E2E。D4c 只冻结桌面客户端与 AgentService
-的取消 DTO/状态契约；真实 Provider 取消证据属于已冻结的 D4b。
+Tauri Rust 壳在 `src-tauri/`（sidecar spawn、托管 code-server 的 IDE 生命周期、
+目录选择器）。仍不包含 REST、Pause、拖拽 Workflow 编辑器或真实 Provider Desktop E2E。
+D4c 只冻结桌面客户端与 AgentService 的取消 DTO/状态契约；真实 Provider 取消证据属于已冻结的 D4b。
 
 ## D4c contract checklist
 
@@ -136,4 +149,9 @@ The UI boundary is intentionally fact-driven:
 | UI07 | Repeated cancellation uses the same Run-scoped request ID. |
 | UI08 | Terminal Runs do not expose a cancel action. |
 
-`npm run build` is the current automated contract gate; this small MVP has no browser-test runner yet. The TypeScript build verifies that every future `AgentServiceClient` adapter implements `cancelRun()` and that the public DTOs remain free of Runtime/SQLite imports.
+`npm run build` is the current automated contract gate. `npm test` runs the
+Vitest suite — service/controller unit tests plus jsdom DOM tests under
+`tests/dom/` — and `npm run typecheck` verifies that every future
+`AgentServiceClient` adapter implements `cancelRun()` and that the public DTOs
+remain free of Runtime/SQLite imports. The desktop job in CI runs typecheck,
+tests, build, and the Rust `cargo test` suite under `src-tauri/`.

@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import type { ApprovalSummary, DesktopAgentServiceClient } from "../types/service";
-import { requestIdForRun } from "./ui";
 
 /** One session approval state shared by TaskTray and workspace approval
  *  cards — a single pending-approval poll per session and a single decide
@@ -22,9 +21,7 @@ const key = (service: DesktopAgentServiceClient, sessionId: string) =>
 async function poll(e: Entry) {
   try {
     e.approvals = await e.service.listApprovals({
-      tenantId: e.service.identity.tenantId,
       sessionId: e.sessionId,
-      requestId: requestIdForRun(0),
       status: "PENDING",
     });
     e.subs.forEach((fn) => fn());
@@ -52,13 +49,10 @@ export async function decideSessionApproval(
   decision: "approve" | "deny",
 ): Promise<void> {
   await service.decideApproval({
-    tenantId: service.identity.tenantId,
     sessionId,
-    requestId: requestIdForRun(0),
     runId: a.runId,
     approvalId: a.approvalId,
     decision,
-    decidedBy: service.identity.userId,
   });
   const e = entries.get(key(service, sessionId));
   if (e) await poll(e);

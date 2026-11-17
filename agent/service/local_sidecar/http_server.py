@@ -81,7 +81,11 @@ def run_http_sidecar(
             if self.path != "/rpc":
                 self.send_error(404)
                 return
-            body = self.rfile.read(int(self.headers["Content-Length"]))
+            length = self.headers.get("Content-Length")
+            if length is None:
+                self.send_error(411, "Content-Length required")
+                return
+            body = self.rfile.read(int(length))
             try:
                 request = LocalRpcRequest.from_dict(json.loads(body))
             except (LocalProtocolError, json.JSONDecodeError) as exc:
@@ -93,6 +97,8 @@ def run_http_sidecar(
             try:
                 response = future.result(timeout=300)
             except Exception as exc:
+                # A timed-out call must not keep running unobserved.
+                future.cancel()
                 self._reply(500, {"error": str(exc)})
                 return
             self._reply(200, json.loads(encode_response(response)))

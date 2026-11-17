@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useReducer, useState, type FormEvent }
 import { SCENES } from "../../app/scenes";
 import { WorkspaceFrame } from "../../design-system/WorkspaceFrame";
 import AgentComposer from "../../app/AgentComposer";
-import { requestIdForRun } from "../../app/ui";
+import { draftKey, prefillDraft } from "../../app/draftStore";
 import { t } from "../../app/i18n";
 import { CapNotInstalled } from "../../design-system/WorkspaceFrame";
 import { useWorkspaceCurrentRun } from "../../app/workspaceSelection";
@@ -25,9 +25,7 @@ export default function MercuryWorkspace({ ctx }: { ctx: RunCtx }) {
   const search = useMemo(
     () => new MercurySearchSession((q) =>
       service.webSearch({
-        tenantId: service.identity.tenantId,
         sessionId: ctx.sessionId,
-        requestId: requestIdForRun(0),
         query: q,
         maxResults: 4,
       }),
@@ -111,9 +109,7 @@ export default function MercuryWorkspace({ ctx }: { ctx: RunCtx }) {
                 // 选中来源经既有草稿合同进入研究任务 —— 预填不代提交。
                 const sources = search.panes.flatMap((p) => p.source ? [p.source] : [])
                   .map((s) => `- ${String(s.title ?? s.url ?? "source")} — ${String(s.url ?? "")}`).join("\n");
-                window.dispatchEvent(new CustomEvent("tsagent:composer-draft", {
-                  detail: { text: t("mer.research-prefill", { query: searchedQuery, sources }) },
-                }));
+                prefillDraft(draftKey(ctx.service.identity.tenantId, ctx.sessionId, "mercury"), t("mer.research-prefill", { query: searchedQuery, sources }));
               }}>{t("mer.research-task")}</button>
             </div>
             <AgentComposer ctx={ctx} planet="mercury" placeholder={t("mer.composer-ph")} />

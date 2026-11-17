@@ -17,9 +17,8 @@ export type { ArtifactKind, ConversationRole, EventTone, RunStatus, StageStatus 
  */
 
 export interface StartRunRequest {
-  tenantId: string;
   sessionId: string;
-  requestId: string;
+  requestId?: string;
   requestText: string;
   /** Session-bound workspace root — scopes the run's file ops to this dir. */
   workspaceRoot?: string;
@@ -35,16 +34,14 @@ export interface StartRunRequest {
 }
 
 export interface GetRunRequest {
-  tenantId: string;
   sessionId: string;
   runId: string;
 }
 
 export interface CancelRunRequest {
-  tenantId: string;
   sessionId: string;
   runId: string;
-  requestId: string;
+  requestId?: string;
   requestedBy: string;
 }
 
@@ -55,15 +52,13 @@ export type ResumeAction =
   | "ABANDON_AND_RESTART";
 
 export interface PauseRunRequest {
-  tenantId: string;
   sessionId: string;
   runId: string;
-  requestId: string;
+  requestId?: string;
   requestedBy?: string;
 }
 
 export interface ResumeRunRequest {
-  tenantId: string;
   sessionId: string;
   runId: string;
   resumeRequestId: string;
@@ -72,13 +67,11 @@ export interface ResumeRunRequest {
 }
 
 export interface ListArtifactsRequest {
-  tenantId: string;
   sessionId: string;
   runId: string;
 }
 
 export interface EventStreamRequest {
-  tenantId: string;
   sessionId: string;
   runId: string;
   /** Exclusive cursor: only sequence_number > afterSequence is returned. */
@@ -182,7 +175,6 @@ export interface ArtifactSummary {
 }
 
 export interface ReadArtifactRequest {
-  tenantId: string;
   sessionId: string;
   runId: string;
   artifactId: string;
@@ -362,9 +354,8 @@ export interface TaskRecord extends TaskHandle {
 }
 
 export interface CreateTaskRequest {
-  tenantId: string;
   sessionId: string;
-  requestId: string;
+  requestId?: string;
   taskId?: string;
   parentTaskId?: string;
   originPlanet?: string;
@@ -372,9 +363,8 @@ export interface CreateTaskRequest {
 }
 
 export interface TaskLookupRequest {
-  tenantId: string;
   sessionId: string;
-  requestId: string;
+  requestId?: string;
   taskId: string;
 }
 
@@ -397,18 +387,16 @@ export interface ApprovalSummary {
 }
 
 export interface ListApprovalsRequest {
-  tenantId: string;
   sessionId: string;
-  requestId: string;
+  requestId?: string;
   runId?: string;
   status?: string;
   limit?: number;
 }
 
 export interface DecideApprovalRequest {
-  tenantId: string;
   sessionId: string;
-  requestId: string;
+  requestId?: string;
   runId: string;
   approvalId: string;
   decision: "approve" | "deny";
@@ -438,10 +426,8 @@ export interface SessionSummary {
 }
 
 export interface CreateSessionRequest {
-  tenantId: string;
-  userId: string;
   sessionId: string;
-  requestId: string;
+  requestId?: string;
   /** Claim the session for a workstation — explicit adoption/creation. */
   planet?: string;
 }
@@ -451,15 +437,12 @@ export interface CreateSessionRequest {
  * `sessionId: ""` = tenant-wide catalog (Omni aggregate); `originPlanet`
  * filters durable workstation ownership ("" = unclassified). */
 export interface SessionScope {
-  tenantId: string;
   sessionId: string;
   originPlanet?: string;
 }
 
 export interface ListSessionsRequest {
-  tenantId: string;
-  userId: string;
-  requestId: string;
+  requestId?: string;
   limit?: number;
 }
 
@@ -476,9 +459,8 @@ export interface HandoffSummary {
 }
 
 export interface ListHandoffsRequest {
-  tenantId: string;
   sessionId: string;
-  requestId: string;
+  requestId?: string;
   limit?: number;
 }
 
@@ -492,9 +474,8 @@ export interface HistoryEntry {
 }
 
 export interface ListHistoryRequest {
-  tenantId: string;
   sessionId: string;
-  requestId: string;
+  requestId?: string;
   limit?: number;
 }
 
@@ -520,9 +501,8 @@ export interface ScheduleSummary {
 }
 
 export interface CreateScheduleRequest {
-  tenantId: string;
   sessionId: string;
-  requestId: string;
+  requestId?: string;
   requestText: string;
   intervalSeconds: number;
   targetPlanet?: string;
@@ -531,16 +511,14 @@ export interface CreateScheduleRequest {
 }
 
 export interface ListSchedulesRequest {
-  tenantId: string;
   sessionId: string;
-  requestId: string;
+  requestId?: string;
   limit?: number;
 }
 
 export interface UpdateScheduleRequest {
-  tenantId: string;
   sessionId: string;
-  requestId: string;
+  requestId?: string;
   scheduleId: string;
   status: "ACTIVE" | "PAUSED" | "DELETED";
 }
@@ -563,9 +541,8 @@ export interface ProfileSummary {
 }
 
 export interface UpsertProfileRequest {
-  tenantId: string;
   sessionId: string;
-  requestId: string;
+  requestId?: string;
   profileId: string;
   displayName?: string;
   planetAffinity?: string;
@@ -575,9 +552,8 @@ export interface UpsertProfileRequest {
 }
 
 export interface ListProfilesRequest {
-  tenantId: string;
   sessionId: string;
-  requestId: string;
+  requestId?: string;
   limit?: number;
 }
 
@@ -596,15 +572,13 @@ export interface SettingsSummary {
 }
 
 export interface GetSettingsRequest {
-  tenantId: string;
   sessionId: string;
-  requestId: string;
+  requestId?: string;
 }
 
 export interface UpdateSettingsRequest {
-  tenantId: string;
   sessionId: string;
-  requestId: string;
+  requestId?: string;
   providerMode?: string;
   deepseekModel?: string;
   ollamaModel?: string;
@@ -634,9 +608,8 @@ export interface UpsertWorkspaceRequest {
   path?: string;
   /** All source folders for this workspace. */
   paths?: string[];
-  tenantId: string;
   sessionId: string;
-  requestId: string;
+  requestId?: string;
   workspaceId: string;
   displayName?: string;
   capabilities?: string[];
@@ -645,26 +618,23 @@ export interface UpsertWorkspaceRequest {
 }
 
 export interface ListWorkspacesRequest {
-  tenantId: string;
   sessionId: string;
-  requestId: string;
+  requestId?: string;
   limit?: number;
 }
 
 export interface AssignSessionWorkspaceRequest {
-  tenantId: string;
   /** Session being filed — the target, which may differ from the caller's session. */
   sessionId: string;
-  requestId: string;
+  requestId?: string;
   /** "" moves the session back to the unfiled list. */
   workspaceId: string;
 }
 
 export interface DeleteWorkspaceRequest {
-  tenantId: string;
   /** Caller's current session — the wire DTO requires it as a locator. */
   sessionId: string;
-  requestId: string;
+  requestId?: string;
   workspaceId: string;
 }
 
@@ -707,15 +677,13 @@ export interface CapabilitySummary {
 }
 
 export interface ListCapabilitiesRequest {
-  tenantId: string;
   sessionId: string;
-  requestId: string;
+  requestId?: string;
 }
 
 export interface WebSearchRequest {
-  tenantId: string;
   sessionId: string;
-  requestId: string;
+  requestId?: string;
   query: string;
   maxResults?: number;
 }
@@ -733,15 +701,13 @@ export interface SkillSummary {
 }
 
 export interface ListSkillsRequest {
-  tenantId: string;
   sessionId: string;
-  requestId: string;
+  requestId?: string;
 }
 
 export interface DelegateRunRequest {
-  tenantId: string;
   sessionId: string;
-  requestId: string;
+  requestId?: string;
   parentRunId: string;
   requestText: string;
   targetPlanet?: string;
@@ -793,17 +759,15 @@ export interface FactRecordSummary {
 }
 
 export interface ListFactsRequest {
-  tenantId: string;
   sessionId: string;
-  requestId: string;
+  requestId?: string;
   scope?: string;
   limit?: number;
 }
 
 export interface ForgetFactRequest {
-  tenantId: string;
   sessionId: string;
-  requestId: string;
+  requestId?: string;
   category: string;
   key: string;
   scope?: string;
@@ -822,9 +786,8 @@ export interface ParticipantSummary {
 }
 
 export interface ListParticipantsRequest {
-  tenantId: string;
   sessionId: string;
-  requestId: string;
+  requestId?: string;
 }
 
 export interface JupiterArtifactSummary {
@@ -841,9 +804,8 @@ export interface JupiterArtifactSummary {
 }
 
 export interface SearchArtifactsRequest {
-  tenantId: string;
   sessionId: string;
-  requestId: string;
+  requestId?: string;
   query?: string;
   allSessions?: boolean;
   limit?: number;
@@ -864,24 +826,20 @@ export interface WorkspaceFileContent {
 }
 
 export interface ListWorkspaceFilesRequest {
-  tenantId: string;
   sessionId: string;
-  requestId: string;
+  requestId?: string;
   limit?: number;
 }
 
 export interface AttachFilesRequest {
-  tenantId: string;
-  userId: string;
   sessionId: string;
-  requestId: string;
+  requestId?: string;
   paths: string[];
 }
 
 export interface WorkspaceFileRequest {
-  tenantId: string;
   sessionId: string;
-  requestId: string;
+  requestId?: string;
   path: string;
   content?: string;
   baseDigest?: string;
@@ -921,9 +879,8 @@ export interface EvaluationSummary {
 }
 
 export interface RecordEvaluationRequest {
-  tenantId: string;
   sessionId: string;
-  requestId: string;
+  requestId?: string;
   name?: string;
   runId?: string;
   baselineRef?: string;
@@ -935,9 +892,8 @@ export interface RecordEvaluationRequest {
 }
 
 export interface ListEvaluationsRequest {
-  tenantId: string;
   sessionId: string;
-  requestId: string;
+  requestId?: string;
   allSessions?: boolean;
   limit?: number;
 }
@@ -955,9 +911,8 @@ export interface WorkflowDefinitionSummary {
 }
 
 export interface ListWorkflowsRequest {
-  tenantId: string;
   sessionId: string;
-  requestId: string;
+  requestId?: string;
 }
 
 export interface WorkflowGraphSummary {
@@ -970,9 +925,8 @@ export interface WorkflowGraphSummary {
 }
 
 export interface UpsertWorkflowGraphRequest {
-  tenantId: string;
   sessionId: string;
-  requestId: string;
+  requestId?: string;
   graphId: string;
   name?: string;
   definition?: Record<string, unknown>;
@@ -980,9 +934,8 @@ export interface UpsertWorkflowGraphRequest {
 }
 
 export interface ListWorkflowGraphsRequest {
-  tenantId: string;
   sessionId: string;
-  requestId: string;
+  requestId?: string;
   limit?: number;
 }
 
@@ -1002,26 +955,23 @@ export interface MotifSummary {
 }
 
 export interface CreateMotifRequest {
-  tenantId: string;
   sessionId: string;
-  requestId: string;
+  requestId?: string;
   text: string;
   motifId?: string;
   source?: string;
 }
 
 export interface AssignMotifRequest {
-  tenantId: string;
   sessionId: string;
-  requestId: string;
+  requestId?: string;
   motifId: string;
   parentRunId: string;
 }
 
 export interface ResolveMotifRequest {
-  tenantId: string;
   sessionId: string;
-  requestId: string;
+  requestId?: string;
   motifId: string;
   resolutionRunId: string;
   resolution: string;
@@ -1029,9 +979,8 @@ export interface ResolveMotifRequest {
 
 /** A run's reported understanding — evidence awaiting verdict. */
 export interface ReportMotifRequest {
-  tenantId: string;
   sessionId: string;
-  requestId: string;
+  requestId?: string;
   motifId: string;
   resolutionRunId: string;
   resolution: string;
@@ -1039,16 +988,14 @@ export interface ReportMotifRequest {
 
 /** Human verdict rejecting a report — sends the motif back to exploring. */
 export interface RejectMotifRequest {
-  tenantId: string;
   sessionId: string;
-  requestId: string;
+  requestId?: string;
   motifId: string;
 }
 
 export interface ListMotifsRequest {
-  tenantId: string;
   sessionId: string;
-  requestId: string;
+  requestId?: string;
   status?: string;
   limit?: number;
 }
@@ -1085,9 +1032,8 @@ export interface GraphExecutionSummary {
 }
 
 export interface GraphExecutionLookupRequest {
-  tenantId: string;
   sessionId: string;
-  requestId: string;
+  requestId?: string;
   executionId: string;
 }
 
@@ -1099,9 +1045,8 @@ export interface GraphExecutionRef {
 }
 
 export interface RunWorkflowGraphRequest {
-  tenantId: string;
   sessionId: string;
-  requestId: string;
+  requestId?: string;
   graphId: string;
   /** Empty runs the graph under its own durable parent Task — no Omni
    *  task needs to exist first (WI-07). */
@@ -1114,7 +1059,7 @@ export interface WorkflowGraphClient {
   upsertWorkflowGraph(request: UpsertWorkflowGraphRequest): Promise<WorkflowGraphSummary>;
   runGraph(request: RunWorkflowGraphRequest): Promise<GraphRunStepSummary[]>;
   getGraphExecution(request: GraphExecutionLookupRequest): Promise<GraphExecutionSummary>;
-  listGraphExecutions(request: { tenantId: string; sessionId: string; requestId: string }): Promise<GraphExecutionRef[]>;
+  listGraphExecutions(request: { sessionId: string; requestId?: string }): Promise<GraphExecutionRef[]>;
   listWorkflowGraphs(request: ListWorkflowGraphsRequest): Promise<WorkflowGraphSummary[]>;
 }
 

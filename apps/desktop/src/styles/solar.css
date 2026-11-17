@@ -1,0 +1,125 @@
+.solar-zone { position: relative; flex: 1; min-height: 0; overflow: hidden; background: #04060c; }
+
+.solar-zone[data-accent="cyan"] { --accent-glow: #42d9ff; }
+
+.solar-zone[data-accent="violet"] { --accent-glow: #9b7cff; }
+
+.solar-zone[data-accent="ice"] { --accent-glow: #7dd3fc; }
+
+.solar-zone[data-accent="green"] { --accent-glow: #34d399; }
+
+.solar-zone[data-accent="amber"] { --accent-glow: #ffb454; }
+
+.solar-mount { position: absolute; inset: 0; }
+
+.solar-mount canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+/* ---------- floating planet labels ---------- */
+
+.solar-label { position: absolute; top: 0; left: 0; z-index: 3; display: flex; align-items: baseline; gap: 7px; padding: 3px 6px; white-space: nowrap; background: transparent; border: none; text-align: left; cursor: pointer; text-shadow: 0 1px 6px rgba(0,0,0,.9), 0 0 12px rgba(0,0,0,.7); transition: opacity .18s; }
+
+.solar-label .sl-row { display: flex; align-items: baseline; gap: 6px; }
+
+.solar-label .sl-row code { font-family: var(--font-mono); font-size: 8.5px; color: var(--la, rgba(190,212,240,.6)); }
+
+.solar-label .sl-row strong { font-family: var(--font-display); font-size: 9px; font-weight: 700; letter-spacing: .16em; color: #eef4ff; }
+
+.solar-label .sl-planet { font-size: 9px; color: rgba(190, 212, 240, .72); letter-spacing: .04em; }
+
+.solar-label { opacity: .82; }
+
+.solar-label.hot, .solar-label:hover { opacity: 1; }
+
+.solar-label.hot .sl-row strong, .solar-label:hover .sl-row strong { color: var(--la, #fff); text-shadow: 0 0 10px var(--la, transparent); }
+
+.solar-label.sel { opacity: 1; }
+
+.solar-label.sel .sl-row strong { color: var(--la); }
+
+.solar-label:focus-visible { outline: 2px solid var(--la, #42d9ff); outline-offset: 2px; }
+
+/* ---------- HUD panels ---------- */
+
+.solar-hud { position: absolute; z-index: 5; background: rgba(9, 14, 26, .55); border: 1px solid rgba(214, 232, 255, .12); border-radius: 12px; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); box-shadow: 0 8px 28px -12px rgba(0,0,0,.7); }
+
+.solar-hud.tl { top: 18px; left: 18px; max-width: 320px; padding: 12px 16px 11px; }
+
+.solar-hud.tl h1 { margin: 3px 0 7px; font-family: var(--font-display); font-size: 20px; font-weight: 800; color: #eef4ff; letter-spacing: .01em; }
+
+.solar-hud.tl p { margin: 8px 0 0; font-size: 11.5px; line-height: 1.5; color: rgba(185, 205, 235, .78); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+.solar-hud.tr { top: 18px; right: 18px; padding: 0; overflow: hidden; display: flex; }
+
+.solar-hint { position: absolute; left: 20px; bottom: 24px; z-index: 4; margin: 0; font-size: 11px; color: rgba(160, 185, 220, .55); letter-spacing: .04em; }
+
+@media (prefers-reduced-motion: reduce) {
+.solar-label, .solar-label::after { transition: none; }
+}
+
+/* dim labels when another planet is active */
+
+.solar-zone[data-active] .solar-label:not(.hot):not(.sel) { opacity: .38; }
+
+.solar-label { transition: border-color .18s, background .18s, box-shadow .18s, opacity .25s; }
+
+.solar-zone.nav .solar-label { background: rgba(10, 17, 30, .68); }
+
+/* ---------- temporal lock: desaturate + label scan-unlock ---------- */
+
+.solar-zone.nav .solar-mount canvas { filter: saturate(.58) brightness(.92); transition: filter .8s ease; }
+
+.solar-zone:not(.nav) .solar-mount canvas { transition: filter .6s ease; }
+
+.solar-label { opacity: 1; }
+
+.solar-zone.nav .solar-label { opacity: 0; transform-origin: center; }
+
+.solar-zone.nav .solar-label.scan-locked { opacity: 1; animation: label-unlock .3s cubic-bezier(0.23, 1, 0.32, 1) both; }
+
+/* ---------- webgl fallback ---------- */
+
+.solar-fallback { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; }
+
+.solar-fallback p { margin: 0; font-size: 12px; color: rgba(160,185,220,.7); }
+
+.solar-mount.locked .lock-title { animation: lock-title-in 3s ease both; }
+
+/* Sun workspace: migrated run console */
+
+/* selector accent vars (hex-driven) */
+
+.solar-label { --la: var(--sl-accent, #42d9ff); }
+
+.solar-zone { --accent-glow: var(--scene-accent, #42d9ff); }
+
+/* selector overlays (post-console removal) */
+
+.solar-intel { position: absolute; right: 18px; top: 84px; width: 306px; max-height: calc(100% - 200px); overflow-y: auto; z-index: 12;
+  background: rgba(10,16,24,.52); backdrop-filter: blur(18px) saturate(1.3); -webkit-backdrop-filter: blur(18px) saturate(1.3); border: 1px solid var(--border-base); backdrop-filter: blur(10px);
+  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%); }
+
+/* — HUD plates on the star map — */
+
+.solar-hud, .solar-intel, .chat-host, .settings-drawer, .tray-pop, .topbar {
+  background: var(--bg-panel);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.solar-hud { border: 1px solid var(--border-base); border-radius: 2px; box-shadow: inset 0 1px 0 var(--glass-edge), 0 10px 30px rgba(0,0,0,.5); }
+
+.solar-hud.tl { padding: 12px 18px; }
+
+.solar-hud h1 { font-family: var(--font-display); font-size: 21px; letter-spacing: .1em; }
+
+.solar-intel { border: 1px solid var(--border-base); border-radius: 2px; box-shadow: inset 0 1px 0 var(--glass-edge); }
+
+/* small section titles: sentence case, muted */
+
+/* star map: one plate on hover, nothing at rest */
+
+.solar-intel { width: 280px; padding: 16px 18px; }
+
+.solar-intel .holo-open { width: 100%; justify-content: center; padding: 8px 12px; font-size: 12px; letter-spacing: .02em; }
+
+.solar-intel .holo-open:hover { color: var(--focus); border-color: var(--focus); }

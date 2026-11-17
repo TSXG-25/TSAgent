@@ -66,7 +66,6 @@ export default function NeptuneWorkspace({ ctx }: { ctx: RunCtx }) {
     let staleFlag = false;
     setContent(null); setReadErr(null);
     const req = {
-      tenantId: service.identity.tenantId,
       sessionId: cur.run.sessionId,
       runId: cur.run.runId,
       artifactId: cur.artifact.artifactId,

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { SCENES } from "../../app/scenes";
 import { WorkspaceFrame, CapNotInstalled } from "../../design-system/WorkspaceFrame";
-import { requestIdForRun } from "../../app/ui";
 import { t } from "../../app/i18n";
 import { accessRows, createPreviewGate } from "./jupiterAccess";
 import type { RunCtx } from "../../app/runCtx";
@@ -24,7 +23,7 @@ export default function JupiterWorkspace({ ctx }: { ctx: RunCtx }) {
   const [notice, setNotice] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
 
-  const req = useCallback(() => ({ tenantId: service.identity.tenantId, sessionId: ctx.sessionId, requestId: requestIdForRun(0) }), [service, ctx.sessionId]);
+  const req = useCallback(() => ({ sessionId: ctx.sessionId }), [service, ctx.sessionId]);
   // 预览归属 — 每次请求一个序号，响应提交时仍是最新才落盘；
   // 选中变化即作废在途请求（同一产物的重复请求靠序号区分，不靠对象身份）。
   const previewGate = useMemo(() => createPreviewGate(), []);
@@ -114,7 +113,7 @@ export default function JupiterWorkspace({ ctx }: { ctx: RunCtx }) {
                     <button className="btn secondary" onClick={() => {
                       const a = sel as JupiterArtifactSummary;
                       const tok = previewGate.next();
-                      void service.readArtifact({ tenantId: service.identity.tenantId, sessionId: a.sessionId, runId: a.runId, artifactId: a.artifactId })
+                      void service.readArtifact({ sessionId: a.sessionId, runId: a.runId, artifactId: a.artifactId })
                         .then((c) => { if (previewGate.isCurrent(tok)) setPreview(c.result === "ok" ? c.text.slice(0, 1200) : c.result); })
                         .catch((e) => { if (previewGate.isCurrent(tok)) setPreview(String(e instanceof Error ? e.message : e)); });
                     }} type="button">{t("artifact.preview")}</button>

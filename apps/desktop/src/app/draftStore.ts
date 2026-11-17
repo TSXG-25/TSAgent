@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type RefObject } from "react";
 
 /** App-held input drafts keyed by tenant / session / target workspace. A
  *  GlobalChat composer and a workspace composer aimed at the same target
@@ -11,6 +11,7 @@ export interface InputDraft {
 
 const EMPTY: InputDraft = { text: "", files: [] };
 const listeners = new Map<string, Set<() => void>>();
+const focusListeners = new Map<string, Set<() => void>>();
 
 export function draftKey(tenantId: string, sessionId: string, target: string): string {
   return `${tenantId}${sessionId}${target}`;
@@ -70,4 +71,22 @@ export function useDraft(key: string): [InputDraft, (d: InputDraft) => void] {
     setDraftState(d);
   }, [key]);
   return [draft, setDraft];
+}
+
+/** Prefill a target composer's draft from elsewhere on the page (a landing
+ *  chip, a search result) — never submits — and focus that composer. */
+export function prefillDraft(key: string, text: string): void {
+  saveDraft(key, { ...loadDraft(key), text });
+  focusListeners.get(key)?.forEach((fn) => fn());
+}
+
+/** Focus `ref` whenever `prefillDraft` targets `key`. */
+export function useDraftFocus(key: string, ref: RefObject<HTMLElement | null>): void {
+  useEffect(() => {
+    let set = focusListeners.get(key);
+    if (!set) { set = new Set(); focusListeners.set(key, set); }
+    const fn = () => ref.current?.focus();
+    set.add(fn);
+    return () => { set?.delete(fn); };
+  }, [key, ref]);
 }

@@ -1,0 +1,7 @@
+/* Neptune — neutral canvas + film strip | provenance */
+
+.nep-thumb { flex: 0 0 72px; height: 52px; display: grid; place-items: center; background: #141414; border: 1px solid var(--border-base); border-radius: 2px; cursor: pointer; overflow: hidden; }
+
+.nep-thumb.on { border-color: var(--planet-accent); }
+
+.nep-thumb-kind { font-family: monospace; font-size: 9px; color: var(--text-faint); }

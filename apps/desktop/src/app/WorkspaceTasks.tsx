@@ -98,10 +98,7 @@ function PlanetSessionPicker({ ctx, planet }: { ctx: RunCtx; planet: string }) {
   useEffect(() => {
     let alive = true;
     void service.listSessions({
-      tenantId: service.identity.tenantId,
-      userId: service.identity.userId,
-      requestId: `ws-sess-${planet}-${Date.now()}`,
-    }).then((list) => { if (alive) setSessions(list); }).catch(() => {});
+      }).then((list) => { if (alive) setSessions(list); }).catch(ctx.reportError);
     return () => { alive = false; };
   }, [service, planet, ctx.sessionId]);
   const options = sessions.filter((s) => !s.planet || s.planet === planet);
@@ -127,10 +124,7 @@ function PlanetSessionPicker({ ctx, planet }: { ctx: RunCtx; planet: string }) {
         onClick={() => {
           setCreating(true);
           void service.createSession({
-            tenantId: service.identity.tenantId,
-            userId: service.identity.userId,
             sessionId: `session-${planet}-${crypto.randomUUID().slice(0, 8)}`,
-            requestId: `ws-new-${planet}-${Date.now()}`,
             planet,
           }).then((s) => ctx.selectSession(s.sessionId))
             .finally(() => setCreating(false));

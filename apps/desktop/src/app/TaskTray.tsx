@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
+import { usePoll } from "./usePoll";
 import type { RunCtx } from "./runCtx";
 import { Icon } from "./ui";
 import { decideSessionApproval, useSessionApprovals } from "./approvals";
@@ -18,16 +19,12 @@ export default function TaskTray({ ctx }: { ctx: RunCtx }) {
 
   const refreshTasks = useCallback(async () => {
     try {
-      const all = await service.listTasks({ tenantId: service.identity.tenantId, sessionId });
+      const all = await service.listTasks({ sessionId });
       setTasks(all.filter((x) => ["queued", "planning", "active"].includes(x.status)));
     } catch { /* keep last snapshot */ }
-  }, [service]);
+  }, [service, sessionId]);
 
-  useEffect(() => {
-    void refreshTasks();
-    const t = window.setInterval(() => void refreshTasks(), 8_000);
-    return () => window.clearInterval(t);
-  }, [refreshTasks]);
+  usePoll(() => void refreshTasks(), 8_000, [refreshTasks]);
 
   async function decide(a: ApprovalSummary, decision: "approve" | "deny") {
     setBusy(a.approvalId);

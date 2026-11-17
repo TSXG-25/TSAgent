@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactEle
 import { useNavigate } from "react-router-dom";
 import type { RunView, StageStatus, WorkflowView } from "../types";
 import type { IconName } from "../app/ui";
+import { t } from "../app/i18n";
 import { SCENES, PLANET_SCENES, setLastJump, type SceneDef, type SceneId } from "../app/scenes";
 import SolarSystem, { solarSceneInstance } from "./solar/SolarSystem";
 import { SoundFX } from "./solar/sound";
@@ -117,7 +118,7 @@ export default function MissionControl({
   const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const enterScene = (scene: SceneDef) => {
     const sc = solarSceneInstance();
-    const planetKey = scene.planet ?? scene.id;
+    const planetKey = scene.planet;
     if (sc && planetKey !== "sun" && !reducedMotion()) {
       sound.current.insert();
       let fired = false;
@@ -126,7 +127,7 @@ export default function MissionControl({
         if (p) setLastJump({ x: p.x, y: p.y, accent: scene.accent });
         void navigate(`/w/${scene.id}`);
       };
-      sc.insertion(planetKey as never, go);
+      sc.insertion(planetKey, go);
       window.setTimeout(() => go(), 600); // failsafe: never trap the click
     } else {
       void navigate(`/w/${scene.id}`);
@@ -260,8 +261,8 @@ export default function MissionControl({
           )}
 
         <form className="console-composer floating" onSubmit={createRun}>
-                    <textarea onChange={(event) => setRequestDraft(event.target.value)} placeholder="Ask T.S.A to do something…" rows={2} value={requestDraft} />
-          <button className="mc-send" title="Create run" type="submit"><Icon name="send" size={14} /></button>
+                    <textarea onChange={(event) => setRequestDraft(event.target.value)} placeholder={t("app.ask-placeholder")} rows={2} value={requestDraft} />
+          <button className="mc-send" disabled={!requestDraft.trim()} title={t("app.create-run")} type="submit"><Icon name="send" size={14} /></button>
         </form>
 
         </section>

@@ -59,6 +59,19 @@ _NEGATION = re.compile(
 )
 _CLAUSE_BREAKS = "，。；;,.、：:\n"
 
+# Cross-file mutation: "更新全部引用/所有调用点/across the codebase" grants
+# writes beyond the file the classifier happened to name.  Real-eval R3:
+# write_targets=["util.py"] made a rename's call-site edits scope violations.
+_WORKSPACE_WIDE_MUTATION = re.compile(
+    r"全部引用|所有引用|全部调用|所有调用|全部使用|所有使用"
+    r"|所有相关文件|全部相关文件|整个项目|整个仓库|全仓"
+    r"|all\s+references?|every\s+reference|all\s+usages?|every\s+usage"
+    r"|all\s+callers?|all\s+occurrences|all\s+imports?"
+    r"|across\s+the\s+(?:code\s?base|project|repo(?:sitory)?)"
+    r"|project[-\s]?wide|codebase[-\s]?wide|everywhere",
+    re.IGNORECASE,
+)
+
 
 def _request_demands_verification(user_input: str) -> bool:
     """A demand match is real only when its own clause isn't negated —
@@ -159,6 +172,11 @@ class EffectAuthorization:
             for target in state.get("intent_write_targets", ())
             if str(target or "").strip()
         )
+        if (
+            RequestedOutcome.FILE_MUTATION in outcomes
+            and _WORKSPACE_WIDE_MUTATION.search(user_input or "")
+        ):
+            write_targets = (".",)
         if not write_targets and RequestedOutcome.FILE_MUTATION in outcomes:
             write_targets = (".",)
         return cls(

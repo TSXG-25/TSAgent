@@ -478,3 +478,73 @@ def test_verification_demand_survives_earlier_negated_clause():
         "修完先不要 git 提交；然后用 python -m pytest -q 验证。",
     )
     assert RequestedOutcome.COMMAND_EXECUTION in authorization.requested_outcomes
+
+
+def test_cross_file_mutation_phrasing_widens_write_scope():
+    """Real-eval R3: intent_write_targets=["util.py"] for "rename + update
+    all references" rejected edits to call-site files — the phrase grants
+    workspace-wide scope, the named file is just the entry point."""
+    authorization = EffectAuthorization.from_state(
+        {
+            "artifact_required": True,
+            "requested_outcomes": ["FILE_MUTATION"],
+            "intent_write_targets": ["util.py"],
+            "goal_state": {},
+        },
+        "把 util.trim 重命名为 util.normalize，更新全部引用，"
+        "并用 python -m pytest -q 确认通过。",
+    )
+    assert authorization.write_scopes == (".",)
+    assert authorization.allows_path("test_util.py")
+    assert authorization.allows_path("app.py")
+
+
+def test_narrow_write_targets_without_wide_phrasing_stay_scoped():
+    authorization = EffectAuthorization.from_state(
+        {
+            "artifact_required": True,
+            "requested_outcomes": ["FILE_MUTATION"],
+            "intent_write_targets": ["util.py"],
+            "goal_state": {},
+        },
+        "改一下 util.py 里的函数名",
+    )
+    assert authorization.write_scopes == ("util.py",)
+    assert not authorization.allows_path("test_util.py")
+
+
+def test_repeated_identical_failure_gets_stall_nudge(tmp_path, monkeypatch):
+    """Real-eval stall: the model re-issued the same failing pytest 4x while
+    narrating the fix. A second identical failure (with no successful
+    mutation in between) must carry a directive to edit first."""
+    root = _materialize(FIX_BUG, tmp_path / "stall")
+    orch = _orchestrator(root)
+    cmd = f"{PY} -B -m pytest -q"
+    scripted = [
+        _turn(("shell", {"cmd": cmd}), prefix="s1"),
+        _turn(("shell", {"cmd": cmd}), prefix="s2"),
+        _turn(content="仍然失败，如实报告。"),
+        _turn(content="仍然失败，如实报告。"),
+        _turn(content="仍然失败，如实报告。"),
+    ]
+    queue = list(scripted)
+    transcripts = []
+
+    async def achat(messages, tools=None, **_kwargs):
+        transcripts.append([
+            m for m in messages if m.get("role") == "tool"
+        ])
+        assert queue, "scripted achat exhausted"
+        return queue.pop(0)
+
+    monkeypatch.setattr("agent.llm.llm.achat", achat)
+    asyncio.run(AgentLoop(orch).run(
+        _mutation_state(FIX_BUG["task"]),
+        user_input=FIX_BUG["task"], user_id="u",
+    ))
+
+    first_shell = transcripts[1][-1]["content"]
+    second_shell = transcripts[2][-1]["content"]
+    assert "运行时提示" not in first_shell, "first failure stays un-nudged"
+    assert "同一调用已连续失败 2 次" in second_shell
+    assert "edit_file" in second_shell

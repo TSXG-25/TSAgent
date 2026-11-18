@@ -1,0 +1,66 @@
+{
+  "driver": "scripts/real_eval_mars.py",
+  "provider": "deepseek",
+  "model": "deepseek-flash",
+  "results": [
+    {
+      "candidate": "r3",
+      "fixture": "refactor",
+      "dir": "/Users/tsxg/Desktop/tsagent-real-eval/r3-refactor",
+      "task": "把 util.trim 重命名为 util.normalize，更新全部引用，并用 python -m pytest -q 确认通过。",
+      "classification": "capability_met",
+      "checks": {
+        "accepted": true,
+        "preserved_user_files": {
+          "CHANGELOG.md": true,
+          "local_run.sh": true
+        },
+        "workspace_changes_present": true,
+        "agent_files": [
+          "app.py",
+          "test_util.py",
+          "util.py"
+        ],
+        "ambiguous_files": [],
+        "user_dirty_preserved": [
+          ".repo_index/.file_symbols.json",
+          ".repo_index/.symbol_index.json",
+          "CHANGELOG.md",
+          "local_run.sh"
+        ],
+        "shell_observations": [
+          {
+            "cmd": "grep -rn \"trim\\|normalize\" CHANGELOG.md local_run.sh; echo \"---\"; ls .repo_index",
+            "ok": true,
+            "error_code": null
+          },
+          {
+            "cmd": "cat local_run.sh; echo \"--- git ---\"; git log --oneline -3; git status --short",
+            "ok": false,
+            "error_code": "COMMAND_NONZERO_EXIT"
+          },
+          {
+            "cmd": "grep -rn \"trim\" .repo_index | head -20",
+            "ok": true,
+            "error_code": null
+          },
+          {
+            "cmd": "grep -rn \"trim\" --include=\"*.py\" . | grep -v \"\\.repo_index\"; echo \"--- exit:$? ---\"",
+            "ok": true,
+            "error_code": null
+          },
+          {
+            "cmd": "python -m pytest -q",
+            "ok": true,
+            "error_code": null
+          }
+        ],
+        "goal_missing": []
+      },
+      "run_id": "run-99da18e43456490a85ffc6c20c5a0a84",
+      "elapsed_s": 62.5,
+      "terminal_status": "COMPLETED",
+      "failure": null
+    }
+  ]
+}

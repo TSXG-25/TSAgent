@@ -214,7 +214,11 @@ def build_toolset(
                                 "output_paths": {
                                     "type": "array",
                                     "items": {"type": "string"},
-                                    "description": "本步骤预期产出的工作区文件/目录，用于效果核验",
+                                    "description": (
+                                        "仅当本步骤会实际创建或修改文件时才填写的工作区路径，"
+                                        "用于效果核验；运行测试/构建/检查等验证步骤必须留空，"
+                                        "否则步骤会因产物未变化被判失败"
+                                    ),
                                 },
                             },
                         },

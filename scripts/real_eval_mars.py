@@ -35,9 +35,17 @@ sys.path.insert(0, str(REPO))
 
 from test_mars_devloop import FIX_BUG, SMALL_FEATURE, REFACTOR, _materialize  # noqa: E402
 
+from dotenv import load_dotenv  # noqa: E402
+
+# Match the sidecar's own env resolution so report metadata reflects what the
+# provider actually ran (e.g. .env MODEL_NAME under the deepseek provider).
+load_dotenv(REPO / ".env")
+
 EVAL_ROOT = Path.home() / "Desktop" / "tsagent-real-eval"
 REPORT_ROOT = REPO / "realtest_reports" / f"mars-devloop-{time.strftime('%Y%m%d-%H%M%S')}"
-RUN_DEADLINE_S = 900  # qwen3:8b on a laptop — generous, still bounded
+RUN_DEADLINE_S = int(
+    os.getenv("EVAL_DEADLINE_S", "900")
+)  # qwen3:8b on a laptop is slow; DeepSeek needs more — EVAL_DEADLINE_S=1800
 
 CANDIDATES = {
     "r1": FIX_BUG,
@@ -59,12 +67,15 @@ class Sidecar:
     async def spawn(cls, db: Path) -> "Sidecar":
         env = {
             **os.environ,
-            "OPENAI_API_KEY": "",
-            "LLM_API_KEY": "",
-            "P2_SECONDARY_API_KEY": "",
-            "TSAGENT_LLM_PROVIDER": "ollama",
             "PYTHONUNBUFFERED": "1",
         }
+        provider = os.environ.get("TSAGENT_LLM_PROVIDER", "ollama")
+        env["TSAGENT_LLM_PROVIDER"] = provider
+        if provider == "ollama":
+            # Offline evals must not accidentally spend the real API key.
+            env["OPENAI_API_KEY"] = ""
+            env["LLM_API_KEY"] = ""
+            env["P2_SECONDARY_API_KEY"] = ""
         proc = await asyncio.create_subprocess_exec(
             sys.executable, "-u", "-m", "agent.service.local_sidecar",
             "--database", str(db),
@@ -167,7 +178,11 @@ def classify(run_status: str, accepted: bool, cont: dict,
     contract working correctly — classify by whether the refusal was honest,
     not by the raw status."""
     if sidecar_error:
-        return "provider_or_environment"
+        return (
+            "deadline_exceeded"
+            if "did not reach a terminal status" in sidecar_error
+            else "provider_or_environment"
+        )
     missing = list((cont.get("missing") or []))
     if run_status == "COMPLETED" and accepted and not missing:
         return "capability_met"
@@ -245,7 +260,7 @@ async def evaluate(sidecar: Sidecar, key: str, spec: dict, root: Path) -> dict:
             str(run.get("status")), accepted, cont,
         )
     except Exception as exc:  # provider/env/transport failures land here
-        result["classification"] = classify("", False, str(exc))
+        result["classification"] = classify("", False, {}, sidecar_error=str(exc))
         result["error"] = str(exc)[:500]
     return result
 
@@ -272,9 +287,15 @@ async def main() -> int:
     finally:
         await sidecar.shutdown()
 
+    provider = os.environ.get("TSAGENT_LLM_PROVIDER", "auto")
     report = {
         "driver": "scripts/real_eval_mars.py",
-        "model": os.environ.get("OLLAMA_MODEL", "qwen3:8b"),
+        "provider": provider,
+        "model": (
+            os.environ.get("MODEL_NAME", "deepseek-v4-flash")
+            if provider == "deepseek"
+            else os.environ.get("OLLAMA_MODEL", "qwen3:8b")
+        ),
         "results": results,
     }
     (REPORT_ROOT / "report.json").write_text(

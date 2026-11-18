@@ -9,6 +9,7 @@ model — acceptance failures never drive repair.
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 from typing import Any, Mapping, Sequence
 
@@ -26,7 +27,7 @@ from agent.state import AgentState
 from agent.task import ExecutionPlan, ExecutionStep, Task
 
 from .prompt import build_system_prompt
-from .toolset import LoopTool, build_toolset
+from .toolset import LoopTool, build_toolset, _MUTATION_TOOL_NAMES
 from .workflow_tool import run_workflow_tool, workflow_projections
 
 # Approval gate threshold: any tool declaring risk R2+ routes through
@@ -393,6 +394,11 @@ class AgentLoop:
         transcript.append({"role": "user", "content": request_text})
 
         call_index = 0
+        # Stall detection: identical failing calls repeated with no successful
+        # mutation in between. Real eval showed a model re-running the same
+        # pytest 4x while narrating the fix instead of calling edit_file —
+        # the nudge turns its own diagnosis into a directive to act.
+        repeat_failures: dict[tuple[str, str], int] = {}
         while True:
             if budget is not None and not budget.consume_transition():
                 state["runtime_terminal_status"] = "FAILED_TERMINAL"
@@ -505,6 +511,27 @@ class AgentLoop:
                 index=call_index, run_context=run_context,
                 user_id=user_id, user_input=user_input,
             )
+            for call, message in zip(turn.tool_calls, messages):
+                content = str(message.get("content") or "")
+                if content.startswith("ERROR["):
+                    signature = (
+                        call.name,
+                        json.dumps(
+                            call.arguments, sort_keys=True, ensure_ascii=False
+                        ),
+                    )
+                    count = repeat_failures.get(signature, 0) + 1
+                    repeat_failures[signature] = count
+                    if count >= 2:
+                        message["content"] = (
+                            content
+                            + f"\n\n[运行时提示] 同一调用已连续失败 {count} 次且期间没有成功的文件修改。"
+                            "若报错指向未完成的代码修改（如旧名称残留、缺失引用），"
+                            "先用 edit_file/write_file 修正再重新运行，不要原样重试；"
+                            "确实无法修复时如实说明原因。"
+                        )
+                elif call.name in _MUTATION_TOOL_NAMES:
+                    repeat_failures.clear()
             transcript.extend(messages)
             _compact_transcript(
                 transcript,

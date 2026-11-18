@@ -122,7 +122,11 @@ stdio JSONL 线协议）+ 真实模型 `ollama/qwen3:8b` + 独立 git 项目目�
 | R1 修 bug | COMPLETED | ✅ | **capability_met** | 模型先 `EDIT_MATCH_NOT_UNIQUE`（edit 片段不唯一）再 `COMMAND_NONZERO_EXIT`（猜错测试文件名 `calc_test.py`），两个真实工具错误都在 loop 内自行恢复；pytest 最终通过；用户文件全保留；`workspace_changes` 归因正确 |
 | R2 小功能 | FAILED_TERMINAL | ✅（文件含 shout） | **capability_gap_honest_refusal** | 模型用 `run_python`（非 shell）验证且两次 `ARTIFACT_OUTPUT_UNVERIFIED`，从未执行 pytest；意图声明了 `CODE_EXECUTION`，goal 校验 `missing:["outcome:CODE_EXECUTION"]` → 如实拒绝未验证的成功声明。**失败 run 同样携带 workspace_changes + diff** |
 | R3 跨文件重构 | COMPLETED | ❌（引用未更新） | **capability_gap（含声明层缺口）** | 模型只改 `util.py`，未更新 `app.py`/`test_util.py` 引用、从未跑 pytest 却宣告完成；意图只声明 `FILE_MUTATION`（尽管请求明写"并用 pytest 确认"），校验器无可强制项 → `missing:[]` 放行 |
-| R3 修复后复测 | FAILED_TERMINAL | ❌ | **capability_gap_honest_refusal** | 修复生效：`missing` 出现 `outcome:COMMAND_EXECUTION`+`outcome:FILE_MUTATION`，门禁正确拦截；但模型幻觉无写权限（"请确认授权"重复输出），连 `filesystem.edit` 都未调——合同语义对了，瓶颈是纯模型能力 |
+| R3 修复后复测（qwen3:8b） | FAILED_TERMINAL | ❌ | **capability_gap_honest_refusal** | 修复生效：`missing` 出现 `outcome:COMMAND_EXECUTION`+`outcome:FILE_MUTATION`，门禁正确拦截；但模型幻觉无写权限（"请确认授权"重复输出），连 `filesystem.edit` 都未调——合同语义对了，瓶颈是纯模型能力 |
+| R3 qwen3:8b #3（误标为 deepseek，harness 强制 provider） | FAILED_TERMINAL | ❌ | **capability_gap_honest_refusal（另有授权真 bug）** | 模型路径全对（改名→跑测试→读失败文件→尝试改它），但 `edit(test_util.py)` 被 `EFFECT_SCOPE_VIOLATION` 拒：意图 `write_targets=["util.py"]` 把"更新全部引用"收窄成单文件 |
+| R3 qwen3:8b #4（误标） | 未到终态（1800s） | 工作区通过 | **deadline_exceeded** | scope 放宽后三个文件全部改成 `agent_files`；最终验证 pytest 被模型误填 `output_paths` 判 `ARTIFACT_OUTPUT_UNVERIFIED`，重试至超时——但磁盘上 pytest 已全绿 |
+| R3 qwen3:8b #5（误标） | FAILED_TERMINAL | ❌（import 改了调用点没改） | **capability_gap_honest_refusal** | 工具链全程正确（scope、证据、门禁、用户文件保留）；停滞点定位：模型自述"测试文件仍用旧 trim"却连续 4 次重发同一 pytest 调用，从不发 edit——诊断说对了但不落成工具调用 |
+| **R3 deepseek-flash（真实）** | **COMPLETED** | ✅ | **capability_met** | 62.5s 一次通过：改名→grep 清查全部 trim 引用（含 .repo_index/用户文件）→修调用点→`python -m pytest -q` 通过；`goal_missing:[]`，用户文件全保留 |
 
 ### 真实评测暴露的问题与修复（按层归因）
 
@@ -141,13 +145,24 @@ stdio JSONL 线协议）+ 真实模型 `ollama/qwen3:8b` + 独立 git 项目目�
 2. **能力缺口（真实模型，部分缓解）**：`run_python` 被当验证工具使用且参数
    误用（`ARTIFACT_OUTPUT_UNVERIFIED`×2）；`shell` 可用却未被选。
    修复：`prompt.py` 的验证规则点名 `shell` 运行项目测试/构建命令，
-   并说明 `run_python` 只适合小段临时代码。剩余风险是模型本身的选择能力。
-3. **证据噪声（已修）**：`.pytest_cache/*` 曾计入 agent_files →
+   并说明 `run_python` 只适合小段临时代码；`output_paths` 的 schema
+   描述与 prompt 都写明"验证步骤不许填"。剩余风险是模型本身的选择能力。
+3. **写范围收窄（真实，已修）**：实跑 #3（qwen3，曾误标 deepseek）证明 `write_targets` 会把
+   "更新全部引用"收窄成单文件（`EFFECT_SCOPE_VIOLATION` 拒绝合法的调用点
+   修改）。修复：`from_state` 对跨文件变更语（全部引用/所有调用/
+   across the codebase 等）放宽 `write_scopes` 到 `.`——`test_mars_devloop.py`
+   有正（放宽）反（窄声明保留）两例回归。
+4. **停滞形态（真实，已修）**：实跑 #5（qwen3）的停滞不是工具没接通——模型
+   自述正确诊断却连续重发同一失败调用。修复：runner 对"同一工具+参数连续
+   失败且期间无成功修改"注入运行时提示（第 2 次起），prompt 增加"报错指向
+   未完成修改时必须调 edit"规则；`_run_fixture` 有首次不提示、二次提示的
+   回归用例。
+5. **证据噪声（已修）**：`.pytest_cache/*` 曾计入 agent_files →
    `_SKIP_DIRS` 已扩常见生成目录。`.file_symbols.json`/
    `.symbol_index.json` 由 `RepositoryIndexer` 写入用户项目根 →
    已挪进 `.repo_index/`（与 vector store 同目录），旧位置的既有文件
    在索引器加载时一次性迁移，不留兼容读路径。
-4. **超时观察**："交接记忆写入超时"在三个 run 都出现（非阻断，未修）。
+6. **超时观察**："交接记忆写入超时"在各 run 都出现（非阻断，未修）。
 
 ### 结论口径
 
@@ -155,7 +170,11 @@ stdio JSONL 线协议）+ 真实模型 `ollama/qwen3:8b` + 独立 git 项目目�
   （含失败 run），归因与用户文件保留正确。
 - Capability：1/3 完成验收（R1）；R2 文件改对但未验证（被合同拦下）；R3
   半重构未验证被放行（声明层缺口）。
-- Provider：qwen3:8b 三单无 provider 级错误；单 run 140–180s。
+- Provider：qwen3:8b 单 run 140–2160s，止步半重构（能力上限）；
+  **deepseek-flash 真实 R3 一次通过（62.5s，含 grep 引用清查与 pytest 验证）**。
+  ⚠️ 中间三轮标称 deepseek 的 run 实为 qwen3:8b——评测 harness 在
+  sidecar spawn 时强制 `TSAGENT_LLM_PROVIDER=ollama`，已修并加
+  provider 字段校验（report.json 的 provider/model 现按实际值记录）。
 - Environment：无环境失败。
 
 ## 4. 未覆盖项（如实声明）
@@ -163,8 +182,9 @@ stdio JSONL 线协议）+ 真实模型 `ollama/qwen3:8b` + 独立 git 项目目�
 - 真实 Tauri/WebView 交互验收未做（前端证据为 jsdom DOM 测试；真实 run 走了
   与 Tauri 相同的 sidecar JSONL 线协议，但未经桌面壳）。
 - 装依赖/git 写操作的确认边界目前只在指令层，无命令级强制；真实模型不遵守指令时
-  的表现未评测（三个候选均未触发需确认操作）。
+  的表现未评测（候选均未触发需确认操作）。
 - 大型工作区（>20000 文件）的 diff 证据按“不可用”记录，未实测性能开销。
 - 中断 run 的 `workspace_changes` 通道已接好但 `Runtime` 中断路径暂未填值（部分
   结果以 `partial_execution` 为准）。
-- DeepSeek provider 未评测；意图声明层缺口（§3.1）的修复方向未实施。
+- 停滞提示（§3.4）只经离线断言验证；deepseek 一次通过未触发停滞，qwen3
+  停滞形态的真实收敛效果仍待观察。

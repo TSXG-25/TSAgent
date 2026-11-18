@@ -1,0 +1,71 @@
+{
+  "driver": "scripts/real_eval_mars.py",
+  "provider": "deepseek",
+  "model": "qwen3:8b",
+  "results": [
+    {
+      "candidate": "r3",
+      "fixture": "refactor",
+      "dir": "/Users/tsxg/Desktop/tsagent-real-eval/r3-refactor",
+      "task": "把 util.trim 重命名为 util.normalize，更新全部引用，并用 python -m pytest -q 确认通过。",
+      "classification": "capability_gap_honest_refusal",
+      "checks": {
+        "accepted": false,
+        "preserved_user_files": {
+          "CHANGELOG.md": true,
+          "local_run.sh": true
+        },
+        "workspace_changes_present": true,
+        "agent_files": [
+          "app.py",
+          "test_util.py",
+          "util.py"
+        ],
+        "ambiguous_files": [],
+        "user_dirty_preserved": [
+          "CHANGELOG.md",
+          "local_run.sh"
+        ],
+        "shell_observations": [
+          {
+            "cmd": "python -m pytest -q test_util.py",
+            "ok": false,
+            "error_code": "COMMAND_NONZERO_EXIT"
+          },
+          {
+            "cmd": "python -m pytest -q test_util.py",
+            "ok": false,
+            "error_code": "COMMAND_NONZERO_EXIT"
+          },
+          {
+            "cmd": "python -m pytest -q test_util.py",
+            "ok": false,
+            "error_code": "COMMAND_NONZERO_EXIT"
+          },
+          {
+            "cmd": "python -m pytest -q test_util.py",
+            "ok": false,
+            "error_code": "COMMAND_NONZERO_EXIT"
+          },
+          {
+            "cmd": "python -m pytest -q test_util.py",
+            "ok": false,
+            "error_code": "COMMAND_NONZERO_EXIT"
+          },
+          {
+            "cmd": "python -m pytest -q test_util.py",
+            "ok": false,
+            "error_code": "COMMAND_NONZERO_EXIT"
+          }
+        ],
+        "goal_missing": [
+          "outcome:COMMAND_EXECUTION"
+        ]
+      },
+      "run_id": "run-edfafefee94b43afa9e12fb825a2c660",
+      "elapsed_s": 2159.2,
+      "terminal_status": "FAILED_TERMINAL",
+      "failure": null
+    }
+  ]
+}

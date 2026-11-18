@@ -1,0 +1,17 @@
+{
+  "driver": "scripts/real_eval_mars.py",
+  "provider": "deepseek",
+  "model": "qwen3:8b",
+  "results": [
+    {
+      "candidate": "r3",
+      "fixture": "refactor",
+      "dir": "/Users/tsxg/Desktop/tsagent-real-eval/r3-refactor",
+      "task": "把 util.trim 重命名为 util.normalize，更新全部引用，并用 python -m pytest -q 确认通过。",
+      "classification": "provider_or_environment",
+      "checks": {},
+      "run_id": "run-9ba8475ad20e4bdf9ebc177e6c191950",
+      "error": "run run-9ba8475ad20e4bdf9ebc177e6c191950 did not reach a terminal status in 1800s"
+    }
+  ]
+}

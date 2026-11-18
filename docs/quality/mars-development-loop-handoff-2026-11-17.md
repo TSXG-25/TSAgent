@@ -122,6 +122,7 @@ stdio JSONL 线协议）+ 真实模型 `ollama/qwen3:8b` + 独立 git 项目目�
 | R1 修 bug | COMPLETED | ✅ | **capability_met** | 模型先 `EDIT_MATCH_NOT_UNIQUE`（edit 片段不唯一）再 `COMMAND_NONZERO_EXIT`（猜错测试文件名 `calc_test.py`），两个真实工具错误都在 loop 内自行恢复；pytest 最终通过；用户文件全保留；`workspace_changes` 归因正确 |
 | R2 小功能 | FAILED_TERMINAL | ✅（文件含 shout） | **capability_gap_honest_refusal** | 模型用 `run_python`（非 shell）验证且两次 `ARTIFACT_OUTPUT_UNVERIFIED`，从未执行 pytest；意图声明了 `CODE_EXECUTION`，goal 校验 `missing:["outcome:CODE_EXECUTION"]` → 如实拒绝未验证的成功声明。**失败 run 同样携带 workspace_changes + diff** |
 | R3 跨文件重构 | COMPLETED | ❌（引用未更新） | **capability_gap（含声明层缺口）** | 模型只改 `util.py`，未更新 `app.py`/`test_util.py` 引用、从未跑 pytest 却宣告完成；意图只声明 `FILE_MUTATION`（尽管请求明写"并用 pytest 确认"），校验器无可强制项 → `missing:[]` 放行 |
+| R3 修复后复测 | FAILED_TERMINAL | ❌ | **capability_gap_honest_refusal** | 修复生效：`missing` 出现 `outcome:COMMAND_EXECUTION`+`outcome:FILE_MUTATION`，门禁正确拦截；但模型幻觉无写权限（"请确认授权"重复输出），连 `filesystem.edit` 都未调——合同语义对了，瓶颈是纯模型能力 |
 
 ### 真实评测暴露的问题与修复（按层归因）
 

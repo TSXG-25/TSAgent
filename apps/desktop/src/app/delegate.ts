@@ -112,3 +112,52 @@ export async function delegateToPlanet(
   void view;
   return result?.taskId ?? "";
 }
+
+/** Omni → workstation delegation ("在 Omni 发任务，Mars 执行并回来汇报").
+ *  Same durable chain as delegateToPlanet — child Task + Handoff + child Run
+ *  in this session — anchored under the active run's task when one exists,
+ *  else under a fresh Omni-side Task created on the spot. Returns the child
+ *  run id so Omni can display progress/result inline. */
+export async function delegateFromOmni(
+  ctx: RunCtx,
+  targetPlanet: string,
+  requestText: string,
+  attachments: string[] = [],
+  options: { model?: string } = {},
+): Promise<{ taskId: string; runId: string }> {
+  const { service } = ctx;
+  const metadata = metadataFor(options);
+  let parentTaskId = "";
+  if (!ctx.activeRun) {
+    const parent = await service.createTask({
+      sessionId: ctx.sessionId,
+      originPlanet: "sun",
+    });
+    parentTaskId = parent.taskId;
+  }
+  const result = await service.delegateRun({
+    sessionId: ctx.activeRun?.sessionId ?? ctx.sessionId,
+    parentRunId: ctx.activeRun?.runId ?? "",
+    parentTaskId,
+    contextRefs: attachments,
+    requestText,
+    targetPlanet,
+  });
+  const view = await ctx.controller.startRun({
+    sessionId: ctx.activeRun?.sessionId ?? ctx.sessionId,
+    requestText: result?.requestText ?? requestText,
+    taskId: result?.taskId ?? "",
+    originPlanet: targetPlanet,
+    workspaceRoot: result?.workspaceRoot,
+    contextRefs: attachments.filter((r) => !r.startsWith("artifact:")),
+    metadata: {
+      ...metadata,
+      delegation_depth: 1,
+      agent_profile: {
+        ...((metadata.agent_profile as Record<string, unknown>) ?? {}),
+        ...(result?.agentProfile ?? {}),
+      },
+    },
+  });
+  return { taskId: result?.taskId ?? "", runId: view.runId };
+}

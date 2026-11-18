@@ -1431,14 +1431,19 @@ class SearchArtifactsRequest:
 @dataclass(frozen=True)
 class DelegateRunRequest:
     """UI-side delegation: provision a child Task + durable Handoff edge in
-    one call (the run itself is started via start_run with the task_id)."""
+    one call (the run itself is started via start_run with the task_id).
+
+    The delegation anchors under either a parent Run (continuation of an
+    existing conversation) or a bare parent Task (a fresh send that owns no
+    Run yet — e.g. Omni handing a new request to another workstation)."""
 
     tenant_id: str
     user_id: str
     session_id: str
     request_id: str
-    parent_run_id: str
     request_text: str
+    parent_run_id: str = ""
+    parent_task_id: str = ""
     target_planet: str = ""
     profile_id: str = ""
     context_refs: tuple[str, ...] = ()
@@ -1448,7 +1453,8 @@ class DelegateRunRequest:
         _required_identifier(self.user_id, "user_id")
         _required_identifier(self.session_id, "session_id")
         _required_identifier(self.request_id, "request_id")
-        _required_identifier(self.parent_run_id, "parent_run_id")
+        if not (self.parent_run_id or self.parent_task_id):
+            raise ValueError("parent_run_id or parent_task_id is required")
         if not self.request_text.strip():
             raise ValueError("request_text must be a non-empty string")
 
@@ -1461,6 +1467,7 @@ class DelegateRunRequest:
             request_id=str(value.get("request_id", "")),
             parent_run_id=str(value.get("parent_run_id", "")),
             request_text=str(value.get("request_text", "")),
+            parent_task_id=str(value.get("parent_task_id", "")),
             target_planet=str(value.get("target_planet", "")),
             profile_id=str(value.get("profile_id", "")),
             context_refs=tuple(str(v) for v in (value.get("context_refs") or ())),

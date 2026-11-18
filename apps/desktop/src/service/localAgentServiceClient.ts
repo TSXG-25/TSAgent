@@ -950,7 +950,8 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
   async delegateRun(request: DelegateRunRequest): Promise<DelegateRunResult> {
     return mapDelegation(await this.call("delegate_run", {
       ...this.ids(request, "delegate_run"),
-      parent_run_id: request.parentRunId,
+      parent_run_id: request.parentRunId ?? "",
+      parent_task_id: request.parentTaskId ?? "",
       request_text: request.requestText,
       target_planet: request.targetPlanet ?? "",
       profile_id: request.profileId ?? "",

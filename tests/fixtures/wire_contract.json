@@ -57,6 +57,7 @@
       "request": {
         "context_refs": [],
         "parent_run_id": "run-1",
+        "parent_task_id": "",
         "profile_id": "p1",
         "request_id": "r5",
         "request_text": "x",
@@ -68,6 +69,7 @@
       "request_fields": [
         "context_refs",
         "parent_run_id",
+        "parent_task_id",
         "profile_id",
         "request_id",
         "request_text",

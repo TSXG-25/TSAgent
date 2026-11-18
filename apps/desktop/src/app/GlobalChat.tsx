@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import type { RunCtx } from "./runCtx";
-import { Icon, MarkdownText } from "./ui";
+import { Icon, MarkdownText, StatusBadge } from "./ui";
 import { useScrollFollow } from "./useScrollFollow";
-import { submitToPlanet } from "./delegate";
-import { selectWorkspaceRun } from "./workspaceSelection";
+import { usePoll } from "./usePoll";
+import { delegateFromOmni } from "./delegate";
 import { isOmniSession } from "./sessionWorkspace";
 import { draftKey, useDraft, clearDraftIfUnchanged } from "./draftStore";
 import { t } from "./i18n";
-import type { SessionSummary } from "../types/service";
+import type { HandoffSummary, SessionSummary } from "../types/service";
 
 /** Global Chat — §4.1 honest subset: sessions are real (list/create), a sent
  *  message starts a Run in the active session (TSAgent's run-scoped chat
@@ -21,9 +22,11 @@ const loadJson = <T,>(k: string, d: T): T => { try { return JSON.parse(localStor
 
 export default function GlobalChat({ ctx, onClose, embedded = false, instant = false }: { ctx: RunCtx; onClose?: () => void; embedded?: boolean; instant?: boolean }) {
   const { service, sessionId, selectSession, activeRun, createRun } = ctx;
+  const navigate = useNavigate();
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [delegateTo, setDelegateTo] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
+  const [handoffs, setHandoffs] = useState<HandoffSummary[]>([]);
   const thread = useScrollFollow(activeRun?.runId ?? "none");
   const composingRef = useRef(false);
   // Draft keyed by the selected target — @direct shares the Sun workspace
@@ -61,6 +64,16 @@ export default function GlobalChat({ ctx, onClose, embedded = false, instant = f
   }, [service, ctx.reportError]);
 
   useEffect(() => { void refreshSessions(); }, [refreshSessions]);
+  // Delegated children of this session — durable Handoff edges resolve to
+  // the child runs living in this session (progress/result show inline).
+  usePoll(() => {
+    void service.listHandoffs({ sessionId })
+      .then(setHandoffs)
+      .catch(() => { /* keep last snapshot */ });
+  }, 8_000, [service, sessionId]);
+  const delegated = handoffs
+    .map((h) => ({ handoff: h, run: ctx.runs.find((r) => r.runId === h.targetRunId) }))
+    .filter((x): x is { handoff: HandoffSummary; run: NonNullable<typeof x.run> } => Boolean(x.run));
   useEffect(() => { thread.onContentGrow(); }, [activeRun?.conversation.length, activeRun?.output]);
   useEffect(() => {
     if (!pickerOpen) return;
@@ -159,6 +172,30 @@ export default function GlobalChat({ ctx, onClose, embedded = false, instant = f
             <div className="mc-msg-body"><MarkdownText text={activeRun.output.text} /></div>
           </article>
         )}
+        {delegated.length > 0 && (
+          <div className="chat-delegated" data-testid="chat-delegated">
+            {delegated.map(({ handoff, run }) => (
+              <article className="mc-delegated" key={handoff.handoffId}>
+                <div className="mc-delegated-head">
+                  <span>@{handoff.targetPlanet || "?"}</span>
+                  <StatusBadge status={run.status} />
+                  <button
+                    className="ven-link"
+                    onClick={() => ctx.selectRun(run.runId)}
+                    type="button"
+                  >{run.request || run.runId}</button>
+                  <button
+                    className="ven-link"
+                    onClick={() => navigate(`/w/${handoff.targetPlanet}`)}
+                    type="button"
+                  >{t("chat.enter-planet", { planet: handoff.targetPlanet })}</button>
+                </div>
+                {run.failure && <p className="mc-delegated-fail">{run.failure.message}</p>}
+                {run.output && <p className="mc-delegated-out">{run.output.text.slice(0, 200)}</p>}
+              </article>
+            ))}
+          </div>
+        )}
         {thread.hasNew && (
           <button className="scroll-pill" onClick={thread.toBottom} type="button">{t("thread.new-content")} ↓</button>
         )}
@@ -171,8 +208,10 @@ export default function GlobalChat({ ctx, onClose, embedded = false, instant = f
         const submitted = draft;
         if (delegateTo) {
           try {
-            const runId = await submitToPlanet(ctx, delegateTo, text, draft.files);
-            selectWorkspaceRun(ctx.service.identity.tenantId, ctx.sessionId, delegateTo, runId);
+            const { runId } = await delegateFromOmni(ctx, delegateTo, text, draft.files);
+            // The delegated child lives in this session — selecting it keeps
+            // the workstation's progress/result visible in the Omni thread.
+            ctx.selectRun(runId);
             clearDraftIfUnchanged(dkey, submitted);
             setNotice(t("composer.delegated", { target: delegateTo }));
           } catch (err) { setNotice(String(err)); }

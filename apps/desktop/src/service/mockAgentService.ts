@@ -696,16 +696,19 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
   }
 
   async delegateRun(request: DelegateRunRequest): Promise<DelegateRunResult> {
+    const sourceTaskId = request.parentRunId
+      ? `task-${request.parentRunId}`
+      : request.parentTaskId ?? "";
     const task = await this.createTask({
       sessionId: request.sessionId,
       requestId: request.requestId,
-      parentTaskId: request.parentRunId ? `task-${request.parentRunId}` : "",
+      parentTaskId: sourceTaskId,
       originPlanet: request.targetPlanet ?? "",
     });
     const handoff: HandoffSummary = {
       handoffId: `handoff-${Math.random().toString(16).slice(2, 10)}`,
-      sourceRunId: request.parentRunId,
-      sourceTaskId: request.parentRunId ? `task-${request.parentRunId}` : "",
+      sourceRunId: request.parentRunId ?? "",
+      sourceTaskId,
       targetTaskId: task.taskId,
       targetRunId: "",
       targetPlanet: request.targetPlanet ?? "",

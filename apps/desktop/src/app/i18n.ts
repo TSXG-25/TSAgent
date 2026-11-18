@@ -111,6 +111,7 @@ const zh = {
   "chat.placeholder": "输入消息 — 在当前会话中启动 Run…",
   "chat.send-title": "发送（启动 Run）",
   "chat.foot": "消息在 {session} 中启动 Run · @planet 委派子任务 · ⌘L 重新打开",
+  "chat.enter-planet": "进入 @{planet} →",
   // sun shell
   "sun.sessions": "◈ 会话",
   "sun.new-task": "新建任务",
@@ -529,6 +530,7 @@ const en: Record<keyof typeof zh, string> = {
   "chat.placeholder": "Message — starts a Run in this session…",
   "chat.send-title": "Send (start run)",
   "chat.foot": "Messages start Runs in {session} · @planet delegates a child Task+Run · ⌘L to reopen",
+  "chat.enter-planet": "Enter @{planet} →",
   "sun.sessions": "◈ SESSIONS",
   "sun.new-task": "New task",
   "sun.pick-workspace": "Pick workspace",

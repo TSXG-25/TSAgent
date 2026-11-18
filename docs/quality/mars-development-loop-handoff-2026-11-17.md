@@ -192,3 +192,46 @@ stdio JSONL 线协议）+ 真实模型 `ollama/qwen3:8b` + 独立 git 项目目�
   结果以 `partial_execution` 为准）。
 - 停滞提示（§3.4）只经离线断言验证；deepseek 一次通过未触发停滞，qwen3
   停滞形态的真实收敛效果仍待观察。
+
+## 5. Omni→Mars 委派接通（本次新增）
+
+### 链路
+
+Omni 显式选 `@Mars` → `delegateFromOmni`（`apps/desktop/src/app/delegate.ts`）
+→ `delegate_run` RPC → `_provision_delegation`（子 Task + Handoff + 继承工作区）
+→ `start_run`（子 run 落在 Omni 会话内，`origin_planet=mars`，`delegation_depth=1`）。
+与 Neptune 的 `delegateToPlanet` 同一条链，无第二路径。
+
+### 合同改动
+
+- `DelegateRunRequest.parent_task_id`：Omni 首发没有父 Run 时的任务锚点；
+  `parent_run_id`（活跃 run 锚点）与 `parent_task_id` 二选一，全空报错。
+- `start_run` admission：带 provisioned `task_id` 的 run 启动时按 task 回填
+  handoff `target_run_id`（此前 UI 委派链没人回填，spawn/graph 路径是手动的）。
+- `mockAgentService`/`localAgentServiceClient`/wire fixture 同步。
+
+### UI
+
+- `GlobalChat`：`@planet` 发送走 `delegateFromOmni`，成功后选中子 run 让
+  Omni 线程直接看到 Mars 执行；草稿只在受理后清空。
+- Omni 子任务卡（`chat-delegated`）：`listHandoffs` 轮询 → 状态徽标 +
+  结果摘要 + 选中链接（选中即进入 Mars 的执行视角）。
+- Mars 端 `WorkspaceTasks` delegated 区复用既有逻辑展示同一 task/handoff。
+- i18n：`chat.target`、`chat.delegated*`、`chat.enterPlanet`。
+
+### 离线证据（非真实场景验证）
+
+- `tests/test_omni_mars_delegation.py`（2 例）：createTask→delegate_run→
+  start_run 链、继承 workspace_root 下的真实文件编辑+pytest、task 树/
+  handoff 回填/双侧可见性断言。
+- `apps/desktop/tests/dom/omniDelegation.test.tsx`（2 例）：`@mars` 发送走
+  委派链而非扁平 run（断言 parentTaskId/delegation_depth）；委派卡片渲染
+  状态/摘要/进入链接。
+- 全量：`989 passed / 17 skipped`（DeepSeek API 不可达跳过，符合离线口径）；
+  vitest `22 files / 149 passed`；`tsc`+build 干净。
+
+### 未覆盖
+
+- 真实桌面壳（Tauri）内的 Omni→Mars 人工验收未做。
+- `spawn_subtask`（模型侧阻塞委派）未接入 Omni 的 `@` 路径——本阶段只做
+  显式选择，自动识别/任务拆解/多工作台编排均未做。

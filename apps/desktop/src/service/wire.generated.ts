@@ -290,8 +290,9 @@ export interface WireDelegateRunRequest {
   user_id: string;
   session_id: string;
   request_id: string;
-  parent_run_id: string;
   request_text: string;
+  parent_run_id?: string;
+  parent_task_id?: string;
   target_planet?: string;
   profile_id?: string;
   context_refs?: string[];

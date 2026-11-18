@@ -329,6 +329,21 @@ class AgentService:
                 raise self._store_error(error, request_id=request.request_id) from error
 
             run_id = reservation.head.run_id
+            # A run admitted under a provisioned (delegated) Task binds the
+            # pending Handoff edge to itself — the UI path splits
+            # delegate_run/start_run into two calls, so the binding lives at
+            # admission rather than in the caller. Idempotent by handoff id.
+            if request.task_id:
+                for handoff in self._store.list_handoffs(
+                    request.tenant_id, request.session_id
+                ):
+                    if (
+                        handoff.target_task_id == task_id
+                        and handoff.target_run_id != run_id
+                    ):
+                        self._store.update_handoff_target_run(
+                            request.tenant_id, handoff.handoff_id, run_id
+                        )
             if not reservation.created:
                 managed = self._runs.get(run_id)
                 if managed is not None and not managed.task.done():
@@ -2550,19 +2565,31 @@ class AgentService:
         from agent.runtime_store.errors import DurableStoreError
 
         tenant_id, session_id = request.tenant_id, request.session_id
-        try:
-            parent_head = self._store.get_run_head(
-                tenant_id, request.parent_run_id, session_id=session_id
-            )
-        except DurableStoreError:
-            # run exists but belongs to another session — for this session's
-            # scope it is simply not found; surface a real error, not 500.
-            parent_head = None
-        if parent_head is None:
-            raise AgentServiceError(
-                ServiceErrorCode.RUN_NOT_FOUND,
-                f"run was not found: {request.parent_run_id}",
-            )
+        parent_task_id = ""
+        if request.parent_run_id:
+            try:
+                parent_head = self._store.get_run_head(
+                    tenant_id, request.parent_run_id, session_id=session_id
+                )
+            except DurableStoreError:
+                # run exists but belongs to another session — for this session's
+                # scope it is simply not found; surface a real error, not 500.
+                parent_head = None
+            if parent_head is None:
+                raise AgentServiceError(
+                    ServiceErrorCode.RUN_NOT_FOUND,
+                    f"run was not found: {request.parent_run_id}",
+                )
+            parent_task_id = parent_head.task_id
+        elif request.parent_task_id:
+            if self._store.get_task_head(
+                tenant_id, request.parent_task_id, session_id=session_id
+            ) is None:
+                raise AgentServiceError(
+                    ServiceErrorCode.INVALID_REQUEST,
+                    f"parent task not found: {request.parent_task_id}",
+                )
+            parent_task_id = request.parent_task_id
         profile = None
         if request.profile_id:
             profile = self._store.get_profile(tenant_id, request.profile_id)
@@ -2585,7 +2612,7 @@ class AgentService:
             tenant_id=tenant_id,
             session_id=session_id,
             source_run_id=request.parent_run_id,
-            parent_task_id=parent_head.task_id if parent_head else "",
+            parent_task_id=parent_task_id,
             request_key=request.request_id,
             request_text=request.request_text,
             target_planet=target_planet,

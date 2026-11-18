@@ -708,7 +708,10 @@ export interface ListSkillsRequest {
 export interface DelegateRunRequest {
   sessionId: string;
   requestId?: string;
-  parentRunId: string;
+  /** Anchor under an existing Run — continuation of its task tree. */
+  parentRunId?: string;
+  /** Anchor under a bare Task — a fresh send that owns no Run yet. */
+  parentTaskId?: string;
   requestText: string;
   targetPlanet?: string;
   profileId?: string;

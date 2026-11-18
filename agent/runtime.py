@@ -312,6 +312,7 @@ def _build_run_evidence(
             {
                 "task_id": item.get("task_id", ""),
                 "tool": item.get("tool", ""),
+                "input": dict(item.get("input") or {}),
                 "result": {
                     "ok": item["result"].get("ok", False),
                     "verified": item["result"].get("verified", False),
@@ -666,6 +667,31 @@ class UniversalAgent:
                 return await self._run_in_context(user_input)
             except RunInterruptionRequested as interruption:
                 return self._interrupted_result(interruption)
+
+    def _evidence_workspace_root(self) -> Optional[Path]:
+        workspace = (
+            getattr(self._run_context, "workspace", None)
+            if self._run_context is not None
+            else None
+        ) or getattr(self, "_workspace", None)
+        if workspace is None:
+            return None
+        try:
+            # Path.root is the anchor "/" — never getattr(root, "root", root).
+            if isinstance(workspace, (str, Path)):
+                return Path(workspace)
+            return Path(workspace.root)
+        except (TypeError, ValueError, AttributeError):
+            return None
+
+    def _workspace_change_evidence(self, state: AgentState) -> Optional[dict]:
+        baseline = state.get("_workspace_baseline")
+        root = self._evidence_workspace_root()
+        if not isinstance(baseline, dict) or root is None or not root.is_dir():
+            return None
+        from agent.workspace_diff import diff_workspace, snapshot_workspace
+
+        return diff_workspace(baseline, snapshot_workspace(root))
 
     def _run_invalid_request(self, user_input: str) -> str:
         """Reject an empty/punctuation-only request without cognition calls."""
@@ -1155,6 +1181,9 @@ class UniversalAgent:
         self.last_run_evidence = _build_run_evidence(
             state, final_answer, transitions, user_input,
         )
+        workspace_changes = self._workspace_change_evidence(state)
+        if workspace_changes:
+            self.last_run_evidence["workspace_changes"] = workspace_changes
         if conversation_diagnostic:
             self.last_run_evidence["diagnostics"] = [conversation_diagnostic]
         self._wall_total_seconds = time.perf_counter() - t0

@@ -1,0 +1,37 @@
+{
+  "driver": "scripts/real_eval_mars.py",
+  "model": "qwen3:8b",
+  "results": [
+    {
+      "candidate": "r3",
+      "fixture": "refactor",
+      "dir": "/Users/tsxg/Desktop/tsagent-real-eval/r3-refactor",
+      "task": "把 util.trim 重命名为 util.normalize，更新全部引用，并用 python -m pytest -q 确认通过。",
+      "classification": "capability_gap",
+      "checks": {
+        "accepted": false,
+        "preserved_user_files": {
+          "CHANGELOG.md": true,
+          "local_run.sh": true
+        },
+        "workspace_changes_present": true,
+        "agent_files": [
+          "util.py"
+        ],
+        "ambiguous_files": [],
+        "user_dirty_preserved": [
+          ".file_symbols.json",
+          ".symbol_index.json",
+          "CHANGELOG.md",
+          "local_run.sh"
+        ],
+        "shell_observations": [],
+        "goal_missing": []
+      },
+      "run_id": "run-0857e550823443d9aaea757acba3c014",
+      "elapsed_s": 139.2,
+      "terminal_status": "COMPLETED",
+      "failure": null
+    }
+  ]
+}

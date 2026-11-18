@@ -213,3 +213,56 @@ def test_finalizer_does_not_claim_a_command_was_created() -> None:
     assert answer is not None
     assert answer.startswith("已执行 date")
     assert "已创建" not in answer
+
+
+def test_verified_command_evidence_satisfies_declared_code_execution() -> None:
+    """A run that verified via shell satisfies a CODE_EXECUTION declaration:
+    the user asked that execution happen and be verified, not which runner
+    produced the evidence."""
+    state = {
+        "requested_outcomes": ["USER_VISIBLE_OUTPUT", "CODE_EXECUTION"],
+        "execution_evidence": [{
+            "outcome": "COMMAND_EXECUTION",
+            "status": "VERIFIED",
+            "source": "ToolExecutor",
+        }],
+    }
+
+    truth = enforce_completion_gate(state)
+
+    assert truth.can_complete is True
+    assert truth.unresolved_requested_outcomes == ()
+
+
+def test_verified_code_evidence_satisfies_declared_command_execution() -> None:
+    state = {
+        "requested_outcomes": ["USER_VISIBLE_OUTPUT", "COMMAND_EXECUTION"],
+        "execution_evidence": [{
+            "outcome": "CODE_EXECUTION",
+            "status": "VERIFIED",
+            "source": "ToolExecutor",
+        }],
+    }
+
+    truth = enforce_completion_gate(state)
+
+    assert truth.can_complete is True
+    assert truth.unresolved_requested_outcomes == ()
+
+
+def test_unverified_execution_evidence_still_blocks_completion() -> None:
+    """Equivalence applies to VERIFIED evidence only — a failed or
+    unverified run_python attempt must not satisfy the gate (real-eval R2)."""
+    state = {
+        "requested_outcomes": ["USER_VISIBLE_OUTPUT", "CODE_EXECUTION"],
+        "execution_evidence": [{
+            "outcome": "COMMAND_EXECUTION",
+            "status": "UNVERIFIED",
+            "source": "ToolExecutor",
+        }],
+    }
+
+    truth = enforce_completion_gate(state)
+
+    assert truth.can_complete is False
+    assert truth.unresolved_requested_outcomes == ("CODE_EXECUTION",)

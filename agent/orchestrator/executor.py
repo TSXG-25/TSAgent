@@ -209,6 +209,13 @@ class ExecutionStage:
         step = {
             "task_id": str(task_dict.get("id", "")),
             "tool": plan.steps[0].tool if plan.steps else plan.executor,
+            "input": {
+                key: str(value)[:300]
+                for key, value in (
+                    plan.steps[0].args.items() if plan.steps else ()
+                )
+                if key in {"cmd", "command", "path", "query", "url"}
+            },
             "action": {
                 "kind": "tool_call",
                 "executor": plan.executor,

@@ -1,0 +1,169 @@
+# Mars 开发闭环 — 实施交接（MC-01..06）
+
+日期：2026-11-17。配套计划：`mars-development-loop-plan-2026-11-17.md`。
+
+**状态：代码与离线门禁完成；真实任务评测 R1–R3 已跑（§3）。** 剩余未覆盖项见 §4，
+离线测试结果不构成真实环境验证结论。
+
+## 1. 交付内容（按工单）
+
+### MC-01 固定失败用例（已完成）
+
+`tests/test_mars_devloop.py` — 三个固定 fixture（修 bug / 小功能 / 跨文件重构），
+每个都是真实 git 仓库（基线提交 + 任务前未提交修改 + 未跟踪文件），经真实
+`AgentLoop` + 真实工具面（`shell` 走 workspace 作用域沙箱，`edit_file`/
+`write_file` 走 `WorkspaceService`）驱动，Provider 为脚本化 `ChatTurn`。
+
+记录合同：验收结果、人工介入次数（0）、工具错误、复测次数、耗时、全部命令结果
+（含首个断点的真实报错尾部）。断言锁定完整闭环：首次验证失败 → 失败输出原样回传
+模型 → 文件修改 → 受影响测试复测通过 → 验收函数核对真实文件。
+
+发现并修复的测试自身缺陷：脚本化轮次的 `calls[:-1]` 切片丢弃了复测轮（已修）；
+同尺寸同秒 mtime 的旧 pyc 导致复测偶发读到旧字节码（`python -B` 消除，双沙箱路径
+各两轮验证确定性）。
+
+### MC-02 自主验证授权对齐（已完成）
+
+- `agent/cognition/effect_authorization.py`（前轮 `8711eb62`）：`requested_outcomes`
+  保持“用户声明”语义（`validate_plan` 的计划要求不变），`command_execution_allowed`
+  在授予层由 FILE_MUTATION 推定，`prohibited_effects` 显式禁止仍优先。
+- `skills/coding/SKILL.md`：旧的“只有用户明确要求才调用 shell”与验证合同矛盾，改为
+  “改代码后应运行项目已有测试/构建；装依赖、git 提交/推送等不可逆操作先获确认”。
+- `agent/loop/prompt.py`：在通用规则区补同一条确认边界（不加载 coding skill 的 run
+  也受约束）。
+- 未新增权限档位；shell 仍为 R0 无审批门，确认边界当前在指令层——这是与既有模式
+  一致的取舍，命令级分类属于后续工作（需要有证据再动）。
+
+### MC-03 失败→修正→复测链路（已完成，无 runner 缺口）
+
+MC-01 三个 fixture 证明：工具失败作为普通 observation 进入模型消息流
+（`ERROR[code]: ...` + 完整 stderr），模型随后修改、复测通过。普通失败未升级为
+结构性恢复路径，无需补丁。
+
+### MC-04 任务改动预览与验证记录（已完成）
+
+- `agent/workspace_diff.py`（新）：基线快照（sha256 + 限量文本保留）→ 终态快照 →
+  归因分类。`agent_files`（基线干净、本轮变更）/`ambiguous_files`（基线已脏又改动，
+  明确标“无法归因”）/`user_dirty_preserved`（任务前修改原样保留）。unified diff 由
+  difflib 产出，git 仅用于 `status --porcelain` 判脏；不 init/stash/reset/commit。
+  上限：20000 文件、8MB 哈希上限、64KB/文件与 4MB 总量文本保留、diff 40 文件/20KB。
+- `agent/loop/runner.py`：`_run_impl` 授权判定后、首个工具前捕获基线；仅
+  FILE_MUTATION/COMMAND_EXECUTION 授权的 run 付快照成本。
+- `agent/runtime.py`：终态时 `workspace_changes` 并入 `last_run_evidence`；
+  `action_observations` 透传步骤 `input`（shell 的 `cmd` 等）。
+- `agent/orchestrator/executor.py`：inbox 步骤记录命令参数摘要。
+- `agent/service/runtime_launcher.py`：`workspace_changes` 进终态事件
+  `continuation` 与中断 `terminal_payload`。
+- `apps/desktop/src/app/WorkspaceThread.tsx`：`RunEvidence` 卡片——按归因分组的
+  文件清单（新增/修改/删除/无法归因徽标）、可折叠 diff、验证命令通过/失败徽标 +
+  失败输出尾部。失败永不渲染成功徽标（徽标直接由 `result.ok` 决定）。
+- 已知限制：真实崩溃（`BaseException` 路径）不携带 workspace_changes；非 Loop
+  路径（planner/workflow 执行器）的 run 不捕获基线，证据按“缺失”处理而非伪空。
+
+修复的实现缺陷：`getattr(root, "root", root)` 对 `Path` 返回锚点 `/`（曾导致全
+文件系统扫描），改为按类型分派；`UniversalAgent.__new__` 手工构造的测试对象缺
+`_workspace`，按仓库既有测试模式补容错。
+
+### MC-05 Mars 前端交互回归（已完成）
+
+`apps/desktop/tests/dom/workspaceRail.test.tsx`（vitest + jsdom +
+@testing-library/react，沿用既有 `tests/dom/` 基建与 `MockAgentServiceClient`）：
+
+- 首页发送 → 新建本台记录会话 → 接纳后落在其 thread；
+- 发送失败 → 草稿、当前会话、首页视图全部保留；
+- 点击 RECENT 记录 → 显式进 thread（含当前记录重开）；
+- 迟到的接纳响应 → 草稿只在落地后清除；
+- 隔离 → mars 发送恢复 Omni 全局选中 run，且只写 mars 选中槽；
+- `WorkspaceThread` 证据渲染：归因文件清单 + diff + 验证命令成败徽标。
+
+### MC-06 离线门禁（已完成）
+
+| 门禁 | 结果 |
+| --- | --- |
+| Python 全量（屏蔽 provider key，ollama 环境） | 983 passed, 17 skipped（DeepSeek 不可达项）；含评测修复回归与 Bad Apple 否定语境用例 |
+| `tests/test_mars_devloop.py` | 4/4（seatbelt 与默认沙箱路径各两轮） |
+| desktop `tsc` | 干净（src + tests 双 tsconfig） |
+| desktop `vitest run` | 21 文件 147/147 |
+| desktop `npm run build` | 通过（chunk 体积警告为既有状况） |
+| cargo test（src-tauri） | 前轮 3/3，本轮未改动 Rust |
+
+## 2. 真实任务评测候选（交接给独立评测）
+
+三个固定候选与离线 fixture 同源但物化为**真实磁盘项目 + 真实模型 + 真实
+sidecar/Desktop**。评测者自行选择 Provider（建议 `TSAGENT_LLM_PROVIDER=ollama`
+`qwen3:8b`；需 DeepSeek 时单独注明）。
+
+| 候选 | 项目与修订 | 确切请求 | 验收命令 | 允许操作 |
+| --- | --- | --- | --- | --- |
+| R1 修 bug | 将 `FIX_BUG` fixture（`test_mars_devloop.py`）物化到独立目录并 git init；基线提交含错误 `subtract` | “`calc.subtract` 结果错误：`subtract(3, 5)` 应为 -2。修复实现并用 `python -m pytest -q` 验证。” | `python -m pytest -q` 全绿 | 编辑文件、运行已有测试；禁止装依赖/git 写操作 |
+| R2 小功能 | `SMALL_FEATURE` fixture 同上物化 | “给 `greet.py` 增加 `shout(name)`，返回问候的大写形式；先写测试再实现，并用 `python -m pytest -q` 验证。” | 同上 | 同上 |
+| R3 跨文件重构 | `REFACTOR` fixture 同上物化 | “把 `util.trim` 重命名为 `util.normalize`，更新全部引用，并用 `python -m pytest -q` 确认通过。” | 同上 | 同上 |
+
+每个候选的评测要点：
+
+1. Mars 绑定该目录后发任务；核对请求记录不含 IDE 前缀正文泄漏。
+2. 运行中观察：是否自行读文件、运行测试、按报错修改、复测。
+3. 终态核对：验收命令实际结果、`workspace_changes` 归因（任务前的未提交修改与
+   未跟踪文件必须原样保留并如实标注）、证据卡片与真实文件一致。
+4. 结果分四类记录：**Runtime contract**（终态/事件/证据是否符合合同）/
+   **Capability**（任务本身是否完成）/**Provider**（模型调用错误、超时、配额）/
+   **Environment**（网络、依赖、沙箱不可用）。普通测试失败不得记为进程故障；
+   失败 run 不得显示成功徽标。
+
+## 3. 真实评测结果（R1–R3，2026-11-18）
+
+驱动：`scripts/real_eval_mars.py` — 真实 `local_sidecar`（与 Tauri 相同的
+stdio JSONL 线协议）+ 真实模型 `ollama/qwen3:8b` + 独立 git 项目目录
+`~/Desktop/tsagent-real-eval/r{1,2,3}-*`。报告归档
+`realtest_reports/mars-devloop-20261118-14*/report.json`（含 eval.db 事件库）。
+
+| 候选 | 终态 | 验收 | 分类 | 证据 |
+| --- | --- | --- | --- | --- |
+| R1 修 bug | COMPLETED | ✅ | **capability_met** | 模型先 `EDIT_MATCH_NOT_UNIQUE`（edit 片段不唯一）再 `COMMAND_NONZERO_EXIT`（猜错测试文件名 `calc_test.py`），两个真实工具错误都在 loop 内自行恢复；pytest 最终通过；用户文件全保留；`workspace_changes` 归因正确 |
+| R2 小功能 | FAILED_TERMINAL | ✅（文件含 shout） | **capability_gap_honest_refusal** | 模型用 `run_python`（非 shell）验证且两次 `ARTIFACT_OUTPUT_UNVERIFIED`，从未执行 pytest；意图声明了 `CODE_EXECUTION`，goal 校验 `missing:["outcome:CODE_EXECUTION"]` → 如实拒绝未验证的成功声明。**失败 run 同样携带 workspace_changes + diff** |
+| R3 跨文件重构 | COMPLETED | ❌（引用未更新） | **capability_gap（含声明层缺口）** | 模型只改 `util.py`，未更新 `app.py`/`test_util.py` 引用、从未跑 pytest 却宣告完成；意图只声明 `FILE_MUTATION`（尽管请求明写"并用 pytest 确认"），校验器无可强制项 → `missing:[]` 放行 |
+
+### 真实评测暴露的问题与修复（按层归因）
+
+1. **声明层缺口（真实，已修）**：验证强制力完全依赖意图分类的
+   `requested_outcomes`——同一句式"并用 pytest 验证"在 R2 被声明、R3 没有。
+   修复：`EffectAuthorization.from_state` 增加 `_VERIFICATION_DEMAND`
+   确定性修复——请求文本含明确的运行/验证指令（真实的工具调用形态如
+   `python -m pytest -q`、`npm test`、`./build.sh`，或"跑一下测试"类
+   动词+目标组合）且已声明了非纯聊天 outcome 时，补入
+   `COMMAND_EXECUTION`；纯聊天 outcome 集合不注入（"解释一下 pytest"
+   不会被升级成执行要求），`prohibited_effects` 仍然优先。
+   配套：`execution_truth` 的执行类 outcome 改为等价满足——
+   shell 验证证据可满足 `CODE_EXECUTION` 声明，反之亦然（验证发生即可，
+   不限产生者）。回归测试见 `test_mars_devloop.py` 尾部与
+   `test_h4c_execution_evidence.py` 尾部。
+2. **能力缺口（真实模型，部分缓解）**：`run_python` 被当验证工具使用且参数
+   误用（`ARTIFACT_OUTPUT_UNVERIFIED`×2）；`shell` 可用却未被选。
+   修复：`prompt.py` 的验证规则点名 `shell` 运行项目测试/构建命令，
+   并说明 `run_python` 只适合小段临时代码。剩余风险是模型本身的选择能力。
+3. **证据噪声（已修）**：`.pytest_cache/*` 曾计入 agent_files →
+   `_SKIP_DIRS` 已扩常见生成目录。`.file_symbols.json`/
+   `.symbol_index.json` 由 `RepositoryIndexer` 写入用户项目根 →
+   已挪进 `.repo_index/`（与 vector store 同目录），旧位置的既有文件
+   在索引器加载时一次性迁移，不留兼容读路径。
+4. **超时观察**："交接记忆写入超时"在三个 run 都出现（非阻断，未修）。
+
+### 结论口径
+
+- Runtime contract：3/3 终态事件结构完整，`workspace_changes` 100% 落地
+  （含失败 run），归因与用户文件保留正确。
+- Capability：1/3 完成验收（R1）；R2 文件改对但未验证（被合同拦下）；R3
+  半重构未验证被放行（声明层缺口）。
+- Provider：qwen3:8b 三单无 provider 级错误；单 run 140–180s。
+- Environment：无环境失败。
+
+## 4. 未覆盖项（如实声明）
+
+- 真实 Tauri/WebView 交互验收未做（前端证据为 jsdom DOM 测试；真实 run 走了
+  与 Tauri 相同的 sidecar JSONL 线协议，但未经桌面壳）。
+- 装依赖/git 写操作的确认边界目前只在指令层，无命令级强制；真实模型不遵守指令时
+  的表现未评测（三个候选均未触发需确认操作）。
+- 大型工作区（>20000 文件）的 diff 证据按“不可用”记录，未实测性能开销。
+- 中断 run 的 `workspace_changes` 通道已接好但 `Runtime` 中断路径暂未填值（部分
+  结果以 `partial_execution` 为准）。
+- DeepSeek provider 未评测；意图声明层缺口（§3.1）的修复方向未实施。

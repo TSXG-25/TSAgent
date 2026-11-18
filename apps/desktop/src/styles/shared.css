@@ -1632,6 +1632,34 @@ html[data-fx="standard"] .ws-root::after { animation: none; }
 
 .req-ctx { font-style: normal; font-family: var(--font-mono); font-size: 9.5px; color: var(--text-faint); border: 1px solid var(--line); border-radius: 3px; padding: 1px 6px; max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+.run-evidence { margin: 6px 0 12px; font-size: 11px; color: var(--text-muted); }
+
+.run-evidence .ev-block { border: 1px solid var(--line); border-radius: 4px; background: var(--surface-1); margin-bottom: 6px; }
+
+.run-evidence .ev-block > summary { cursor: pointer; padding: 6px 10px; font-size: 11px; color: var(--text-main); user-select: none; }
+
+.run-evidence .ev-files, .run-evidence .ev-runs { list-style: none; margin: 0; padding: 2px 10px 8px; display: flex; flex-direction: column; gap: 4px; }
+
+.run-evidence .ev-files li, .run-evidence .ev-runs > li { display: flex; align-items: baseline; gap: 6px; min-width: 0; flex-wrap: wrap; }
+
+.ev-tag { font-style: normal; font-size: 9.5px; border: 1px solid var(--line); border-radius: 3px; padding: 0 5px; color: var(--text-faint); flex: none; }
+
+.ev-tag.ok { color: #7ee2a8; border-color: rgba(126,226,168,.35); }
+
+.ev-tag.fail, .ev-tag.warn { color: #f0b26b; border-color: rgba(240,178,107,.35); }
+
+.ev-path { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+
+.ev-note { margin: 2px 10px 8px; font-size: 10px; color: var(--text-faint); }
+
+.ev-diff { margin: 0 10px 6px; }
+
+.ev-diff > summary { cursor: pointer; font-size: 10px; color: var(--text-faint); user-select: none; }
+
+.ev-diff pre, .ev-out { margin: 4px 0 6px; padding: 6px 8px; max-height: 220px; overflow: auto; font-family: var(--font-mono); font-size: 10px; line-height: 1.45; background: var(--surface-0, rgba(0,0,0,.25)); border: 1px solid var(--line); border-radius: 3px; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.ev-out { flex-basis: 100%; color: var(--text-faint); }
+
 .ws-thread::-webkit-scrollbar { width: 6px; }
 
 .ws-thread::-webkit-scrollbar-thumb { border-radius: 3px; background: rgba(160,190,255,.14); }

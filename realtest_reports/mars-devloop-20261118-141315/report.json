@@ -1,0 +1,44 @@
+{
+  "driver": "scripts/real_eval_mars.py",
+  "model": "qwen3:8b",
+  "results": [
+    {
+      "candidate": "r1",
+      "fixture": "fix_bug",
+      "dir": "/Users/tsxg/Desktop/tsagent-real-eval/r1-fix_bug",
+      "task": "calc.subtract 结果错误：subtract(3, 5) 应为 -2。修复实现并用 python -m pytest -q 验证。",
+      "classification": "capability_met",
+      "checks": {
+        "accepted": true,
+        "preserved_user_files": {
+          "README.md": true,
+          "scratch.txt": true
+        },
+        "workspace_changes_present": true,
+        "agent_files": [
+          ".pytest_cache/.gitignore",
+          ".pytest_cache/CACHEDIR.TAG",
+          ".pytest_cache/README.md",
+          ".pytest_cache/v/cache/nodeids",
+          "calc.py"
+        ],
+        "ambiguous_files": [],
+        "user_dirty_preserved": [
+          "README.md",
+          "scratch.txt"
+        ],
+        "shell_observations": [
+          {
+            "cmd": "python -m pytest -q calc_test.py",
+            "ok": false,
+            "error_code": "COMMAND_NONZERO_EXIT"
+          }
+        ]
+      },
+      "run_id": "run-bad99cc29084444ba7aef13ee3eb3ad1",
+      "elapsed_s": 180.3,
+      "terminal_status": "COMPLETED",
+      "failure": null
+    }
+  ]
+}

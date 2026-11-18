@@ -43,13 +43,23 @@ class RepositoryIndexer:
 
     @property
     def symbol_index_path(self) -> Path:
-        return self.repo_root / SYMBOL_INDEX_FILE
+        return self.index_dir / SYMBOL_INDEX_FILE
 
     @property
     def file_symbols_path(self) -> Path:
-        return self.repo_root / FILE_SYMBOLS_FILE
+        return self.index_dir / FILE_SYMBOLS_FILE
 
     def _load_existing_index(self) -> None:
+        # Index artifacts are service-owned: they live inside .repo_index/,
+        # never loose in the user's project root.  Repositories indexed
+        # before the move keep their files at the old root paths — migrate
+        # them once instead of leaving a compat read path behind.
+        for name in (SYMBOL_INDEX_FILE, FILE_SYMBOLS_FILE):
+            legacy = self.repo_root / name
+            target = self.index_dir / name
+            if legacy.exists() and not target.exists():
+                self.index_dir.mkdir(exist_ok=True)
+                legacy.rename(target)
         # Only load symbol index eagerly; vector store is lazy loaded
         if self.symbol_index_path.exists():
             try:
@@ -208,6 +218,7 @@ class RepositoryIndexer:
                 collection_name="repository_code",
             )
 
+        self.index_dir.mkdir(exist_ok=True)
         self.symbol_index_path.write_text(
             json.dumps(
                 self.symbol_index,

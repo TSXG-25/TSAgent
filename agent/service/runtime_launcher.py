@@ -508,6 +508,7 @@ class RuntimeExecutionLauncher:
                                 "missing": runtime_evidence.get("goal_missing", []),
                                 "observations": runtime_evidence.get("action_observations", []),
                                 "acceptance_evidence": runtime_evidence.get("acceptance_evidence", []),
+                                "workspace_changes": runtime_evidence.get("workspace_changes"),
                             },
                             **(
                             {"request_id": request.request_id}
@@ -705,6 +706,7 @@ class RuntimeExecutionLauncher:
                 ],
                 "interrupted_action": evidence.get("interrupted_action"),
             },
+            "workspace_changes": evidence.get("workspace_changes"),
         }
         run_output = RuntimeExecutionLauncher._run_output_payload(
             runtime,

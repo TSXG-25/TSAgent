@@ -279,6 +279,21 @@ class AgentLoop:
         budget = self._orch.run_budget
 
         authorization = EffectAuthorization.from_state(state, user_input)
+        # Baseline the bound workspace before any tool can mutate it — only
+        # for runs authorized to change files or execute commands; read-only
+        # and chat runs never pay the snapshot cost.
+        if (
+            "_workspace_baseline" not in state
+            and (
+                authorization.allows_file_mutation
+                or authorization.requires_execution
+            )
+        ):
+            workspace = getattr(run_context, "workspace", None)
+            if workspace is not None:
+                from agent.workspace_diff import snapshot_workspace
+
+                state["_workspace_baseline"] = snapshot_workspace(workspace)
         # AgentProfile overlay — delegated runs carry the profile the
         # handoff resolved: permission_policy trims requested_outcomes,
         # skill_refs narrows the skill catalog, model_ref overrides model.

@@ -20,6 +20,57 @@ from .resource_binding import normalize_resource_path
 
 _MUTATION_VERBS = frozenset({"write", "modify", "delete", "move", "copy"})
 _EXECUTION_VERBS = frozenset({"execute"})
+
+# Deterministic repair for a demonstrated intent-classifier gap: a real run
+# classified "rename X and confirm with python -m pytest -q" as FILE_MUTATION
+# only, so the completion gate had no execution outcome to enforce and an
+# unverified claim passed.  The classifier stays the primary declarer; this
+# repair only fires on unambiguous run/verify instructions in the request
+# text, and only on runs that already request real work (never pure chat).
+_RUN_WORDS = r"运行|执行|跑一下|跑一遍|跑|验证|确认|确保|检查|run|execute|verify|check"
+_TARGET_WORDS = (
+    r"测试|命令|脚本|程序|构建|编译|lint|"
+    r"tests?|build|commands?|scripts?|pytest|unittest|vitest|jest|mocha|rspec|phpunit"
+)
+_VERIFICATION_DEMAND = re.compile(
+    # Unambiguous tool invocations: `python -m pytest -q`, `npm test`,
+    # `cargo test`, `pytest -q tests/`, `./build.sh`, `python foo.py` …
+    r"python3?\s+-m\s+[\w.]+"
+    r"|python3?\s+[\w./-]+\.py"
+    r"|(?:pytest|py\.test|unittest|vitest|jest|mocha|rspec|phpunit|ctest|tox|nose2?)"
+    r"(?:\s+[-a-zA-Z0-9_./:=\[\]]+)"
+    r"|(?:npm|pnpm|yarn)\s+(?:test|build|run\s+[\w:-]+|ci)\b"
+    r"|cargo\s+(?:test|build|check|run)\b"
+    r"|go\s+(?:test|build|run|vet)\b"
+    r"|make\s+[\w.-]+\b"
+    r"|mvn\s+[\w:-]+\b|gradlew?\s+[\w:-]+\b"
+    r"|dotnet\s+(?:test|build)\b|flutter\s+test\b"
+    r"|(?:bash|sh)\s+[\w./-]+|\./[\w./-]+\.sh"
+    # Run/verify verb aimed at a test/build target: 跑一下测试, run the tests
+    rf"|(?:{_RUN_WORDS})[^\n。；;]{{0,16}}(?:{_TARGET_WORDS})"
+    # Test/build must pass: 测试通过, tests pass, build passes
+    rf"|(?:{_TARGET_WORDS})[^\n。；;]{{0,8}}(?:通过|成功|pass(?:es|ed)?)"
+    ,
+    re.IGNORECASE,
+)
+_NEGATION = re.compile(
+    r"不(?:要|用|需|能|可|必)|别|禁|勿|never|don'?t|do\s+not",
+    re.IGNORECASE,
+)
+_CLAUSE_BREAKS = "，。；;,.、：:\n"
+
+
+def _request_demands_verification(user_input: str) -> bool:
+    """A demand match is real only when its own clause isn't negated —
+    "也不要运行程序" must not produce an execution requirement."""
+    for match in _VERIFICATION_DEMAND.finditer(user_input):
+        prefix = user_input[max(0, match.start() - 32) : match.start()]
+        clause = prefix[max(
+            prefix.rfind(breaker) for breaker in _CLAUSE_BREAKS
+        ) + 1 :]
+        if not _NEGATION.search(clause):
+            return True
+    return False
 _EXECUTION_TOOLS = frozenset({
     "shell",
     "run_python",
@@ -95,6 +146,14 @@ class EffectAuthorization:
             and RequestedOutcome.FILE_MUTATION not in outcomes
         ):
             outcomes = (*outcomes, RequestedOutcome.FILE_MUTATION)
+        if (
+            any(outcome is not RequestedOutcome.USER_VISIBLE_OUTPUT for outcome in outcomes)
+            and RequestedOutcome.COMMAND_EXECUTION not in prohibited
+            and RequestedOutcome.COMMAND_EXECUTION not in outcomes
+            and RequestedOutcome.CODE_EXECUTION not in outcomes
+            and _request_demands_verification(user_input or "")
+        ):
+            outcomes = (*outcomes, RequestedOutcome.COMMAND_EXECUTION)
         write_targets = tuple(
             _normalize_scope(target)
             for target in state.get("intent_write_targets", ())

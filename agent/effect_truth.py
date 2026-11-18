@@ -120,6 +120,13 @@ _EVIDENCE_REQUIRED_OUTCOMES = frozenset({
     RequestedOutcome.COMMAND_EXECUTION.value,
 })
 
+# Either execution evidence satisfies a request for the other: the user asked
+# that execution happen and be verified, not which runner produced it.
+_EXECUTION_OUTCOMES = frozenset({
+    RequestedOutcome.CODE_EXECUTION.value,
+    RequestedOutcome.COMMAND_EXECUTION.value,
+})
+
 
 def _copy_outcomes(value: Any) -> tuple[str, ...]:
     if not isinstance(value, (list, tuple)):
@@ -155,11 +162,13 @@ def execution_truth(state: Mapping[str, Any]) -> ExecutionTruth:
         for item in execution_evidence
         if str(item.get("status", "VERIFIED")).upper() == "VERIFIED"
     }
+    execution_verified = bool(verified_outcomes & _EXECUTION_OUTCOMES)
     unresolved_outcomes = tuple(
         outcome
         for outcome in requested_outcomes
         if outcome in _EVIDENCE_REQUIRED_OUTCOMES
         and outcome not in verified_outcomes
+        and not (outcome in _EXECUTION_OUTCOMES and execution_verified)
     )
     return ExecutionTruth(
         required_effects=required,

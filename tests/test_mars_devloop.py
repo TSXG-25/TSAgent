@@ -480,10 +480,11 @@ def test_verification_demand_survives_earlier_negated_clause():
     assert RequestedOutcome.COMMAND_EXECUTION in authorization.requested_outcomes
 
 
-def test_cross_file_mutation_phrasing_widens_write_scope():
-    """Real-eval R3: intent_write_targets=["util.py"] for "rename + update
-    all references" rejected edits to call-site files — the phrase grants
-    workspace-wide scope, the named file is just the entry point."""
+def test_declared_write_scope_is_never_keyword_widened():
+    """P1: a wide-mutation phrase in the request text must not override the
+    declared scope — "只改 util.py，不要更新全部引用" is an explicit limit,
+    and keyword widening would silently reverse it.  The authorization
+    source stays the parsed declaration, not phrasing."""
     authorization = EffectAuthorization.from_state(
         {
             "artifact_required": True,
@@ -491,15 +492,15 @@ def test_cross_file_mutation_phrasing_widens_write_scope():
             "intent_write_targets": ["util.py"],
             "goal_state": {},
         },
-        "把 util.trim 重命名为 util.normalize，更新全部引用，"
-        "并用 python -m pytest -q 确认通过。",
+        "只改 util.py，不要更新全部引用。",
     )
-    assert authorization.write_scopes == (".",)
-    assert authorization.allows_path("test_util.py")
-    assert authorization.allows_path("app.py")
+    assert authorization.write_scopes == ("util.py",)
+    assert not authorization.allows_path("app.py")
 
 
-def test_narrow_write_targets_without_wide_phrasing_stay_scoped():
+def test_reported_file_list_is_not_a_write_grant():
+    """P1 variant: '列出所有相关文件但不要修改它们' — the file list is a
+    report requirement, not authorization to widen the declared scope."""
     authorization = EffectAuthorization.from_state(
         {
             "artifact_required": True,
@@ -507,10 +508,27 @@ def test_narrow_write_targets_without_wide_phrasing_stay_scoped():
             "intent_write_targets": ["util.py"],
             "goal_state": {},
         },
-        "改一下 util.py 里的函数名",
+        "修改 util.py；报告里列出所有相关文件，但不要修改它们。",
     )
     assert authorization.write_scopes == ("util.py",)
     assert not authorization.allows_path("test_util.py")
+
+
+def test_empty_write_targets_default_to_workspace_scope():
+    """Cross-file requests arrive with intent_write_targets=[] (per intent
+    rule 11: [] means workspace-wide grant, not 'no target'); the default
+    fills the whole-workspace scope."""
+    authorization = EffectAuthorization.from_state(
+        {
+            "artifact_required": True,
+            "requested_outcomes": ["FILE_MUTATION"],
+            "intent_write_targets": [],
+            "goal_state": {},
+        },
+        "把 util.trim 重命名为 util.normalize，更新全部引用。",
+    )
+    assert authorization.write_scopes == (".",)
+    assert authorization.allows_path("test_util.py")
 
 
 def test_repeated_identical_failure_gets_stall_nudge(tmp_path, monkeypatch):

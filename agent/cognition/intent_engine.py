@@ -132,8 +132,11 @@ Domain 说明：
     今天/最新的事实必须 freshness_required=true 且 source_grounding_required=true。
     source_grounding_required 为 true 时给出 search_query（去掉保存/输出尾巴的检索主题）和
     search_timeliness（today|yesterday|week|month|any）。
-11. write_targets：用户明确授权创建或修改的文件路径或目录（目录以 "/" 结尾）；
-    recent_conversation [产物] 中被用户要求修改的历史产物路径也算。没有明确授权路径时为空。
+11. write_targets：仅当用户明确限定了写入范围才填写（"只改 X"、"别动 Y"、
+    给出具体文件/目录路径，目录以 "/" 结尾）；recent_conversation [产物] 中
+    被用户要求修改的历史产物路径也算。空数组表示授权整个工作区——要求修改
+    "全部引用/所有调用点/相关文件"或未限定范围时必须输出 []，
+    不得把你推断最可能要改的文件当成授权范围填进来。
 12. external_effects：仅当用户以祈使句要求执行外部动作（预订、发送消息、部署、交易、修改远程资源）时填写，
     每项 {"capability": "reservation|message_send|deployment|transaction|remote_mutation", "description": "用户要求的外部动作"}；
     询问“如何做”的问题不填。

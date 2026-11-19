@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { submitToPlanet } from "./delegate";
+import { delegateFromPlanet, submitToPlanet } from "./delegate";
 import { selectWorkspaceRun, useWorkspaceCurrentRun } from "./workspaceSelection";
 import { Icon } from "./ui";
 import type { RunCtx } from "./runCtx";
@@ -104,9 +104,17 @@ export default function AgentComposer({ ctx, planet, placeholder, contextPrefix,
       const to = m ? m[1].toLowerCase() : target;
       const body = contextPrefix ? `${contextPrefix}\n${m ? m[2] : body0}` : (m ? m[2] : body0);
       const modelOptions = model !== "default" ? { model } : {};
+      // Cross-planet @ sends walk the durable delegation chain (child Task
+      // + Handoff + child run in this session, anchored on the selected
+      // task when it belongs here); a same-planet send stays a flat task.
       const sent = onSend
         ? await onSend(to, body, files, modelOptions)
-        : { runId: await submitToPlanet(ctx, to, body, files, modelOptions), sessionId: ctx.sessionId };
+        : to !== target
+          ? {
+              runId: (await delegateFromPlanet(ctx, target, to, runHere, body, files, modelOptions)).runId,
+              sessionId: ctx.sessionId,
+            }
+          : { runId: await submitToPlanet(ctx, to, body, files, modelOptions), sessionId: ctx.sessionId };
       // The workstation the send targeted now owns this task — its rail
       // selects it without navigating away from where the user is.
       selectWorkspaceRun(ctx.service.identity.tenantId, sent.sessionId, to, sent.runId);

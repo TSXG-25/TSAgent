@@ -2,9 +2,10 @@ import { useEffect, useState } from "react";
 import { t } from "./i18n";
 import { Icon, StatusBadge, rel, statusLabel } from "./ui";
 import type { RunCtx } from "./runCtx";
+import type { RunView } from "../types";
 import type { SessionSummary } from "../types/service";
 import { PLANET_GLYPH } from "./scenes";
-import { sendNewRecord, submitToPlanet } from "./delegate";
+import { delegateFromPlanet, delegateNewRecord, sendNewRecord, submitToPlanet } from "./delegate";
 import AgentComposer from "./AgentComposer";
 import { WorkspaceThread } from "./WorkspaceThread";
 import { useWorkspaceCurrentRun } from "./workspaceSelection";
@@ -29,7 +30,9 @@ export function openRecord(
  *        writes another planet's view. */
 /** Send for the rail's current view — `sendContext` (e.g. the hosted
  *  IDE's focused file) is resolved at send time and prepended to the
- *  request; home files a fresh record, thread continues the session. */
+ *  request; home files a fresh record, thread continues the session. A
+ *  cross-planet target walks the same durable delegation chain as Omni
+ *  (`parentRun` is the rail's selected task when it can anchor). */
 export async function sendForView(
   ctx: RunCtx,
   planet: string,
@@ -39,11 +42,18 @@ export async function sendForView(
   files: string[],
   options: { model?: string },
   sendContext?: () => Promise<string>,
+  parentRun?: RunView | null,
 ): Promise<{ runId: string; sessionId: string }> {
   const prefix = (await sendContext?.()) ?? "";
   const text = prefix ? `${prefix}\n${body}` : body;
-  if (view === "home") return sendNewRecord(ctx, planet, to, text, files, options);
-  const runId = await submitToPlanet(ctx, to, text, files, options);
+  if (view === "home") {
+    return to === planet
+      ? sendNewRecord(ctx, planet, to, text, files, options)
+      : delegateNewRecord(ctx, planet, to, text, files, options);
+  }
+  const runId = to === planet
+    ? await submitToPlanet(ctx, to, text, files, options)
+    : (await delegateFromPlanet(ctx, planet, to, parentRun ?? null, text, files, options)).runId;
   return { runId, sessionId: ctx.sessionId };
 }
 
@@ -91,7 +101,7 @@ export function WorkspaceRail({ ctx, planet, placeholder, sendContext }: { ctx: 
         ctx={ctx}
         planet={planet}
         placeholder={placeholder}
-        onSend={(to, body, files, options) => sendForView(ctx, planet, view, to, body, files, options, sendContext)}
+        onSend={(to, body, files, options) => sendForView(ctx, planet, view, to, body, files, options, sendContext, currentRun)}
       />
     </div>
   );

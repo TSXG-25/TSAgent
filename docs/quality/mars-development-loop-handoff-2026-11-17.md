@@ -270,3 +270,37 @@ Omni 的"回来汇报"目前 = Omni 展示子 Run 的进度/结果卡片，父�
   A→B→A 逆序返回或同会话轮询重叠时旧响应可覆盖新卡片/旧失败可清空。
   改 `handoffSeq` 请求序号（searchSession 同款）——只有最新请求可写。
   补 A→B→A 逆序用例：新响应先落地，旧响应后到被丢弃。
+
+## 6. 工作台委派链通用化（Mercury 接入）
+
+Omni 修完的链这次接到了所有工作台发送面——`@planet` 跨台发送不再
+是"打 originPlanet 标的扁平 run"，而是统一走
+`delegateFromPlanet`（sourcePlanet + parentRun|null + sessionId）：
+
+- **AgentComposer**（Mercury/Neptune/各工作台内嵌 composer）：跨台
+  `@mars` 走委派链，锚点是 `runHere`（工作台选择记录经同会话校验）；
+  同台发送保持扁平任务。"Mercury 查资料→@mars 实现"即锚定研究 run。
+- **WorkspaceRail.sendForView**（Mars rail）：thread 视图跨台锚
+  `currentRun`；home 视图跨台走 `delegateNewRecord`——新记录会话作
+  父任务宿主，子 run 受理后才选中会话（与 sendNewRecord 同语义）。
+- **委派出的子任务**：`DelegatedRuns.tsx` 共享组件——`useDelegatedRuns`
+  （序号守卫+会话过滤）+ `DelegatedRunCards` + `openDelegatedRun`
+  （会话 scope + 全局选择 + 工作台选择记录 + 导航四步）。GlobalChat
+  改用共享组件；`WorkspaceTasks` 新增"本会话委派的任务"区，全部渲染
+  该组件的工作台（含 Mercury）免费获得委派出的可见性。
+- **全局选中不劫持**：`delegateFromPlanet` 内同样恢复 startRun 抢占的
+  prevActiveRun（非 sun 目标），Omni 的显示由显式 selectRun 负责。
+
+组合路径现状：`Mercury 查资料 → @mars 实现` 已可显式发起（锚定研究
+run，子 run 落在 Mercury 会话，两侧可见同一记录）；"→ Omni 汇报"
+依赖跨会话聚合，未在本轮范围。
+
+### 测试（离线）
+
+- `mercuryDelegation.test.tsx`（4 例）：composer @mars 链 + mercury
+  父任务锚点、选中 run 续锚、同台扁平保持、delegated-out 卡+进入 Mars
+  四步定位。
+- `omniDelegation.test.tsx` 复跑全绿（共享组件替换后原断言仍成立）。
+- `test_omni_mars_delegation.py` 参数化 source ∈ {sun, mercury}：
+  同一 E2E 断言链对两个源工作台均成立（3 passed）。
+- vitest 157 passed；tsc 干净。

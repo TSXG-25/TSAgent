@@ -113,44 +113,50 @@ export async function delegateToPlanet(
   return result?.taskId ?? "";
 }
 
-/** Omni → workstation delegation ("在 Omni 发任务，Mars 执行并回来汇报").
- *  Same durable chain as delegateToPlanet — child Task + Handoff + child Run
- *  in this session — anchored under the active run's task when one exists,
- *  else under a fresh Omni-side Task created on the spot. Returns the child
- *  run id so Omni can display progress/result inline. */
-export async function delegateFromOmni(
+/** Workstation → workstation delegation ("在 Omni 发任务，Mars 执行并回来
+ *  汇报" — the same chain every surface walks). Child Task + Handoff +
+ *  child Run in this session, anchored under `parentRun`'s task when the
+ *  caller passes a "continue" candidate that actually belongs to this
+ *  session — a cross-scope selection must never pull the delegation scope
+ *  (or its project) onto another session — else under a fresh task in the
+ *  session claimed by `sourcePlanet`. Returns the child run id so the
+ *  delegating surface can display progress/result inline. */
+export async function delegateFromPlanet(
   ctx: RunCtx,
+  sourcePlanet: string,
   targetPlanet: string,
+  parentRun: RunView | null,
   requestText: string,
   attachments: string[] = [],
-  options: { model?: string } = {},
+  options: { model?: string; sessionId?: string } = {},
 ): Promise<{ taskId: string; runId: string }> {
   const { service } = ctx;
+  const sessionId = options.sessionId ?? ctx.sessionId;
   const metadata = metadataFor(options);
-  // "继续" anchors only on a run owned by this composer's session — the
-  // global activeRun is a cross-scope selection that survives session
-  // switches, so it must never pull the delegation scope (or its project)
-  // onto another session. Anything else files under a fresh Omni task in
-  // the current session.
-  const parentRun = ctx.activeRun?.sessionId === ctx.sessionId ? ctx.activeRun : null;
+  const parent = parentRun?.sessionId === sessionId ? parentRun : null;
   let parentTaskId = "";
-  if (!parentRun) {
-    const parent = await service.createTask({
-      sessionId: ctx.sessionId,
-      originPlanet: "sun",
+  if (!parent) {
+    const task = await service.createTask({
+      sessionId,
+      originPlanet: sourcePlanet,
     });
-    parentTaskId = parent.taskId;
+    parentTaskId = task.taskId;
   }
   const result = await service.delegateRun({
-    sessionId: ctx.sessionId,
-    parentRunId: parentRun?.runId ?? "",
+    sessionId,
+    parentRunId: parent?.runId ?? "",
     parentTaskId,
     contextRefs: attachments,
     requestText,
     targetPlanet,
   });
+  // startRun claims the session-global activeRun for whatever it just
+  // created — a workstation's delegation owns only its rail selection;
+  // restore the previous global selection so it never hijacks Omni's view
+  // (callers that want the child selected — Omni — do it themselves).
+  const prevActiveId = ctx.activeRun?.runId ?? "";
   const view = await ctx.controller.startRun({
-    sessionId: ctx.sessionId,
+    sessionId,
     requestText: result?.requestText ?? requestText,
     taskId: result?.taskId ?? "",
     originPlanet: targetPlanet,
@@ -165,5 +171,28 @@ export async function delegateFromOmni(
       },
     },
   });
+  if (targetPlanet !== "sun" && prevActiveId) ctx.controller.selectRun(prevActiveId);
   return { taskId: result?.taskId ?? "", runId: view.runId };
+}
+
+/** Workstation "new record" delegation — the cross-planet counterpart of
+ *  sendNewRecord: files the record session (claimed by the rail's planet,
+ *  inheriting the workspace binding), parents a fresh task in it, and
+ *  delegates the child to `targetPlanet`. The record is selected only
+ *  after the child run is admitted. */
+export async function delegateNewRecord(
+  ctx: RunCtx,
+  railPlanet: string,
+  targetPlanet: string,
+  requestText: string,
+  attachments: string[] = [],
+  options: { model?: string } = {},
+): Promise<{ runId: string; sessionId: string }> {
+  const sessionId = await createRecordSession(ctx.service, railPlanet, ctx.sessionId);
+  const { runId } = await delegateFromPlanet(
+    ctx, railPlanet, targetPlanet, null, requestText, attachments,
+    { ...options, sessionId },
+  );
+  ctx.selectSession(sessionId);
+  return { runId, sessionId };
 }

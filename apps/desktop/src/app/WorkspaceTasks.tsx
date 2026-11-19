@@ -4,6 +4,7 @@ import { StatusBadge } from "./ui";
 import type { RunCtx } from "./runCtx";
 import type { SessionSummary } from "../types/service";
 import { selectWorkspaceRun, useWorkspaceRunId, workspaceRuns } from "./workspaceSelection";
+import { DelegatedRunCards, useDelegatedRuns } from "./DelegatedRuns";
 
 /** Task rail for one workstation — list, progress, failures and result
  *  entries for this scope, with per-run pause/cancel and an explicit
@@ -21,6 +22,9 @@ export function WorkspaceTasks({ ctx, planet }: { ctx: RunCtx; planet: string })
   const delegated = ctx.runs.filter(
     (run) => run.originPlanet === planet && run.sessionId !== ctx.sessionId,
   );
+  // Delegated OUT — children this session handed to other workstations
+  // (they live in this session under the durable handoff edge).
+  const delegatedOut = useDelegatedRuns(ctx);
   return (
     <div className="ws-tasks">
       <div className="ws-tasks-head">
@@ -59,6 +63,12 @@ export function WorkspaceTasks({ ctx, planet }: { ctx: RunCtx; planet: string })
           {run.failure && <p className="ws-task-fail">{run.failure.message}</p>}
         </div>
       ))}
+      {delegatedOut.length > 0 && (
+        <>
+          <h4 className="ws-mod">{t("wstasks.delegated-out")}</h4>
+          <DelegatedRunCards ctx={ctx} delegated={delegatedOut} />
+        </>
+      )}
       {delegated.length > 0 && (
         <>
           <h4 className="ws-mod">{t("wstasks.delegated")}</h4>

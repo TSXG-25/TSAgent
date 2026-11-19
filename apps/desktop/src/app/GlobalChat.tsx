@@ -1,15 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import type { RunCtx } from "./runCtx";
-import { Icon, MarkdownText, StatusBadge } from "./ui";
+import { Icon, MarkdownText } from "./ui";
 import { useScrollFollow } from "./useScrollFollow";
-import { usePoll } from "./usePoll";
-import { delegateFromOmni } from "./delegate";
+import { delegateFromPlanet } from "./delegate";
+import { DelegatedRunCards, useDelegatedRuns } from "./DelegatedRuns";
 import { isOmniSession } from "./sessionWorkspace";
-import { selectWorkspaceRun } from "./workspaceSelection";
 import { draftKey, useDraft, clearDraftIfUnchanged } from "./draftStore";
 import { t } from "./i18n";
-import type { HandoffSummary, SessionSummary } from "../types/service";
+import type { SessionSummary } from "../types/service";
 
 /** Global Chat — §4.1 honest subset: sessions are real (list/create), a sent
  *  message starts a Run in the active session (TSAgent's run-scoped chat
@@ -23,11 +21,9 @@ const loadJson = <T,>(k: string, d: T): T => { try { return JSON.parse(localStor
 
 export default function GlobalChat({ ctx, onClose, embedded = false, instant = false }: { ctx: RunCtx; onClose?: () => void; embedded?: boolean; instant?: boolean }) {
   const { service, sessionId, selectSession, activeRun, createRun } = ctx;
-  const navigate = useNavigate();
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [delegateTo, setDelegateTo] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
-  const [handoffs, setHandoffs] = useState<HandoffSummary[]>([]);
   const thread = useScrollFollow(activeRun?.runId ?? "none");
   const composingRef = useRef(false);
   // Draft keyed by the selected target — @direct shares the Sun workspace
@@ -65,23 +61,9 @@ export default function GlobalChat({ ctx, onClose, embedded = false, instant = f
   }, [service, ctx.reportError]);
 
   useEffect(() => { void refreshSessions(); }, [refreshSessions]);
-  // Delegated children of this session — durable Handoff edges resolve to
-  // the child runs living in this session (progress/result show inline).
-  // Request-sequence guard (same as searchSession): only the newest request
-  // may write — a stale response can never overwrite fresher cards, whether
-  // it straddles a session switch (A→B→A) or an overlapping poll tick; a
-  // stale failure can't clear them either. Switching clears the snapshot.
-  const handoffSeq = useRef(0);
-  usePoll(() => {
-    const id = ++handoffSeq.current;
-    void service.listHandoffs({ sessionId })
-      .then((list) => { if (id === handoffSeq.current) setHandoffs(list); })
-      .catch(() => { if (id === handoffSeq.current) setHandoffs([]); });
-  }, 8_000, [service, sessionId]);
-  useEffect(() => { setHandoffs([]); }, [sessionId]);
-  const delegated = handoffs
-    .map((h) => ({ handoff: h, run: ctx.runs.find((r) => r.runId === h.targetRunId && r.sessionId === sessionId) }))
-    .filter((x): x is { handoff: HandoffSummary; run: NonNullable<typeof x.run> } => Boolean(x.run));
+  // Delegated children of this session — the shared durable surface also
+  // rendered on workstation task rails (progress/result show inline).
+  const delegated = useDelegatedRuns(ctx);
   useEffect(() => { thread.onContentGrow(); }, [activeRun?.conversation.length, activeRun?.output]);
   useEffect(() => {
     if (!pickerOpen) return;
@@ -180,42 +162,7 @@ export default function GlobalChat({ ctx, onClose, embedded = false, instant = f
             <div className="mc-msg-body"><MarkdownText text={activeRun.output.text} /></div>
           </article>
         )}
-        {delegated.length > 0 && (
-          <div className="chat-delegated" data-testid="chat-delegated">
-            {delegated.map(({ handoff, run }) => (
-              <article className="mc-delegated" key={handoff.handoffId}>
-                <div className="mc-delegated-head">
-                  <span>@{handoff.targetPlanet || "?"}</span>
-                  <StatusBadge status={run.status} />
-                  <button
-                    className="ven-link"
-                    onClick={() => ctx.selectRun(run.runId)}
-                    type="button"
-                  >{run.request || run.runId}</button>
-                  <button
-                    className="ven-link"
-                    onClick={() => {
-                      // A workstation's rail and bound project follow its
-                      // session scope — point the planet's scope at the run's
-                      // owning session, then select + land so Mars opens on
-                      // this delegation (not its previous session). The
-                      // per-workstation selection record is what Mars's
-                      // current-task/status/controls read — set it to this
-                      // run or the newest sibling wins by fallback.
-                      ctx.selectSessionFor(handoff.targetPlanet, run.sessionId);
-                      ctx.selectRun(run.runId);
-                      selectWorkspaceRun(ctx.service.identity.tenantId, run.sessionId, handoff.targetPlanet, run.runId);
-                      navigate(`/w/${handoff.targetPlanet}`);
-                    }}
-                    type="button"
-                  >{t("chat.enter-planet", { planet: handoff.targetPlanet })}</button>
-                </div>
-                {run.failure && <p className="mc-delegated-fail">{run.failure.message}</p>}
-                {run.output && <p className="mc-delegated-out">{run.output.text.slice(0, 200)}</p>}
-              </article>
-            ))}
-          </div>
-        )}
+        <DelegatedRunCards ctx={ctx} delegated={delegated} />
         {thread.hasNew && (
           <button className="scroll-pill" onClick={thread.toBottom} type="button">{t("thread.new-content")} ↓</button>
         )}
@@ -228,7 +175,7 @@ export default function GlobalChat({ ctx, onClose, embedded = false, instant = f
         const submitted = draft;
         if (delegateTo) {
           try {
-            const { runId } = await delegateFromOmni(ctx, delegateTo, text, draft.files);
+            const { runId } = await delegateFromPlanet(ctx, "sun", delegateTo, ctx.activeRun, text, draft.files);
             // The delegated child lives in this session — selecting it keeps
             // the workstation's progress/result visible in the Omni thread.
             ctx.selectRun(runId);

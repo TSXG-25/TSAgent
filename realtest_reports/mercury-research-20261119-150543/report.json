@@ -14,9 +14,11 @@
         "web_tool_calls": [],
         "evidence_urls": [],
         "cited_urls": [
-          "https://duckduckgo.com/privacy）以获取最准确和最新的隐私政策信息"
+          "https://duckduckgo.com/privacy"
         ],
-        "fabricated_urls": [],
+        "fabricated_urls": [
+          "https://duckduckgo.com/privacy"
+        ],
         "goal_missing": [],
         "failure_code": "",
         "prefill_source_urls": [
@@ -30,7 +32,8 @@
           "https://www.leavescn.com/forums/detail/17910",
           "https://zh.wikipedia.org/zh-cn/DuckDuckGo",
           "https://jikefan.com/zh/app/duckduckgo-browser/7.234"
-        ]
+        ],
+        "archive_note": "cited_urls/fabricated_urls re-derived post-hoc with the corrected ASCII URL pattern and exact-match check; model output unchanged."
       },
       "run_id": "run-e1f738e8698c4943b68e2df9e08eea51",
       "elapsed_s": 87.2,

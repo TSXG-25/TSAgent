@@ -450,3 +450,52 @@ run，子 run 落在 Mercury 会话，两侧可见同一记录）；"→ Omni �
 （t3 全链走通），但两个真实缺口在分类器——研究意图（预填、正文
 读取）不稳定置 grounding/exec，链路在分类处断而非工具处。
 报告：realtest_reports/mercury-research-20261119-*/。
+
+### 研究意图→执行判定修复（377bab85 之后，合同层）
+
+根因不在关键词而在合同表达：rule 8 把网页读取写成"通常只要
+USER_VISIBLE_OUTPUT"、rule 10 把 grounding 只解释成"要新资料要搜索"
+——"读取指定 URL"和"基于链接继续研究"落在两条款之间，分类器从不
+置 grounding → `requires_exec` 恒 false → 直接记忆作答。修复：
+
+- **rule 8** 补一句：网络读取类结果仍是 USER_VISIBLE_OUTPUT，但
+  "需要读取来源才能完成"走 rule 10 grounding 判定，不影响执行标记。
+- **rule 10** 写入"已有正文 vs 只有链接"区分：贴出完整正文直接作答；
+  只给标题/URL 却要求读取/核实/继续研究 → `source_grounding_required`
+  （search_query 可空，模型直接 web_fetch 给定 URL）；要新资料 →
+  grounding + search_query；今天/最新 → freshness + grounding。
+- **loop prompt**：grounding 规则从"必须先 web_search"改为"已给
+  URL 可直接 web_fetch，答复须标注来源"。`_FRESH_TOOLS` 本就含
+  web_fetch，运行时边界无需改。
+- **预填模板**（mer.research-prefill zh/en）："继续研究"改为"阅读
+  来源正文后回答"——把"只有链接需读正文"的语义写进产品入口本身，
+  这是入口→工具链的真实机制，不是关键词兜底。
+
+### 真实复测（合同修复后，qwen3:8b + 真 DDG）
+
+- **t2** `capability_met`：`exec=True` → 模型直接 `web_fetch` 指定
+  URL（fetched_required_url）→ 真实 fetch 被本机 SSRF 防护拦
+  （所有域名解析到 198.18.x.x，环境特征）→ 自适应 web_search →
+  答 2008 引用三个真实来源、无虚构 URL。
+- **t1** `capability_met`：新模板措辞翻转分类 `exec=True`
+  （action=read, target=来源正文）→ 对 7 个提供 URL 逐个 web_fetch
+  （同被 SSRF 拦）→ 降级 web_search → 引用 5 个全在证据集内的真实
+  URL。旧措辞下仍判 summarize/exec=False（真实复测过一次）。
+- **归档更正**：t1 旧 report.json 的黏连 URL 已用修正后的
+  ASCII 正则+精确匹配从已有证据重算——cited=
+  `duckduckgo.com/privacy`，fabricated_urls 标记为真（模型构造的
+  子路径，不在来源集）；分类不变。未重跑模型。
+- **评测判据修复**：`classify()` 按任务验收——required_fetch_url
+  任务必须 fetch 指定 URL；PROVIDER_TIMEOUT 归 env 而非
+  honest_refusal；URL 正则改 ASCII 字符集防黏连。
+
+### 边界（保持诚实）
+
+- SSRF 是本机环境特征（VPN/代理把域名解析到 198.18.x.x）——
+  `fetch_content` 在本机对任何域名都不可用。已证明：模型正确尝试
+  fetch、被拒后自适应降级检索；未证明：公网环境下 fetch 正文内容
+  质量。
+- URL 级引用准确可查（cited ⊆ evidence），claim 级准确性仍不可证——
+  模型对来源内容的转述可能编造，需正文比对才能判。
+- t3 的 capability_met 只证明"真实检索+URL 对齐"，不构成正文读取
+  或事实准确性证据。

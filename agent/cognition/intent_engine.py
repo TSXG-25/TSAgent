@@ -117,8 +117,9 @@ Domain 说明：
    请求开发可用程序/计算器/应用，需要 FILE_MUTATION；是否要求告知位置不影响这个判定。
    解释概念、展示代码示例、讨论偏好不要求修改文件。命令执行、代码运行只在用户要求时选择。
    COMMAND_EXECUTION 仅指命令行/终端/脚本执行；浏览器打开网页、点击、输入、抓取内容
-   以及网页搜索都属于网络读取类操作，不是 COMMAND_EXECUTION——这类任务通常只要
-   USER_VISIBLE_OUTPUT（用户要求存文件时再加 FILE_MUTATION）。
+   以及网页搜索都属于网络读取类操作，不是 COMMAND_EXECUTION——这类任务的交付结果
+   通常只要 USER_VISIBLE_OUTPUT（用户要求存文件时再加 FILE_MUTATION），但"需要
+   读取来源才能完成"属于规则 10 的 grounding 判定，不影响执行标记。
    artifact_required：需要交付新建或修改后的非空文件时为 true；仅删除文件/纯回答时为 false。
    artifact_required=true 时，delivery_requirements 至少有一项，且每项包含 id、kind="file"、正整数 quantity、
    target（没有显式路径时为空字符串）和 acceptance_criteria 数组。artifact_required=false 时数组为空。
@@ -128,9 +129,13 @@ Domain 说明：
 9. reference 延续前轮结果；correction 修正前轮目标的执行方式，必须在 resolved_request 中保留尚未交付的目标。
    上一轮助手声称成功不是执行证据；文件路径以 verified artifacts 为依据。修改已有文件时先读取真实文件。
    不替用户扩大权限或编造文件路径/外部链接。用户未指定新文件路径时可让执行规划在工作区根目录选择合理名称。
-10. 总结已有搜索结果可使用 recent_conversation 中的[观察]，不必重复搜索；要求新资料或更充分来源则需要 source_grounding_required。
+10. 区分"已有正文"与"只有链接"：用户已贴出完整正文/全文时直接作答，不需要
+    source_grounding_required；用户只给出标题/URL 却要求读取、核实或继续研究来源
+    的，需要读取来源才能回答——source_grounding_required=true（此时答案依赖正文，
+    search_query 可留空，模型会直接 web_fetch 给定 URL）。
+    总结已有搜索结果可使用 recent_conversation 中的[观察]，不必重复搜索；要求新资料或更充分来源则需要 source_grounding_required 和 search_query。
     今天/最新的事实必须 freshness_required=true 且 source_grounding_required=true。
-    source_grounding_required 为 true 时给出 search_query（去掉保存/输出尾巴的检索主题）和
+    source_grounding_required 为 true 且需要先检索时给出 search_query（去掉保存/输出尾巴的检索主题）和
     search_timeliness（today|yesterday|week|month|any）。
 11. write_targets：仅当用户明确限定了写入范围才填写（"只改 X"、"别动 Y"、
     给出具体文件/目录路径，目录以 "/" 结尾）；recent_conversation [产物] 中

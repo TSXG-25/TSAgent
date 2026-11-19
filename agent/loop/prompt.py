@@ -50,8 +50,9 @@ def build_system_prompt(
         parts.append("- 验收条件: " + "; ".join(acceptance))
     if freshness_required or source_grounding_required:
         parts.append(
-            "- 该请求要求可核验的外部来源：必须先调用 web_search 等检索工具，"
-            "不得凭记忆回答时效性内容；答复中须标注来源（标题 + URL）。"
+            "- 该请求要求可核验的外部来源：不得凭记忆回答。需要检索时调用"
+            " web_search 等检索工具；已给出具体 URL 的，直接 web_fetch 读取"
+            "其正文，不必先搜索。答复中须标注来源（标题 + URL）。"
         )
     parts += [
         "",

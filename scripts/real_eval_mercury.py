@@ -66,6 +66,10 @@ TASKS = {
             "读取 https://en.wikipedia.org/wiki/DuckDuckGo 的正文，告诉我 "
             "DuckDuckGo 是哪一年推出的，并标注来源。"
         ),
+        # Acceptance is task-shaped: this task is only met if the model
+        # actually fetched THE GIVEN URL — searching without reading the
+        # body (or fetching a different page) does not satisfy it.
+        "required_fetch_url": "https://en.wikipedia.org/wiki/DuckDuckGo",
     },
     "t3": {
         "name": "freshness",
@@ -136,7 +140,10 @@ class Sidecar:
             (json.dumps({"id": req_id, "method": method, "params": params}) + "\n").encode()
         )
         await self.proc.stdin.drain()
-        msg = await asyncio.wait_for(fut, timeout)
+        try:
+            msg = await asyncio.wait_for(fut, timeout)
+        except asyncio.TimeoutError:
+            raise RuntimeError(f"{method}: timed out after {timeout}s")
         resp = msg.get("response", msg)
         if resp.get("ok") is True:
             return resp.get("result")
@@ -157,7 +164,9 @@ class Sidecar:
 async def wait_terminal(sidecar: Sidecar, ident: dict, run_id: str) -> dict:
     deadline = time.monotonic() + RUN_DEADLINE_S
     while time.monotonic() < deadline:
-        snap = await sidecar.call("get_run", {**ident, "run_id": run_id})
+        snap = await sidecar.call(
+            "get_run", {**ident, "run_id": run_id}, timeout=120,
+        )
         run = snap.get("run", snap)
         if str(run.get("status", "")) in {
             "COMPLETED", "FAILED_TERMINAL", "BLOCKED", "CANCELLED",
@@ -194,9 +203,13 @@ def observation_urls(observations: list[dict]) -> list[str]:
     return list(dict.fromkeys(urls))
 
 
-def classify(run_status: str, checks: dict, sidecar_error: str = "") -> str:
-    """capability / honest refusal / environment — a grounded task that
-    fails with RESEARCH_TOOL_UNAVAILABLE is the contract working."""
+def classify(run_status: str, checks: dict, spec: dict,
+             sidecar_error: str = "") -> str:
+    """capability / honest refusal / environment — acceptance is shaped by
+    what the task actually required, not by a single 'searched' flag.
+    A grounded task that fails with RESEARCH_TOOL_UNAVAILABLE is the
+    contract working; a fetch-required task must have fetched the given
+    URL, not merely searched."""
     if sidecar_error:
         return (
             "deadline_exceeded"
@@ -204,12 +217,18 @@ def classify(run_status: str, checks: dict, sidecar_error: str = "") -> str:
             else "provider_or_environment"
         )
     if run_status == "COMPLETED":
-        if checks.get("searched") and checks.get("cited_urls") and not checks.get("fabricated_urls"):
+        retrieved = checks.get("searched") or checks.get("fetched_body")
+        if spec.get("required_fetch_url") and not checks.get("fetched_required_url"):
+            retrieved = False
+        if retrieved and checks.get("cited_urls") and not checks.get("fabricated_urls"):
             return "capability_met"
         return "capability_gap"
     if run_status in {"FAILED_TERMINAL", "BLOCKED"}:
         code = str(checks.get("failure_code", ""))
-        if "RESEARCH_TOOL_UNAVAILABLE" in code or checks.get("goal_missing"):
+        missing = checks.get("goal_missing") or []
+        if "PROVIDER" in code or any("PROVIDER" in str(m) for m in missing):
+            return "provider_or_environment"
+        if "RESEARCH_TOOL_UNAVAILABLE" in code or missing:
             return "capability_gap_honest_refusal"
         return "capability_gap"
     return "runtime_contract_gap"
@@ -253,7 +272,7 @@ async def evaluate(
 
         events = await sidecar.call("read_events", {
             **ident, "run_id": run_id, "after_sequence": 0,
-        })
+        }, timeout=120)
         event_list = events if isinstance(events, list) else events.get("events", [])
         cont = terminal_continuation(event_list)
         observations = cont.get("observations") or []
@@ -264,6 +283,16 @@ async def evaluate(
             }
             for o in observations if str(o.get("tool", "")) in WEB_TOOLS
         ]
+        required_url = str(spec.get("required_fetch_url") or "")
+        fetched_required = bool(
+            required_url
+            and any(
+                o["tool"] in FETCH_TOOLS
+                and str((o["args"] or {}).get("url", "")).rstrip("/")
+                == required_url.rstrip("/")
+                for o in web_obs
+            )
+        )
         output_text = str((run.get("output") or {}).get("text") or "")
         cited = list(dict.fromkeys(URL_PATTERN.findall(output_text)))
         evidence_urls = observation_urls(observations)
@@ -282,6 +311,7 @@ async def evaluate(
                 for o in web_obs
             ),
             "fetched_body": any(o["tool"] in FETCH_TOOLS for o in web_obs),
+            "fetched_required_url": fetched_required,
             "web_tool_calls": web_obs,
             "evidence_urls": evidence_urls,
             "cited_urls": cited,
@@ -293,10 +323,13 @@ async def evaluate(
                 or (run.get("failure") or "")
             ),
         }
-        result["classification"] = classify(status, result["checks"])
+        result["classification"] = classify(status, result["checks"], spec)
     except Exception as exc:  # provider/env/transport failures land here
-        result["classification"] = classify("", {}, sidecar_error=str(exc))
-        result["error"] = str(exc)[:500]
+        error = str(exc) or type(exc).__name__
+        result["classification"] = classify(
+            "", {}, spec, sidecar_error=error
+        )
+        result["error"] = error[:500]
     return result
 
 
@@ -316,7 +349,7 @@ async def t1_prefill_text(sidecar: Sidecar) -> tuple[str, list[str]]:
         for s in sources
     )
     prefill = (
-        "基于以下搜索结果继续研究：\n"
+        "基于以下搜索结果继续研究，阅读来源正文后回答：\n"
         "查询：DuckDuckGo 搜索引擎 隐私\n"
         f"{lines}\n\n"
         "研究目标：总结这些来源如何描述 DuckDuckGo 的隐私策略，并标注来源。"

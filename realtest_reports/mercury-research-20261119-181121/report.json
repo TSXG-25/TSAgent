@@ -1,0 +1,64 @@
+{
+  "driver": "scripts/real_eval_mercury.py",
+  "provider": "ollama",
+  "model": "qwen3:8b",
+  "results": [
+    {
+      "task_id": "t2",
+      "name": "body-reading",
+      "task": "读取 https://en.wikipedia.org/wiki/DuckDuckGo 的正文，告诉我 DuckDuckGo 是哪一年推出的，并标注来源。",
+      "classification": "capability_met",
+      "checks": {
+        "searched": true,
+        "fetched_body": true,
+        "fetched_required_url": true,
+        "web_tool_calls": [
+          {
+            "tool": "web_fetch",
+            "args": {
+              "url": "https://en.wikipedia.org/wiki/DuckDuckGo"
+            }
+          },
+          {
+            "tool": "web_search",
+            "args": {
+              "query": "DuckDuckGo launch year"
+            }
+          },
+          {
+            "tool": "web_search",
+            "args": {
+              "query": "DuckDuckGo launch year"
+            }
+          }
+        ],
+        "evidence_urls": [
+          "https://en.wikipedia.org/wiki/DuckDuckGo",
+          "https://errors.pydantic.dev/2.13/v/greater_than_equal",
+          "https://www.zippia.com/duckduckgo-careers-1425922/history/",
+          "https://duckduckgo.com/about",
+          "https://spreadprivacy.com/15-years-of-duckduckgo/",
+          "https://factually.co/fact-checks/technology/duckduckgo-founded-mission-279352",
+          "https://startupspotlight.co/q/when-was-duckduckgo-launched",
+          "https://history.itlibra.com/en/events/duckduckgo-2008",
+          "https://canvasbusinessmodel.com/blogs/brief-history/duckduckgo-brief-history",
+          "https://start.duckduckgo.com/",
+          "https://www.wikiwand.com/en/DuckDuckGo"
+        ],
+        "cited_urls": [
+          "https://duckduckgo.com/about",
+          "https://spreadprivacy.com/15-years-of-duckduckgo/",
+          "https://factually.co/fact-checks/technology/duckduckgo-founded-mission-279352"
+        ],
+        "fabricated_urls": [],
+        "goal_missing": [],
+        "output_excerpt": "DuckDuckGo 是在 **2008 年**推出的。这一信息来源于多个可靠来源，包括其官方网站和历史记录页面。 \n\n- 来源 1: [DuckDuckGo 官方网站](https://duckduckgo.com/about) 提到，DuckDuckGo 是在 2008 年从宾夕法尼亚州的帕洛伊（Paoli）启动的。\n- 来源 2: [Spread Privacy 的文章](https://spreadprivacy.com/15-years-of-duckduckgo/) 指出，Gabriel Weinberg 在 2008 年 9 月 25 日从宾夕法尼亚州的帕洛伊启动了 DuckDuckGo。\n- 来源 3: [Factually.co 的文章](https://factually.co/fact-checks/technology/duckduckgo-founded-mission-279352) 也确认了 DuckDuckGo 是在 2008 年 2 月晚些时候推出的。\n\n未自动验证：用户要求标注来源，但无法机械核验是否正确标注。",
+        "failure_code": ""
+      },
+      "run_id": "run-db1a57ee93624e5fbf578900a556d426",
+      "elapsed_s": 216.5,
+      "terminal_status": "COMPLETED",
+      "failure": null
+    }
+  ]
+}

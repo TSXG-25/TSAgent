@@ -17,9 +17,9 @@ import tests.test_ha_r1_harness as harness
 from agent.service.contracts import StartRunRequest
 
 # The exact zh template MercuryWorkspace prefills (i18n mer.research-prefill):
-#   "基于以下搜索结果继续研究：\n查询：{query}\n{sources}\n\n研究目标："
+#   "基于以下搜索结果继续研究，阅读来源正文后回答：\n查询：{query}\n{sources}\n\n研究目标："
 PREFILL = (
-    "基于以下搜索结果继续研究：\n"
+    "基于以下搜索结果继续研究，阅读来源正文后回答：\n"
     "查询：mercury 搜索链\n"
     "- Alpha Source — https://a.example/x\n"
     "\n"

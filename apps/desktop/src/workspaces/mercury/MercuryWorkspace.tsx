@@ -91,8 +91,10 @@ export default function MercuryWorkspace({ ctx }: { ctx: RunCtx }) {
                     <>
                       <strong>{String(v.source.title ?? "Source")}</strong>
                       <a href={String(v.source.url ?? "#")} rel="noreferrer" target="_blank">{String(v.source.url ?? "")}</a>
-                      <p>{String(v.source.snippet ?? v.content?.slice(0, 240) ?? "")}</p>
+                      <p>{String(v.source.snippet || v.content?.slice(0, 240) || "")}</p>
                     </>
+                  ) : v.content ? (
+                    <p>{v.content.slice(0, 240)}</p>
                   ) : (
                     <div className="empty-state"><p>{t("mer.empty-view")}</p><p className="omni-empty">{t("mer.empty-hint")}</p></div>
                   )}

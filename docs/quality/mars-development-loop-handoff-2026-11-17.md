@@ -329,3 +329,48 @@ run，子 run 落在 Mercury 会话，两侧可见同一记录）；"→ Omni �
 "Mercury 查资料→Mars 实现"现在内容层面闭环（有离线证明）。仍
 未覆盖：spawn_subtask 自动续写、跨会话聚合（Omni 看 Mercury→Mars
 结果）、Mercury 搜索/正文/引用质量的独立验收、真实 Tauri 验收。
+
+### Mercury 搜索→正文读取→来源引用 链检查（172a8ae2 之后）
+
+链现状：UI `web_search` RPC → `run_search` → 提供者链
+（duckduckgo → deepseek，全失败诚实报 `RESEARCH_TOOL_UNAVAILABLE`）；
+正文读取只存在于 run 内（`web_fetch`/`web_deep_search` 经 DDG MCP
+`fetch_content`），协议层没有 `web_fetch` RPC；来源引用经"研究任务"
+按钮把 `- 标题 — URL` 预填进草稿→进 run 请求文本，
+`source_grounding_required` → prompt 要求先搜索。
+
+修复的三处根因：
+
+- **DDG provider 丢结构（P1）**：`DuckDuckGoSearchProvider` 只回
+  `content` 原文、`sources=[]`——规范解析器 `parse_search_results`
+  就在 `tools/web.py`（模型侧 `web_search` 工具已用），provider 没用。
+  后果是 DDG 成功搜索在 UI 显示"无结果"+空 pane（DDG 是默认链首位，
+  即主路径）。现在 provider 把 MCP 文本解析成结构化 sources（同一
+  规范解析器，content 原文保留）。
+- **pane 正文盲区（P2）**：DeepSeek source `snippet:""` 不是 nullish，
+  `??` 不落 `content` → pane 正文空；改为 `||` 回落，且 `v.content`
+  无 source 时也渲染（content-only 结果不再完全不可见）。
+- **引用要求不进 prompt（P2）**：`source_grounding_required` 此前只
+  要求"先搜索"，现在同时要求答复标注来源（标题 + URL）——引用链
+  最后一环进 prompt。
+
+### 测试（离线）
+
+- `test_search_providers.py` 新增 DDG 解析用例：canonical MCP 文本
+  → 结构化 sources（title/url/snippet）；7 passed（含原有 failover/
+  归一化用例）。
+- `mercurySearch.test.tsx`（3 例）：sources→panes 投影 + 空 snippet
+  回落 content + add-view 映射下一条；content-only 响应渲染正文而非
+  空态；A→B 会话切换后旧响应不落新 pane（seq 守卫）。
+- vitest 161 passed；tsc 干净；search 相关 Python 19 passed。
+
+### 未覆盖（待决策/验收）
+
+- **`web_fetch` RPC**：Navigator pane 直接读正文目前只能进 run 下游
+  发生；要不要给 UI 开 pane 级"读取正文"动作是 scope 决策。
+- **loop run 结构化 sources**：`plan_executor` 的 `research_sources`
+  收集只在工作流路径；agent loop run 的引用只活在输出文本里，没有
+  结构化来源记录。
+- Mercury 意图分类是否对"研究任务"预填稳定置 `source_grounding_required`
+  未单独验证。
+- 真实研究质量/正确性、真实 Tauri 验收仍不在本次范围。

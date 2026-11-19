@@ -51,7 +51,7 @@ def build_system_prompt(
     if freshness_required or source_grounding_required:
         parts.append(
             "- 该请求要求可核验的外部来源：必须先调用 web_search 等检索工具，"
-            "不得凭记忆回答时效性内容。"
+            "不得凭记忆回答时效性内容；答复中须标注来源（标题 + URL）。"
         )
     parts += [
         "",

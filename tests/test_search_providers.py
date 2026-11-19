@@ -61,6 +61,34 @@ async def test_web_search_routes_through_seam(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_duckduckgo_provider_parses_sources(monkeypatch):
+    """DDG MCP returns prose blocks — the provider must project them into
+    structured sources or UI consumers see 'empty' on a successful search."""
+    from agent.search import duckduckgo_provider as ddg
+
+    text = (
+        '1. First Title\n   URL: https://a.example/x\n'
+        '   Summary: first snippet\n\n'
+        '2. Second Title\n   URL: https://b.example/y\n'
+        '   Summary: second snippet\n'
+    )
+
+    async def fake_call(name, arguments):
+        assert name == "search"
+        return text
+
+    monkeypatch.setattr(
+        "agent.mcp.duckduckgo.call_duckduckgo_tool", fake_call
+    )
+    out = await ddg.DuckDuckGoSearchProvider().search("q", max_results=5)
+    assert out.content == text
+    assert out.sources[0]["url"] == "https://a.example/x"
+    assert out.sources[0]["title"] == "First Title"
+    assert out.sources[0]["snippet"] == "first snippet"
+    assert out.sources[1]["url"] == "https://b.example/y"
+
+
+@pytest.mark.asyncio
 async def test_deepseek_provider_normalizes_response(monkeypatch):
     from agent.search import deepseek_provider as dp
 

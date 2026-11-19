@@ -258,3 +258,15 @@ Omni 的"回来汇报"目前 = Omni 展示子 Run 的进度/结果卡片，父�
 继续消费结果（`spawn_subtask` 那条阻塞回传链未接进 `@` 路径）。本轮
 显式 `@Mars` 范围按此交付；若要"Omni 拿到结果后自动续写"是下一步的
 独立决策。
+
+### 第二轮审查修复
+
+- **工作台选择记录**：`ctx.selectRun` 只写全局选中；Mars 的
+  `useWorkspaceCurrentRun` 读独立的 `selectWorkspaceRun` 记录
+  （tenant/session/planet 键），缺省回退同会话最新 run——同会话两个
+  Mars 子任务时点旧任务"进入 Mars"会把状态/暂停/取消指向新任务。
+  进入时同步写该记录（DOM 断言 `getWorkspaceRunId` 指向被点击的旧 run）。
+- **序号判定替代会话串比较**：`handoffScope` 只比 sessionId，
+  A→B→A 逆序返回或同会话轮询重叠时旧响应可覆盖新卡片/旧失败可清空。
+  改 `handoffSeq` 请求序号（searchSession 同款）——只有最新请求可写。
+  补 A→B→A 逆序用例：新响应先落地，旧响应后到被丢弃。

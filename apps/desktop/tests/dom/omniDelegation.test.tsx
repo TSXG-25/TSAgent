@@ -3,6 +3,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import GlobalChat from "../../src/app/GlobalChat";
+import { getWorkspaceRunId } from "../../src/app/workspaceSelection";
 import { MockAgentServiceClient } from "../../src/service/mockAgentService";
 import type { RunCtx } from "../../src/app/runCtx";
 import type { RunView } from "../../src/types";
@@ -178,33 +179,39 @@ describe("Omni @planet delegation", () => {
 
   test("delegated card shows status, summary and enters Mars on the owning session", async () => {
     const service = new MockAgentServiceClient();
-    vi.spyOn(service, "listHandoffs").mockResolvedValue([handoff({})]);
-    const child = runView({
-      runId: "run-1",
-      sessionId: "s-omni",
-      originPlanet: "mars",
+    vi.spyOn(service, "listHandoffs").mockResolvedValue([
+      handoff({ handoffId: "h-new", targetRunId: "run-new" }),
+      handoff({ handoffId: "h-old", targetRunId: "run-old" }),
+    ]);
+    // ctx.runs is newest-first — without an explicit workspace selection
+    // Mars's current task would fall back to run-new regardless of which
+    // card was clicked.
+    const runNew = runView({ runId: "run-new", sessionId: "s-delegated", request: "newer task" });
+    const runOld = runView({
+      runId: "run-old",
+      sessionId: "s-delegated",
+      request: "older task",
       output: { text: "fixed and tested", createdAt: "t" } as RunView["output"],
     });
-    const ctx = ctxFor(service, "s-omni", { runs: [child] });
+    const ctx = ctxFor(service, "s-delegated", { runs: [runNew, runOld] });
     renderChat(ctx);
 
     await waitFor(() =>
       expect(screen.getByTestId("chat-delegated")).toBeTruthy(),
     );
-    const card = screen.getByTestId("chat-delegated");
-    expect(card.querySelector(".mc-delegated-head > span")!.textContent).toBe("@mars");
-    expect(card.textContent).toContain("fixed and tested");
+    const cards = document.querySelectorAll(".mc-delegated");
+    expect(cards).toHaveLength(2);
+    const oldCard = cards[1];
+    expect(oldCard.textContent).toContain("fixed and tested");
 
-    // Enter-Mars locates the owning session, the run, and lands on Mars —
-    // Mars's rail filter + bound project follow the session scope.
-    fireEvent.click([...card.querySelectorAll(".ven-link")].pop()!);
-    expect(ctx.selectSessionFor).toHaveBeenCalledWith("mars", "s-omni");
-    expect(ctx.selectRun).toHaveBeenCalledWith("run-1");
+    // Enter-Mars on the OLDER child: session scope, global selection, and
+    // the per-workstation selection record must all point at it — Mars's
+    // status/controls read that record, not the global run.
+    fireEvent.click([...oldCard.querySelectorAll(".ven-link")].pop()!);
+    expect(ctx.selectSessionFor).toHaveBeenCalledWith("mars", "s-delegated");
+    expect(ctx.selectRun).toHaveBeenCalledWith("run-old");
+    expect(getWorkspaceRunId(service.identity.tenantId, "s-delegated", "mars")).toBe("run-old");
     await waitFor(() => expect(screen.getByTestId("mars-view")).toBeTruthy());
-
-    // The request link still selects the run inline (Omni view).
-    fireEvent.click(card.querySelector(".ven-link")!);
-    expect(ctx.selectRun).toHaveBeenCalledWith("run-1");
   });
 
   test("a late handoffs response from the previous session is dropped", async () => {
@@ -235,5 +242,46 @@ describe("Omni @planet delegation", () => {
     resolveA([handoff({})]);
     await new Promise((r) => setTimeout(r, 20));
     expect(screen.queryByTestId("chat-delegated")).toBeNull();
+  });
+
+  test("A→B→A: a stale response for the same session cannot overwrite newer cards", async () => {
+    const service = new MockAgentServiceClient();
+    let resolveA1: (v: HandoffSummary[]) => void = () => {};
+    let resolveA2: (v: HandoffSummary[]) => void = () => {};
+    const spy = vi.spyOn(service, "listHandoffs")
+      .mockImplementationOnce(() => new Promise<HandoffSummary[]>((res) => { resolveA1 = res; }))
+      .mockResolvedValueOnce([])
+      .mockImplementationOnce(() => new Promise<HandoffSummary[]>((res) => { resolveA2 = res; }))
+      .mockResolvedValue([]);
+    const runOld = runView({ runId: "run-old", sessionId: "s-A", request: "stale task" });
+    const runNew = runView({ runId: "run-new", sessionId: "s-A", request: "fresh task" });
+    const mount = (ctx: RunCtx) => (
+      <MemoryRouter initialEntries={["/w/sun"]}>
+        <GlobalChat ctx={ctx} embedded instant />
+        <Routes>
+          <Route path="/w/mars" element={<div data-testid="mars-view" />} />
+        </Routes>
+      </MemoryRouter>
+    );
+    const ctxA = ctxFor(service, "s-A", { runs: [runNew, runOld] });
+    const { rerender } = render(mount(ctxA));
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(1)); // A₁ in flight
+
+    // A→B→A: B's poll fires and resolves; A₂ is then the newest request.
+    rerender(mount(ctxFor(service, "s-B", { runs: [runNew, runOld] })));
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(2));
+    rerender(mount(ctxA));
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(3));
+
+    // Newest first: fresh cards land.
+    resolveA2([handoff({ targetRunId: "run-new" })]);
+    await waitFor(() => expect(screen.getByText(/fresh task/)).toBeTruthy());
+
+    // Stale A₁ arrives last — it shares the session string but loses the
+    // sequence race, so the fresh cards survive.
+    resolveA1([handoff({ targetRunId: "run-old" })]);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.getByText(/fresh task/)).toBeTruthy();
+    expect(screen.queryByText(/stale task/)).toBeNull();
   });
 });

@@ -6,6 +6,7 @@ import { useScrollFollow } from "./useScrollFollow";
 import { usePoll } from "./usePoll";
 import { delegateFromOmni } from "./delegate";
 import { isOmniSession } from "./sessionWorkspace";
+import { selectWorkspaceRun } from "./workspaceSelection";
 import { draftKey, useDraft, clearDraftIfUnchanged } from "./draftStore";
 import { t } from "./i18n";
 import type { HandoffSummary, SessionSummary } from "../types/service";
@@ -66,16 +67,16 @@ export default function GlobalChat({ ctx, onClose, embedded = false, instant = f
   useEffect(() => { void refreshSessions(); }, [refreshSessions]);
   // Delegated children of this session — durable Handoff edges resolve to
   // the child runs living in this session (progress/result show inline).
-  // Live-scope guard (same as WorkspaceHost): a session switch clears the
-  // snapshot, a late response for the previous session is discarded, and a
-  // failed fetch clears rather than keep another scope's cards.
-  const handoffScope = useRef(sessionId);
-  handoffScope.current = sessionId;
+  // Request-sequence guard (same as searchSession): only the newest request
+  // may write — a stale response can never overwrite fresher cards, whether
+  // it straddles a session switch (A→B→A) or an overlapping poll tick; a
+  // stale failure can't clear them either. Switching clears the snapshot.
+  const handoffSeq = useRef(0);
   usePoll(() => {
-    const target = sessionId;
-    void service.listHandoffs({ sessionId: target })
-      .then((list) => { if (handoffScope.current === target) setHandoffs(list); })
-      .catch(() => { if (handoffScope.current === target) setHandoffs([]); });
+    const id = ++handoffSeq.current;
+    void service.listHandoffs({ sessionId })
+      .then((list) => { if (id === handoffSeq.current) setHandoffs(list); })
+      .catch(() => { if (id === handoffSeq.current) setHandoffs([]); });
   }, 8_000, [service, sessionId]);
   useEffect(() => { setHandoffs([]); }, [sessionId]);
   const delegated = handoffs
@@ -197,9 +198,13 @@ export default function GlobalChat({ ctx, onClose, embedded = false, instant = f
                       // A workstation's rail and bound project follow its
                       // session scope — point the planet's scope at the run's
                       // owning session, then select + land so Mars opens on
-                      // this delegation (not its previous session).
+                      // this delegation (not its previous session). The
+                      // per-workstation selection record is what Mars's
+                      // current-task/status/controls read — set it to this
+                      // run or the newest sibling wins by fallback.
                       ctx.selectSessionFor(handoff.targetPlanet, run.sessionId);
                       ctx.selectRun(run.runId);
+                      selectWorkspaceRun(ctx.service.identity.tenantId, run.sessionId, handoff.targetPlanet, run.runId);
                       navigate(`/w/${handoff.targetPlanet}`);
                     }}
                     type="button"

@@ -10,18 +10,23 @@
       "classification": "capability_gap",
       "checks": {
         "searched": false,
+        "fetch_attempted": false,
         "fetched_body": false,
+        "fetched_required_url": false,
+        "required_fetch_attempted": false,
         "web_tool_calls": [],
         "evidence_urls": [],
         "cited_urls": [],
         "fabricated_urls": [],
         "goal_missing": [],
-        "failure_code": ""
+        "failure_code": "",
+        "recomputed": "checks regenerated from eval.db observations with attempted-vs-succeeded fetch distinction; failed results no longer contribute evidence URLs"
       },
       "run_id": "run-a60191c2f36f419a8e1fc01731fce556",
       "elapsed_s": 21.2,
       "terminal_status": "COMPLETED",
       "failure": null
     }
-  ]
+  ],
+  "recomputed": true
 }

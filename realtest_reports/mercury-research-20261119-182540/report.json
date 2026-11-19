@@ -7,71 +7,83 @@
       "task_id": "t1",
       "name": "prefill-entry",
       "task": "基于以下搜索结果继续研究，阅读来源正文后回答：\n查询：DuckDuckGo 搜索引擎 隐私\n- DuckDuckGo - Protection. Privacy. Peace of mind. — https://duckduckgo.com/\n- 14 个最佳私人搜索引擎 - Private Proxy Guide — https://www.privateproxyguide.com/zh/%E6%9C%80%E4%BD%B3%E7%A7%81%E4%BA%BA%E6%90%9C%E7%B4%A2%E5%BC%95%E6%93%8E/\n- DuckDuckGo 安全吗？关于这款私有搜索引擎需要了解的信息 | Proton — https://proton.me/zh/blog/duckduckgo\n- DUCKDUCKGO: 搜索引擎评测 - 优点与缺点 - NetValuator (中文中国) — https://netvaluator.com/cn/duckduckgo-%E6%90%9C%E7%B4%A2%E5%BC%95%E6%93%8E%E8%AF%84%E6%B5%8B-%E4%BC%98%E7%82%B9%E4%B8%8E%E7%BC%BA%E7%82%B9/\n- DuckDuckGo 公司介绍 - 隐私搜索引擎·浏览器 - 16IDC — https://www.16idc.com/provider-detail/duckduckgo\n- DuckDuckGo - 保护。隐私。安心。 — https://www.navgood.com/zh/tool-details/duckduckgo-57abf\n- DuckDuckGo 浏览器：搜索不追踪、广告能屏蔽，隐私浏览器里的省心之选 - 极客范 — https://jikefan.com/zh/app/duckduckgo-browser/7.234\n- DuckDuckGo 2026 年统计数据：隐私体验指南 - venuelabs.com — https://venuelabs.com/zh-CN/duckduckgo-statistics/\n- DuckDuckGo 搜索引擎官网 | 隐私为核心的另类搜索体验 — https://www.leavescn.com/forums/detail/17910\n- DuckDuckGo - 维基百科，自由的百科全书 - zh.wikipedia.org — https://zh.wikipedia.org/zh-cn/DuckDuckGo\n\n研究目标：总结这些来源如何描述 DuckDuckGo 的隐私策略，并标注来源。",
-      "classification": "capability_met",
+      "classification": "provider_or_environment",
       "checks": {
         "searched": true,
-        "fetched_body": true,
+        "fetch_attempted": true,
+        "fetched_body": false,
         "fetched_required_url": false,
+        "required_fetch_attempted": false,
         "web_tool_calls": [
           {
             "tool": "web_fetch",
             "args": {
               "url": "https://www.privateproxyguide.com/zh/%E6%9C%80%E4%BD%B3%E7%A7%81%E4%BA%BA%E6%90%9C%E7%B4%A2%E5%BC%95%E6%93%8E/"
-            }
+            },
+            "ok": false,
+            "error_code": "TOOL_EXECUTION_FAILED"
           },
           {
             "tool": "web_fetch",
             "args": {
               "url": "https://jikefan.com/zh/app/duckduckgo-browser/7.234"
-            }
+            },
+            "ok": false,
+            "error_code": "TOOL_EXECUTION_FAILED"
           },
           {
             "tool": "web_fetch",
             "args": {
               "url": "https://venuelabs.com/zh-CN/duckduckgo-statistics/"
-            }
+            },
+            "ok": false,
+            "error_code": "TOOL_EXECUTION_FAILED"
           },
           {
             "tool": "web_fetch",
             "args": {
               "url": "https://www.navgood.com/zh/tool-details/duckduckgo-57abf"
-            }
+            },
+            "ok": false,
+            "error_code": "TOOL_EXECUTION_FAILED"
           },
           {
             "tool": "web_fetch",
             "args": {
               "url": "https://www.16idc.com/provider-detail/duckduckgo"
-            }
+            },
+            "ok": false,
+            "error_code": "TOOL_EXECUTION_FAILED"
           },
           {
             "tool": "web_fetch",
             "args": {
               "url": "https://www.leavescn.com/forums/detail/17910"
-            }
+            },
+            "ok": false,
+            "error_code": "TOOL_EXECUTION_FAILED"
           },
           {
             "tool": "web_fetch",
             "args": {
               "url": "https://zh.wikipedia.org/zh-cn/DuckDuckGo"
-            }
+            },
+            "ok": false,
+            "error_code": "TOOL_EXECUTION_FAILED"
           },
           {
             "tool": "web_search",
             "args": {
               "query": "DuckDuckGo 隐私策略"
-            }
+            },
+            "ok": true,
+            "error_code": ""
           }
         ],
         "evidence_urls": [
-          "https://www.privateproxyguide.com/zh/%E6%9C%80%E4%BD%B3%E7%A7%81%E4%BA%BA%E6%90%9C%E7%B4%A2%E5%BC%95%E6%93%8E/",
-          "https://jikefan.com/zh/app/duckduckgo-browser/7.234",
-          "https://venuelabs.com/zh-CN/duckduckgo-statistics/",
-          "https://www.navgood.com/zh/tool-details/duckduckgo-57abf",
-          "https://www.16idc.com/provider-detail/duckduckgo",
-          "https://www.leavescn.com/forums/detail/17910",
-          "https://zh.wikipedia.org/zh-cn/DuckDuckGo",
           "https://duckduckgo.com/privacy",
           "https://healthlinemags.com/zh-cn/%E8%87%AA%E5%B8%A6vpn%E7%9A%84%E6%B5%8F%E8%A7%88%E5%99%A8/",
+          "https://venuelabs.com/zh-CN/duckduckgo-statistics/",
           "https://newreleases.io/project/github/duckduckgo/duckduckgo-privacy-extension/release/2026.11.12",
           "https://www.ababnews.com/news/e3c6555b-3e30-4ac8-8466-b6ab119539ff",
           "https://www.jilo.ai/zh/news/exploring-duckduckgo-ai-features-a-comprehensive-guide",
@@ -102,12 +114,14 @@
           "https://venuelabs.com/zh-CN/duckduckgo-statistics/",
           "https://www.leavescn.com/forums/detail/17910",
           "https://zh.wikipedia.org/zh-cn/DuckDuckGo"
-        ]
+        ],
+        "recomputed": "checks regenerated from eval.db observations with attempted-vs-succeeded fetch distinction; failed results no longer contribute evidence URLs"
       },
       "run_id": "run-53bf11f15b6948998c5f7f57836701d3",
       "elapsed_s": 315.5,
       "terminal_status": "COMPLETED",
       "failure": null
     }
-  ]
+  ],
+  "recomputed": true
 }

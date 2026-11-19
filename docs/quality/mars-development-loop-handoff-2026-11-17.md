@@ -499,3 +499,35 @@ USER_VISIBLE_OUTPUT"、rule 10 把 grounding 只解释成"要新资料要搜索"
   模型对来源内容的转述可能编造，需正文比对才能判。
 - t3 的 capability_met 只证明"真实检索+URL 对齐"，不构成正文读取
   或事实准确性证据。
+
+### 评测口径更正（cb632b21 复核后）
+
+此前 `fetched_body`/`fetched_required_url` 统计的是"调用过"而非
+"读成功"——SSRF 拒绝的 fetch 也被计为正文读取，且失败结果 error
+文本里的 URL 会混进 evidence_urls。修正（只改评测，不碰生产合同、
+不放松 SSRF 防护）：
+
+- `observation_urls` 只收 `result.ok` 的观察——失败结果不贡献证据。
+- `web_obs` 记录 `ok`/`error_code`；区分 `fetch_attempted`（尝试过）
+  与 `fetched_body`（读成功）/`fetched_required_url`（指定 URL 读成功）。
+- t1/t2 按"要求读取正文"验收（`body_required`）：fetch 尝试被环境
+  阻断 → `provider_or_environment`；从未尝试 → `capability_gap`；
+  搜索替代不算正文读取通过。
+- `--recompute` 模式从 eval.db 事件重算报告，零模型调用。
+
+重算后的诚实结论：
+
+| 报告 | 修正后分类 | 含义 |
+|---|---|---|
+| t1 旧模板（150543） | capability_gap | exec=False 无工具，分类断点 |
+| t2 旧合同（150730） | capability_gap | exec=False 零调用 |
+| t2 新合同（181121） | **provider_or_environment** | exec=True、按要求 fetch 指定 URL、被 SSRF 拦、降级检索+真引用 |
+| t1 旧模板 PROVIDER_TIMEOUT（181517） | provider_or_environment | 环境超时，非诚实拒绝 |
+| t1 新模板（182540） | **provider_or_environment** | exec=True、7 个 URL 逐个 fetch、全被 SSRF 拦、降级检索+真引用 |
+| t3（150755） | capability_met | 真实检索+URL 对齐（不证明正文/事实准确） |
+| t2 驱动超时（153802） | runtime_contract_gap | 驱动 60s 轮询超时崩溃的真实记录 |
+
+**当前可宣称**：分类合同修复在真实环境生效——"读取正文"与"基于
+链接继续研究"正确进入执行路径，模型按要求工具调用并在被拒后
+自适应。**不可宣称**：正文读取能力已完成——本机 SSRF 防护拦所有
+fetch_content，需公网解析正常的环境验证。SSRF 防护不为此放松。

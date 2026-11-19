@@ -70,6 +70,7 @@ TASKS = {
         # actually fetched THE GIVEN URL — searching without reading the
         # body (or fetching a different page) does not satisfy it.
         "required_fetch_url": "https://en.wikipedia.org/wiki/DuckDuckGo",
+        "body_required": True,
     },
     "t3": {
         "name": "freshness",
@@ -189,18 +190,87 @@ def terminal_continuation(events: list[dict]) -> dict:
 
 def observation_urls(observations: list[dict]) -> list[str]:
     """Source URLs the tools actually returned — from _sources when the
-    executor collected them, else parsed out of the result content."""
+    executor collected them, else parsed out of the result content.
+    FAILED observations contribute nothing: an error message that names
+    the rejected URL is not evidence the source was read."""
     urls: list[str] = []
     for obs in observations:
         if str(obs.get("tool", "")) not in WEB_TOOLS:
             continue
         result = obs.get("result") or {}
+        if result.get("ok") is not True:
+            continue
         for url in result.get("_sources") or ():
             if str(url).strip():
                 urls.append(str(url).strip())
         content = str(result.get("content") or "")
         urls.extend(URL_PATTERN.findall(content))
     return list(dict.fromkeys(urls))
+
+
+def compute_checks(
+    observations: list[dict], output_text: str, request_text: str,
+    spec: dict,
+) -> dict:
+    """Wire-observable checks shared by live evaluation and --recompute."""
+    web_obs = [
+        {
+            "tool": str(o.get("tool", "")),
+            "args": o.get("input") or {},
+            "ok": (o.get("result") or {}).get("ok") is True,
+            "error_code": str((o.get("result") or {}).get("error_code") or ""),
+        }
+        for o in observations if str(o.get("tool", "")) in WEB_TOOLS
+    ]
+    required_url = str(spec.get("required_fetch_url") or "")
+    # "Attempted" and "succeeded" are different facts — an SSRF-rejected
+    # fetch is an attempt, not a body read.
+    fetch_attempted = any(o["tool"] in FETCH_TOOLS for o in web_obs)
+    fetched_body = any(
+        o["tool"] in FETCH_TOOLS and o["ok"] for o in web_obs
+    )
+    required_attempted = bool(
+        required_url
+        and any(
+            o["tool"] in FETCH_TOOLS
+            and str((o["args"] or {}).get("url", "")).rstrip("/")
+            == required_url.rstrip("/")
+            for o in web_obs
+        )
+    )
+    fetched_required = bool(
+        required_url
+        and required_attempted
+        and any(
+            o["tool"] in FETCH_TOOLS
+            and o["ok"]
+            and str((o["args"] or {}).get("url", "")).rstrip("/")
+            == required_url.rstrip("/")
+            for o in web_obs
+        )
+    )
+    cited = list(dict.fromkeys(URL_PATTERN.findall(output_text)))
+    evidence_urls = observation_urls(observations)
+    provided_urls = URL_PATTERN.findall(request_text)
+    known = set(evidence_urls) | set(provided_urls)
+    fabricated = [
+        u for u in cited
+        if not any(u == k or u.rstrip("/") == k.rstrip("/") for k in known)
+    ]
+    return {
+        "searched": any(
+            o["tool"] in {"web_search", "web_news_search", "web_deep_search"}
+            for o in web_obs
+        ),
+        "fetch_attempted": fetch_attempted,
+        "fetched_body": fetched_body,
+        "fetched_required_url": fetched_required,
+        "required_fetch_attempted": required_attempted,
+        "web_tool_calls": web_obs,
+        "evidence_urls": evidence_urls,
+        "cited_urls": cited,
+        "fabricated_urls": fabricated,
+    }
 
 
 def classify(run_status: str, checks: dict, spec: dict,
@@ -217,9 +287,16 @@ def classify(run_status: str, checks: dict, spec: dict,
             else "provider_or_environment"
         )
     if run_status == "COMPLETED":
-        retrieved = checks.get("searched") or checks.get("fetched_body")
+        # Body-required tasks are only met by a body that was actually
+        # READ — a fetch attempt rejected by the environment does not
+        # satisfy it, and a search fallback is not a body read.
+        if spec.get("body_required") and not checks.get("fetched_body"):
+            if checks.get("fetch_attempted") or checks.get("required_fetch_attempted"):
+                return "provider_or_environment"
+            return "capability_gap"
         if spec.get("required_fetch_url") and not checks.get("fetched_required_url"):
-            retrieved = False
+            return "capability_gap"
+        retrieved = checks.get("searched") or checks.get("fetched_body")
         if retrieved and checks.get("cited_urls") and not checks.get("fabricated_urls"):
             return "capability_met"
         return "capability_gap"
@@ -276,54 +353,19 @@ async def evaluate(
         event_list = events if isinstance(events, list) else events.get("events", [])
         cont = terminal_continuation(event_list)
         observations = cont.get("observations") or []
-        web_obs = [
-            {
-                "tool": str(o.get("tool", "")),
-                "args": o.get("input") or {},
-            }
-            for o in observations if str(o.get("tool", "")) in WEB_TOOLS
-        ]
-        required_url = str(spec.get("required_fetch_url") or "")
-        fetched_required = bool(
-            required_url
-            and any(
-                o["tool"] in FETCH_TOOLS
-                and str((o["args"] or {}).get("url", "")).rstrip("/")
-                == required_url.rstrip("/")
-                for o in web_obs
-            )
-        )
         output_text = str((run.get("output") or {}).get("text") or "")
-        cited = list(dict.fromkeys(URL_PATTERN.findall(output_text)))
-        evidence_urls = observation_urls(observations)
-        provided_urls = URL_PATTERN.findall(request_text)
-        known = set(evidence_urls) | set(provided_urls)
-        # A cited URL that merely *extends* an evidence URL is not evidence —
-        # the model constructed a path it never saw. Track separately from
-        # wholly-unrelated fabrications; both are accuracy signals.
-        fabricated = [
-            u for u in cited
-            if not any(u == k or u.rstrip("/") == k.rstrip("/") for k in known)
-        ]
-        result["checks"] = {
-            "searched": any(
-                o["tool"] in {"web_search", "web_news_search", "web_deep_search"}
-                for o in web_obs
-            ),
-            "fetched_body": any(o["tool"] in FETCH_TOOLS for o in web_obs),
-            "fetched_required_url": fetched_required,
-            "web_tool_calls": web_obs,
-            "evidence_urls": evidence_urls,
-            "cited_urls": cited,
-            "fabricated_urls": fabricated,
-            "goal_missing": cont.get("missing", []),
-            "output_excerpt": output_text[:1500],
-            "failure_code": str(
-                ((run.get("failure_summary") or {}) or {}).get("code")
-                or (run.get("failure") or "")
-            ),
-        }
-        result["classification"] = classify(status, result["checks"], spec)
+        failure_code = str(
+            ((run.get("failure_summary") or {}) or {}).get("code")
+            or (run.get("failure") or "")
+        )
+        checks = compute_checks(
+            observations, output_text, request_text, spec,
+        )
+        checks["goal_missing"] = cont.get("missing", [])
+        checks["output_excerpt"] = output_text[:1500]
+        checks["failure_code"] = failure_code
+        result["checks"] = checks
+        result["classification"] = classify(status, checks, spec)
     except Exception as exc:  # provider/env/transport failures land here
         error = str(exc) or type(exc).__name__
         result["classification"] = classify(
@@ -357,10 +399,83 @@ async def t1_prefill_text(sidecar: Sidecar) -> tuple[str, list[str]]:
     return prefill, [str(s.get("url", "")) for s in sources]
 
 
+def recompute_report(report_dir: Path) -> int:
+    """Recompute checks/classification for an existing report from its
+    eval.db events — corrects archived stats without any model calls."""
+    import sqlite3
+
+    report_path = report_dir / "report.json"
+    db_path = report_dir / "eval.db"
+    report = json.loads(report_path.read_text())
+    db = sqlite3.connect(str(db_path))
+    try:
+        for r in report.get("results") or []:
+            task_id = str(r.get("task_id") or r.get("candidate") or "")
+            spec = TASKS.get(task_id) or {
+                "name": r.get("name", task_id), "body_required": True,
+            }
+            run_id = str(r.get("run_id") or "")
+            status = str(r.get("terminal_status") or "")
+            row = db.execute(
+                "SELECT text FROM run_outputs WHERE run_id = ? "
+                "ORDER BY revision DESC LIMIT 1",
+                (run_id,),
+            ).fetchone()
+            output_text = str(row[0]) if row else ""
+            events = db.execute(
+                "SELECT payload_json FROM run_events WHERE run_id = ? "
+                "ORDER BY sequence_number",
+                (run_id,),
+            ).fetchall()
+            observations: list[dict] = []
+            for (payload_json,) in events:
+                payload = json.loads(payload_json or "{}")
+                cont = payload.get("continuation") or {}
+                observations.extend(cont.get("observations") or [])
+            checks = compute_checks(
+                observations, output_text,
+                str(r.get("task") or ""), spec,
+            )
+            # Preserve fields recompute cannot derive differently.
+            for key in ("goal_missing", "output_excerpt", "failure_code",
+                        "prefill_source_urls"):
+                if key in r.get("checks", {}):
+                    checks[key] = r["checks"][key]
+            checks["recomputed"] = (
+                "checks regenerated from eval.db observations with "
+                "attempted-vs-succeeded fetch distinction; failed results "
+                "no longer contribute evidence URLs"
+            )
+            r["checks"] = checks
+            r["classification"] = classify(status, checks, spec)
+        report["recomputed"] = True
+        report_path.write_text(
+            json.dumps(report, ensure_ascii=False, indent=2)
+        )
+        for r in report.get("results") or []:
+            print(
+                f"{r.get('task_id')}: {r['classification']} "
+                f"(fetched_body={r['checks'].get('fetched_body')}, "
+                f"fabricated={r['checks'].get('fabricated_urls')})"
+            )
+        return 0
+    finally:
+        db.close()
+
+
 async def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--only", choices=["t1", "t2", "t3"], default=None)
+    parser.add_argument(
+        "--recompute",
+        metavar="REPORT_DIR",
+        help="recompute checks/classification for an existing report "
+        "directory from its eval.db events — no model calls",
+    )
     args = parser.parse_args()
+
+    if args.recompute:
+        return recompute_report(Path(args.recompute))
 
     REPORT_ROOT.mkdir(parents=True, exist_ok=True)
     sidecar = await Sidecar.spawn(REPORT_ROOT / "eval.db")
@@ -374,7 +489,11 @@ async def main() -> int:
             prefill, search_urls = await t1_prefill_text(sidecar)
             r = await evaluate(
                 sidecar, "t1",
-                {"name": "prefill-entry", "task": prefill}, prefill,
+                {
+                    "name": "prefill-entry", "task": prefill,
+                    "body_required": True,
+                },
+                prefill,
             )
             r["checks"]["prefill_source_urls"] = search_urls
             results.append(r)

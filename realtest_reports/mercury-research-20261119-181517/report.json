@@ -7,11 +7,13 @@
       "task_id": "t1",
       "name": "prefill-entry",
       "task": "基于以下搜索结果继续研究：\n查询：DuckDuckGo 搜索引擎 隐私\n- DuckDuckGo - Protection. Privacy. Peace of mind. — https://duckduckgo.com/\n- DuckDuckGo 安全吗？关于这款私有搜索引擎需要了解的信息 | Proton — https://proton.me/zh/blog/duckduckgo\n- DuckDuckGo Privacy Policy — https://duckduckgo.com/privacy\n- 14 个最佳私人搜索引擎 - Private Proxy Guide — https://www.privateproxyguide.com/zh/%E6%9C%80%E4%BD%B3%E7%A7%81%E4%BA%BA%E6%90%9C%E7%B4%A2%E5%BC%95%E6%93%8E/\n- Duck Duck Go（互联网搜索引擎）_百度百科 — https://baike.baidu.com/item/Duck%20Duck%20Go/7218557\n- DuckDuckGo 2026 年统计数据：隐私体验指南 - venuelabs.com — https://venuelabs.com/zh-CN/duckduckgo-statistics/\n- DUCKDUCKGO: 搜索引擎评测 - 优点与缺点 - NetValuator (中文中国) — https://netvaluator.com/cn/duckduckgo-%E6%90%9C%E7%B4%A2%E5%BC%95%E6%93%8E%E8%AF%84%E6%B5%8B-%E4%BC%98%E7%82%B9%E4%B8%8E%E7%BC%BA%E7%82%B9/\n- DuckDuckGo：私密搜索引擎、浏览器与AI聊天 - ToolMage — https://www.toolmage.com/zh-hans/tool/duckduckgo/\n- DuckDuckGo - 维基百科，自由的百科全书 - zh.wikipedia.org — https://zh.wikipedia.org/zh-cn/DuckDuckGo\n- DuckDuckGo 公司介绍 - 隐私搜索引擎·浏览器 - 16IDC — https://www.16idc.com/provider-detail/duckduckgo\n\n研究目标：总结这些来源如何描述 DuckDuckGo 的隐私策略，并标注来源。",
-      "classification": "capability_gap_honest_refusal",
+      "classification": "provider_or_environment",
       "checks": {
         "searched": false,
+        "fetch_attempted": false,
         "fetched_body": false,
         "fetched_required_url": false,
+        "required_fetch_attempted": false,
         "web_tool_calls": [],
         "evidence_urls": [],
         "cited_urls": [],
@@ -32,12 +34,14 @@
           "https://www.toolmage.com/zh-hans/tool/duckduckgo/",
           "https://zh.wikipedia.org/zh-cn/DuckDuckGo",
           "https://www.16idc.com/provider-detail/duckduckgo"
-        ]
+        ],
+        "recomputed": "checks regenerated from eval.db observations with attempted-vs-succeeded fetch distinction; failed results no longer contribute evidence URLs"
       },
       "run_id": "run-2f7cdfa6fb0a46218961180975fcc102",
       "elapsed_s": 594.9,
       "terminal_status": "FAILED_TERMINAL",
       "failure": null
     }
-  ]
+  ],
+  "recomputed": true
 }

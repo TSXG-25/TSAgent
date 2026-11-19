@@ -8,9 +8,21 @@
       "name": "body-reading",
       "task": "读取 https://en.wikipedia.org/wiki/DuckDuckGo 的正文，告诉我 DuckDuckGo 是哪一年推出的，并标注来源。",
       "classification": "runtime_contract_gap",
-      "checks": {},
+      "checks": {
+        "searched": false,
+        "fetch_attempted": false,
+        "fetched_body": false,
+        "fetched_required_url": false,
+        "required_fetch_attempted": false,
+        "web_tool_calls": [],
+        "evidence_urls": [],
+        "cited_urls": [],
+        "fabricated_urls": [],
+        "recomputed": "checks regenerated from eval.db observations with attempted-vs-succeeded fetch distinction; failed results no longer contribute evidence URLs"
+      },
       "run_id": "run-ce0192b76af94cc7bbf504149ae4af8b",
       "error": ""
     }
-  ]
+  ],
+  "recomputed": true
 }

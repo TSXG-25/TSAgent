@@ -10,7 +10,10 @@
       "classification": "capability_gap",
       "checks": {
         "searched": false,
+        "fetch_attempted": false,
         "fetched_body": false,
+        "fetched_required_url": false,
+        "required_fetch_attempted": false,
         "web_tool_calls": [],
         "evidence_urls": [],
         "cited_urls": [
@@ -33,12 +36,13 @@
           "https://zh.wikipedia.org/zh-cn/DuckDuckGo",
           "https://jikefan.com/zh/app/duckduckgo-browser/7.234"
         ],
-        "archive_note": "cited_urls/fabricated_urls re-derived post-hoc with the corrected ASCII URL pattern and exact-match check; model output unchanged."
+        "recomputed": "checks regenerated from eval.db observations with attempted-vs-succeeded fetch distinction; failed results no longer contribute evidence URLs"
       },
       "run_id": "run-e1f738e8698c4943b68e2df9e08eea51",
       "elapsed_s": 87.2,
       "terminal_status": "COMPLETED",
       "failure": null
     }
-  ]
+  ],
+  "recomputed": true
 }

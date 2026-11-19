@@ -9,6 +9,7 @@ import { delegateFromPlanet, delegateNewRecord, sendNewRecord, submitToPlanet } 
 import AgentComposer from "./AgentComposer";
 import { WorkspaceThread } from "./WorkspaceThread";
 import { useWorkspaceCurrentRun } from "./workspaceSelection";
+import { DelegatedRunCards, useDelegatedRuns } from "./DelegatedRuns";
 
 /** Open a record's thread — unconditional: re-picking the session the
  *  rail already shows must still leave home, so the view transition
@@ -63,6 +64,10 @@ export function WorkspaceRail({ ctx, planet, placeholder, sendContext }: { ctx: 
   const [view, setView] = useState<"home" | "thread">("thread");
   const currentRun = useWorkspaceCurrentRun(ctx, planet);
   const live = currentRun && ["active", "blocked", "pending"].includes(currentRun.status);
+  // Delegated-out children — they live in this session under another
+  // planet's origin, so the rail's own filter would hide them; the shared
+  // card surface keeps their progress/result/entry visible here.
+  const delegated = useDelegatedRuns(ctx);
 
   // A session switch always lands on its record; re-opening home bumps
   // the epoch so the recent list refetches.
@@ -95,6 +100,12 @@ export function WorkspaceRail({ ctx, planet, placeholder, sendContext }: { ctx: 
             )}
           </div>
           <WorkspaceThread ctx={ctx} planet={planet} />
+          {delegated.length > 0 && (
+            <section className="rail-delegated">
+              <h4 className="ws-mod">{t("wstasks.delegated-out")}</h4>
+              <DelegatedRunCards ctx={ctx} delegated={delegated} />
+            </section>
+          )}
         </>
       )}
       <AgentComposer

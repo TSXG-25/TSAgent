@@ -304,3 +304,28 @@ run，子 run 落在 Mercury 会话，两侧可见同一记录）；"→ Omni �
 - `test_omni_mars_delegation.py` 参数化 source ∈ {sun, mercury}：
   同一 E2E 断言链对两个源工作台均成立（3 passed）。
 - vitest 157 passed；tsc 干净。
+
+### 复核修复（d727c195 之后）
+
+- **Mars rail 委派可见性**：`WorkspaceRail` thread 视图补挂
+  `DelegatedRunCards`（`delegated.length > 0` 门控）——此前 Mars 能
+  委派出去但看不到子任务（rail 的本台过滤把它排除，WorkspaceTasks
+  又是 Mars 不用的组件）。补 `workspaceRail.test.tsx` 用例：Mercury
+  子任务卡 + 进入四步定位断言。
+- **研究内容真交接**：`run:` context ref 此前只是验证过的死 token
+  （循环里没有解引用工具）。`delegateFromPlanet` 锚定 parentRun 时
+  自动附 `run:<runId>`；`_provision_delegation` 把 `run:` ref 内联成
+  该 run 的 durable 输出（含状态，4000 字截断）写进 `child_text`——
+  spawn_subtask 路径同样受益。`artifact:`/`task:`/`file:` 仍是引用
+  语义（file: 子模型经继承 workspace 的 read_file 实际可读）。
+- **E2E 证明交接**：`test_continue_anchor_hands_parent_output_to_child`
+  ——Mercury 研究 run 完成并携带 `UNIQUE-FACT-8842` 输出 →
+  run 锚委派 → 断言唯一内容进 `request_text`、进 handoff.context_refs、
+  且进子模型实际 prompt（`provider.calls` 断言 + 子 turn 以唯一内容
+  为 key 才应答）。
+
+### 口径
+
+"Mercury 查资料→Mars 实现"现在内容层面闭环（有离线证明）。仍
+未覆盖：spawn_subtask 自动续写、跨会话聚合（Omni 看 Mercury→Mars
+结果）、Mercury 搜索/正文/引用质量的独立验收、真实 Tauri 验收。

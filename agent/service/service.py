@@ -982,8 +982,29 @@ class AgentService:
         )
         child_text = request_text
         if resolved_refs:
-            lines = "\n".join(f"- {r}" for r in resolved_refs)
-            child_text = f"{request_text}\n\n上下文引用（已验证可用）:\n{lines}"
+            # run: refs carry real content — the referenced run's durable
+            # output is inlined into the child's request (a continue-anchor
+            # hands the research to the child's model, not just a token).
+            blocks = [request_text, "上下文引用（已验证可用）:"]
+            for ref in resolved_refs:
+                kind, _, target = ref.partition(":")
+                if kind != "run" or not target:
+                    blocks.append(f"- {ref}")
+                    continue
+                snapshot = self._store.read_run_snapshot(
+                    tenant_id, target, session_id=None
+                )
+                status = str(getattr(snapshot.head, "run_status", "") or "")
+                output = (snapshot.output.text if snapshot.output else "").strip()
+                if len(output) > 4000:
+                    output = output[:4000] + "…[截断]"
+                blocks.append(f"- run:{target}（状态：{status}）")
+                if output:
+                    blocks.append(
+                        "  上游输出：\n"
+                        + "\n".join(f"  {line}" for line in output.splitlines())
+                    )
+            child_text = "\n".join(blocks)
         if profile is not None:
             label = profile.display_name or profile.profile_id
             planet = (

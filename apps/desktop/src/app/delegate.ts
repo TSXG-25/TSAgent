@@ -142,11 +142,16 @@ export async function delegateFromPlanet(
     });
     parentTaskId = task.taskId;
   }
+  // A continue-anchor carries its parent's result: the run: ref rides the
+  // durable handoff edge and the service inlines that run's output into
+  // the child's request — the research actually reaches the child's model,
+  // not just the task tree.
+  const refs = parent ? [...attachments, `run:${parent.runId}`] : attachments;
   const result = await service.delegateRun({
     sessionId,
     parentRunId: parent?.runId ?? "",
     parentTaskId,
-    contextRefs: attachments,
+    contextRefs: refs,
     requestText,
     targetPlanet,
   });
@@ -161,7 +166,7 @@ export async function delegateFromPlanet(
     taskId: result?.taskId ?? "",
     originPlanet: targetPlanet,
     workspaceRoot: result?.workspaceRoot,
-    contextRefs: attachments.filter((r) => !r.startsWith("artifact:")),
+    contextRefs: refs.filter((r) => !r.startsWith("artifact:")),
     metadata: {
       ...metadata,
       delegation_depth: 1,

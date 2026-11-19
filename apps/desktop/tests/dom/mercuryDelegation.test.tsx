@@ -135,7 +135,13 @@ describe("Mercury @planet delegation", () => {
       expect.objectContaining({ originPlanet: "mercury" }),
     );
     expect(delegate).toHaveBeenCalledWith(
-      expect.objectContaining({ sessionId: "s-mer-anchor", parentRunId: "run-research" }),
+      expect.objectContaining({
+        sessionId: "s-mer-anchor",
+        parentRunId: "run-research",
+        // The parent run's output rides the handoff — research actually
+        // reaches the child's model, not just the task anchor.
+        contextRefs: ["run:run-research"],
+      }),
     );
   });
 

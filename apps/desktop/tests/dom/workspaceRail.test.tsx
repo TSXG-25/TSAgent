@@ -2,11 +2,14 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { useState } from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { WorkspaceRail } from "../../src/app/WorkspaceRail";
 import { WorkspaceThread } from "../../src/app/WorkspaceThread";
+import { getWorkspaceRunId } from "../../src/app/workspaceSelection";
 import { MockAgentServiceClient } from "../../src/service/mockAgentService";
 import type { RunCtx } from "../../src/app/runCtx";
 import type { RunView } from "../../src/types";
+import type { HandoffSummary } from "../../src/types/service";
 
 afterEach(cleanup);
 
@@ -161,6 +164,51 @@ describe("WorkspaceRail DOM", () => {
 
     resolveRun({ runId: "run-late" });
     await waitFor(() => expect(area.value).toBe(""));
+  });
+
+  test("a cross-planet child delegated from Mars stays visible on the rail", async () => {
+    const service = new MockAgentServiceClient([], { tenantId: "t", userId: "u", sessionId: "s-mars-1" });
+    vi.spyOn(service, "listHandoffs").mockResolvedValue([{
+      handoffId: "h-1", sourceRunId: "", sourceTaskId: "task-p",
+      targetTaskId: "task-c", targetRunId: "run-merc",
+      targetPlanet: "mercury", contextRefs: [],
+      approvalState: "not_required", createdAt: "2024-01-01T00:00:00Z",
+    } as HandoffSummary]);
+    // The mercury child lives in Mars's session — the rail's own
+    // originPlanet filter hides it, the delegated-out surface must not.
+    const child = runView({
+      runId: "run-merc", originPlanet: "mercury",
+      request: "查一下资料",
+      output: { text: "research summary", createdAt: "t" } as RunView["output"],
+    });
+    const ctx = ctxFor(service, "s-mars-1", {
+      runs: [child],
+      selectSessionFor: vi.fn(),
+      selectRun: vi.fn(),
+    });
+    render(
+      <MemoryRouter initialEntries={["/w/mars"]}>
+        <WorkspaceRail ctx={ctx} planet="mars" />
+        <Routes>
+          <Route path="/w/mercury" element={<div data-testid="mercury-view" />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("chat-delegated")).toBeTruthy(),
+    );
+    const card = screen.getByTestId("chat-delegated");
+    expect(card.textContent).toContain("@mercury");
+    expect(card.textContent).toContain("research summary");
+
+    // Enter-Mercury lands on the delegated record: session scope +
+    // selection + workstation selection record + navigation.
+    fireEvent.click([...card.querySelectorAll(".ven-link")].pop()!);
+    expect(ctx.selectSessionFor).toHaveBeenCalledWith("mercury", "s-mars-1");
+    expect(ctx.selectRun).toHaveBeenCalledWith("run-merc");
+    expect(getWorkspaceRunId("t", "s-mars-1", "mercury")).toBe("run-merc");
+    await waitFor(() => expect(screen.getByTestId("mercury-view")).toBeTruthy());
   });
 });
 

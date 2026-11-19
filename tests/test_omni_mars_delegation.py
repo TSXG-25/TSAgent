@@ -165,6 +165,99 @@ def test_delegated_mars_run_executes_and_reports_back(
     asyncio.run(scenario())
 
 
+RESEARCH_OUTPUT = "UNIQUE-FACT-8842 found in the sources"
+RESEARCH_REQ = "research the parser bug"
+
+
+def test_continue_anchor_hands_parent_output_to_child(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Research → implementation handoff: delegating under a completed run
+    passes run:<parent> on the handoff edge and inlines that run's durable
+    output into the child's request — the child's model receives the
+    research, not just the task anchor."""
+    async def scenario() -> None:
+        workspace = tmp_path / "repo"
+        workspace.mkdir()
+        service, store = harness.service_at(tmp_path)
+        try:
+            store.ensure_session("t", "mercury-sess", "u")
+            store.upsert_workspace("t", "ws", path=str(workspace))
+            store.assign_session_workspace("t", "mercury-sess", "ws")
+
+            # The Mercury research run completes with a unique finding.
+            parent = await service.start_run(StartRunRequest(
+                tenant_id="t", user_id="u", session_id="mercury-sess",
+                request_id="req-research", request_text=RESEARCH_REQ,
+                origin_planet="mercury",
+            ))
+            head = await _wait_terminal(
+                service, "t", "mercury-sess", parent.run_id
+            )
+            assert head.run_status == "COMPLETED", head.run_status
+
+            # Continue-anchor delegation — exactly what delegateFromPlanet
+            # sends when a run is selected: parentRunId + the run: ref.
+            delegation = await service.delegate_run(DelegateRunRequest(
+                tenant_id="t", user_id="u", session_id="mercury-sess",
+                request_id="req-delegate", parent_run_id=parent.run_id,
+                request_text="implement what the research found",
+                target_planet="mars",
+                context_refs=(f"run:{parent.run_id}",),
+            ))
+            # The unique research content is inlined into the child's
+            # request — the model actually receives it.
+            assert RESEARCH_OUTPUT in delegation["request_text"]
+
+            child = await service.start_run(StartRunRequest(
+                tenant_id="t", user_id="u", session_id="mercury-sess",
+                request_id="req-child",
+                request_text=delegation["request_text"],
+                task_id=delegation["task_id"], origin_planet="mars",
+                workspace_root=delegation["workspace_root"],
+                metadata={"delegation_depth": 1},
+            ))
+            head = await _wait_terminal(
+                service, "t", "mercury-sess", child.run_id
+            )
+            assert head.run_status == "COMPLETED", head.run_status
+
+            handoffs = await service.list_handoffs(ListHandoffsRequest(
+                tenant_id="t", user_id="u", session_id="mercury-sess",
+                request_id="req-handoffs",
+            ))
+            assert handoffs[0].source_run_id == parent.run_id
+            assert f"run:{parent.run_id}" in handoffs[0].context_refs
+
+            # The child's model prompt itself carries the research — not
+            # just the durable request field.
+            assert any(
+                RESEARCH_OUTPUT in call for call in provider.calls
+            )
+        finally:
+            await service.close()
+
+    provider = harness.setup_provider(monkeypatch, [
+        (RESEARCH_REQ, harness.intent(RESEARCH_REQ, artifact=False)),
+        (RESEARCH_REQ, RESEARCH_OUTPUT),
+        # The child's intent turn and tool turns key on the unique fact —
+        # the provider only answers when the assembled prompt really
+        # contains it.
+        (RESEARCH_OUTPUT, harness.intent(
+            "implement what the research found", artifact=False,
+            outcomes=("FILE_MUTATION",), write_targets=(".",),
+        )),
+        (RESEARCH_OUTPUT, {
+            "tool_calls": [
+                {"name": "write_file",
+                 "arguments": {"path": "fix.py", "content": "# fix\n"}},
+            ],
+        }),
+        (RESEARCH_OUTPUT, "implemented from the research"),
+    ])
+    asyncio.run(scenario())
+
+
 def test_delegate_run_rejects_unknown_parent_task(tmp_path: Path) -> None:
     async def scenario() -> None:
         service, store = harness.service_at(tmp_path)

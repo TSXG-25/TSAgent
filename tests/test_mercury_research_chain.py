@@ -35,6 +35,17 @@ DDG_TEXT = (
 
 CITED_ANSWER = "Mercury 链已验证 [Mercury Chain Doc](https://deep.example/page)"
 
+# Body-reading leg: the unique fact exists ONLY in the fetched page body —
+# the search snippet cannot supply it, so its presence downstream proves
+# web_fetch actually ran and its content reached the model.
+BODY_URL = "https://body.example/full"
+BODY_FACT = "UNIQUE-BODY-FACT-7701"
+BODY_TEXT = (
+    "Full article text ... "
+    f"{BODY_FACT} appears only inside the page body."
+)
+BODY_ANSWER = f"结论：{BODY_FACT} [Full Page]({BODY_URL})"
+
 
 async def _wait_terminal(service, tenant, session, run_id, timeout=60.0):
     for _ in range(int(timeout / 0.1)):
@@ -117,5 +128,82 @@ def test_research_prefill_entry_runs_grounded_search_and_cites(
         # Keyed on the fetched URL — only answers once the tool result is
         # really inside the model's transcript.
         ("https://deep.example/page", CITED_ANSWER),
+    ])
+    asyncio.run(scenario())
+
+
+DDG_WITH_BODY_LINK = (
+    "1. Full Page\n   URL: " + BODY_URL + "\n"
+    "   Summary: snippet without the fact\n"
+)
+
+
+def test_body_reading_unique_fact_reaches_model_and_keeps_source(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """search -> web_fetch -> body-only fact: the snippet cannot contain
+    UNIQUE-BODY-FACT, so its presence in the model transcript and the
+    durable answer proves the body was actually read."""
+    async def scenario() -> None:
+        workspace = tmp_path / "ws"
+        workspace.mkdir()
+        service, store = harness.service_at(tmp_path)
+        try:
+            store.ensure_session("t", "mercury-sess", "u")
+            store.upsert_workspace("t", "ws", path=str(workspace))
+            store.assign_session_workspace("t", "mercury-sess", "ws")
+
+            run = await service.start_run(StartRunRequest(
+                tenant_id="t", user_id="u", session_id="mercury-sess",
+                request_id="req-body", request_text=PREFILL,
+                origin_planet="mercury",
+            ))
+            head = await _wait_terminal(
+                service, "t", "mercury-sess", run.run_id
+            )
+            assert head.run_status == "COMPLETED", (
+                head.run_status, getattr(head, "failure_code", "")
+            )
+
+            # The body-only fact reached the model after web_fetch ran.
+            assert any(BODY_FACT in call for call in provider.calls), (
+                "web_fetch body never reached the model"
+            )
+            output = store.read_run_snapshot(
+                "t", run.run_id, session_id="mercury-sess"
+            ).output
+            assert BODY_FACT in output.text
+            assert BODY_URL in output.text
+        finally:
+            await service.close()
+
+    import agent.mcp.duckduckgo as duckduckgo
+
+    async def fake_mcp_call(name: str, arguments: dict[str, object]) -> str:
+        if name == "search":
+            return DDG_WITH_BODY_LINK
+        if name == "fetch_content":
+            assert arguments.get("url") == BODY_URL
+            return BODY_TEXT
+        raise AssertionError(f"unexpected MCP tool {name}")
+
+    monkeypatch.setattr(duckduckgo, "unavailable_reason", lambda: "")
+    monkeypatch.setattr(
+        "agent.mcp.duckduckgo.call_duckduckgo_tool", fake_mcp_call
+    )
+    monkeypatch.setenv("TSAGENT_SEARCH_PROVIDERS", "duckduckgo")
+
+    provider = harness.setup_provider(monkeypatch, [
+        ("基于以下搜索结果继续研究", harness.intent(
+            PREFILL, artifact=False, source=True,
+            search_query="mercury 搜索链",
+        )),
+        ("基于以下搜索结果继续研究", harness.call_tool(
+            "web_search", query="mercury 搜索链"
+        )),
+        # Search handed the model the URL — fetch the page body for it.
+        (BODY_URL, harness.call_tool("web_fetch", url=BODY_URL)),
+        # Keyed on the body-only fact — unreachable without web_fetch.
+        (BODY_FACT, BODY_ANSWER),
     ])
     asyncio.run(scenario())

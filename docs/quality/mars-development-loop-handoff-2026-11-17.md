@@ -416,3 +416,11 @@ run，子 run 落在 Mercury 会话，两侧可见同一记录）；"→ Omni �
   模型验证范畴。
 
 口径修正：上轮 `test_search_providers.py` 实报 6 passed（非 7）。
+
+- **正文读取离线用例**：`test_mercury_research_chain.py` 第二例——
+  搜索返回 URL → `web_fetch` 经 `fetch_content` 读取正文（MCP 桩化，
+  断言 fetch 的 url 来自搜索结果）→ 只存在于正文的
+  `UNIQUE-BODY-FACT-7701`（摘要里不含，无法靠 snippet 假阳性）进入
+  模型 transcript → 最终答复同时携带独特事实与来源 URL 落 durable
+  输出。区别于上例：上一例的 `Summary:` 字段仍是搜索摘要，本例才
+  是正文读取验证。

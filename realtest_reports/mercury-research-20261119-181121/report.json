@@ -11,6 +11,7 @@
       "checks": {
         "searched": true,
         "fetch_attempted": true,
+        "fetch_env_blocked": true,
         "fetched_body": false,
         "fetched_required_url": false,
         "required_fetch_attempted": true,

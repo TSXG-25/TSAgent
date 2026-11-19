@@ -200,12 +200,34 @@ def observation_urls(observations: list[dict]) -> list[str]:
         result = obs.get("result") or {}
         if result.get("ok") is not True:
             continue
+        # A successful web_fetch's own URL is evidence — same rule the
+        # executor applies when it records `_sources` for fetches.
+        if str(obs.get("tool", "")) == "web_fetch":
+            fetched = str((obs.get("input") or {}).get("url", "")).strip()
+            if fetched:
+                urls.append(fetched)
         for url in result.get("_sources") or ():
             if str(url).strip():
                 urls.append(str(url).strip())
         content = str(result.get("content") or "")
         urls.extend(URL_PATTERN.findall(content))
     return list(dict.fromkeys(urls))
+
+
+_ENV_ERROR_CODES = ("UNAVAILABLE", "TIMEOUT", "PROVIDER", "NETWORK", "CONNECTION")
+_ENV_CONTENT_MARKERS = ("ssrf", "non-public", "private/internal", "refusing to fetch")
+
+
+def _fetch_failure_is_env(result: dict) -> bool:
+    """A fetch failure is environmental only when the error carries a known
+    environment signature — SSRF/private-address refusals and network or
+    provider unavailability. Argument/validation errors are the model's
+    mistake, not the environment's."""
+    code = str(result.get("error_code") or "").upper()
+    if any(k in code for k in _ENV_ERROR_CODES):
+        return True
+    content = str(result.get("content") or "").lower()
+    return any(m in content for m in _ENV_CONTENT_MARKERS)
 
 
 def compute_checks(
@@ -228,6 +250,15 @@ def compute_checks(
     fetch_attempted = any(o["tool"] in FETCH_TOOLS for o in web_obs)
     fetched_body = any(
         o["tool"] in FETCH_TOOLS and o["ok"] for o in web_obs
+    )
+    fetch_results = [
+        (o.get("result") or {}) for o in observations
+        if str(o.get("tool", "")) in FETCH_TOOLS
+    ]
+    failed_fetches = [r for r in fetch_results if r.get("ok") is not True]
+    fetch_env_blocked = bool(
+        failed_fetches
+        and all(_fetch_failure_is_env(r) for r in failed_fetches)
     )
     required_attempted = bool(
         required_url
@@ -260,9 +291,11 @@ def compute_checks(
     return {
         "searched": any(
             o["tool"] in {"web_search", "web_news_search", "web_deep_search"}
+            and o["ok"]
             for o in web_obs
         ),
         "fetch_attempted": fetch_attempted,
+        "fetch_env_blocked": fetch_env_blocked,
         "fetched_body": fetched_body,
         "fetched_required_url": fetched_required,
         "required_fetch_attempted": required_attempted,
@@ -291,7 +324,7 @@ def classify(run_status: str, checks: dict, spec: dict,
         # READ — a fetch attempt rejected by the environment does not
         # satisfy it, and a search fallback is not a body read.
         if spec.get("body_required") and not checks.get("fetched_body"):
-            if checks.get("fetch_attempted") or checks.get("required_fetch_attempted"):
+            if checks.get("fetch_env_blocked"):
                 return "provider_or_environment"
             return "capability_gap"
         if spec.get("required_fetch_url") and not checks.get("fetched_required_url"):

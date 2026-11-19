@@ -531,3 +531,26 @@ USER_VISIBLE_OUTPUT"、rule 10 把 grounding 只解释成"要新资料要搜索"
 链接继续研究"正确进入执行路径，模型按要求工具调用并在被拒后
 自适应。**不可宣称**：正文读取能力已完成——本机 SSRF 防护拦所有
 fetch_content，需公网解析正常的环境验证。SSRF 防护不为此放松。
+
+### 评测判据第二轮更正（78a2f17c 复核后）
+
+探针复现的两个同型盲区（以及修复时发现的第三个）：
+
+- `searched` 未查 `ok`——失败的搜索也算"检索过"；现只对成功观察
+  置真。
+- 所有 fetch 失败都归环境——`INVALID_ARGUMENT` 等模型参数错误也
+  得 `provider_or_environment`；新增 `fetch_env_blocked`：全部 fetch
+  失败且每个失败带 env 签名（UNAVAILABLE/TIMEOUT/PROVIDER/
+  NETWORK/CONNECTION 错误码，或内容含 ssrf/non-public/
+  private-internal/refusing to fetch）才算环境阻断，参数错误归
+  `capability_gap`。
+- 成功 `web_fetch` 的目标 URL 之前不进证据集（result 只有正文
+  字符串），模型引用刚读的页面会被误算 fabricated；现与 executor
+  的 `_sources` 语义一致：`ok` 的 web_fetch 把 `input.url` 计入证据。
+
+回归：`tests/test_real_eval_mercury.py` 4 例纯函数用例（失败搜索
+不满足检索、参数错误非环境、SSRF 签名是环境、成功 fetch 指定 URL
+可达 met）。七份报告重算后分类不变——修正收紧判据，没有翻案。
+
+项目结论保持：分类合同修复在真实请求中生效（exec=True、按约调用
+工具、被拒自适应）；公网正文读取仍受本机 SSRF 环境阻断，未验收。

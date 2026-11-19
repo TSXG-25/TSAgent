@@ -66,13 +66,20 @@ export default function GlobalChat({ ctx, onClose, embedded = false, instant = f
   useEffect(() => { void refreshSessions(); }, [refreshSessions]);
   // Delegated children of this session — durable Handoff edges resolve to
   // the child runs living in this session (progress/result show inline).
+  // Live-scope guard (same as WorkspaceHost): a session switch clears the
+  // snapshot, a late response for the previous session is discarded, and a
+  // failed fetch clears rather than keep another scope's cards.
+  const handoffScope = useRef(sessionId);
+  handoffScope.current = sessionId;
   usePoll(() => {
-    void service.listHandoffs({ sessionId })
-      .then(setHandoffs)
-      .catch(() => { /* keep last snapshot */ });
+    const target = sessionId;
+    void service.listHandoffs({ sessionId: target })
+      .then((list) => { if (handoffScope.current === target) setHandoffs(list); })
+      .catch(() => { if (handoffScope.current === target) setHandoffs([]); });
   }, 8_000, [service, sessionId]);
+  useEffect(() => { setHandoffs([]); }, [sessionId]);
   const delegated = handoffs
-    .map((h) => ({ handoff: h, run: ctx.runs.find((r) => r.runId === h.targetRunId) }))
+    .map((h) => ({ handoff: h, run: ctx.runs.find((r) => r.runId === h.targetRunId && r.sessionId === sessionId) }))
     .filter((x): x is { handoff: HandoffSummary; run: NonNullable<typeof x.run> } => Boolean(x.run));
   useEffect(() => { thread.onContentGrow(); }, [activeRun?.conversation.length, activeRun?.output]);
   useEffect(() => {
@@ -186,7 +193,15 @@ export default function GlobalChat({ ctx, onClose, embedded = false, instant = f
                   >{run.request || run.runId}</button>
                   <button
                     className="ven-link"
-                    onClick={() => navigate(`/w/${handoff.targetPlanet}`)}
+                    onClick={() => {
+                      // A workstation's rail and bound project follow its
+                      // session scope — point the planet's scope at the run's
+                      // owning session, then select + land so Mars opens on
+                      // this delegation (not its previous session).
+                      ctx.selectSessionFor(handoff.targetPlanet, run.sessionId);
+                      ctx.selectRun(run.runId);
+                      navigate(`/w/${handoff.targetPlanet}`);
+                    }}
                     type="button"
                   >{t("chat.enter-planet", { planet: handoff.targetPlanet })}</button>
                 </div>

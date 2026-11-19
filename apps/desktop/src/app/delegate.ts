@@ -127,8 +127,14 @@ export async function delegateFromOmni(
 ): Promise<{ taskId: string; runId: string }> {
   const { service } = ctx;
   const metadata = metadataFor(options);
+  // "继续" anchors only on a run owned by this composer's session — the
+  // global activeRun is a cross-scope selection that survives session
+  // switches, so it must never pull the delegation scope (or its project)
+  // onto another session. Anything else files under a fresh Omni task in
+  // the current session.
+  const parentRun = ctx.activeRun?.sessionId === ctx.sessionId ? ctx.activeRun : null;
   let parentTaskId = "";
-  if (!ctx.activeRun) {
+  if (!parentRun) {
     const parent = await service.createTask({
       sessionId: ctx.sessionId,
       originPlanet: "sun",
@@ -136,15 +142,15 @@ export async function delegateFromOmni(
     parentTaskId = parent.taskId;
   }
   const result = await service.delegateRun({
-    sessionId: ctx.activeRun?.sessionId ?? ctx.sessionId,
-    parentRunId: ctx.activeRun?.runId ?? "",
+    sessionId: ctx.sessionId,
+    parentRunId: parentRun?.runId ?? "",
     parentTaskId,
     contextRefs: attachments,
     requestText,
     targetPlanet,
   });
   const view = await ctx.controller.startRun({
-    sessionId: ctx.activeRun?.sessionId ?? ctx.sessionId,
+    sessionId: ctx.sessionId,
     requestText: result?.requestText ?? requestText,
     taskId: result?.taskId ?? "",
     originPlanet: targetPlanet,

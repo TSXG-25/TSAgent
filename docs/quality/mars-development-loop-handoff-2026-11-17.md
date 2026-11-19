@@ -235,3 +235,26 @@ Omni 显式选 `@Mars` → `delegateFromOmni`（`apps/desktop/src/app/delegate.t
 - 真实桌面壳（Tauri）内的 Omni→Mars 人工验收未做。
 - `spawn_subtask`（模型侧阻塞委派）未接入 Omni 的 `@` 路径——本阶段只做
   显式选择，自动识别/任务拆解/多工作台编排均未做。
+
+### 审查修复（eb8d368 之后）
+
+- **进入 Mars 定位完整**：原实现只 `navigate` 不切作用域，Mars 侧栏/IDE
+  仍指向自己的旧会话。现在点击同时 `selectSessionFor(planet,
+  run.sessionId)`（工作台 rail 与绑定项目随会话走）+ `selectRun` + 导航。
+- **委派归属不随全局选中漂移**：`ctx.activeRun` 是跨作用域选中，切换
+  Omni 会话不会清除。`delegateFromOmni` 只把"当前会话内的 activeRun"
+  当作继续锚点；其余一律在 `ctx.sessionId` 下新建 Omni 父任务——明确
+  区分"本会话新委派"与"基于选中任务继续"。
+- **委派卡片作用域隔离**：`listHandoffs` 轮询沿用 WorkspaceHost 的
+  live-scope 模式——切会话即清空、迟到响应按 ref 丢弃、失败清空而非
+  保留旧快照；run 解析限定 `sessionId`，跨作用域目录里的同名 run 不再
+  被旧卡片匹配。
+- 新增 3 个 DOM 用例覆盖上述场景（跨会话锚点拒绝、同会话继续锚点、
+  进入 Mars 三步定位、迟到响应丢弃）。
+
+### 口径说明
+
+Omni 的"回来汇报"目前 = Omni 展示子 Run 的进度/结果卡片，父侧没有模型
+继续消费结果（`spawn_subtask` 那条阻塞回传链未接进 `@` 路径）。本轮
+显式 `@Mars` 范围按此交付；若要"Omni 拿到结果后自动续写"是下一步的
+独立决策。

@@ -424,3 +424,29 @@ run，子 run 落在 Mercury 会话，两侧可见同一记录）；"→ Omni �
   模型 transcript → 最终答复同时携带独特事实与来源 URL 落 durable
   输出。区别于上例：上一例的 `Summary:` 字段仍是搜索摘要，本例才
   是正文读取验证。
+
+### Mercury 真实评测（qwen3:8b + 真实 DDG，scripts/real_eval_mercury.py）
+
+三任务真实执行，按工具观测+引用准确性分类（`capability_met`/
+`capability_gap`/`honest_refusal`/`env`）：
+
+- **t1 预填入口** `capability_gap`：真实 `web_search` RPC 返回 10 条
+  真实来源进 `mer.research-prefill` 模板；但真实分类器判为
+  `summarize/exec=False`——预填入口**不必然激活 grounding**，模型
+  用已给来源直接作答（87s），引用还是模型构造的子路径
+  （`duckduckgo.com/privacy` 不在来源集）。
+- **t2 正文读取** `capability_gap`：请求"读取正文"分类为
+  `action=read` 但 `exec=False`——模型凭记忆作答、零工具调用、
+  无引用（21s）。离线链证明 `web_fetch` 可用，但真实分类器不把
+  "读取正文"标记为需执行，链路在分类处断开。
+- **t3 时效** `capability_met`（URL 级）：`exec=True` → 真实
+  `web_news_search`（query 带当日日期）→ 5 个真实来源 → 引用
+  `aihot.news/daily` 在证据集内、无虚构 URL（87s）。**但 URL 级
+  检查证明不了 claim 级准确**——三条新闻同引一个 daily 页，
+  "Gemini 4 Neon"/"Anthropic IPO $83" 等具体声明疑似编造/错配，
+  claim 级真实性需来源内容比对，超出本驱动观测面。
+
+**真实评测结论**：检索/正文/引用的工具缝与上下文传递真实可用
+（t3 全链走通），但两个真实缺口在分类器——研究意图（预填、正文
+读取）不稳定置 grounding/exec，链路在分类处断而非工具处。
+报告：realtest_reports/mercury-research-20261119-*/。

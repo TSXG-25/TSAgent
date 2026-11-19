@@ -1,0 +1,43 @@
+{
+  "driver": "scripts/real_eval_mercury.py",
+  "provider": "ollama",
+  "model": "qwen3:8b",
+  "results": [
+    {
+      "task_id": "t3",
+      "name": "freshness",
+      "task": "今天 AI 领域有什么值得注意的新闻？请带来源回答。",
+      "classification": "capability_met",
+      "checks": {
+        "searched": true,
+        "fetched_body": false,
+        "web_tool_calls": [
+          {
+            "tool": "web_news_search",
+            "args": {
+              "query": "AI领域 2026年11月19日 新闻"
+            }
+          }
+        ],
+        "evidence_urls": [
+          "https://news.qq.com/rain/a/20261116A0AUTT00",
+          "https://www.aibase.com/zh/daily",
+          "https://aihot.news/daily",
+          "https://www.itsdw.cn/news/49189.html",
+          "https://aiproducthub.cn/newsflash/2026-11-18/"
+        ],
+        "cited_urls": [
+          "https://aihot.news/daily"
+        ],
+        "fabricated_urls": [],
+        "goal_missing": [],
+        "output_excerpt": "今天 AI 领域有以下值得注意的新闻：\n\n1. **Google DeepMind 发布 Gemini 4 Neon**  \n   - 来源：[Ai Hot](https://aihot.news/daily)  \n   - 概要：Gemini 4 Neon 是 Google DeepMind 推出的新一代 AI 模型，专注于高性能计算和多模态任务。\n\n2. **Anthropic IPO 定价每股 $83.00**  \n   - 来源：[Ai Hot](https://aihot.news/daily)  \n   - 概要：Anthropic 在 11 月 19 日以代码 ANT 登陆纳斯达克，IPO 定价为每股 $83.00。\n\n3. **Nvidia 宣布停售 H200 芯片至中国**  \n   - 来源：[Ai Hot](https://aihot.news/daily)  \n   - 概要：Nvidia 宣布将 H200 芯片的销售暂停至中国，并设立董事会级国家安全委员会以应对相关挑战。\n\n如需了解更多详细信息，可以访问上述来源链接。",
+        "failure_code": ""
+      },
+      "run_id": "run-329cb3b28ed545b886845e5451e3611f",
+      "elapsed_s": 87.1,
+      "terminal_status": "COMPLETED",
+      "failure": null
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "driver": "scripts/real_eval_mercury.py",
+  "provider": "ollama",
+  "model": "qwen3:8b",
+  "results": [
+    {
+      "task_id": "t1",
+      "name": "prefill-entry",
+      "task": "基于以下搜索结果继续研究：\n查询：DuckDuckGo 搜索引擎 隐私\n- DuckDuckGo - Protection. Privacy. Peace of mind. — https://duckduckgo.com/\n- 14 个最佳私人搜索引擎 - Private Proxy Guide — https://www.privateproxyguide.com/zh/%E6%9C%80%E4%BD%B3%E7%A7%81%E4%BA%BA%E6%90%9C%E7%B4%A2%E5%BC%95%E6%93%8E/\n- DuckDuckGo 安全吗？关于这款私有搜索引擎需要了解的信息 | Proton — https://proton.me/zh/blog/duckduckgo\n- DUCKDUCKGO: 搜索引擎评测 - 优点与缺点 - NetValuator (中文中国) — https://netvaluator.com/cn/duckduckgo-%E6%90%9C%E7%B4%A2%E5%BC%95%E6%93%8E%E8%AF%84%E6%B5%8B-%E4%BC%98%E7%82%B9%E4%B8%8E%E7%BC%BA%E7%82%B9/\n- DuckDuckGo 公司介绍 - 隐私搜索引擎·浏览器 - 16IDC — https://www.16idc.com/provider-detail/duckduckgo\n- DuckDuckGo 2026 年统计数据：隐私体验指南 — https://venuelabs.com/zh-CN/duckduckgo-statistics/\n- DuckDuckGo：私密搜索引擎、浏览器与AI聊天 - ToolMage — https://www.toolmage.com/zh-hans/tool/duckduckgo/\n- DuckDuckGo 搜索引擎官网 | 隐私为核心的另类搜索体验 — https://www.leavescn.com/forums/detail/17910\n- DuckDuckGo - 维基百科，自由的百科全书 — https://zh.wikipedia.org/zh-cn/DuckDuckGo\n- DuckDuckGo 浏览器：搜索不追踪、广告能屏蔽，隐私浏览器里的省心之选 - 极客范 — https://jikefan.com/zh/app/duckduckgo-browser/7.234\n\n研究目标：总结这些来源如何描述 DuckDuckGo 的隐私策略，并标注来源。",
+      "classification": "capability_gap",
+      "checks": {
+        "searched": false,
+        "fetched_body": false,
+        "web_tool_calls": [],
+        "evidence_urls": [],
+        "cited_urls": [
+          "https://duckduckgo.com/privacy）以获取最准确和最新的隐私政策信息"
+        ],
+        "fabricated_urls": [],
+        "goal_missing": [],
+        "failure_code": "",
+        "prefill_source_urls": [
+          "https://duckduckgo.com/",
+          "https://www.privateproxyguide.com/zh/%E6%9C%80%E4%BD%B3%E7%A7%81%E4%BA%BA%E6%90%9C%E7%B4%A2%E5%BC%95%E6%93%8E/",
+          "https://proton.me/zh/blog/duckduckgo",
+          "https://netvaluator.com/cn/duckduckgo-%E6%90%9C%E7%B4%A2%E5%BC%95%E6%93%8E%E8%AF%84%E6%B5%8B-%E4%BC%98%E7%82%B9%E4%B8%8E%E7%BC%BA%E7%82%B9/",
+          "https://www.16idc.com/provider-detail/duckduckgo",
+          "https://venuelabs.com/zh-CN/duckduckgo-statistics/",
+          "https://www.toolmage.com/zh-hans/tool/duckduckgo/",
+          "https://www.leavescn.com/forums/detail/17910",
+          "https://zh.wikipedia.org/zh-cn/DuckDuckGo",
+          "https://jikefan.com/zh/app/duckduckgo-browser/7.234"
+        ]
+      },
+      "run_id": "run-e1f738e8698c4943b68e2df9e08eea51",
+      "elapsed_s": 87.2,
+      "terminal_status": "COMPLETED",
+      "failure": null
+    }
+  ]
+}

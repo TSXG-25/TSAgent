@@ -1,0 +1,27 @@
+{
+  "driver": "scripts/real_eval_mercury.py",
+  "provider": "ollama",
+  "model": "qwen3:8b",
+  "results": [
+    {
+      "task_id": "t2",
+      "name": "body-reading",
+      "task": "读取 https://en.wikipedia.org/wiki/DuckDuckGo 的正文，告诉我 DuckDuckGo 是哪一年推出的，并标注来源。",
+      "classification": "capability_gap",
+      "checks": {
+        "searched": false,
+        "fetched_body": false,
+        "web_tool_calls": [],
+        "evidence_urls": [],
+        "cited_urls": [],
+        "fabricated_urls": [],
+        "goal_missing": [],
+        "failure_code": ""
+      },
+      "run_id": "run-a60191c2f36f419a8e1fc01731fce556",
+      "elapsed_s": 21.2,
+      "terminal_status": "COMPLETED",
+      "failure": null
+    }
+  ]
+}

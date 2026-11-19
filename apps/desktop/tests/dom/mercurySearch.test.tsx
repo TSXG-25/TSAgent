@@ -117,6 +117,13 @@ describe("Mercury search → panes", () => {
 
     resolveA?.({ provider: "p", sources: [{ title: "Stale Src", url: "https://stale", snippet: "s" }], content: "" });
     await waitFor(() => expect(screen.queryByText("Stale Src")).toBeNull());
-    expect(spy).toHaveBeenCalled();
+
+    // Each request carries its own scope — B's search must not reuse A's
+    // sessionId even though the service object is shared.
+    const reqFor = (q: string) =>
+      spy.mock.calls.map((c) => c[0] as { query: string; sessionId: string })
+        .find((r) => r.query === q);
+    expect(reqFor("old-q")?.sessionId).toBe("sess-a");
+    expect(reqFor("new-q")?.sessionId).toBe("sess-b");
   });
 });

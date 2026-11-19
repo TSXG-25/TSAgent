@@ -30,7 +30,7 @@ export default function MercuryWorkspace({ ctx }: { ctx: RunCtx }) {
         maxResults: 4,
       }),
     ),
-    [service],
+    [service, ctx.sessionId],
   );
   useEffect(() => {
     search.listener = () => bump();

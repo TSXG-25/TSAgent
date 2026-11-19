@@ -374,3 +374,45 @@ run，子 run 落在 Mercury 会话，两侧可见同一记录）；"→ Omni �
 - Mercury 意图分类是否对"研究任务"预填稳定置 `source_grounding_required`
   未单独验证。
 - 真实研究质量/正确性、真实 Tauri 验收仍不在本次范围。
+
+### 复核修复（79fae54c 之后）
+
+- **搜索作用域泄漏（P2）**：`MercuryWorkspace` 的 `useMemo` 只依赖
+  `service`，内层搜索函数捕获了首发时的 `ctx.sessionId`——A→B 切换
+  后 B 的新搜索仍携带 A 的 sessionId（`bind` 只守住响应端）。依赖
+  改为 `[service, ctx.sessionId]`：搜索 session 按作用域重建，函数
+  不可能携带过期 scope。mercurySearch A→B 用例补断言：`new-q` 请求
+  携带 `sess-b`、`old-q` 携带 `sess-a`。
+
+- **研究任务入口 E2E（离线验证）**：`test_mercury_research_chain.py`
+  用真实预填模板文本（i18n `mer.research-prefill` zh 版原样）驱动
+  run——意图声明 `source_grounding_required` → system prompt 含"答复
+  标注来源"规则（`provider.calls` 断言）→ `web_search` 工具经真实
+  provider 缝执行（DDG MCP 桩化，`parse_search_results` 真实解析）
+  → 抓取来源 URL 进入模型 transcript → 最终答复携带来源 URL 落进
+  durable 输出。诚实边界：意图分类的 grounding 判定是脚本化的（证明
+  链在标记成立时全通），真实分类器是否稳定对预填文本置标记属真实
+  模型验证范畴。
+
+口径修正：上轮 `test_search_providers.py` 实报 6 passed（非 7）。
+
+### 复核修复（79fae54c 之后）
+
+- **搜索作用域泄漏（P2）**：`MercuryWorkspace` 的 `useMemo` 只依赖
+  `service`，内层搜索函数捕获了首发时的 `ctx.sessionId`——A→B 切换
+  后 B 的新搜索仍携带 A 的 sessionId（`bind` 只守住响应端）。依赖
+  改为 `[service, ctx.sessionId]`：搜索 session 按作用域重建，函数
+  不可能携带过期 scope。mercurySearch A→B 用例补断言：`new-q` 请求
+  携带 `sess-b`、`old-q` 携带 `sess-a`。
+
+- **研究任务入口 E2E（离线验证）**：`test_mercury_research_chain.py`
+  用真实预填模板文本（i18n `mer.research-prefill` zh 版原样）驱动
+  run——意图声明 `source_grounding_required` → system prompt 含"答复
+  标注来源"规则（`provider.calls` 断言）→ `web_search` 工具经真实
+  provider 缝执行（DDG MCP 桩化，`parse_search_results` 真实解析）
+  → 抓取来源 URL 进入模型 transcript → 最终答复携带来源 URL 落进
+  durable 输出。诚实边界：意图分类的 grounding 判定是脚本化的（证明
+  链在标记成立时全通），真实分类器是否稳定对预填文本置标记属真实
+  模型验证范畴。
+
+口径修正：上轮 `test_search_providers.py` 实报 6 passed（非 7）。

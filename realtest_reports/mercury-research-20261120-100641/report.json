@@ -23,12 +23,14 @@
           "RUNTIME_EXCEPTION"
         ],
         "output_excerpt": "目标尚未完成，缺少可验证证据：RUNTIME_EXCEPTION。本次不会报告为成功。 原因：ImportError: cannot import name '_ExtendedAttributes' from 'opentelemetry.util.types' (/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/opentelemetry/util/types.py)。",
-        "failure_code": "RUNTIME_EXCEPTION"
+        "failure_code": "RUNTIME_EXCEPTION",
+        "recomputed": "checks regenerated from eval.db observations with attempted-vs-succeeded fetch distinction; failed results no longer contribute evidence URLs"
       },
       "run_id": "run-6e251747a34544d5a7b4596311890df4",
       "elapsed_s": 42.9,
       "terminal_status": "FAILED_TERMINAL",
       "failure": null
     }
-  ]
+  ],
+  "recomputed": true
 }

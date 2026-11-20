@@ -68,12 +68,14 @@
           "https://www.navgood.com/zh/tool-details/duckduckgo-57abf",
           "https://blog.csdn.net/weixin_30613727/article/details/99938955",
           "https://zhuanlan.zhihu.com/p/650470529"
-        ]
+        ],
+        "recomputed": "checks regenerated from eval.db observations with attempted-vs-succeeded fetch distinction; failed results no longer contribute evidence URLs"
       },
       "run_id": "run-40b72e697b204c6a90c157d112f96949",
       "elapsed_s": 114.1,
       "terminal_status": "COMPLETED",
       "failure": null
     }
-  ]
+  ],
+  "recomputed": true
 }

@@ -572,3 +572,41 @@ api 1.43.0 对齐后恢复。
 - **t2 代表"给定 URL→正文读取→带来源回答"已在真实公网环境验收通过**——全链无环境阻断，判据各项硬指标全真。
 - t1 暴露的是模型行为选择问题：拿到"只有链接"的输入时，qwen3:8b 倾向新搜索而非逐链接读正文。判据按验收口径如实记 gap；这不是链断（工具都在、路由正确），是该模型在此输入形态下的工具选择。
 - 遗留边界不变：URL 级对齐可证；claim 级事实准确性仍需来源比对，评测不宣称。报告：realtest_reports/mercury-research-20261120-100748（t2 met）、-100911（t1 gap）。
+
+### t1 较强模型对照 + 评测观测面第三轮修正（2026-11-20 晚）
+
+**DeepSeek 对照（t1，同一份输入）**：意图 `exec=True`，模型
+首轮即对提供的来源 **逐个 `web_fetch`**（PlanExecutor 步路径，
+6 次全被 SSRF 拦——该时段 DNS 又抖回 198.18.x fake-IP），随后
+降级检索（含 1 次 deep_search 成功），最终答案开头明写"正文没
+读到"、逐域名列拒绝 IP、只用摘要作答、拒编细节。
+**结论：t1 缺口是 qwen3:8b 的模型工具选择问题，不是系统约束**——
+同一合同下较强模型选择了正确的直接 fetch 策略。判定
+`provider_or_environment`（策略对、环境拦）。报告
+`mercury-research-20261120-212805`。
+
+**对照过程中发现并修正的评测观测面缺口**：
+
+- **执行器路径工具调用漏计**：PlanExecutor 步的工具调用落在
+  `task_started`/`task_completed` 事件对（tool/target/verb +
+  status/error_code），不进 `continuation.observations`。DeepSeek
+  的 6 次 fetch 在原判据里完全不可见。新增 `collect_observations`
+  合并两种记录形态（continuation 优先，含 result.content）。
+- **去重吞掉重试成功**：去重 key 原为 (tool, input)——同参 INVALID
+  → 重试成功的两次调用被折叠成一条失败。key 加 `ok` 维度。
+- **`fetch_env_blocked` 作用域**：`web_deep_search` 同属 FETCH_TOOLS，
+  其 INVALID 参数错会污染 all() 判定。有 required 集合时只按
+  required URL 的 fetch 失败判环境；模型参数错只认 INVALID/
+  ARGUMENT/VALIDATION 签名，TOOL_EXECUTION_FAILED 归边界失败。
+- **URL 判定 unicode 归一化**：正则放开到非空白/括号/CJK 句读
+  字符集（raw-unicode 引用不再截断），对比两侧 unquote 归一
+  （percent 编码提供 URL = raw 引用 URL）。
+- **t1 验收收紧**：`required_fetch_any_of` = 预填来源列表——
+  "阅读来源正文后回答"仅当 ≥1 提供 URL 的 fetch ok 才算达成。
+
+修正后全归档重算（零模型调用）：qwen t1 仍 `capability_gap`（模型
+从未 fetch——模型问题如实记）；DeepSeek t1 `provider_or_environment`
+（策略对、环境拦）；t2 公网 run 仍 `capability_met`；其余不变。
+
+回归：`tests/test_real_eval_mercury.py` 增至 7 例纯函数用例
+（+执行器路径提取、any-of 验收、unicode 归一化）。生产代码零改动。

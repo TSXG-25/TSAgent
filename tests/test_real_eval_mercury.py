@@ -9,7 +9,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from scripts.real_eval_mercury import classify, compute_checks  # noqa: E402
+from scripts.real_eval_mercury import (  # noqa: E402
+    classify,
+    collect_observations,
+    compute_checks,
+)
 
 SPEC_BODY = {"body_required": True}
 SPEC_FETCH = {
@@ -81,3 +85,72 @@ def test_successful_fetch_of_required_url_can_meet():
     checks = compute_checks(obs, out, "task", SPEC_FETCH)
     assert checks["fetched_required_url"] is True
     assert classify("COMPLETED", checks, SPEC_FETCH) == "capability_met"
+
+
+def _task_events(pairs):
+    """(task_id, tool, verb, target, status, error_code) → typed event
+    stream in the executor-path shape (task_started/task_completed)."""
+    events = []
+    for tid, tool, verb, target, status, code in pairs:
+        events.append(("task_started", {
+            "executor": "tool", "task_id": tid, "tool": tool,
+            "verb": verb, "target": target}))
+        events.append(("task_completed", {
+            "executor": "tool", "task_id": tid, "status": status,
+            "error_code": code, "verified": status == "succeeded"}))
+    return events
+
+
+def test_executor_path_fetch_attempts_are_counted():
+    """PlanExecutor tool calls land as task_started/completed pairs, not
+    continuation.observations — the evaluator must see them (DeepSeek's
+    t1 run fetched every given URL this way and the report showed zero
+    fetch attempts)."""
+    events = _task_events([
+        ("loop-1", "web_fetch", "read", "https://a.example/x",
+         "failed", "TOOL_EXECUTION_FAILED"),
+        ("loop-2", "web_fetch", "read", "https://b.example/y",
+         "failed", "TOOL_EXECUTION_FAILED"),
+    ])
+    obs = collect_observations(events)
+    spec = {
+        "body_required": True,
+        "required_fetch_any_of": ["https://a.example/x"],
+    }
+    checks = compute_checks(obs, "", "read sources", spec)
+    assert checks["fetch_attempted"] is True
+    assert checks["required_fetch_attempted"] is True
+    assert checks["fetch_env_blocked"] is True
+    assert classify("COMPLETED", checks, spec) == "provider_or_environment"
+
+
+def test_any_of_required_url_needs_one_real_body():
+    """t1's 'read the given sources' is met only when at least one
+    provided URL fetched ok — reading an unrelated page does not count."""
+    obs = [_obs(
+        "web_fetch", {"url": "https://unrelated.example/p"},
+        ok=True, content="body", error_code="",
+    )]
+    spec = {
+        "body_required": True,
+        "required_fetch_any_of": ["https://a.example/x", "https://b.example/y"],
+    }
+    checks = compute_checks(obs, "answer https://a.example/x", "", spec)
+    assert checks["fetched_required_url"] is False
+    assert classify("COMPLETED", checks, spec) == "capability_gap"
+
+
+def test_raw_unicode_citation_matches_percent_encoded_source():
+    """A source percent-encoded in the request may be cited with raw
+    CJK chars — same URL, not a fabrication."""
+    provided = "https://n.example/cn/duckduckgo-%E6%90%9C%E7%B4%A2/"
+    obs = [_obs(
+        "web_fetch", {"url": provided}, ok=True,
+        content="body", error_code="",
+    )]
+    out = "答案见 https://n.example/cn/duckduckgo-搜索/"
+    spec = {"body_required": True, "required_fetch_any_of": [provided]}
+    checks = compute_checks(obs, out, f"read {provided}", spec)
+    assert checks["fetched_required_url"] is True
+    assert checks["fabricated_urls"] == []
+    assert classify("COMPLETED", checks, spec) == "capability_met"

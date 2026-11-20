@@ -38,6 +38,7 @@ import re
 import subprocess
 import sys
 import time
+import urllib.parse
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -51,9 +52,16 @@ EVAL_ROOT = Path.home() / "Desktop" / "tsagent-real-eval"
 REPORT_ROOT = REPO / "realtest_reports" / f"mercury-research-{time.strftime('%Y%m%d-%H%M%S')}"
 RUN_DEADLINE_S = int(os.getenv("EVAL_DEADLINE_S", "900"))
 
-# ASCII-only character class — CJK/full-width punctuation can never be part
-# of a URL, so a citation can't smuggle trailing prose into the match.
-URL_PATTERN = re.compile(r"https?://[A-Za-z0-9\-._~:/?#@!$&*+,;=%]+")
+# Permissive charset — a citation may carry raw CJK/unicode chars even
+# when the same URL was percent-encoded in the request; stop only at
+# whitespace, closing brackets/quotes and CJK sentence punctuation.
+URL_PATTERN = re.compile(r"https?://[^\s\)\]>\"'<，。；）】]+")
+
+
+def _norm_url(u: str) -> str:
+    """Compare URLs semantically — a citation may be percent-encoded in
+    the request but written raw (e.g. CJK chars) in the answer."""
+    return urllib.parse.unquote(str(u)).rstrip("/")
 WEB_TOOLS = {"web_search", "web_news_search", "web_deep_search", "web_fetch"}
 FETCH_TOOLS = {"web_fetch", "web_deep_search"}
 
@@ -188,6 +196,83 @@ def terminal_continuation(events: list[dict]) -> dict:
     return {}
 
 
+def _obs_key(obs: dict) -> tuple[str, str, bool]:
+    """Dedup key for a tool observation across the two record shapes —
+    continuation.observations carry `input.url`/`input.query`, executor
+    task events carry `target`. `ok` is part of the key: a retry with the
+    same arguments is a DISTINCT call (the INVALID→retry pattern real
+    runs produce), not a duplicate."""
+    inp = obs.get("input") or {}
+    primary = str(inp.get("url") or inp.get("query") or "")
+    ok = (obs.get("result") or {}).get("ok") is True
+    return (str(obs.get("tool", "")), primary, ok)
+
+
+def collect_observations(typed_events: list[tuple[str, dict]]) -> list[dict]:
+    """Merge the two tool-call record shapes a run can emit:
+
+    - ``continuation.observations`` — loop-path tool calls with full
+      ``input``/``result`` (content, ok, error_code).
+    - ``task_started``/``task_completed`` pairs — executor-path steps
+      (e.g. PlanExecutor running ``web_fetch`` per provided URL). These
+      carry ``tool``/``target`` at start and ``status``/``error_code`` at
+      completion; without them the evaluator misses every executor-path
+      fetch attempt and misreads 'model never tried' for 'tried, blocked'.
+
+    Continuation observations win dedup — they carry result content for
+    evidence extraction; task events have no content field.
+    """
+    observations: list[dict] = []
+    seen: set[tuple[str, str, bool]] = set()
+    for _, payload in typed_events:
+        cont = payload.get("continuation") or {}
+        for obs in cont.get("observations") or []:
+            if not isinstance(obs, dict):
+                continue
+            key = _obs_key(obs)
+            if key not in seen:
+                seen.add(key)
+                observations.append(obs)
+    started: dict[str, dict] = {}
+    completed: dict[str, dict] = {}
+    for etype, payload in typed_events:
+        if etype not in {"task_started", "task_completed"}:
+            continue
+        if str(payload.get("executor", "")) != "tool":
+            continue
+        tool = str(payload.get("tool", "")) or started.get(
+            str(payload.get("task_id", "")), {}).get("tool", "")
+        task_id = str(payload.get("task_id") or "")
+        if not task_id:
+            continue
+        if etype == "task_started":
+            if tool:
+                started[task_id] = payload | {"tool": tool}
+        else:
+            completed[task_id] = payload
+    for task_id, start in started.items():
+        tool = str(start.get("tool", ""))
+        target = str(start.get("target") or "")
+        done = completed.get(task_id) or {}
+        ok = str(done.get("status", "")) == "succeeded"
+        key = (tool, target, ok)
+        if key in seen:
+            continue
+        seen.add(key)
+        verb = str(start.get("verb") or "")
+        inp = {"url": target} if verb == "read" else {"query": target}
+        observations.append({
+            "tool": tool,
+            "input": inp,
+            "result": {
+                "ok": ok,
+                "error_code": str(done.get("error_code") or ""),
+                "verified": bool(done.get("verified")),
+            },
+        })
+    return observations
+
+
 def observation_urls(observations: list[dict]) -> list[str]:
     """Source URLs the tools actually returned — from _sources when the
     executor collected them, else parsed out of the result content.
@@ -218,13 +303,19 @@ _ENV_ERROR_CODES = ("UNAVAILABLE", "TIMEOUT", "PROVIDER", "NETWORK", "CONNECTION
 _ENV_CONTENT_MARKERS = ("ssrf", "non-public", "private/internal", "refusing to fetch")
 
 
+_MODEL_FAULT_CODES = ("INVALID", "ARGUMENT", "VALIDATION")
+
+
 def _fetch_failure_is_env(result: dict) -> bool:
-    """A fetch failure is environmental only when the error carries a known
-    environment signature — SSRF/private-address refusals and network or
-    provider unavailability. Argument/validation errors are the model's
-    mistake, not the environment's."""
+    """A fetch failure is the model's fault only for a known arg/validation
+    signature (INVALID_*, *ARGUMENT*, *VALIDATION*) — bad args it sent.
+    TOOL_EXECUTION_FAILED and network/provider-flavoured failures happen
+    at the fetch boundary (SSRF refusal, DNS, transport), which the model
+    cannot cause."""
     code = str(result.get("error_code") or "").upper()
-    if any(k in code for k in _ENV_ERROR_CODES):
+    if any(k in code for k in _MODEL_FAULT_CODES):
+        return False
+    if any(k in code for k in _ENV_ERROR_CODES) or "TOOL_EXECUTION_FAILED" in code:
         return True
     content = str(result.get("content") or "").lower()
     return any(m in content for m in _ENV_CONTENT_MARKERS)
@@ -244,7 +335,10 @@ def compute_checks(
         }
         for o in observations if str(o.get("tool", "")) in WEB_TOOLS
     ]
-    required_url = str(spec.get("required_fetch_url") or "")
+    required_urls = [str(spec["required_fetch_url"])] if spec.get(
+        "required_fetch_url") else [str(u) for u in spec.get(
+            "required_fetch_any_of") or ()]
+    required_norm = {_norm_url(u) for u in required_urls}
     # "Attempted" and "succeeded" are different facts — an SSRF-rejected
     # fetch is an attempt, not a body read.
     fetch_attempted = any(o["tool"] in FETCH_TOOLS for o in web_obs)
@@ -252,42 +346,49 @@ def compute_checks(
         o["tool"] in FETCH_TOOLS and o["ok"] for o in web_obs
     )
     fetch_results = [
-        (o.get("result") or {}) for o in observations
+        (o, o.get("result") or {}) for o in observations
         if str(o.get("tool", "")) in FETCH_TOOLS
     ]
-    failed_fetches = [r for r in fetch_results if r.get("ok") is not True]
+    failed_fetches = [(o, r) for o, r in fetch_results
+                      if r.get("ok") is not True]
+    if required_norm:
+        # The environment question is about the REQUIRED reads: an
+        # INVALID arg error on an unrelated deep_search call must not
+        # poison the verdict, and env-blocked required fetches must not
+        # be excused just because another call also failed.
+        failed_fetches = [
+            (o, r) for o, r in failed_fetches
+            if _norm_url((o.get("input") or {}).get("url", ""))
+            in required_norm
+        ]
     fetch_env_blocked = bool(
         failed_fetches
-        and all(_fetch_failure_is_env(r) for r in failed_fetches)
+        and all(_fetch_failure_is_env(r) for _, r in failed_fetches)
     )
     required_attempted = bool(
-        required_url
+        required_norm
         and any(
             o["tool"] in FETCH_TOOLS
-            and str((o["args"] or {}).get("url", "")).rstrip("/")
-            == required_url.rstrip("/")
+            and _norm_url((o["args"] or {}).get("url", "")) in required_norm
             for o in web_obs
         )
     )
     fetched_required = bool(
-        required_url
+        required_norm
         and required_attempted
         and any(
             o["tool"] in FETCH_TOOLS
             and o["ok"]
-            and str((o["args"] or {}).get("url", "")).rstrip("/")
-            == required_url.rstrip("/")
+            and _norm_url((o["args"] or {}).get("url", "")) in required_norm
             for o in web_obs
         )
     )
     cited = list(dict.fromkeys(URL_PATTERN.findall(output_text)))
     evidence_urls = observation_urls(observations)
     provided_urls = URL_PATTERN.findall(request_text)
-    known = set(evidence_urls) | set(provided_urls)
-    fabricated = [
-        u for u in cited
-        if not any(u == k or u.rstrip("/") == k.rstrip("/") for k in known)
-    ]
+    known = {_norm_url(u) for u in evidence_urls} | {
+        _norm_url(u) for u in provided_urls}
+    fabricated = [u for u in cited if _norm_url(u) not in known]
     return {
         "searched": any(
             o["tool"] in {"web_search", "web_news_search", "web_deep_search"}
@@ -322,13 +423,20 @@ def classify(run_status: str, checks: dict, spec: dict,
     if run_status == "COMPLETED":
         # Body-required tasks are only met by a body that was actually
         # READ — a fetch attempt rejected by the environment does not
-        # satisfy it, and a search fallback is not a body read.
-        if spec.get("body_required") and not checks.get("fetched_body"):
-            if checks.get("fetch_env_blocked"):
-                return "provider_or_environment"
-            return "capability_gap"
-        if spec.get("required_fetch_url") and not checks.get("fetched_required_url"):
-            return "capability_gap"
+        # satisfy it, and a search fallback is not a body read. When the
+        # spec names required source(s), the read must be of THOSE
+        # sources (any-of for multi-source research entries).
+        if spec.get("body_required"):
+            needs_specific = spec.get("required_fetch_url") or spec.get(
+                "required_fetch_any_of")
+            body_ok = (
+                checks.get("fetched_required_url")
+                if needs_specific else checks.get("fetched_body")
+            )
+            if not body_ok:
+                if checks.get("fetch_env_blocked"):
+                    return "provider_or_environment"
+                return "capability_gap"
         retrieved = checks.get("searched") or checks.get("fetched_body")
         if retrieved and checks.get("cited_urls") and not checks.get("fabricated_urls"):
             return "capability_met"
@@ -385,7 +493,14 @@ async def evaluate(
         }, timeout=120)
         event_list = events if isinstance(events, list) else events.get("events", [])
         cont = terminal_continuation(event_list)
-        observations = cont.get("observations") or []
+        typed = [
+            (
+                str(e.get("type") or e.get("event_type") or ""),
+                e.get("payload") or {},
+            )
+            for e in event_list
+        ]
+        observations = collect_observations(typed)
         output_text = str((run.get("output") or {}).get("text") or "")
         failure_code = str(
             ((run.get("failure_summary") or {}) or {}).get("code")
@@ -456,15 +571,20 @@ def recompute_report(report_dir: Path) -> int:
             ).fetchone()
             output_text = str(row[0]) if row else ""
             events = db.execute(
-                "SELECT payload_json FROM run_events WHERE run_id = ? "
-                "ORDER BY sequence_number",
+                "SELECT event_type, payload_json FROM run_events "
+                "WHERE run_id = ? ORDER BY sequence_number",
                 (run_id,),
             ).fetchall()
-            observations: list[dict] = []
-            for (payload_json,) in events:
-                payload = json.loads(payload_json or "{}")
-                cont = payload.get("continuation") or {}
-                observations.extend(cont.get("observations") or [])
+            typed = [
+                (str(etype or ""), json.loads(payload_json or "{}"))
+                for etype, payload_json in events
+            ]
+            observations = collect_observations(typed)
+            if spec.get("body_required") and not spec.get(
+                    "required_fetch_url"):
+                spec["required_fetch_any_of"] = list(
+                    (r.get("checks") or {}).get("prefill_source_urls") or []
+                )
             checks = compute_checks(
                 observations, output_text,
                 str(r.get("task") or ""), spec,
@@ -525,6 +645,9 @@ async def main() -> int:
                 {
                     "name": "prefill-entry", "task": prefill,
                     "body_required": True,
+                    # The entry asks to read THE GIVEN sources — met only
+                    # when at least one provided URL's body came back ok.
+                    "required_fetch_any_of": search_urls,
                 },
                 prefill,
             )

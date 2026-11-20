@@ -151,6 +151,31 @@ def test_executor_fetch_env_verdict_grounded_in_stderr_evidence():
     assert classify("COMPLETED", checks, spec) == "provider_or_environment"
 
 
+def test_stderr_evidence_requires_exact_url_not_host():
+    """A refusal line for a.example/a must NOT be credited to a fetch of
+    a.example/b — same host is not evidence about a different path.
+    Unmatched failures keep 'cause unconfirmed' -> gap, not env."""
+    from scripts.real_eval_mercury import attach_executor_error_evidence
+    events = _task_events([
+        ("loop-1", "web_fetch", "read", "https://a.example/b",
+         "failed", "TOOL_EXECUTION_FAILED"),
+    ])
+    obs = collect_observations(events)
+    stderr = (
+        "PlanExecutor: step 0 (web_fetch) 失败: Error: Refusing to fetch "
+        "https://a.example/a (refusing to fetch 'a.example' — non-public "
+        "address 198.18.0.9; SSRF)\n"
+    )
+    attach_executor_error_evidence(obs, stderr)
+    spec = {
+        "body_required": True,
+        "required_fetch_any_of": ["https://a.example/b"],
+    }
+    checks = compute_checks(obs, "", "read sources", spec)
+    assert checks["fetch_env_blocked"] is False
+    assert classify("COMPLETED", checks, spec) == "capability_gap"
+
+
 def test_any_of_required_url_needs_one_real_body():
     """t1's 'read the given sources' is met only when at least one
     provided URL fetched ok — reading an unrelated page does not count."""

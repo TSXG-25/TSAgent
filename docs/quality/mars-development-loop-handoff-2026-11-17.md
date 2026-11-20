@@ -629,3 +629,18 @@ api 1.43.0 对齐后恢复。
   重算维持 `provider_or_environment`——证据化判定，非放宽规则。
 - 复跑口径更正：`tests/test_real_eval_mercury.py` 为 8 passed
   （此前"9"是两文件合计的误写）。
+
+### 证据回填归属修正（复核 346a775d 后）
+
+- `attach_executor_error_evidence` 去掉 host 回退——`a.example/a`
+  的拒绝不得归到 `a.example/b`；且改为完整 token 匹配（URL 后须
+  跟定界符），`/a` 不会误中 `/ab`。
+- 日志按 run 限定：live 路径记录 run 前的 stderr 偏移，只取该
+  run 的增量段，另存 `stderr-<run_id>.log` 进报告目录；重算时优先
+  per-run 文件，共享日志仅对"该 run 独占的 URL"回填——无法归属
+  的保留原因未确认，不补证据。
+- 修正的意外收益：182540（qwen t1 SSRF 时代）曾因缺错误正文翻转
+  为 capability_gap，现已从会话 transcript 逐字恢复 10 条拒绝行
+  到 `stderr-run-53bf….log`——10 个 task_started target 与 10 条
+  拒绝行一一对应，`provider_or_environment` 判定证据化复原。
+- 回归 +1（9 项）：同 host 不同 path 的串证据用例。

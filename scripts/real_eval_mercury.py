@@ -286,9 +286,10 @@ def attach_executor_error_evidence(
     """Executor task_completed events store only error_code/status — the
     tool's refusal text never reaches the db. The sidecar's stderr IS the
     error channel (e.g. 'step N (web_fetch) 失败: Error: Refusing to
-    fetch <url> (...) SSRF'). When a stderr log exists, attach the
-    matching error line to each failed executor observation so
-    environment-vs-model classification rests on real evidence."""
+    fetch <url> (...) SSRF'). When a stderr segment for THIS RUN exists,
+    attach the error line that names the exact target URL. No host
+    fallback — a refusal for a.example/a says nothing about a.example/b,
+    and a misattributed line would manufacture environment evidence."""
     if not stderr_text:
         return
     lines = stderr_text.splitlines()
@@ -301,9 +302,14 @@ def attach_executor_error_evidence(
         tool = str(obs.get("tool", ""))
         target = str((obs.get("input") or {}).get("url")
                      or (obs.get("input") or {}).get("query") or "")
-        host = urllib.parse.urlparse(target).netloc or target
+        if not target:
+            continue
+        # The URL must appear as a complete token — a bare substring
+        # match would credit /a.example/a with a refusal for
+        # /a.example/ab.
+        needle = re.escape(target) + r"(?=\s|\)|\(|\"|'|$)"
         for line in lines:
-            if tool in line and (target in line or (host and host in line)):
+            if tool in line and re.search(needle, line):
                 result["content"] = line.strip()
                 break
 
@@ -514,6 +520,8 @@ async def evaluate(
         await sidecar.call("assign_session_workspace", {
             **ident, "workspace_id": f"ws-eval-{key}",
         })
+        stderr_log = REPORT_ROOT / "sidecar.stderr.log"
+        stderr_pos = stderr_log.stat().st_size if stderr_log.exists() else 0
         started = time.monotonic()
         handle = await sidecar.call("start_run", {
             **ident, "request_text": request_text,
@@ -542,11 +550,15 @@ async def evaluate(
             for e in event_list
         ]
         observations = collect_observations(typed)
-        stderr_log = REPORT_ROOT / "sidecar.stderr.log"
+        # Per-run evidence only — the shared log accumulates every task
+        # in this session, and a refusal for run A's URL must not be
+        # credited to run B's retry of the same URL.
         if stderr_log.exists():
-            attach_executor_error_evidence(
-                observations, stderr_log.read_text(encoding="utf-8"),
+            delta = stderr_log.read_text(encoding="utf-8")[stderr_pos:]
+            (REPORT_ROOT / f"stderr-{run_id}.log").write_text(
+                delta, encoding="utf-8",
             )
+            attach_executor_error_evidence(observations, delta)
         output_text = str((run.get("output") or {}).get("text") or "")
         failure_code = str(
             ((run.get("failure_summary") or {}) or {}).get("code")
@@ -603,6 +615,7 @@ def recompute_report(report_dir: Path) -> int:
     report = json.loads(report_path.read_text())
     db = sqlite3.connect(str(db_path))
     try:
+        prepared: list[dict] = []
         for r in report.get("results") or []:
             task_id = str(r.get("task_id") or r.get("candidate") or "")
             spec = TASKS.get(task_id) or {
@@ -625,20 +638,48 @@ def recompute_report(report_dir: Path) -> int:
                 (str(etype or ""), json.loads(payload_json or "{}"))
                 for etype, payload_json in events
             ]
-            observations = collect_observations(typed)
-            stderr_log = report_dir / "sidecar.stderr.log"
-            if stderr_log.exists():
+            prepared.append({
+                "r": r, "spec": spec, "run_id": run_id,
+                "status": status, "output_text": output_text,
+                "observations": collect_observations(typed),
+            })
+        # Which run claims each executor-path fetch URL — a shared
+        # stderr log can only ground a target owned by exactly one run.
+        claims: dict[str, set[str]] = {}
+        for p in prepared:
+            for o in p["observations"]:
+                if o.get("_origin") != "executor_task":
+                    continue
+                if str(o.get("tool", "")) not in FETCH_TOOLS:
+                    continue
+                url = _norm_url(
+                    (o.get("input") or {}).get("url", ""))
+                if url:
+                    claims.setdefault(url, set()).add(p["run_id"])
+        for p in prepared:
+            r, spec, run_id = p["r"], p["spec"], p["run_id"]
+            observations = p["observations"]
+            per_run = report_dir / f"stderr-{run_id}.log"
+            shared = report_dir / "sidecar.stderr.log"
+            if per_run.exists():
                 attach_executor_error_evidence(
-                    observations,
-                    stderr_log.read_text(encoding="utf-8"),
-                )
+                    observations, per_run.read_text(encoding="utf-8"))
+            elif shared.exists():
+                text = shared.read_text(encoding="utf-8")
+                scoped = [
+                    o for o in observations
+                    if _norm_url((o.get("input") or {}).get("url", ""))
+                    in {u for u, runs in claims.items()
+                        if runs == {run_id}}
+                ]
+                attach_executor_error_evidence(scoped, text)
             if spec.get("body_required") and not spec.get(
                     "required_fetch_url"):
                 spec["required_fetch_any_of"] = list(
                     (r.get("checks") or {}).get("prefill_source_urls") or []
                 )
             checks = compute_checks(
-                observations, output_text,
+                observations, p["output_text"],
                 str(r.get("task") or ""), spec,
             )
             # Preserve fields recompute cannot derive differently.
@@ -652,7 +693,7 @@ def recompute_report(report_dir: Path) -> int:
                 "no longer contribute evidence URLs"
             )
             r["checks"] = checks
-            r["classification"] = classify(status, checks, spec)
+            r["classification"] = classify(p["status"], checks, spec)
         report["recomputed"] = True
         report_path.write_text(
             json.dumps(report, ensure_ascii=False, indent=2)

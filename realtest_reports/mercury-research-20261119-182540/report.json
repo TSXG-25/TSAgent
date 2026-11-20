@@ -7,11 +7,11 @@
       "task_id": "t1",
       "name": "prefill-entry",
       "task": "基于以下搜索结果继续研究，阅读来源正文后回答：\n查询：DuckDuckGo 搜索引擎 隐私\n- DuckDuckGo - Protection. Privacy. Peace of mind. — https://duckduckgo.com/\n- 14 个最佳私人搜索引擎 - Private Proxy Guide — https://www.privateproxyguide.com/zh/%E6%9C%80%E4%BD%B3%E7%A7%81%E4%BA%BA%E6%90%9C%E7%B4%A2%E5%BC%95%E6%93%8E/\n- DuckDuckGo 安全吗？关于这款私有搜索引擎需要了解的信息 | Proton — https://proton.me/zh/blog/duckduckgo\n- DUCKDUCKGO: 搜索引擎评测 - 优点与缺点 - NetValuator (中文中国) — https://netvaluator.com/cn/duckduckgo-%E6%90%9C%E7%B4%A2%E5%BC%95%E6%93%8E%E8%AF%84%E6%B5%8B-%E4%BC%98%E7%82%B9%E4%B8%8E%E7%BC%BA%E7%82%B9/\n- DuckDuckGo 公司介绍 - 隐私搜索引擎·浏览器 - 16IDC — https://www.16idc.com/provider-detail/duckduckgo\n- DuckDuckGo - 保护。隐私。安心。 — https://www.navgood.com/zh/tool-details/duckduckgo-57abf\n- DuckDuckGo 浏览器：搜索不追踪、广告能屏蔽，隐私浏览器里的省心之选 - 极客范 — https://jikefan.com/zh/app/duckduckgo-browser/7.234\n- DuckDuckGo 2026 年统计数据：隐私体验指南 - venuelabs.com — https://venuelabs.com/zh-CN/duckduckgo-statistics/\n- DuckDuckGo 搜索引擎官网 | 隐私为核心的另类搜索体验 — https://www.leavescn.com/forums/detail/17910\n- DuckDuckGo - 维基百科，自由的百科全书 - zh.wikipedia.org — https://zh.wikipedia.org/zh-cn/DuckDuckGo\n\n研究目标：总结这些来源如何描述 DuckDuckGo 的隐私策略，并标注来源。",
-      "classification": "capability_gap",
+      "classification": "provider_or_environment",
       "checks": {
         "searched": true,
         "fetch_attempted": true,
-        "fetch_env_blocked": false,
+        "fetch_env_blocked": true,
         "fetched_body": false,
         "fetched_required_url": false,
         "required_fetch_attempted": true,
@@ -95,7 +95,7 @@
             },
             "ok": false,
             "error_code": "TOOL_EXECUTION_FAILED",
-            "evidence_excerpt": ""
+            "evidence_excerpt": "PlanExecutor: step 0 (web_fetch) 失败: Error: Refusing to fetch https://duckduckgo.com/ (refusing to fetch 'duckduckgo.com' — it resolves to non-public address 198.18.0.160). This server blocks requests to private/internal addresses to preven"
           },
           {
             "tool": "web_fetch",
@@ -104,7 +104,7 @@
             },
             "ok": false,
             "error_code": "TOOL_EXECUTION_FAILED",
-            "evidence_excerpt": ""
+            "evidence_excerpt": "PlanExecutor: step 0 (web_fetch) 失败: Error: Refusing to fetch https://proton.me/zh/blog/duckduckgo (refusing to fetch 'proton.me' — it resolves to non-public address 198.18.0.163). This server blocks requests to private/internal addresses t"
           },
           {
             "tool": "web_fetch",
@@ -113,7 +113,7 @@
             },
             "ok": false,
             "error_code": "TOOL_EXECUTION_FAILED",
-            "evidence_excerpt": ""
+            "evidence_excerpt": "PlanExecutor: step 0 (web_fetch) 失败: Error: Refusing to fetch https://netvaluator.com/cn/duckduckgo-%E6%90%9C%E7%B4%A2%E5%BC%95%E6%93%8E%E8%AF%84%E6%B5%8B-%E4%BC%98%E7%82%B9%E4%B8%8E%E7%BC%BA%E7%82%B9/ (refusing to fetch 'netvaluator.com' —"
           }
         ],
         "evidence_urls": [

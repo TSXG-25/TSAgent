@@ -1,0 +1,45 @@
+{
+  "driver": "scripts/real_eval_mercury.py",
+  "provider": "ollama",
+  "model": "qwen3:8b",
+  "results": [
+    {
+      "task_id": "t2",
+      "name": "body-reading",
+      "task": "读取 https://en.wikipedia.org/wiki/DuckDuckGo 的正文，告诉我 DuckDuckGo 是哪一年推出的，并标注来源。",
+      "classification": "capability_met",
+      "checks": {
+        "searched": false,
+        "fetch_attempted": true,
+        "fetch_env_blocked": false,
+        "fetched_body": true,
+        "fetched_required_url": true,
+        "required_fetch_attempted": true,
+        "web_tool_calls": [
+          {
+            "tool": "web_fetch",
+            "args": {
+              "url": "https://en.wikipedia.org/wiki/DuckDuckGo"
+            },
+            "ok": true,
+            "error_code": ""
+          }
+        ],
+        "evidence_urls": [
+          "https://en.wikipedia.org/wiki/DuckDuckGo"
+        ],
+        "cited_urls": [
+          "https://en.wikipedia.org/wiki/DuckDuckGo"
+        ],
+        "fabricated_urls": [],
+        "goal_missing": [],
+        "output_excerpt": "DuckDuckGo 是在 2008 年推出的，来源：Wikipedia 的正文内容（标题：DuckDuckGo - Wikipedia，URL：https://en.wikipedia.org/wiki/DuckDuckGo）。\n\n未自动验证：用户要求标注来源，但无法机械核验是否正确标注。",
+        "failure_code": ""
+      },
+      "run_id": "run-16bcba3326ce4a74ab1ed7724f48fee1",
+      "elapsed_s": 78.1,
+      "terminal_status": "COMPLETED",
+      "failure": null
+    }
+  ]
+}

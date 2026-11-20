@@ -554,3 +554,21 @@ fetch_content，需公网解析正常的环境验证。SSRF 防护不为此放�
 
 项目结论保持：分类合同修复在真实请求中生效（exec=True、按约调用
 工具、被拒自适应）；公网正文读取仍受本机 SSRF 环境阻断，未验收。
+
+### 公网正常环境真实复验（2026-11-20）
+
+环境前提：DNS 恢复公网解析（wikipedia→103.x、ddg→20.x，不再落
+198.18.x fake-IP）；另修复 Python 环境依赖错配
+`opentelemetry-api` 被单独升到 1.45.2 而 sdk/semconv 钉 1.43.0
+（SDK import 崩 → run FAILED_TERMINAL/RUNTIME_EXCEPTION），降回
+api 1.43.0 对齐后恢复。
+
+| 任务 | 结果 | 真实路径 |
+|---|---|---|
+| t2 正文读取 | **capability_met** | exec=True → 直接 `web_fetch` 指定 URL → **ok:true 真读到正文** → 答 2008（正确）→ 引用=证据 URL，`fetched_body`/`fetched_required_url` 全真 |
+| t1 预填入口 | **capability_gap** | exec=True → 模型**未 fetch 提供的 10 个来源**，改跑 `web_search`（先踩 max_results<5 校验、重试成功）→ 引用 6 个新证据 URL 零虚构——但任务要求读来源正文，`fetch_attempted=false`，搜索替代如实判 gap |
+
+结论更新：
+- **t2 代表"给定 URL→正文读取→带来源回答"已在真实公网环境验收通过**——全链无环境阻断，判据各项硬指标全真。
+- t1 暴露的是模型行为选择问题：拿到"只有链接"的输入时，qwen3:8b 倾向新搜索而非逐链接读正文。判据按验收口径如实记 gap；这不是链断（工具都在、路由正确），是该模型在此输入形态下的工具选择。
+- 遗留边界不变：URL 级对齐可证；claim 级事实准确性仍需来源比对，评测不宣称。报告：realtest_reports/mercury-research-20261120-100748（t2 met）、-100911（t1 gap）。

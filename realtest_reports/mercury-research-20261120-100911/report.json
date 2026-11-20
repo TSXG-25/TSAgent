@@ -1,0 +1,79 @@
+{
+  "driver": "scripts/real_eval_mercury.py",
+  "provider": "ollama",
+  "model": "qwen3:8b",
+  "results": [
+    {
+      "task_id": "t1",
+      "name": "prefill-entry",
+      "task": "基于以下搜索结果继续研究，阅读来源正文后回答：\n查询：DuckDuckGo 搜索引擎 隐私\n- DuckDuckGo - Protection. Privacy. Peace of mind. — https://duckduckgo.com/\n- DuckDuckGo 安全吗？关于这款私有搜索引擎需要了解的信息 | Proton — https://proton.me/zh/blog/duckduckgo\n- 14 个最佳私人搜索引擎 - Private Proxy Guide — https://www.privateproxyguide.com/zh/%E6%9C%80%E4%BD%B3%E7%A7%81%E4%BA%BA%E6%90%9C%E7%B4%A2%E5%BC%95%E6%93%8E/\n- DuckDuckGo 搜索引擎官网 | 隐私为核心的另类搜索体验 — https://www.leavescn.com/forums/detail/17910\n- DUCKDUCKGO: 搜索引擎评测 - 优点与缺点 - NetValuator (中文中国) — https://netvaluator.com/cn/duckduckgo-%E6%90%9C%E7%B4%A2%E5%BC%95%E6%93%8E%E8%AF%84%E6%B5%8B-%E4%BC%98%E7%82%B9%E4%B8%8E%E7%BC%BA%E7%82%B9/\n- DuckDuckGo引擎无需登录入口链接 DuckDuckGo搜索免费官方直链-浏览器-PHP中文网 — https://www.php.cn/faq/1718470.html\n- DuckDuckGo 公司介绍 - 隐私搜索引擎·浏览器 - 16IDC — https://www.16idc.com/provider-detail/duckduckgo\n- DuckDuckGo - 保护。隐私。安心。 — https://www.navgood.com/zh/tool-details/duckduckgo-57abf\n- DuckDuckGo隐私扩展全解析：从原理到实战的浏览器隐私保护指南-CSDN博客 — https://blog.csdn.net/weixin_30613727/article/details/99938955\n- 惊天!还有能保护隐私的浏览器——DuckDuckGo - 知乎 — https://zhuanlan.zhihu.com/p/650470529\n\n研究目标：总结这些来源如何描述 DuckDuckGo 的隐私策略，并标注来源。",
+      "classification": "capability_gap",
+      "checks": {
+        "searched": true,
+        "fetch_attempted": false,
+        "fetch_env_blocked": false,
+        "fetched_body": false,
+        "fetched_required_url": false,
+        "required_fetch_attempted": false,
+        "web_tool_calls": [
+          {
+            "tool": "web_search",
+            "args": {
+              "query": "DuckDuckGo privacy policy"
+            },
+            "ok": false,
+            "error_code": "INVALID_TOOL_ARGUMENT"
+          },
+          {
+            "tool": "web_search",
+            "args": {
+              "query": "DuckDuckGo privacy policy"
+            },
+            "ok": true,
+            "error_code": ""
+          }
+        ],
+        "evidence_urls": [
+          "https://duckduckgo.com/privacy",
+          "https://duckduckgo.com/pro/privacy-terms/us",
+          "https://start.duckduckgo.com/duckduckgo-help-pages/privacy-pro/vpn/security-reports/2025-2026-vpn-no-log-policy-audit",
+          "https://factually.co/fact-checks/technology/duckduckgo-official-privacy-policy-user-tracking-2a2596",
+          "https://safe.duckduckgo.com/duckduckgo-help-pages/privacy-pro/terms-and-privacy",
+          "https://factually.co/fact-checks/technology/duckduckgo-privacy-policy-search-logging-server-telemetry-explained-7497f6",
+          "https://assets.claude.com/6ae2f5bb8675bcd9fac006125817ba1393b396e4.pdf",
+          "https://start.duckduckgo.com/duckduckgo-help-pages/privacy-pro/personal-information-removal/privacy",
+          "https://privacy-decoded.com/analyses/duckduckgo",
+          "https://yesai.duckduckgo.com/"
+        ],
+        "cited_urls": [
+          "https://duckduckgo.com/privacy",
+          "https://duckduckgo.com/pro/privacy-terms/us",
+          "https://start.duckduckgo.com/duckduckgo-help-pages/privacy-pro/vpn/security-reports/2025-2026-vpn-no-log-policy-audit",
+          "https://factually.co/fact-checks/technology/duckduckgo-official-privacy-policy-user-tracking-2a2596",
+          "https://privacy-decoded.com/analyses/duckduckgo",
+          "https://factually.co/fact-checks/technology/duckduckgo-privacy-policy-search-logging-server-telemetry-explained-7497f6"
+        ],
+        "fabricated_urls": [],
+        "goal_missing": [],
+        "output_excerpt": "DuckDuckGo 的隐私策略主要通过其官方隐私政策和相关声明进行描述，以下是这些来源对 DuckDuckGo 隐私策略的总结：\n\n1. **DuckDuckGo Privacy Policy** (https://duckduckgo.com/privacy)  \n   - DuckDuckGo 承诺不跟踪用户，不保存搜索历史，不创建用户档案。它提供多种内置保护措施以阻止第三方跟踪，并披露了在用户离开 DuckDuckGo 或启用需要个人数据的功能时的实际限制。  \n   - 来源：DuckDuckGo 官方。\n\n2. **DuckDuckGo Subscription (U.S.) Privacy Policy and Terms of Service** (https://duckduckgo.com/pro/privacy-terms/us)  \n   - DuckDuckGo 是一家致力于让用户无缝控制在线个人数据的公司，且不进行任何权衡。  \n   - 来源：DuckDuckGo 官方。\n\n3. **DuckDuckGo VPN No-Log Policy Audit 2025-2026** (https://start.duckduckgo.com/duckduckgo-help-pages/privacy-pro/vpn/security-reports/2025-2026-vpn-no-log-policy-audit)  \n   - 2025 年 10 月至 2026 年 1 月期间，Securitum 对 DuckDuckGo 的无日志政策进行了审计，确认其不收集或保留用户可识别数据。  \n   - 来源：DuckDuckGo 官方。\n\n4. **What is DuckDuckGo's official privacy policy on user tracking...** (https://factually.co/fact-checks/technology/duckduckgo-official-privacy-policy-user-tracking-2a2596)  \n   - DuckDuckGo 的政策承诺不跟踪用户，不保存搜索历史，不创建用户档案，并提供多种产品内保护措施以阻止第三方跟踪。  \n   - 来源：DuckDuckGo 官方。\n\n5. **DuckDuckGo Privacy Policy — Grade B+ | Privacy Decoded** (https://privacy-decoded.com/analyses/duckduckgo)  \n   - DuckDuckGo 在隐私评分中获得 B+（84/100），其政策简短，因为公司不收集用户的搜索或浏览数据。  \n   - 来源：Privacy Decoded。\n\n6. **What Does DuckDuckGo's Privacy Policy Say About Search...** (https://factually.co/fact-checks/technology/duckduckgo-privacy-policy-search-logging-server-telemetry-explained-7497f6)  \n   - DuckDuckGo 在 2026 年 6 月更新了政策，明确包括新功能如 Duck.ai 聊天，表明公司公开记录功能覆盖范围。  \n   - 来源：DuckDuckGo 官方。\n\n综上所",
+        "failure_code": "",
+        "prefill_source_urls": [
+          "https://duckduckgo.com/",
+          "https://proton.me/zh/blog/duckduckgo",
+          "https://www.privateproxyguide.com/zh/%E6%9C%80%E4%BD%B3%E7%A7%81%E4%BA%BA%E6%90%9C%E7%B4%A2%E5%BC%95%E6%93%8E/",
+          "https://www.leavescn.com/forums/detail/17910",
+          "https://netvaluator.com/cn/duckduckgo-%E6%90%9C%E7%B4%A2%E5%BC%95%E6%93%8E%E8%AF%84%E6%B5%8B-%E4%BC%98%E7%82%B9%E4%B8%8E%E7%BC%BA%E7%82%B9/",
+          "https://www.php.cn/faq/1718470.html",
+          "https://www.16idc.com/provider-detail/duckduckgo",
+          "https://www.navgood.com/zh/tool-details/duckduckgo-57abf",
+          "https://blog.csdn.net/weixin_30613727/article/details/99938955",
+          "https://zhuanlan.zhihu.com/p/650470529"
+        ]
+      },
+      "run_id": "run-40b72e697b204c6a90c157d112f96949",
+      "elapsed_s": 114.1,
+      "terminal_status": "COMPLETED",
+      "failure": null
+    }
+  ]
+}

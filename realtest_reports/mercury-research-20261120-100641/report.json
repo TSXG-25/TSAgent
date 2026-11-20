@@ -1,0 +1,34 @@
+{
+  "driver": "scripts/real_eval_mercury.py",
+  "provider": "ollama",
+  "model": "qwen3:8b",
+  "results": [
+    {
+      "task_id": "t2",
+      "name": "body-reading",
+      "task": "读取 https://en.wikipedia.org/wiki/DuckDuckGo 的正文，告诉我 DuckDuckGo 是哪一年推出的，并标注来源。",
+      "classification": "capability_gap_honest_refusal",
+      "checks": {
+        "searched": false,
+        "fetch_attempted": false,
+        "fetch_env_blocked": false,
+        "fetched_body": false,
+        "fetched_required_url": false,
+        "required_fetch_attempted": false,
+        "web_tool_calls": [],
+        "evidence_urls": [],
+        "cited_urls": [],
+        "fabricated_urls": [],
+        "goal_missing": [
+          "RUNTIME_EXCEPTION"
+        ],
+        "output_excerpt": "目标尚未完成，缺少可验证证据：RUNTIME_EXCEPTION。本次不会报告为成功。 原因：ImportError: cannot import name '_ExtendedAttributes' from 'opentelemetry.util.types' (/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/opentelemetry/util/types.py)。",
+        "failure_code": "RUNTIME_EXCEPTION"
+      },
+      "run_id": "run-6e251747a34544d5a7b4596311890df4",
+      "elapsed_s": 42.9,
+      "terminal_status": "FAILED_TERMINAL",
+      "failure": null
+    }
+  ]
+}

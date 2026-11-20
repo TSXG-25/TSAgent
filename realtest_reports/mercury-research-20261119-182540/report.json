@@ -7,11 +7,11 @@
       "task_id": "t1",
       "name": "prefill-entry",
       "task": "基于以下搜索结果继续研究，阅读来源正文后回答：\n查询：DuckDuckGo 搜索引擎 隐私\n- DuckDuckGo - Protection. Privacy. Peace of mind. — https://duckduckgo.com/\n- 14 个最佳私人搜索引擎 - Private Proxy Guide — https://www.privateproxyguide.com/zh/%E6%9C%80%E4%BD%B3%E7%A7%81%E4%BA%BA%E6%90%9C%E7%B4%A2%E5%BC%95%E6%93%8E/\n- DuckDuckGo 安全吗？关于这款私有搜索引擎需要了解的信息 | Proton — https://proton.me/zh/blog/duckduckgo\n- DUCKDUCKGO: 搜索引擎评测 - 优点与缺点 - NetValuator (中文中国) — https://netvaluator.com/cn/duckduckgo-%E6%90%9C%E7%B4%A2%E5%BC%95%E6%93%8E%E8%AF%84%E6%B5%8B-%E4%BC%98%E7%82%B9%E4%B8%8E%E7%BC%BA%E7%82%B9/\n- DuckDuckGo 公司介绍 - 隐私搜索引擎·浏览器 - 16IDC — https://www.16idc.com/provider-detail/duckduckgo\n- DuckDuckGo - 保护。隐私。安心。 — https://www.navgood.com/zh/tool-details/duckduckgo-57abf\n- DuckDuckGo 浏览器：搜索不追踪、广告能屏蔽，隐私浏览器里的省心之选 - 极客范 — https://jikefan.com/zh/app/duckduckgo-browser/7.234\n- DuckDuckGo 2026 年统计数据：隐私体验指南 - venuelabs.com — https://venuelabs.com/zh-CN/duckduckgo-statistics/\n- DuckDuckGo 搜索引擎官网 | 隐私为核心的另类搜索体验 — https://www.leavescn.com/forums/detail/17910\n- DuckDuckGo - 维基百科，自由的百科全书 - zh.wikipedia.org — https://zh.wikipedia.org/zh-cn/DuckDuckGo\n\n研究目标：总结这些来源如何描述 DuckDuckGo 的隐私策略，并标注来源。",
-      "classification": "provider_or_environment",
+      "classification": "capability_gap",
       "checks": {
         "searched": true,
         "fetch_attempted": true,
-        "fetch_env_blocked": true,
+        "fetch_env_blocked": false,
         "fetched_body": false,
         "fetched_required_url": false,
         "required_fetch_attempted": true,
@@ -22,7 +22,8 @@
               "url": "https://www.privateproxyguide.com/zh/%E6%9C%80%E4%BD%B3%E7%A7%81%E4%BA%BA%E6%90%9C%E7%B4%A2%E5%BC%95%E6%93%8E/"
             },
             "ok": false,
-            "error_code": "TOOL_EXECUTION_FAILED"
+            "error_code": "TOOL_EXECUTION_FAILED",
+            "evidence_excerpt": "PlanExecutor: step 0 (web_fetch) 失败: Error: Refusing to fetch https://www.privateproxyguide.com/zh/%E6%9C%80%E4%BD%B3%E7%A7%81%E4%BA%BA%E6%90%9C%E7%B4%A2%E5%BC%95%E6%93%8E/ (refusing to fetch 'www.privateproxyguide.com' — it resolves to non"
           },
           {
             "tool": "web_fetch",
@@ -30,7 +31,8 @@
               "url": "https://jikefan.com/zh/app/duckduckgo-browser/7.234"
             },
             "ok": false,
-            "error_code": "TOOL_EXECUTION_FAILED"
+            "error_code": "TOOL_EXECUTION_FAILED",
+            "evidence_excerpt": "PlanExecutor: step 0 (web_fetch) 失败: Error: Refusing to fetch https://jikefan.com/zh/app/duckduckgo-browser/7.234 (refusing to fetch 'jikefan.com' — it resolves to non-public address 198.18.0.167). This server blocks requests to private/int"
           },
           {
             "tool": "web_fetch",
@@ -38,7 +40,8 @@
               "url": "https://venuelabs.com/zh-CN/duckduckgo-statistics/"
             },
             "ok": false,
-            "error_code": "TOOL_EXECUTION_FAILED"
+            "error_code": "TOOL_EXECUTION_FAILED",
+            "evidence_excerpt": "PlanExecutor: step 0 (web_fetch) 失败: Error: Refusing to fetch https://venuelabs.com/zh-CN/duckduckgo-statistics/ (refusing to fetch 'venuelabs.com' — it resolves to non-public address 198.18.0.165). This server blocks requests to private/in"
           },
           {
             "tool": "web_fetch",
@@ -46,7 +49,8 @@
               "url": "https://www.navgood.com/zh/tool-details/duckduckgo-57abf"
             },
             "ok": false,
-            "error_code": "TOOL_EXECUTION_FAILED"
+            "error_code": "TOOL_EXECUTION_FAILED",
+            "evidence_excerpt": "PlanExecutor: step 0 (web_fetch) 失败: Error: Refusing to fetch https://www.navgood.com/zh/tool-details/duckduckgo-57abf (refusing to fetch 'www.navgood.com' — it resolves to non-public address 198.18.0.166). This server blocks requests to pr"
           },
           {
             "tool": "web_fetch",
@@ -54,7 +58,8 @@
               "url": "https://www.16idc.com/provider-detail/duckduckgo"
             },
             "ok": false,
-            "error_code": "TOOL_EXECUTION_FAILED"
+            "error_code": "TOOL_EXECUTION_FAILED",
+            "evidence_excerpt": "PlanExecutor: step 0 (web_fetch) 失败: Error: Refusing to fetch https://www.16idc.com/provider-detail/duckduckgo (refusing to fetch 'www.16idc.com' — it resolves to non-public address 198.18.0.164). This server blocks requests to private/inte"
           },
           {
             "tool": "web_fetch",
@@ -62,7 +67,8 @@
               "url": "https://www.leavescn.com/forums/detail/17910"
             },
             "ok": false,
-            "error_code": "TOOL_EXECUTION_FAILED"
+            "error_code": "TOOL_EXECUTION_FAILED",
+            "evidence_excerpt": "PlanExecutor: step 0 (web_fetch) 失败: Error: Refusing to fetch https://www.leavescn.com/forums/detail/17910 (refusing to fetch 'www.leavescn.com' — it resolves to non-public address 198.18.0.168). This server blocks requests to private/inter"
           },
           {
             "tool": "web_fetch",
@@ -70,7 +76,8 @@
               "url": "https://zh.wikipedia.org/zh-cn/DuckDuckGo"
             },
             "ok": false,
-            "error_code": "TOOL_EXECUTION_FAILED"
+            "error_code": "TOOL_EXECUTION_FAILED",
+            "evidence_excerpt": "PlanExecutor: step 0 (web_fetch) 失败: Error: Refusing to fetch https://zh.wikipedia.org/zh-cn/DuckDuckGo (refusing to fetch 'zh.wikipedia.org' — it resolves to non-public address 198.18.0.169). This server blocks requests to private/internal"
           },
           {
             "tool": "web_search",
@@ -78,7 +85,8 @@
               "query": "DuckDuckGo 隐私策略"
             },
             "ok": true,
-            "error_code": ""
+            "error_code": "",
+            "evidence_excerpt": "说明：DuckDuckGo MCP 不提供精确时间过滤；时间范围仅作为搜索词提示，结果可能包含该范围之外的页面。\n1. DuckDuckGo Privacy Policy\n   URL: https://duckduckgo.com/privacy\n   Summary: DuckDuckGo(officially, Duck Duck Go, Inc.) has been an independent company since our founding in 2008. "
           },
           {
             "tool": "web_fetch",
@@ -86,7 +94,8 @@
               "url": "https://duckduckgo.com/"
             },
             "ok": false,
-            "error_code": "TOOL_EXECUTION_FAILED"
+            "error_code": "TOOL_EXECUTION_FAILED",
+            "evidence_excerpt": ""
           },
           {
             "tool": "web_fetch",
@@ -94,7 +103,8 @@
               "url": "https://proton.me/zh/blog/duckduckgo"
             },
             "ok": false,
-            "error_code": "TOOL_EXECUTION_FAILED"
+            "error_code": "TOOL_EXECUTION_FAILED",
+            "evidence_excerpt": ""
           },
           {
             "tool": "web_fetch",
@@ -102,7 +112,8 @@
               "url": "https://netvaluator.com/cn/duckduckgo-%E6%90%9C%E7%B4%A2%E5%BC%95%E6%93%8E%E8%AF%84%E6%B5%8B-%E4%BC%98%E7%82%B9%E4%B8%8E%E7%BC%BA%E7%82%B9/"
             },
             "ok": false,
-            "error_code": "TOOL_EXECUTION_FAILED"
+            "error_code": "TOOL_EXECUTION_FAILED",
+            "evidence_excerpt": ""
           }
         ],
         "evidence_urls": [

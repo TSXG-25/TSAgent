@@ -22,7 +22,8 @@
               "query": "16idc DuckDuckGo 隐私搜索引擎 服务商"
             },
             "ok": true,
-            "error_code": ""
+            "error_code": "",
+            "evidence_excerpt": "No results were found for your search query. This could be due to DuckDuckGo's bot detection or the query returned no matches. Please try rephrasing your search or try again in a few minutes."
           },
           {
             "tool": "web_search",
@@ -30,7 +31,8 @@
               "query": "DuckDuckGo 隐私策略 不追踪 不收集个人信息"
             },
             "ok": true,
-            "error_code": ""
+            "error_code": "",
+            "evidence_excerpt": ""
           },
           {
             "tool": "web_search",
@@ -38,13 +40,15 @@
               "query": "DuckDuckGo 隐私浏览器 追踪器拦截 HTTPS 加密"
             },
             "ok": true,
-            "error_code": ""
+            "error_code": "",
+            "evidence_excerpt": "说明：DuckDuckGo MCP 不提供精确时间过滤；时间范围仅作为搜索词提示，结果可能包含该范围之外的页面。"
           },
           {
             "tool": "web_search",
             "args": {},
             "ok": true,
-            "error_code": ""
+            "error_code": "",
+            "evidence_excerpt": ""
           },
           {
             "tool": "web_search",
@@ -52,7 +56,8 @@
               "query": "私人搜索引擎 对比 DuckDuckGo Startpage Brave 隐私 中国"
             },
             "ok": true,
-            "error_code": ""
+            "error_code": "",
+            "evidence_excerpt": ""
           },
           {
             "tool": "web_search",
@@ -60,7 +65,8 @@
               "query": "DuckDuckGo 追踪器 微软 LinkedIn 浏览器 隐私争议"
             },
             "ok": true,
-            "error_code": ""
+            "error_code": "",
+            "evidence_excerpt": ""
           },
           {
             "tool": "web_search",
@@ -68,7 +74,8 @@
               "query": "DuckDuckGo 不记录搜索历史 隐私 特点 介绍"
             },
             "ok": true,
-            "error_code": ""
+            "error_code": "",
+            "evidence_excerpt": ""
           },
           {
             "tool": "web_fetch",
@@ -76,7 +83,8 @@
               "url": "https://duckduckgo.com/"
             },
             "ok": false,
-            "error_code": "TOOL_EXECUTION_FAILED"
+            "error_code": "TOOL_EXECUTION_FAILED",
+            "evidence_excerpt": "PlanExecutor: step 0 (web_fetch) 失败: Error: Refusing to fetch https://duckduckgo.com/ (refusing to fetch 'duckduckgo.com' — it resolves to non-public address 198.18.0.144). This server blocks requests to private/internal addresses to preven"
           },
           {
             "tool": "web_fetch",
@@ -84,7 +92,8 @@
               "url": "https://proton.me/zh/blog/duckduckgo"
             },
             "ok": false,
-            "error_code": "TOOL_EXECUTION_FAILED"
+            "error_code": "TOOL_EXECUTION_FAILED",
+            "evidence_excerpt": "PlanExecutor: step 0 (web_fetch) 失败: Error: Refusing to fetch https://proton.me/zh/blog/duckduckgo (refusing to fetch 'proton.me' — it resolves to non-public address 198.18.0.141). This server blocks requests to private/internal addresses t"
           },
           {
             "tool": "web_fetch",
@@ -92,7 +101,8 @@
               "url": "https://baike.baidu.com/item/Duck%20Duck%20Go/7218557"
             },
             "ok": false,
-            "error_code": "TOOL_EXECUTION_FAILED"
+            "error_code": "TOOL_EXECUTION_FAILED",
+            "evidence_excerpt": "PlanExecutor: step 0 (web_fetch) 失败: Error: Refusing to fetch https://baike.baidu.com/item/Duck%20Duck%20Go/7218557 (refusing to fetch 'baike.baidu.com' — it resolves to non-public address 198.18.0.143). This server blocks requests to priva"
           },
           {
             "tool": "web_fetch",
@@ -100,7 +110,8 @@
               "url": "https://netvaluator.com/cn/duckduckgo-搜索引擎评测-优点与缺点/"
             },
             "ok": false,
-            "error_code": "TOOL_EXECUTION_FAILED"
+            "error_code": "TOOL_EXECUTION_FAILED",
+            "evidence_excerpt": "PlanExecutor: step 0 (web_fetch) 失败: Error: Refusing to fetch https://netvaluator.com/cn/duckduckgo-搜索引擎评测-优点与缺点/ (refusing to fetch 'netvaluator.com' — it resolves to non-public address 198.18.0.142). This server blocks requests to private"
           },
           {
             "tool": "web_fetch",
@@ -108,7 +119,8 @@
               "url": "https://www.privateproxyguide.com/zh/最佳私人搜索引擎/"
             },
             "ok": false,
-            "error_code": "TOOL_EXECUTION_FAILED"
+            "error_code": "TOOL_EXECUTION_FAILED",
+            "evidence_excerpt": "PlanExecutor: step 0 (web_fetch) 失败: Error: Refusing to fetch https://www.privateproxyguide.com/zh/最佳私人搜索引擎/ (refusing to fetch 'www.privateproxyguide.com' — it resolves to non-public address 198.18.0.145). This server blocks requests to pr"
           },
           {
             "tool": "web_deep_search",
@@ -116,7 +128,8 @@
               "query": "DuckDuckGo 隐私政策 不记录搜索历史 不构建用户画像"
             },
             "ok": true,
-            "error_code": ""
+            "error_code": "",
+            "evidence_excerpt": ""
           },
           {
             "tool": "web_fetch",
@@ -124,7 +137,8 @@
               "url": "https://venuelabs.com/zh-CN/duckduckgo-statistics/"
             },
             "ok": false,
-            "error_code": "TOOL_EXECUTION_FAILED"
+            "error_code": "TOOL_EXECUTION_FAILED",
+            "evidence_excerpt": "PlanExecutor: step 0 (web_fetch) 失败: Error: Refusing to fetch https://venuelabs.com/zh-CN/duckduckgo-statistics/ (refusing to fetch 'venuelabs.com' — it resolves to non-public address 198.18.0.146). This server blocks requests to private/in"
           },
           {
             "tool": "web_search",
@@ -132,7 +146,8 @@
               "query": "proton.me 博客 DuckDuckGo 安全吗 私有搜索引擎 上下文广告"
             },
             "ok": true,
-            "error_code": ""
+            "error_code": "",
+            "evidence_excerpt": ""
           },
           {
             "tool": "web_search",
@@ -140,7 +155,8 @@
               "query": "baike.baidu.com Duck Duck Go 百度百科 隐私 不记录"
             },
             "ok": true,
-            "error_code": ""
+            "error_code": "",
+            "evidence_excerpt": ""
           },
           {
             "tool": "web_search",
@@ -148,7 +164,8 @@
               "query": "netvaluator DuckDuckGo 搜索引擎评测 优点与缺点"
             },
             "ok": true,
-            "error_code": ""
+            "error_code": "",
+            "evidence_excerpt": ""
           },
           {
             "tool": "web_search",
@@ -156,7 +173,8 @@
               "query": "venuelabs DuckDuckGo 统计 用户 市场份额"
             },
             "ok": true,
-            "error_code": ""
+            "error_code": "",
+            "evidence_excerpt": ""
           },
           {
             "tool": "web_search",
@@ -164,7 +182,8 @@
               "query": "最佳私人搜索引擎 privateproxyguide DuckDuckGo Startpage Brave 隐私"
             },
             "ok": true,
-            "error_code": ""
+            "error_code": "",
+            "evidence_excerpt": ""
           },
           {
             "tool": "web_search",
@@ -172,7 +191,8 @@
               "query": "leavescn 论坛 DuckDuckGo 隐私 搜索引擎"
             },
             "ok": true,
-            "error_code": ""
+            "error_code": "",
+            "evidence_excerpt": ""
           },
           {
             "tool": "web_search",
@@ -180,7 +200,8 @@
               "query": "16idc DuckDuckGo provider 隐私政策 简介"
             },
             "ok": true,
-            "error_code": ""
+            "error_code": "",
+            "evidence_excerpt": ""
           },
           {
             "tool": "web_search",
@@ -188,7 +209,8 @@
               "query": "navgood DuckDuckGo 工具 details 隐私搜索引擎导航"
             },
             "ok": true,
-            "error_code": ""
+            "error_code": "",
+            "evidence_excerpt": ""
           },
           {
             "tool": "web_search",
@@ -196,7 +218,8 @@
               "query": "私密搜索引擎推荐 DuckDuckGo 不追踪 2026"
             },
             "ok": true,
-            "error_code": ""
+            "error_code": "",
+            "evidence_excerpt": ""
           },
           {
             "tool": "web_search",
@@ -204,7 +227,8 @@
               "query": "DuckDuckGo 隐私 论坛 leavescn"
             },
             "ok": true,
-            "error_code": ""
+            "error_code": "",
+            "evidence_excerpt": ""
           },
           {
             "tool": "web_search",
@@ -212,7 +236,8 @@
               "query": "DuckDuckGo 搜索引擎 服务商 详情 16idc"
             },
             "ok": true,
-            "error_code": ""
+            "error_code": "",
+            "evidence_excerpt": ""
           },
           {
             "tool": "web_search",
@@ -220,7 +245,8 @@
               "query": "CSDN DuckDuckGo 隐私 搜索引擎 不记录 IP"
             },
             "ok": true,
-            "error_code": ""
+            "error_code": "",
+            "evidence_excerpt": ""
           },
           {
             "tool": "web_search",
@@ -228,7 +254,8 @@
               "query": "DuckDuckGo 隐私保护 不追踪用户 搜索引擎"
             },
             "ok": true,
-            "error_code": ""
+            "error_code": "",
+            "evidence_excerpt": ""
           },
           {
             "tool": "web_news_search",
@@ -236,7 +263,8 @@
               "query": "DuckDuckGo privacy"
             },
             "ok": true,
-            "error_code": ""
+            "error_code": "",
+            "evidence_excerpt": ""
           },
           {
             "tool": "web_search",
@@ -244,7 +272,8 @@
               "query": "DuckDuckGo privacy policy no tracking"
             },
             "ok": true,
-            "error_code": ""
+            "error_code": "",
+            "evidence_excerpt": ""
           },
           {
             "tool": "web_search",
@@ -252,7 +281,8 @@
               "query": "DuckDuckGo 不追踪 隐私政策 说明"
             },
             "ok": true,
-            "error_code": ""
+            "error_code": "",
+            "evidence_excerpt": ""
           },
           {
             "tool": "web_deep_search",
@@ -260,7 +290,8 @@
               "query": "16idc DuckDuckGo 服务商详情 隐私搜索"
             },
             "ok": false,
-            "error_code": "INVALID_TOOL_ARGUMENT"
+            "error_code": "INVALID_TOOL_ARGUMENT",
+            "evidence_excerpt": ""
           },
           {
             "tool": "web_deep_search",
@@ -268,7 +299,8 @@
               "query": "navgood DuckDuckGo 工具详情 隐私"
             },
             "ok": false,
-            "error_code": "INVALID_TOOL_ARGUMENT"
+            "error_code": "INVALID_TOOL_ARGUMENT",
+            "evidence_excerpt": ""
           },
           {
             "tool": "web_deep_search",
@@ -276,7 +308,8 @@
               "query": "navgood.com DuckDuckGo 工具详情"
             },
             "ok": true,
-            "error_code": ""
+            "error_code": "",
+            "evidence_excerpt": ""
           }
         ],
         "evidence_urls": [],

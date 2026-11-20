@@ -580,8 +580,11 @@ api 1.43.0 对齐后恢复。
 6 次全被 SSRF 拦——该时段 DNS 又抖回 198.18.x fake-IP），随后
 降级检索（含 1 次 deep_search 成功），最终答案开头明写"正文没
 读到"、逐域名列拒绝 IP、只用摘要作答、拒编细节。
-**结论：t1 缺口是 qwen3:8b 的模型工具选择问题，不是系统约束**——
-同一合同下较强模型选择了正确的直接 fetch 策略。判定
+**口径（复核修正）**：两次 run 的 `task` 并不相同——10 个来源只有
+8 个相同，网络条件也不同（qwen 公网、DeepSeek fake-IP）。可成立
+的表述：**同类任务下，DeepSeek 尝试了来源读取，qwen 该次运行
+没有尝试，显示出工具选择差异**；不能据此断言缺口完全属于模型、
+与系统约束无关。需要严格对照时应固定原始请求文本复跑。判定
 `provider_or_environment`（策略对、环境拦）。报告
 `mercury-research-20261120-212805`。
 
@@ -610,3 +613,19 @@ api 1.43.0 对齐后恢复。
 
 回归：`tests/test_real_eval_mercury.py` 增至 7 例纯函数用例
 （+执行器路径提取、any-of 验收、unicode 归一化）。生产代码零改动。
+
+### 环境判定证据化（复核 e114bc34 后的修正）
+
+- `TOOL_EXECUTION_FAILED` 是执行器通用兜底码，不证明 DNS/SSRF/
+  网络原因；`_fetch_failure_is_env` 已回退该放宽——裸通用码 +
+  无错误正文 → 不判环境（如实 gap）。
+- 执行器 `task_completed` 事件只存 error_code/status，工具的拒绝
+  正文不落库；sidecar stderr 才是错误通道。驱动现在把 stderr 落盘
+  到报告目录 `sidecar.stderr.log`（之后的归档自带证据）；
+  `attach_executor_error_evidence` 按工具名+URL/host 匹配把拒绝行
+  回填到对应观察的 result.content，环境判定基于真实证据。
+- 20261120-212805 的 stderr 当时未落盘（修补丁前），6 条 SSRF
+  拒绝行已从会话输出逐字归档进该报告的 sidecar.stderr.log；
+  重算维持 `provider_or_environment`——证据化判定，非放宽规则。
+- 复跑口径更正：`tests/test_real_eval_mercury.py` 为 8 passed
+  （此前"9"是两文件合计的误写）。

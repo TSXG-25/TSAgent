@@ -134,9 +134,15 @@ class Sidecar:
 
     async def _stderr(self) -> None:
         assert self.proc.stderr is not None
-        async for raw in self.proc.stderr:
-            sys.stderr.write(f"[sidecar] {raw.decode('utf-8', 'replace')}")
-            sys.stderr.flush()
+        log = REPORT_ROOT / "sidecar.stderr.log"
+        REPORT_ROOT.mkdir(parents=True, exist_ok=True)
+        with log.open("a", encoding="utf-8") as fh:
+            async for raw in self.proc.stderr:
+                line = raw.decode("utf-8", "replace")
+                sys.stderr.write(f"[sidecar] {line}")
+                sys.stderr.flush()
+                fh.write(line)
+                fh.flush()
 
     async def call(self, method: str, params: dict, timeout: float = 60.0):
         self.seq += 1
@@ -264,6 +270,7 @@ def collect_observations(typed_events: list[tuple[str, dict]]) -> list[dict]:
         observations.append({
             "tool": tool,
             "input": inp,
+            "_origin": "executor_task",
             "result": {
                 "ok": ok,
                 "error_code": str(done.get("error_code") or ""),
@@ -271,6 +278,34 @@ def collect_observations(typed_events: list[tuple[str, dict]]) -> list[dict]:
             },
         })
     return observations
+
+
+def attach_executor_error_evidence(
+    observations: list[dict], stderr_text: str,
+) -> None:
+    """Executor task_completed events store only error_code/status — the
+    tool's refusal text never reaches the db. The sidecar's stderr IS the
+    error channel (e.g. 'step N (web_fetch) 失败: Error: Refusing to
+    fetch <url> (...) SSRF'). When a stderr log exists, attach the
+    matching error line to each failed executor observation so
+    environment-vs-model classification rests on real evidence."""
+    if not stderr_text:
+        return
+    lines = stderr_text.splitlines()
+    for obs in observations:
+        if obs.get("_origin") != "executor_task":
+            continue
+        result = obs.get("result") or {}
+        if result.get("ok") is True:
+            continue
+        tool = str(obs.get("tool", ""))
+        target = str((obs.get("input") or {}).get("url")
+                     or (obs.get("input") or {}).get("query") or "")
+        host = urllib.parse.urlparse(target).netloc or target
+        for line in lines:
+            if tool in line and (target in line or (host and host in line)):
+                result["content"] = line.strip()
+                break
 
 
 def observation_urls(observations: list[dict]) -> list[str]:
@@ -307,15 +342,16 @@ _MODEL_FAULT_CODES = ("INVALID", "ARGUMENT", "VALIDATION")
 
 
 def _fetch_failure_is_env(result: dict) -> bool:
-    """A fetch failure is the model's fault only for a known arg/validation
-    signature (INVALID_*, *ARGUMENT*, *VALIDATION*) — bad args it sent.
-    TOOL_EXECUTION_FAILED and network/provider-flavoured failures happen
-    at the fetch boundary (SSRF refusal, DNS, transport), which the model
-    cannot cause."""
+    """A fetch failure is environmental only with an actual environment
+    signature: an env error code (UNAVAILABLE/TIMEOUT/PROVIDER/NETWORK/
+    CONNECTION) or refusal content naming SSRF/private-address/network
+    reasons. A known model-fault code (INVALID_*/ARGUMENT/VALIDATION) is
+    the model's mistake. A bare TOOL_EXECUTION_FAILED is the executor's
+    generic catch-all — it proves nothing about cause."""
     code = str(result.get("error_code") or "").upper()
     if any(k in code for k in _MODEL_FAULT_CODES):
         return False
-    if any(k in code for k in _ENV_ERROR_CODES) or "TOOL_EXECUTION_FAILED" in code:
+    if any(k in code for k in _ENV_ERROR_CODES):
         return True
     content = str(result.get("content") or "").lower()
     return any(m in content for m in _ENV_CONTENT_MARKERS)
@@ -332,6 +368,11 @@ def compute_checks(
             "args": o.get("input") or {},
             "ok": (o.get("result") or {}).get("ok") is True,
             "error_code": str((o.get("result") or {}).get("error_code") or ""),
+            # Keep the error text that grounded the env verdict — the
+            # report must show its evidence, not just the verdict.
+            "evidence_excerpt": str(
+                (o.get("result") or {}).get("content") or ""
+            )[:240],
         }
         for o in observations if str(o.get("tool", "")) in WEB_TOOLS
     ]
@@ -501,6 +542,11 @@ async def evaluate(
             for e in event_list
         ]
         observations = collect_observations(typed)
+        stderr_log = REPORT_ROOT / "sidecar.stderr.log"
+        if stderr_log.exists():
+            attach_executor_error_evidence(
+                observations, stderr_log.read_text(encoding="utf-8"),
+            )
         output_text = str((run.get("output") or {}).get("text") or "")
         failure_code = str(
             ((run.get("failure_summary") or {}) or {}).get("code")
@@ -580,6 +626,12 @@ def recompute_report(report_dir: Path) -> int:
                 for etype, payload_json in events
             ]
             observations = collect_observations(typed)
+            stderr_log = report_dir / "sidecar.stderr.log"
+            if stderr_log.exists():
+                attach_executor_error_evidence(
+                    observations,
+                    stderr_log.read_text(encoding="utf-8"),
+                )
             if spec.get("body_required") and not spec.get(
                     "required_fetch_url"):
                 spec["required_fetch_any_of"] = list(

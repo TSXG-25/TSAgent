@@ -22,7 +22,8 @@
               "url": "https://en.wikipedia.org/wiki/DuckDuckGo"
             },
             "ok": false,
-            "error_code": "TOOL_EXECUTION_FAILED"
+            "error_code": "TOOL_EXECUTION_FAILED",
+            "evidence_excerpt": "PlanExecutor: step 0 (web_fetch) 失败: Error: Refusing to fetch https://en.wikipedia.org/wiki/DuckDuckGo (refusing to fetch 'en.wikipedia.org' — it resolves to non-public address 198.18.0.159). This server blocks requests to private/internal "
           },
           {
             "tool": "web_search",
@@ -30,7 +31,8 @@
               "query": "DuckDuckGo launch year"
             },
             "ok": false,
-            "error_code": "INVALID_TOOL_ARGUMENT"
+            "error_code": "INVALID_TOOL_ARGUMENT",
+            "evidence_excerpt": "PlanExecutor: step 0 (web_search) 失败: 1 validation error for web_search\nmax_results\n  Input should be greater than or equal to 5 [type=greater_than_equal, input_value='1', input_type=str]\n    For further information visit https://errors.pyd"
           },
           {
             "tool": "web_search",
@@ -38,7 +40,8 @@
               "query": "DuckDuckGo launch year"
             },
             "ok": true,
-            "error_code": ""
+            "error_code": "",
+            "evidence_excerpt": "1. DuckDuckGo - Wikipedia\n   URL: https://en.wikipedia.org/wiki/DuckDuckGo\n   Summary: DuckDuckGois an American software company founded by Gabriel Weinberg in 2008 that focuses on Internet privacy. It is known for focusing on user privacy "
           }
         ],
         "evidence_urls": [

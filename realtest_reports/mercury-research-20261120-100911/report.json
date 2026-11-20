@@ -22,7 +22,8 @@
               "query": "DuckDuckGo privacy policy"
             },
             "ok": false,
-            "error_code": "INVALID_TOOL_ARGUMENT"
+            "error_code": "INVALID_TOOL_ARGUMENT",
+            "evidence_excerpt": "PlanExecutor: step 0 (web_search) 失败: 1 validation error for web_search\nmax_results\n  Input should be greater than or equal to 5 [type=greater_than_equal, input_value='3', input_type=str]\n    For further information visit https://errors.pyd"
           },
           {
             "tool": "web_search",
@@ -30,7 +31,8 @@
               "query": "DuckDuckGo privacy policy"
             },
             "ok": true,
-            "error_code": ""
+            "error_code": "",
+            "evidence_excerpt": "说明：DuckDuckGo MCP 不提供精确时间过滤；时间范围仅作为搜索词提示，结果可能包含该范围之外的页面。\n1. DuckDuckGo Privacy Policy\n   URL: https://duckduckgo.com/privacy\n   Summary: DuckDuckGo(officially, Duck Duck Go, Inc.) has been an independent company since our founding in 2008. "
           }
         ],
         "evidence_urls": [

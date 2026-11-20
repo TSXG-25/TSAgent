@@ -105,7 +105,8 @@ def test_executor_path_fetch_attempts_are_counted():
     """PlanExecutor tool calls land as task_started/completed pairs, not
     continuation.observations — the evaluator must see them (DeepSeek's
     t1 run fetched every given URL this way and the report showed zero
-    fetch attempts)."""
+    fetch attempts). A bare TOOL_EXECUTION_FAILED without error text is
+    NOT proof of environment cause — the generic catch-all earns gap."""
     events = _task_events([
         ("loop-1", "web_fetch", "read", "https://a.example/x",
          "failed", "TOOL_EXECUTION_FAILED"),
@@ -120,6 +121,32 @@ def test_executor_path_fetch_attempts_are_counted():
     checks = compute_checks(obs, "", "read sources", spec)
     assert checks["fetch_attempted"] is True
     assert checks["required_fetch_attempted"] is True
+    assert checks["fetch_env_blocked"] is False
+    assert classify("COMPLETED", checks, spec) == "capability_gap"
+
+
+def test_executor_fetch_env_verdict_grounded_in_stderr_evidence():
+    """The SSRF refusal text lives on sidecar stderr, not in
+    task_completed. Once real error lines are attached, the same run
+    classifies as env-blocked on evidence — not a widened rule."""
+    from scripts.real_eval_mercury import attach_executor_error_evidence
+    events = _task_events([
+        ("loop-1", "web_fetch", "read", "https://a.example/x",
+         "failed", "TOOL_EXECUTION_FAILED"),
+    ])
+    obs = collect_observations(events)
+    stderr = (
+        "PlanExecutor: step 0 (web_fetch) 失败: Error: Refusing to fetch "
+        "https://a.example/x (refusing to fetch 'a.example' — it resolves "
+        "to non-public address 198.18.0.9). This server blocks requests "
+        "to private/internal addresses to prevent SSRF.\n"
+    )
+    attach_executor_error_evidence(obs, stderr)
+    spec = {
+        "body_required": True,
+        "required_fetch_any_of": ["https://a.example/x"],
+    }
+    checks = compute_checks(obs, "", "read sources", spec)
     assert checks["fetch_env_blocked"] is True
     assert classify("COMPLETED", checks, spec) == "provider_or_environment"
 

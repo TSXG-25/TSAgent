@@ -22,7 +22,8 @@
               "query": "AI领域 2026年11月19日 新闻"
             },
             "ok": true,
-            "error_code": ""
+            "error_code": "",
+            "evidence_excerpt": "说明：DuckDuckGo MCP 不提供精确时间过滤；时间范围仅作为搜索词提示，结果可能包含该范围之外的页面。\n1. 2026年11月最新科技新闻：Ai领域合集 - 腾讯网\n   URL: https://news.qq.com/rain/a/20261116A0AUTT00\n   Summary: 2026年11月，人工智能领域在模型迭代、智能体应用、算力布局与安全治理方向上持续推进，前沿模型与国产技术同步取得新进展。以下按方向梳理 ...\n   Source: duck"
           }
         ],
         "evidence_urls": [

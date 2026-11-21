@@ -644,3 +644,55 @@ api 1.43.0 对齐后恢复。
   到 `stderr-run-53bf….log`——10 个 task_started target 与 10 条
   拒绝行一一对应，`provider_or_environment` 判定证据化复原。
 - 回归 +1（9 项）：同 host 不同 path 的串证据用例。
+
+### Mercury computer-use（browser_* 工具）验收（2026-11-21）
+
+现状核对：`browser_navigate/snapshot/extract/screenshot`（R1）与
+`browser_click/type`（R2，走审批门）来自 424de980，此前**零测试**。
+暴露条件是 playwright 可导入——项目 `.venv` 有 1.64.1，anaconda /
+Framework python 没有（此前真实评测用的 anaconda，模型看不到这组
+工具）。桌面端默认 `VITE_TSAGENT_SIDECAR_CMD ?? "python3"`，实际
+用哪个解释器取决于 PATH，未改。
+
+修复（生产代码）：
+1. **SSRF 边界（P1）**：原实现 `page.goto(url)` 无任何校验，R1 无
+   审批即可访问 127.0.0.1 / 169.254.169.254 / file://。先实现的
+   `context.route` 拦截在真实 Chromium 冒烟中被证伪——**重定向跳
+   不经过 route handler**（302→内网的请求真实到达了内网服务）。
+   改为 `agent/browser/egress.py` 出口代理：Chromium 全部流量走进
+   程内 HTTP/CONNECT 代理，建连前解析并校验每个地址、直连已校验
+   地址（顺带封住 DNS rebinding）；`--proxy-bypass-list=<-loopback>`
+   去掉 Chromium 对 loopback 的默认直连；非 http(s) scheme 导航前
+   拒绝。放行开关与 web_fetch 共用 `DDG_ALLOW_PRIVATE_URLS`。被拒
+   → `BROWSER_URL_BLOCKED`。
+2. **截图写入授权绕过**：builtin 路径不经 `validate_tool_action`，
+   未授权写文件时也能写工作区。现：无 FILE_MUTATION 授权不暴露
+   `browser_screenshot`；每次调用按 `filesystem.write` 校验路径在
+   授权范围内。
+
+测试：`tests/test_browser_tools.py`（分派、R1 免审批、R2 无通道/
+拒绝/批准、截图授权与范围、run 结束关闭会话）+
+`tests/test_browser_egress.py`（地址策略、代理 wire 行为、真实
+Chromium 下 2 跳重定向/子资源/fetch/https 隧道对禁止源**零请求**）。
+.venv 34 passed；anaconda 32 passed / 2 skipped（无 playwright）。
+.venv 全量 1037 passed / 17 skipped。
+
+真实冒烟（.venv + qwen3:8b；本机 DNS 为 198.18 fake-IP，公网读取
+用 `DDG_ALLOW_PRIVATE_URLS=1` 放行，内网拦截由离线 Chromium 用例
+证明）：
+- 124931「用浏览器读 example.com」：模型选 `web_fetch`，COMPLETED，
+  答案正确——未走浏览器路径。
+- 125201 / 131152「截图到 shots/example.png」：**截图文件真实生成**
+  （78 KB），但 run 判 FAILED_TERMINAL：缺 `outcome:FILE_MUTATION`
+  证据。131152 中模型随后用 shell 试图自证，全部
+  ARTIFACT_OUTPUT_UNVERIFIED。
+
+**未解决（阻塞项）**：builtin 浏览器调用绕过执行器——不进 plan、
+无 task_started/completed、无 execution_evidence/fresh_evidence。
+后果：截图类请求必判失败；浏览器读取不能满足 grounding；R2 点击
+只有审批记录、无执行记录。修法需让 browser_* 走执行器管线（或在
+builtin 路径登记同等证据），属架构决策，待定。
+
+归档说明：124931、131152 的 eval.db 在归档时被我误删 WAL 文件
+导致数据丢失，仅保留 result.json（工具调用与输出摘要）与
+sidecar.stderr.log；125201 的 eval.db 完整。

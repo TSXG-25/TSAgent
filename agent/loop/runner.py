@@ -690,7 +690,10 @@ class AgentLoop:
             error_code="APPROVAL_NOT_GRANTED",
         )
 
-    async def _dispatch_browser(self, call, run_context, workspace) -> dict[str, Any]:
+    async def _dispatch_browser(
+        self, call, run_context, workspace, state, user_input,
+    ) -> dict[str, Any]:
+        from agent.browser.egress import EgressBlocked
         from agent.browser.session import BrowserSession
 
         try:
@@ -705,6 +708,18 @@ class AgentLoop:
             elif call.name == "browser_screenshot":
                 if workspace is None:
                     raise RuntimeError("browser_screenshot 需要工作区")
+                violation = EffectAuthorization.from_state(
+                    state, user_input
+                ).validate_tool_action(
+                    "filesystem.write", {"path": str(args["path"])}
+                )
+                if violation:
+                    state.setdefault("authorization_denials", []).append({
+                        "tool": call.name, "args": dict(args),
+                        "reason": violation,
+                    })
+                    return _tool_message(call, violation, ok=False,
+                                         error_code="EFFECT_SCOPE_VIOLATION")
                 target = workspace.resolve_path(
                     str(args["path"]), must_exist=False
                 )
@@ -718,6 +733,9 @@ class AgentLoop:
             else:
                 return _tool_message(call, f"未知浏览器工具 {call.name}",
                                      ok=False, error_code="UNKNOWN_TOOL")
+        except EgressBlocked as exc:
+            return _tool_message(call, str(exc), ok=False,
+                                 error_code="BROWSER_URL_BLOCKED")
         except Exception as exc:
             return _tool_message(
                 call, "浏览器操作失败: " + stable_error_message(exc),
@@ -776,7 +794,7 @@ class AgentLoop:
                 if denied is not None:
                     return denied
                 return await self._dispatch_browser(
-                    call, run_context, workspace
+                    call, run_context, workspace, state, user_input
                 )
             if tool.mcp is not None:
                 from agent.interruption import await_interruptibly

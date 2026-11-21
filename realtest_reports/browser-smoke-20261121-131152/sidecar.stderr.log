@@ -1,0 +1,20 @@
+[sidecar]   🧠 规划上下文: 无上下文
+[sidecar]   🧠 意图: Intent(domain=unknown, action=browse, target='https://example.com/', entities=['example.png'], current_file='', exec=True)
+[sidecar] 
+[sidecar] ==================================================
+[sidecar] ⏱️  启动耗时 Profile
+[sidecar] ==================================================
+[sidecar]   TOTAL                  0.00s
+[sidecar] ==================================================
+[sidecar] 
+[sidecar] ==================================================
+[sidecar] ⚡ 执行耗时 Profile
+[sidecar] ==================================================
+[sidecar]   loop_llm              56.33s  █████████░░░░░░░░░░░ 48%
+[sidecar]   intent_route          49.48s  ████████░░░░░░░░░░░░ 42%
+[sidecar]   executor               0.12s  ░░░░░░░░░░░░░░░░░░░░ 0%
+[sidecar]   init                   0.00s  ░░░░░░░░░░░░░░░░░░░░ 0%
+[sidecar]   EXCLUSIVE TOTAL      105.93s
+[sidecar]   WALL TOTAL           117.29s
+[sidecar] ==================================================
+[sidecar] 

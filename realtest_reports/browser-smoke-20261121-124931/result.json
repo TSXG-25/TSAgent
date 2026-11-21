@@ -1,0 +1,17 @@
+{
+  "run_id": "run-4b9ee962dcd5464689033cacf465b0b6",
+  "status": "COMPLETED",
+  "elapsed_s": 129.4,
+  "tool_calls": [
+    {
+      "tool": "web_fetch",
+      "input": {
+        "url": "https://example.com/"
+      },
+      "ok": true,
+      "error_code": null,
+      "content": "Example DomainThis domain is for use in documentation examples without needing permission. This is not a service; avoid relying on it for testing and monitoring purposes.\n\n---\n[Content info: Showing c"
+    }
+  ],
+  "output": "页面标题是 \"Example Domain\"，正文第一句话是 \"This domain is for use in documentation examples without needing permission.\" 来源 URL 是 [https://example.com/](https://example.com/)。"
+}

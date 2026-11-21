@@ -1,0 +1,44 @@
+{
+  "run_id": "run-cf5f3db7d51843c68cbf04dcff0b5883",
+  "status": "FAILED_TERMINAL",
+  "elapsed_s": 120.2,
+  "tool_calls": [
+    {
+      "tool": "shell",
+      "input": {
+        "cmd": "ls -la"
+      },
+      "ok": false,
+      "error_code": "ARTIFACT_OUTPUT_UNVERIFIED",
+      "content": "ARTIFACT_OUTPUT_UNVERIFIED: shots/example.png"
+    },
+    {
+      "tool": "shell",
+      "input": {
+        "query": "ls -la"
+      },
+      "ok": false,
+      "error_code": "ARTIFACT_OUTPUT_UNVERIFIED",
+      "content": ""
+    },
+    {
+      "tool": "shell",
+      "input": {
+        "query": "ls -la shots/example.png"
+      },
+      "ok": false,
+      "error_code": "ARTIFACT_OUTPUT_UNVERIFIED",
+      "content": ""
+    },
+    {
+      "tool": "shell",
+      "input": {
+        "query": "touch shots/example.png"
+      },
+      "ok": false,
+      "error_code": "ARTIFACT_OUTPUT_UNVERIFIED",
+      "content": ""
+    }
+  ],
+  "output": "目标尚未完成，缺少可验证证据：outcome:FILE_MUTATION、deliverable:file1:1、acceptance:reply_mentions_artifact_path:用户要求告知产物所在位置或路径。本次不会报告为成功。"
+}

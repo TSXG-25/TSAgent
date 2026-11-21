@@ -255,6 +255,10 @@ def build_toolset(
         import playwright.async_api  # noqa: F401
 
         for name, verb, risk, spec in _BROWSER_TOOLS:
+            # A screenshot writes a workspace file — same grant as
+            # filesystem.write; the path is checked per call in dispatch.
+            if name == "browser_screenshot" and not authorization.allows_file_mutation:
+                continue
             tools[name] = LoopTool(
                 name=name, executor_tool=None, verb=verb, spec=spec,
                 concurrency_safe=False,

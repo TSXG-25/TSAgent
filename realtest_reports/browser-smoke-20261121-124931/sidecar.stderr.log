@@ -1,0 +1,21 @@
+[sidecar]   🧠 规划上下文: 无上下文
+[sidecar]   🧠 意图: Intent(domain=web, action=read, target='https://example.com/', entities=[], current_file='', exec=True)
+[sidecar] 交接记忆写入超时，不影响当前回答
+[sidecar] 
+[sidecar] ==================================================
+[sidecar] ⏱️  启动耗时 Profile
+[sidecar] ==================================================
+[sidecar]   TOTAL                  0.00s
+[sidecar] ==================================================
+[sidecar] 
+[sidecar] ==================================================
+[sidecar] ⚡ 执行耗时 Profile
+[sidecar] ==================================================
+[sidecar]   loop_llm              47.44s  ███████░░░░░░░░░░░░░ 37%
+[sidecar]   intent_route          40.62s  ██████░░░░░░░░░░░░░░ 32%
+[sidecar]   executor              10.87s  █░░░░░░░░░░░░░░░░░░░ 9%
+[sidecar]   init                   0.00s  ░░░░░░░░░░░░░░░░░░░░ 0%
+[sidecar]   EXCLUSIVE TOTAL       98.93s
+[sidecar]   WALL TOTAL           126.56s
+[sidecar] ==================================================
+[sidecar] 

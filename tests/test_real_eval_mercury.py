@@ -206,3 +206,19 @@ def test_raw_unicode_citation_matches_percent_encoded_source():
     assert checks["fetched_required_url"] is True
     assert checks["fabricated_urls"] == []
     assert classify("COMPLETED", checks, spec) == "capability_met"
+
+
+def test_log_delta_uses_byte_offset_after_cjk_prefix(tmp_path):
+    """Earlier runs' Chinese log lines make byte size > char count; the
+    per-run delta must still start exactly at this run's first line."""
+    from scripts.real_eval_mercury import read_log_delta
+
+    log = tmp_path / "sidecar.stderr.log"
+    log.write_text("🧠 意图: 读取正文，交接记忆写入超时\n", encoding="utf-8")
+    offset = log.stat().st_size
+    with log.open("a", encoding="utf-8") as fh:
+        fh.write("PlanExecutor: step 0 (web_fetch) 失败: Refusing to fetch "
+                 "https://a.example/x (SSRF)\n")
+    delta = read_log_delta(log, offset)
+    assert delta.startswith("PlanExecutor: step 0 (web_fetch)")
+    assert "意图" not in delta

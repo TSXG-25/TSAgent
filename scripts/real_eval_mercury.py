@@ -202,6 +202,14 @@ def terminal_continuation(events: list[dict]) -> dict:
     return {}
 
 
+def read_log_delta(path: Path, byte_offset: int) -> str:
+    """Text appended to ``path`` after ``byte_offset``.  The offset comes
+    from ``stat().st_size`` — a BYTE count — so slice the bytes, then
+    decode; slicing decoded text by it would cut into this run's lines
+    whenever earlier output held multi-byte (e.g. CJK) characters."""
+    return path.read_bytes()[byte_offset:].decode("utf-8", "replace")
+
+
 def _obs_key(obs: dict) -> tuple[str, str, bool]:
     """Dedup key for a tool observation across the two record shapes —
     continuation.observations carry `input.url`/`input.query`, executor
@@ -554,7 +562,7 @@ async def evaluate(
         # in this session, and a refusal for run A's URL must not be
         # credited to run B's retry of the same URL.
         if stderr_log.exists():
-            delta = stderr_log.read_text(encoding="utf-8")[stderr_pos:]
+            delta = read_log_delta(stderr_log, stderr_pos)
             (REPORT_ROOT / f"stderr-{run_id}.log").write_text(
                 delta, encoding="utf-8",
             )

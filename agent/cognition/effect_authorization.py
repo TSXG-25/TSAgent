@@ -78,6 +78,7 @@ _EXECUTION_TOOLS = frozenset({
     "process.execute",
 })
 _MUTATION_TOOLS = frozenset({
+    "browser.screenshot",
     "filesystem.write",
     "filesystem.edit",
     "filesystem.copy",
@@ -93,7 +94,7 @@ _PLAN_REQUIREMENTS = {
     RequestedOutcome.FILE_MUTATION: (
         frozenset({
             "filesystem.write", "filesystem.copy", "filesystem.move",
-            "filesystem.delete",
+            "filesystem.delete", "browser.screenshot",
         }),
         frozenset({"write", "modify", "copy", "move", "delete"}),
     ),

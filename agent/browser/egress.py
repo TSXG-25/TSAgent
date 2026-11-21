@@ -76,7 +76,8 @@ class EgressProxy:
         for address in addresses:
             if not self._policy(host, port, address):
                 raise EgressBlocked(
-                    f"refusing to load {host}:{port}: resolves to non-public "
+                    f"BROWSER_URL_BLOCKED: refusing to load {host}:{port}: "
+                    f"resolves to non-public "
                     f"address {address} (SSRF protection; set "
                     f"{ALLOW_PRIVATE_ENV}=1 for trusted local deployments)"
                 )

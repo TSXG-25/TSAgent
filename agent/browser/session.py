@@ -22,7 +22,8 @@ def check_scheme(url: str) -> None:
     scheme = urlparse(url).scheme
     if scheme not in {"http", "https"}:
         raise EgressBlocked(
-            f"refusing to load {url}: scheme {scheme!r} is not http(s)"
+            f"BROWSER_URL_BLOCKED: refusing to load {url}: "
+            f"scheme {scheme!r} is not http(s)"
         )
 
 
@@ -35,9 +36,8 @@ class BrowserSession:
 
     @classmethod
     async def for_context(cls, run_context: Any) -> "BrowserSession":
-        existing = getattr(run_context, "browser_session", None)
-        if existing is not None:
-            return existing
+        if run_context.browser_session is not None:
+            return run_context.browser_session
         from playwright.async_api import async_playwright
 
         proxy = EgressProxy()
@@ -69,13 +69,16 @@ class BrowserSession:
             raise EgressBlocked(self._proxy.blocked[-1])
         return f"{await self.page.title()} — {self.page.url}"
 
+    @property
+    def url(self) -> str:
+        return self.page.url
+
     async def snapshot(self, limit: int = 4000) -> str:
         text = await self.page.inner_text("body")
         return text[:limit]
 
-    async def screenshot(self, path: str) -> str:
-        await self.page.screenshot(path=path, full_page=True)
-        return f"{self.page.url} → {path}"
+    async def screenshot(self) -> bytes:
+        return await self.page.screenshot(full_page=True)
 
     async def click(self, selector: str) -> str:
         await self.page.click(selector)

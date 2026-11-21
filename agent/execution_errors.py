@@ -49,6 +49,8 @@ def classify_execution_error(error: object) -> str:
             return code
     if "COMMAND_NONZERO_EXIT" in upper:
         return "COMMAND_NONZERO_EXIT"
+    if "BROWSER_URL_BLOCKED" in upper:
+        return "BROWSER_URL_BLOCKED"
     if "网络搜索功能不可用" in text or "未找到关于" in text:
         return "RESEARCH_TOOL_UNAVAILABLE"
     if "无法解码文件" in text or "请确保文件是文本格式" in text:

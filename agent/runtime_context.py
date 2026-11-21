@@ -339,6 +339,9 @@ class RunContext:
             if self.workspace is not None
             else None
         )
+        # Lazily opened by the first browser.* step; closed when the loop
+        # run ends (agent.loop.runner.AgentLoop.run).
+        self.browser_session: Any | None = None
         self.clock = time.time
         self.created_at = self.clock()
         self.diagnostics = RunDiagnosticsSink(scope_id=self.scope_id)

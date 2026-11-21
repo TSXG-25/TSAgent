@@ -126,35 +126,38 @@ def _browser_spec(name: str, desc: str, props: dict, required: list) -> dict:
     })
 
 
-# Browser tools are stateful (one playwright page per RunContext) — they
-# dispatch through the builtin path, like spawn_subtask.  Read ops are R1;
+# Browser tools run through the executor like every other effect: one
+# playwright page per RunContext (opened lazily, closed when the loop run
+# ends), task events, verifier and evidence.  Reads are R1 and record the
+# page URL as a source only when text came back; the screenshot is a
+# workspace write (verb "write", FILE_MUTATION grant + write scope);
 # click/type mutate remote state → R2 → approval gate.
-_BROWSER_TOOLS: tuple[tuple[str, str, str, dict], ...] = (
-    ("browser_navigate", "read", "R1", _browser_spec(
-        "browser_navigate", "打开网页并返回页面标题和 URL",
+_BROWSER_TOOLS: tuple[tuple[str, str, str, str, dict], ...] = (
+    ("browser_navigate", "browser.navigate", "read", "R1", _browser_spec(
+        "browser_navigate", "打开网页并返回页面标题和最终 URL（不读取正文）",
         {"url": {"type": "string", "description": "http(s) 地址"}},
         ["url"],
     )),
-    ("browser_snapshot", "read", "R1", _browser_spec(
+    ("browser_snapshot", "browser.snapshot", "read", "R1", _browser_spec(
         "browser_snapshot", "读取当前页面正文文本（截断返回）",
         {}, [],
     )),
-    ("browser_extract", "read", "R1", _browser_spec(
+    ("browser_extract", "browser.extract", "read", "R1", _browser_spec(
         "browser_extract", "读取指定 CSS 选择器元素的文本",
         {"selector": {"type": "string"}},
         ["selector"],
     )),
-    ("browser_screenshot", "read", "R1", _browser_spec(
-        "browser_screenshot", "截取当前页面保存到工作区文件",
+    ("browser_screenshot", "browser.screenshot", "write", "R1", _browser_spec(
+        "browser_screenshot", "截取当前页面整页 PNG，写入工作区文件",
         {"path": {"type": "string", "description": "工作区相对路径"}},
         ["path"],
     )),
-    ("browser_click", "execute", "R2", _browser_spec(
+    ("browser_click", "browser.click", "execute", "R2", _browser_spec(
         "browser_click", "点击页面元素（会改变页面/远端状态）",
         {"selector": {"type": "string"}},
         ["selector"],
     )),
-    ("browser_type", "execute", "R2", _browser_spec(
+    ("browser_type", "browser.type", "execute", "R2", _browser_spec(
         "browser_type", "在输入框填入文本（会改变页面/远端状态）",
         {"selector": {"type": "string"}, "text": {"type": "string"}},
         ["selector", "text"],
@@ -254,18 +257,20 @@ def build_toolset(
     try:
         import playwright.async_api  # noqa: F401
 
-        for name, verb, risk, spec in _BROWSER_TOOLS:
-            # A screenshot writes a workspace file — same grant as
-            # filesystem.write; the path is checked per call in dispatch.
-            if name == "browser_screenshot" and not authorization.allows_file_mutation:
+        for name, executor_tool, verb, risk, spec in _BROWSER_TOOLS:
+            writes = verb == "write"
+            if writes and not authorization.allows_file_mutation:
                 continue
             tools[name] = LoopTool(
-                name=name, executor_tool=None, verb=verb, spec=spec,
+                name=name, executor_tool=executor_tool, verb=verb, spec=spec,
                 concurrency_safe=False,
                 risk_level=risk,
-                permission_scope="network" if risk == "R1" else "remote",
-                side_effects=risk == "R2",
-                produces=("file",) if name == "browser_screenshot" else (),
+                permission_scope=(
+                    "workspace" if writes
+                    else "network" if risk == "R1" else "remote"
+                ),
+                side_effects=writes or risk == "R2",
+                produces=("file",) if writes else (),
             )
     except ImportError:
         pass

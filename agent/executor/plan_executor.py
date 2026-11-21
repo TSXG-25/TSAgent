@@ -22,6 +22,7 @@ from agent.task import ExecutionPlan, ExecutionStep
 from agent.tool_identity import CANONICAL_TOOL_ALIASES, registry_tool_name
 from agent.security import redact_sensitive_text
 from agent.execution_errors import classify_execution_error, stable_error_message
+from agent.failure.taxonomy import FailureCode
 from agent.registry.tool_registry import registry as tool_registry
 from agent.services.workspace_service import WorkspaceService
 from agent.interruption import (
@@ -42,6 +43,15 @@ _RESEARCH_TOOLS = frozenset({
     "web_fetch",
 })
 
+_BROWSER_STEPS = frozenset({
+    "browser.navigate",
+    "browser.snapshot",
+    "browser.extract",
+    "browser.screenshot",
+    "browser.click",
+    "browser.type",
+})
+
 _SOURCE_URL_PATTERN = re.compile(r"https?://[^\s\]\[<>()\"']+")
 
 
@@ -58,6 +68,7 @@ class PlanExecutor:
         workspace: Optional[WorkspaceService] = None,
         cancellation_view: CancellationView | None = None,
         repository_indexer=None,
+        open_browser=None,
     ) -> Dict[str, Any]:
         """执行 plan 的所有 steps。
 
@@ -113,6 +124,10 @@ class PlanExecutor:
             try:
                 if tool_name == "workspace":
                     result = await self._exec_workspace(step, args, workspace, variables)
+                elif tool_name.startswith("browser."):
+                    result = await self._exec_browser(
+                        tool_name, args, open_browser, workspace,
+                    )
                 elif tool_name == "repository":
                     result = await self._exec_tool(
                         tool_name,
@@ -165,7 +180,9 @@ class PlanExecutor:
                 # ── 收集世界状态痕迹（Verifier 的唯一输入，ADR-0012）──
                 # 写入是否真正生效由 ExecutionVerifier 在 Pipeline 末端判定，
                 # Tool 的返回字符串不代表成功。
-                if tool_name in {"filesystem.write", "filesystem.edit"}:
+                if tool_name in {
+                    "filesystem.write", "filesystem.edit", "browser.screenshot",
+                }:
                     files_written.append(str(args.get("path", "")))
                 elif tool_name in {
                     "filesystem.copy",
@@ -334,6 +351,7 @@ class PlanExecutor:
     def _validate_tools(plan: ExecutionPlan) -> None:
         """Reject unknown tool steps before any earlier step can create effects."""
         builtin = {
+            *_BROWSER_STEPS,
             "workspace",
             "repository",
             "knowledge",
@@ -418,6 +436,52 @@ class PlanExecutor:
             return {"path": str(resolved_path)}
         else:
             return {"path": spec}
+
+    @staticmethod
+    async def _exec_browser(
+        tool_name: str,
+        args: Dict[str, Any],
+        open_browser,
+        workspace: Optional[WorkspaceService],
+    ) -> Dict[str, Any]:
+        """Run one browser step on this Run's page.
+
+        Only page text actually read (snapshot/extract) is source evidence,
+        attributed to the page's real URL after redirects; navigating reads
+        nothing.  A screenshot is a workspace write like filesystem.write.
+        """
+        if open_browser is None:
+            raise RuntimeError(
+                f"{FailureCode.EXECUTION_ENVIRONMENT_UNAVAILABLE.value}: "
+                "this execution has no Run-scoped browser"
+            )
+        session = await open_browser()
+        if tool_name == "browser.navigate":
+            return {"content": await session.navigate(str(args["url"]))}
+        if tool_name in {"browser.snapshot", "browser.extract"}:
+            text = (
+                await session.snapshot()
+                if tool_name == "browser.snapshot"
+                else await session.extract(str(args["selector"]))
+            )
+            sources = [session.url] if text.strip() else []
+            return {"content": text, "_sources": sources}
+        if tool_name == "browser.screenshot":
+            if workspace is None:
+                raise RuntimeError(
+                    f"{FailureCode.EXECUTION_ENVIRONMENT_UNAVAILABLE.value}: "
+                    "browser.screenshot requires a Run workspace"
+                )
+            path = str(args["path"])
+            workspace.write_bytes(path, await session.screenshot())
+            return {"content": f"{session.url} → {path}"}
+        if tool_name == "browser.click":
+            return {"content": await session.click(str(args["selector"]))}
+        return {
+            "content": await session.type_text(
+                str(args["selector"]), str(args["text"])
+            )
+        }
 
     async def _exec_tool(
         self,

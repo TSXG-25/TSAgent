@@ -238,6 +238,17 @@ class WorkspaceService:
         message = self.write_text(path, text)
         return message, hashlib.sha256(text.encode("utf-8")).hexdigest()
 
+    def write_bytes(self, path: str | Path, data: bytes) -> str:
+        """Write a binary artifact (e.g. a browser screenshot) under this
+        Run's workspace — same guards and edit record as write_text."""
+        self._guard(path, operation="write")
+        full = self.resolve_path(path)
+        self._guard(full, operation="write")
+        full.parent.mkdir(parents=True, exist_ok=True)
+        full.write_bytes(data)
+        self.record_edit(self.relative_path(full))
+        return f"已写入 {path}"
+
     def write_text(
         self,
         path: str | Path,

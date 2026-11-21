@@ -14,7 +14,7 @@
 |---|---|---|
 | 演示模式 | `cd apps/desktop && npm run dev` | 前端使用内存 Mock 数据，顶栏显示 `DEMO` |
 | 浏览器 + 本地后端 | `.venv/bin/python -m agent.service.local_sidecar --http 8765`，再以 `VITE_AGENT_SERVICE_MODE=local` 启动前端 | 后端只监听 127.0.0.1，并校验 Host/Origin |
-| 桌面应用（Tauri） | `npm run tauri dev` | Tauri 通过 stdio 拉起 Python 后端，退出时一并结束后端 |
+| 桌面应用（Tauri） | `npm run tauri:dev` | Tauri 通过 stdio 拉起 Python 后端；脚本已按包目录推导 `VITE_TSAGENT_SIDECAR_CWD=../..` 与 `VITE_TSAGENT_SIDECAR_CMD=../../.venv/bin/python`（项目 venv，含 playwright）。自定义解释器时改用 `npm run tauri dev` 并自行导出这两个变量 |
 | 命令行 | `python main.py` | 不使用图形界面，直接调用 AgentService |
 
 模型提供方：DeepSeek（OpenAI 兼容接口）或本地 Ollama。可在「全局设置」中切换。连接失败时先重试 3 次，

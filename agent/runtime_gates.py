@@ -15,6 +15,11 @@ _FRESH_TOOLS = frozenset({
     "web_news_search",
     "web_deep_search",
     "web_fetch",
+    # A browser read is evidence only when it returned page text; the
+    # executor then records the page's actual URL. browser.navigate alone
+    # reads nothing and is deliberately absent.
+    "browser.snapshot",
+    "browser.extract",
 })
 def is_empty_or_punctuation_request(text: str) -> bool:
     """Recognize input that cannot carry a task or question.
@@ -65,10 +70,10 @@ def has_fresh_evidence(state: Mapping[str, Any]) -> bool:
                 continue
             if _observation_tools(observation) & _FRESH_TOOLS:
                 sources = observation.get("sources")
-                return bool(
-                    isinstance(sources, (list, tuple, set))
-                    and any(str(url).strip() for url in sources)
-                )
+                if isinstance(sources, (list, tuple, set)) and any(
+                    str(url).strip() for url in sources
+                ):
+                    return True
     return False
 
 

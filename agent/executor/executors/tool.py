@@ -54,6 +54,7 @@ class ToolExecutor:
             workspace=workspace,
             cancellation_view=cancellation_view,
             repository_indexer=repository_indexer,
+            open_browser=context.get_var("open_browser"),
         )
         after = snapshot_outputs(target.output_paths, workspace) if target.output_paths else {}
         changed = [path for path, digest in after.items() if before.get(path) != digest]

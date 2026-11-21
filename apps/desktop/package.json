@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "tauri:dev": "VITE_TSAGENT_SIDECAR_CWD=\"$PWD/../..\" VITE_TSAGENT_SIDECAR_CMD=\"$PWD/../../.venv/bin/python\" tauri dev",
     "build": "tsc -b && vite build",
     "test:desktop4c": "node scripts/run-ts-test.mjs tests/desktop4cE2EHarness.ts",
     "preview": "vite preview",

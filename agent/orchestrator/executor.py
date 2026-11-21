@@ -6,7 +6,10 @@
 """
 import time
 from dataclasses import replace
+from functools import partial
 from typing import Any
+
+from agent.browser.session import BrowserSession
 
 from agent.state import AgentState
 from agent.executor.contract import executor_factory
@@ -107,6 +110,10 @@ class ExecutionStage:
             context.set_var("event_bus", run_context.event_bus)
             context.set_var("cancellation_view", run_context.cancellation_view)
             context.set_var("repository_indexer", run_context.repository_indexer)
+            context.set_var(
+                "open_browser",
+                partial(BrowserSession.for_context, run_context),
+            )
         context.set_var("execution_plan", plan)
         context.set_var("conversation_snapshot", state.get("conversation_snapshot"))
         context.set_var("conversation_reference_type", state.get("conversation_reference_type"))

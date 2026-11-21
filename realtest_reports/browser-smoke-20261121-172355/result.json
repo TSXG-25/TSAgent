@@ -1,0 +1,35 @@
+{
+  "run_id": "run-adbadf381a7c42d291c4442c76f31bb3",
+  "status": "COMPLETED",
+  "elapsed_s": 90.2,
+  "tool_calls": [
+    {
+      "tool": "browser.navigate",
+      "input": {
+        "url": "http://127.0.0.1:8899/"
+      },
+      "ok": true,
+      "error_code": null,
+      "content": "smoke page — http://127.0.0.1:8899/"
+    },
+    {
+      "tool": "browser.screenshot",
+      "input": {
+        "path": "shots/page.png"
+      },
+      "ok": true,
+      "error_code": null,
+      "content": "http://127.0.0.1:8899/ → shots/page.png"
+    },
+    {
+      "tool": "browser.screenshot",
+      "input": {
+        "query": "shots/page.png"
+      },
+      "ok": true,
+      "error_code": "",
+      "content": ""
+    }
+  ],
+  "output": "页面已成功打开并截图保存到 `shots/page.png`。\n\n已生成/更新本地文件：\n/Users/tsxg/Desktop/tsagent-real-eval/.sidecar-ws/shots/page.png\n\nsmoke page — http://127.0.0.1:8899/\n\n未自动验证：文件内容应满足：页面截图\n未自动验证：文件内容应满足：页面截图"
+}

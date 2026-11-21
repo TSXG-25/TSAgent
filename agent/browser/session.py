@@ -33,6 +33,39 @@ class BrowserSession:
         self._browser = browser
         self._proxy = proxy
         self.page = page
+        # The proxy answers a refused request with a marked 403 document,
+        # and an aborted navigation leaves Chromium's error page; neither
+        # is page content, and reading either would turn the boundary's
+        # refusal into fake source evidence.  Refusals are tracked via the
+        # response's BLOCKED_HEADER, never by matching body text.
+        self._refused_document = False
+        self._aborted_document = False
+        self._document_loaded = False
+        page.on("response", self._track_document_refusal)
+
+    def _track_document_refusal(self, response: Any) -> None:
+        request = response.request
+        if request.resource_type != "document" or request.frame.parent_frame is not None:
+            return
+        self._document_loaded = True
+        self._refused_document = (
+            response.headers.get(BLOCKED_HEADER.lower()) is not None
+        )
+        if not self._refused_document:
+            self._aborted_document = False
+
+    def _require_readable_document(self) -> None:
+        if self._refused_document:
+            raise EgressBlocked(
+                f"BROWSER_URL_BLOCKED: {self.page.url} was refused by the "
+                "egress boundary — the current document is the refusal "
+                "notice, not page content"
+            )
+        if self._aborted_document:
+            raise RuntimeError(
+                f"the current document is a navigation error page, not "
+                f"page content ({self.page.url})"
+            )
 
     @classmethod
     async def for_context(cls, run_context: Any) -> "BrowserSession":
@@ -57,11 +90,17 @@ class BrowserSession:
     async def navigate(self, url: str) -> str:
         check_scheme(url)
         seen = len(self._proxy.blocked)
+        self._document_loaded = False
         try:
             response = await self.page.goto(url, wait_until="domcontentloaded")
         except Exception:
-            # A refused CONNECT (https hop into a blocked address) aborts the
-            # navigation — report the boundary's reason, not net::ERR_*.
+            # No main-frame document arrived → the current doc is an error
+            # page, not content.  A refused CONNECT (https hop into a
+            # blocked address) reports the boundary's reason, not net::ERR_*.
+            if not self._document_loaded:
+                self._aborted_document = True
+                if len(self._proxy.blocked) > seen:
+                    self._refused_document = True
             if len(self._proxy.blocked) > seen:
                 raise EgressBlocked(self._proxy.blocked[-1]) from None
             raise
@@ -74,6 +113,7 @@ class BrowserSession:
         return self.page.url
 
     async def snapshot(self, limit: int = 4000) -> str:
+        self._require_readable_document()
         text = await self.page.inner_text("body")
         return text[:limit]
 
@@ -89,6 +129,7 @@ class BrowserSession:
         return f"typed into {selector}"
 
     async def extract(self, selector: str, limit: int = 4000) -> str:
+        self._require_readable_document()
         text = await self.page.inner_text(selector)
         return text[:limit]
 

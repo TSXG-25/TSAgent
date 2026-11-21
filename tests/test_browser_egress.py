@@ -186,7 +186,7 @@ def test_navigate_maps_proxy_refusal_response_to_blocked():
         proxy.blocked.append("refusing to load 10.0.0.1:80: non-public")
         return SimpleNamespace(headers={BLOCKED_HEADER.lower(): "1"})
 
-    session = BrowserSession(None, None, proxy, SimpleNamespace(goto=goto))
+    session = BrowserSession(None, None, proxy, SimpleNamespace(goto=goto, on=lambda *a, **k: None))
     with pytest.raises(EgressBlocked, match="non-public"):
         asyncio.run(session.navigate("http://example.com/redirect"))
 
@@ -198,7 +198,7 @@ def test_navigate_maps_refused_tunnel_error_to_blocked():
         proxy.blocked.append("refusing to load 10.0.0.1:443: non-public")
         raise RuntimeError("net::ERR_TUNNEL_CONNECTION_FAILED")
 
-    session = BrowserSession(None, None, proxy, SimpleNamespace(goto=goto))
+    session = BrowserSession(None, None, proxy, SimpleNamespace(goto=goto, on=lambda *a, **k: None))
     with pytest.raises(EgressBlocked, match="non-public"):
         asyncio.run(session.navigate("https://example.com/"))
 
@@ -209,7 +209,7 @@ def test_navigate_keeps_unrelated_errors():
     async def goto(url, wait_until):
         raise RuntimeError("net::ERR_NAME_NOT_RESOLVED")
 
-    session = BrowserSession(None, None, proxy, SimpleNamespace(goto=goto))
+    session = BrowserSession(None, None, proxy, SimpleNamespace(goto=goto, on=lambda *a, **k: None))
     with pytest.raises(RuntimeError, match="NAME_NOT_RESOLVED"):
         asyncio.run(session.navigate("https://nx.example/"))
 
@@ -243,11 +243,20 @@ def test_chromium_redirect_and_subresources_cannot_reach_forbidden_origin(origin
             assert "ALLOWED-BODY" in await session.snapshot()
             with pytest.raises(EgressBlocked):
                 await session.navigate(f"{base}/redirect")
+            # the proxy's refusal document is not a readable source
+            with pytest.raises(EgressBlocked):
+                await session.snapshot()
             await session.navigate(f"{base}/embed")
             await page.wait_for_timeout(500)
+            # refused subresources do not mark the real main document
+            assert "EMBED" in await session.snapshot()
             with pytest.raises(EgressBlocked):
                 await session.navigate(
                     f"https://127.0.0.1:{forbidden.port}/")
+            # a refused CONNECT aborts onto Chromium's error page —
+            # not a readable document either
+            with pytest.raises(EgressBlocked):
+                await session.snapshot()
         finally:
             await session.close()
 

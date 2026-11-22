@@ -160,37 +160,23 @@ def test_blocked_url_surfaces_stable_code(tmp_path):
 
 # --- a refused main document is not a readable source -------------------
 
-class _FakeResponse:
-    def __init__(self, headers, *, main_frame=True):
-        self._headers = headers
-        self.request = SimpleNamespace(
-            resource_type="document",
-            frame=SimpleNamespace(parent_frame=None if main_frame else object()),
-        )
-
-    @property
-    def headers(self):
-        return self._headers
-
-
 class _RefusalPage:
-    """Fake page: goto() loads the proxy's marked refusal document — the
-    same shape Chromium sees when the egress boundary answers 403."""
+    """Fake page: goto() commits the proxy's marked refusal document at the
+    target URL — the same shape Chromium sees when the boundary answers its
+    403 page with the BLOCKED_META marker."""
 
     refusal_text = "Blocked by the TSAgent egress boundary (SSRF protection)"
 
     def __init__(self):
         self.url = "about:blank"
-        self._handler = None
-
-    def on(self, event, handler):
-        self._handler = handler
+        self.refused = True
 
     async def goto(self, url, wait_until=None):
         self.url = url
-        response = _FakeResponse({BLOCKED_HEADER.lower(): "1"})
-        self._handler(response)
-        return response
+        return SimpleNamespace(headers={BLOCKED_HEADER.lower(): "1"})
+
+    async def evaluate(self, script):
+        return {"url": self.url, "refused": self.refused}
 
     async def inner_text(self, selector):
         return self.refusal_text
@@ -222,39 +208,35 @@ def test_refused_document_produces_no_source(tmp_path, name, args):
     assert state["fresh_evidence"] is False
 
 
-def test_refusal_tracking_scopes_to_main_frame_document():
+def test_refusal_marker_makes_document_unreadable():
+    """The proxy's BLOCKED_META marker identifies the refusal document;
+    a normal document stays readable."""
     session = _refusal_session()
-    blocked = {BLOCKED_HEADER.lower(): "1"}
-    session._track_document_refusal(_FakeResponse(blocked))
     with pytest.raises(EgressBlocked):
         asyncio.run(session.snapshot())
-    # an iframe refusal must not clear or set the main document mark
-    session._track_document_refusal(_FakeResponse(blocked, main_frame=False))
-    with pytest.raises(EgressBlocked):
-        asyncio.run(session.snapshot())
-    # a refused subresource is not the document either
-    subresource = _FakeResponse(blocked)
-    subresource.request.resource_type = "image"
-    session._track_document_refusal(subresource)
-    with pytest.raises(EgressBlocked):
-        asyncio.run(session.snapshot())
-    # a real main-frame document lifts the mark
-    session._track_document_refusal(_FakeResponse({}))
+    page = _RefusalPage()
+    page.refused = False  # a real page has no marker
+    session = BrowserSession(
+        object(), object(), SimpleNamespace(blocked=[]), page)
     assert asyncio.run(session.snapshot()) == _RefusalPage.refusal_text
 
 
 class _AbortPage(_RefusalPage):
-    """goto() fails — Chromium is left on its error page (net::ERR_*).
-    `on_navigate` runs inside goto, like the proxy recording a refusal
-    while the navigation is in flight."""
+    """goto() commits Chromium's error page, then fails — the shape of any
+    aborted navigation (refused CONNECT, DNS, …).  `on_navigate` runs
+    inside goto, like the proxy recording a refusal in flight."""
 
     error = "net::ERR_NAME_NOT_RESOLVED"
     on_navigate = None
 
+    def __init__(self):
+        super().__init__()
+        self.refused = False
+
     async def goto(self, url, wait_until=None):
-        self.url = url
         if self.on_navigate is not None:
             self.on_navigate()
+        self.url = "chrome-error://chromewebdata/"
         raise RuntimeError(self.error)
 
 
@@ -276,12 +258,37 @@ def test_refused_connect_leaves_no_readable_document():
     session = BrowserSession(object(), object(), proxy, page)
 
     async def go():
+        # the caller still gets the boundary's reason …
         with pytest.raises(EgressBlocked):
             await session.navigate("https://10.0.0.1/")
-        with pytest.raises(EgressBlocked):
+        # … and the committed error page is not a readable document
+        with pytest.raises(RuntimeError, match="navigation error page"):
             await session.snapshot()
 
     asyncio.run(go())
+
+
+@pytest.mark.parametrize("name,args", [
+    ("browser_snapshot", {}),
+    ("browser_extract", {"selector": "article"}),
+])
+def test_error_document_produces_no_source(tmp_path, name, args):
+    """Allowed page → 302/click → refused hop commits the error document;
+    reading it must fail, never producing sources or evidence."""
+    orch, state, tools, events = _loop_env(tmp_path)
+    proxy = SimpleNamespace(blocked=[])
+    page = _AbortPage()
+    page.error = "net::ERR_TUNNEL_CONNECTION_FAILED"
+    page.on_navigate = lambda: proxy.blocked.append(
+        "refusing to load 10.0.0.1:443")
+    orch.run_context.browser_session = BrowserSession(
+        object(), object(), proxy, page)
+    _call(orch, state, tools, "browser_navigate", {"url": "http://allowed.example/"})
+    msg = _call(orch, state, tools, name, args, index=2)
+    assert "navigation error page" in msg["content"]
+    assert events[-1][1]["status"] == "failed"
+    assert state["plan"] == []
+    assert state["fresh_evidence"] is False
 
 
 def test_screenshot_writes_verified_file_with_evidence(tmp_path):

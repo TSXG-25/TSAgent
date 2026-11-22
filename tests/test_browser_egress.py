@@ -70,7 +70,12 @@ class _Origin:
                     self.send_header("Location", origin.redirect_to)
                     self.end_headers()
                     return
-                if self.path == "/embed":
+                if self.path == "/link":
+                    body = (
+                        f'<body>LINK<a id="go" href="{origin.link_to}">'
+                        "go</a></body>"
+                    )
+                elif self.path == "/embed":
                     body = (
                         f'<body>EMBED<img src="{origin.redirect_to}">'
                         f'<script>fetch("{origin.redirect_to}x")'
@@ -86,6 +91,7 @@ class _Origin:
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         self.port = self.server.server_address[1]
         self.redirect_to = ""
+        self.link_to = ""
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
 
     def close(self):
@@ -246,16 +252,29 @@ def test_chromium_redirect_and_subresources_cannot_reach_forbidden_origin(origin
             # the proxy's refusal document is not a readable source
             with pytest.raises(EgressBlocked):
                 await session.snapshot()
+            # a 302 hop into a refused CONNECT commits the error page
+            forbidden_https = f"https://127.0.0.1:{forbidden.port}/"
+            allowed.redirect_to = forbidden_https
+            with pytest.raises(EgressBlocked):
+                await session.navigate(f"{base}/redirect")
+            with pytest.raises(RuntimeError, match="navigation error page"):
+                await session.snapshot()
+            # so does a click-initiated navigation into a refused hop —
+            # commit events cover navigations that bypass navigate()
+            allowed.link_to = forbidden_https
+            await session.navigate(f"{base}/link")
+            await page.click("#go", no_wait_after=True)
+            await page.wait_for_timeout(500)
+            assert page.url.startswith("chrome-error://")
+            with pytest.raises(RuntimeError, match="navigation error page"):
+                await session.snapshot()
             await session.navigate(f"{base}/embed")
             await page.wait_for_timeout(500)
             # refused subresources do not mark the real main document
             assert "EMBED" in await session.snapshot()
             with pytest.raises(EgressBlocked):
-                await session.navigate(
-                    f"https://127.0.0.1:{forbidden.port}/")
-            # a refused CONNECT aborts onto Chromium's error page —
-            # not a readable document either
-            with pytest.raises(EgressBlocked):
+                await session.navigate(forbidden_https)
+            with pytest.raises(RuntimeError, match="navigation error page"):
                 await session.snapshot()
         finally:
             await session.close()

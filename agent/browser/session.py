@@ -15,7 +15,12 @@ from __future__ import annotations
 from typing import Any
 from urllib.parse import urlparse
 
-from agent.browser.egress import BLOCKED_HEADER, EgressBlocked, EgressProxy
+from agent.browser.egress import (
+    BLOCKED_HEADER,
+    BLOCKED_META,
+    EgressBlocked,
+    EgressProxy,
+)
 
 
 def check_scheme(url: str) -> None:
@@ -33,39 +38,52 @@ class BrowserSession:
         self._browser = browser
         self._proxy = proxy
         self.page = page
-        # The proxy answers a refused request with a marked 403 document,
-        # and an aborted navigation leaves Chromium's error page; neither
-        # is page content, and reading either would turn the boundary's
-        # refusal into fake source evidence.  Refusals are tracked via the
-        # response's BLOCKED_HEADER, never by matching body text.
-        self._refused_document = False
-        self._aborted_document = False
-        self._document_loaded = False
-        page.on("response", self._track_document_refusal)
 
-    def _track_document_refusal(self, response: Any) -> None:
-        request = response.request
-        if request.resource_type != "document" or request.frame.parent_frame is not None:
-            return
-        self._document_loaded = True
-        self._refused_document = (
-            response.headers.get(BLOCKED_HEADER.lower()) is not None
+    async def _document_state(self) -> dict:
+        """The document that is committed right now, probed at read time.
+
+        Response/commit events race with the read — a refused CONNECT can
+        commit Chromium's error page *after* goto() already raised, and
+        click-triggered navigations never pass through navigate() at all.
+        So readability is not tracked state: a chrome-error page is a
+        navigation failure, and a page carrying the proxy's BLOCKED_META
+        marker is the refusal document.  Neither is page content; reading
+        either would fake source evidence.
+        """
+        return await self.page.evaluate(
+            "() => ({url: location.href, refused: !!"
+            f"document.querySelector('meta[name=\"{BLOCKED_META}\"]')}})"
         )
-        if not self._refused_document:
-            self._aborted_document = False
 
-    def _require_readable_document(self) -> None:
-        if self._refused_document:
-            raise EgressBlocked(
-                f"BROWSER_URL_BLOCKED: {self.page.url} was refused by the "
-                "egress boundary — the current document is the refusal "
-                "notice, not page content"
-            )
-        if self._aborted_document:
-            raise RuntimeError(
-                f"the current document is a navigation error page, not "
-                f"page content ({self.page.url})"
-            )
+    async def _read(self, selector: str, limit: int) -> str:
+        """Probe the committed document, then read its text.  Either call
+        can hit "Execution context was destroyed" while a navigation is
+        committing — wait for the page to settle and retry."""
+        for attempt in range(3):
+            try:
+                state = await self._document_state()
+                url = str(state.get("url") or "")
+                if url.startswith("chrome-error://"):
+                    raise RuntimeError(
+                        f"the current document is a navigation error "
+                        f"page, not page content ({url})"
+                    )
+                if state.get("refused"):
+                    raise EgressBlocked(
+                        f"BROWSER_URL_BLOCKED: {url} was refused by the "
+                        "egress boundary — the current document is the "
+                        "refusal notice, not page content"
+                    )
+                return (await self.page.inner_text(selector))[:limit]
+            except Exception as exc:
+                if "Execution context was destroyed" not in str(exc) or attempt == 2:
+                    raise
+                try:
+                    await self.page.wait_for_load_state(
+                        "domcontentloaded", timeout=2000
+                    )
+                except Exception:
+                    pass
 
     @classmethod
     async def for_context(cls, run_context: Any) -> "BrowserSession":
@@ -90,17 +108,11 @@ class BrowserSession:
     async def navigate(self, url: str) -> str:
         check_scheme(url)
         seen = len(self._proxy.blocked)
-        self._document_loaded = False
         try:
             response = await self.page.goto(url, wait_until="domcontentloaded")
         except Exception:
-            # No main-frame document arrived → the current doc is an error
-            # page, not content.  A refused CONNECT (https hop into a
-            # blocked address) reports the boundary's reason, not net::ERR_*.
-            if not self._document_loaded:
-                self._aborted_document = True
-                if len(self._proxy.blocked) > seen:
-                    self._refused_document = True
+            # A refused CONNECT (https hop into a blocked address) aborts the
+            # navigation — report the boundary's reason, not net::ERR_*.
             if len(self._proxy.blocked) > seen:
                 raise EgressBlocked(self._proxy.blocked[-1]) from None
             raise
@@ -113,9 +125,7 @@ class BrowserSession:
         return self.page.url
 
     async def snapshot(self, limit: int = 4000) -> str:
-        self._require_readable_document()
-        text = await self.page.inner_text("body")
-        return text[:limit]
+        return await self._read("body", limit)
 
     async def screenshot(self) -> bytes:
         return await self.page.screenshot(full_page=True)
@@ -129,9 +139,7 @@ class BrowserSession:
         return f"typed into {selector}"
 
     async def extract(self, selector: str, limit: int = 4000) -> str:
-        self._require_readable_document()
-        text = await self.page.inner_text(selector)
-        return text[:limit]
+        return await self._read(selector, limit)
 
     async def close(self) -> None:
         await self._browser.close()

@@ -15,6 +15,7 @@ connection carries exactly one checked request.
 from __future__ import annotations
 
 import asyncio
+import html
 import ipaddress
 import os
 import socket
@@ -23,6 +24,7 @@ from urllib.parse import urlsplit
 
 ALLOW_PRIVATE_ENV = "DDG_ALLOW_PRIVATE_URLS"
 BLOCKED_HEADER = "X-TSAgent-Egress-Blocked"
+BLOCKED_META = "x-tsagent-egress-blocked"
 
 Address = ipaddress.IPv4Address | ipaddress.IPv6Address
 
@@ -139,10 +141,18 @@ class EgressProxy:
 
     @staticmethod
     async def _refuse(writer, status: int, reason: str) -> None:
-        body = reason.encode("utf-8")
+        # The refusal document carries BLOCKED_META so a later read can
+        # recognise it from the DOM — response headers are invisible to
+        # the page, and body-text guessing is not a boundary signal.
+        body = (
+            '<!doctype html><meta name="' + BLOCKED_META + '" content="1">'
+            "<title>Blocked</title><body>"
+            + html.escape(reason)
+            + "</body>"
+        ).encode("utf-8")
         writer.write(
             f"HTTP/1.1 {status} Blocked\r\n{BLOCKED_HEADER}: 1\r\n"
-            f"Content-Type: text/plain; charset=utf-8\r\n"
+            f"Content-Type: text/html; charset=utf-8\r\n"
             f"Content-Length: {len(body)}\r\nConnection: close\r\n\r\n"
             .encode("latin-1") + body
         )

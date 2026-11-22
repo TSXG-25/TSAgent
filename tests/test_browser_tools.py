@@ -21,6 +21,7 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -28,7 +29,7 @@ pytest.importorskip("playwright.async_api")  # browser tools need playwright
 
 import tests.test_ha_r1_harness as harness  # noqa: E402
 from agent.browser.egress import BLOCKED_HEADER, EgressBlocked  # noqa: E402
-from agent.browser.session import BrowserSession  # noqa: E402
+from agent.browser.session import BrowserRead, BrowserSession  # noqa: E402
 from agent.llm import ToolCall  # noqa: E402
 from agent.loop.runner import AgentLoop  # noqa: E402
 from agent.loop.toolset import build_toolset  # noqa: E402
@@ -60,11 +61,11 @@ class FakeSession:
 
     async def snapshot(self, limit=4000):
         self.calls.append(("snapshot",))
-        return self.text
+        return BrowserRead(text=self.text[:limit], url=self.url)
 
     async def extract(self, selector, limit=4000):
         self.calls.append(("extract", selector))
-        return self.text
+        return BrowserRead(text=self.text[:limit], url=self.url)
 
     async def screenshot(self):
         self.calls.append(("screenshot",))
@@ -145,6 +146,25 @@ def test_empty_page_text_is_not_source_evidence(tmp_path):
     assert state["fresh_evidence"] is False
 
 
+@pytest.mark.parametrize("name,args", [
+    ("browser_snapshot", {}),
+    ("browser_extract", {"selector": "article"}),
+])
+def test_source_stays_bound_to_read_when_page_navigates(tmp_path, name, args):
+    orch, state, tools, _ = _loop_env(tmp_path)
+    session = orch.run_context.browser_session
+
+    async def read_then_navigate(*args):
+        read = BrowserRead(text=PAGE_TEXT, url=PAGE_URL)
+        session.url = "https://next.example/"
+        return read
+
+    session.snapshot = session.extract = read_then_navigate
+    msg = _call(orch, state, tools, name, args)
+    assert PAGE_TEXT in msg["content"]
+    assert state["plan"][0]["observations"][0]["sources"] == [PAGE_URL]
+
+
 def test_blocked_url_surfaces_stable_code(tmp_path):
     orch, state, tools, events = _loop_env(tmp_path)
 
@@ -159,6 +179,17 @@ def test_blocked_url_surfaces_stable_code(tmp_path):
 
 
 # --- a refused main document is not a readable source -------------------
+
+class _ReadHandle:
+    def __init__(self, value):
+        self.value = value
+
+    async def json_value(self):
+        return self.value
+
+    async def dispose(self):
+        pass
+
 
 class _RefusalPage:
     """Fake page: goto() commits the proxy's marked refusal document at the
@@ -175,11 +206,11 @@ class _RefusalPage:
         self.url = url
         return SimpleNamespace(headers={BLOCKED_HEADER.lower(): "1"})
 
-    async def evaluate(self, script):
-        return {"url": self.url, "refused": self.refused}
-
-    async def inner_text(self, selector):
-        return self.refusal_text
+    async def wait_for_function(self, script, *, arg):
+        return _ReadHandle({
+            "url": self.url, "refused": self.refused,
+            "text": self.refusal_text,
+        })
 
 
 def _refusal_session():
@@ -218,7 +249,47 @@ def test_refusal_marker_makes_document_unreadable():
     page.refused = False  # a real page has no marker
     session = BrowserSession(
         object(), object(), SimpleNamespace(blocked=[]), page)
-    assert asyncio.run(session.snapshot()) == _RefusalPage.refusal_text
+    assert asyncio.run(session.snapshot()).text == _RefusalPage.refusal_text
+
+
+def test_read_retries_destroyed_context_and_load_timeout_only():
+    from playwright.async_api import Error, TimeoutError
+
+    page = _RefusalPage()
+    page.refused = False
+    read = _ReadHandle({"url": PAGE_URL, "refused": False, "text": PAGE_TEXT})
+    page.wait_for_function = AsyncMock(side_effect=[
+        Error("Execution context was destroyed"), read,
+    ])
+    page.wait_for_load_state = AsyncMock(side_effect=TimeoutError("load timed out"))
+    session = BrowserSession(None, None, None, page)
+    assert asyncio.run(session.snapshot()) == BrowserRead(PAGE_TEXT, PAGE_URL)
+    assert page.wait_for_function.await_count == 2
+
+
+def test_read_propagates_unrelated_load_error():
+    from playwright.async_api import Error
+
+    page = _RefusalPage()
+    page.wait_for_function = AsyncMock(side_effect=Error("Execution context was destroyed"))
+    page.wait_for_load_state = AsyncMock(side_effect=Error("UNRELATED_BROKEN_PROTOCOL"))
+    session = BrowserSession(None, None, None, page)
+    with pytest.raises(Error, match="UNRELATED_BROKEN_PROTOCOL"):
+        asyncio.run(session.snapshot())
+    assert page.wait_for_function.await_count == 1
+
+
+def test_read_propagates_unrelated_read_error():
+    from playwright.async_api import Error
+
+    page = _RefusalPage()
+    page.wait_for_function = AsyncMock(side_effect=Error("Target page has been closed"))
+    page.wait_for_load_state = AsyncMock()
+    session = BrowserSession(None, None, None, page)
+    with pytest.raises(Error, match="Target page has been closed"):
+        asyncio.run(session.snapshot())
+    assert page.wait_for_function.await_count == 1
+    page.wait_for_load_state.assert_not_awaited()
 
 
 class _AbortPage(_RefusalPage):

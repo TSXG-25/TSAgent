@@ -12,6 +12,7 @@ before navigation."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlparse
 
@@ -21,6 +22,22 @@ from agent.browser.egress import (
     EgressBlocked,
     EgressProxy,
 )
+
+
+@dataclass(frozen=True)
+class BrowserRead:
+    text: str
+    url: str
+
+
+_READ_DOCUMENT = """({selector, marker}) => {
+    const url = location.href;
+    const refused = !!document.querySelector(`meta[name="${marker}"]`);
+    if (refused || url.startsWith('chrome-error://'))
+        return {url, refused, text: ''};
+    const element = document.querySelector(selector);
+    return element ? {url, refused, text: element.innerText} : false;
+}"""
 
 
 def check_scheme(url: str) -> None:
@@ -39,50 +56,44 @@ class BrowserSession:
         self._proxy = proxy
         self.page = page
 
-    async def _document_state(self) -> dict:
-        """The document that is committed right now, probed at read time.
+    async def _read(self, selector: str, limit: int) -> BrowserRead:
+        """Wait for an element or a failed document, then capture validity,
+        text and URL in one synchronous browser evaluation.  The returned
+        object contains values, not a live DOM reference."""
+        from playwright.async_api import Error as PlaywrightError
+        from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
-        Response/commit events race with the read — a refused CONNECT can
-        commit Chromium's error page *after* goto() already raised, and
-        click-triggered navigations never pass through navigate() at all.
-        So readability is not tracked state: a chrome-error page is a
-        navigation failure, and a page carrying the proxy's BLOCKED_META
-        marker is the refusal document.  Neither is page content; reading
-        either would fake source evidence.
-        """
-        return await self.page.evaluate(
-            "() => ({url: location.href, refused: !!"
-            f"document.querySelector('meta[name=\"{BLOCKED_META}\"]')}})"
-        )
-
-    async def _read(self, selector: str, limit: int) -> str:
-        """Probe the committed document, then read its text.  Either call
-        can hit "Execution context was destroyed" while a navigation is
-        committing — wait for the page to settle and retry."""
         for attempt in range(3):
             try:
-                state = await self._document_state()
-                url = str(state.get("url") or "")
+                handle = await self.page.wait_for_function(
+                    _READ_DOCUMENT,
+                    arg={"selector": selector, "marker": BLOCKED_META},
+                )
+                try:
+                    read = await handle.json_value()
+                finally:
+                    await handle.dispose()
+                url = read["url"]
                 if url.startswith("chrome-error://"):
                     raise RuntimeError(
                         f"the current document is a navigation error "
                         f"page, not page content ({url})"
                     )
-                if state.get("refused"):
+                if read["refused"]:
                     raise EgressBlocked(
                         f"BROWSER_URL_BLOCKED: {url} was refused by the "
                         "egress boundary — the current document is the "
                         "refusal notice, not page content"
                     )
-                return (await self.page.inner_text(selector))[:limit]
-            except Exception as exc:
+                return BrowserRead(text=read["text"][:limit], url=url)
+            except PlaywrightError as exc:
                 if "Execution context was destroyed" not in str(exc) or attempt == 2:
                     raise
                 try:
                     await self.page.wait_for_load_state(
                         "domcontentloaded", timeout=2000
                     )
-                except Exception:
+                except PlaywrightTimeoutError:
                     pass
 
     @classmethod
@@ -124,7 +135,7 @@ class BrowserSession:
     def url(self) -> str:
         return self.page.url
 
-    async def snapshot(self, limit: int = 4000) -> str:
+    async def snapshot(self, limit: int = 4000) -> BrowserRead:
         return await self._read("body", limit)
 
     async def screenshot(self) -> bytes:
@@ -138,7 +149,7 @@ class BrowserSession:
         await self.page.fill(selector, text)
         return f"typed into {selector}"
 
-    async def extract(self, selector: str, limit: int = 4000) -> str:
+    async def extract(self, selector: str, limit: int = 4000) -> BrowserRead:
         return await self._read(selector, limit)
 
     async def close(self) -> None:

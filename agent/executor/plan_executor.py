@@ -459,13 +459,13 @@ class PlanExecutor:
         if tool_name == "browser.navigate":
             return {"content": await session.navigate(str(args["url"]))}
         if tool_name in {"browser.snapshot", "browser.extract"}:
-            text = (
+            read = (
                 await session.snapshot()
                 if tool_name == "browser.snapshot"
                 else await session.extract(str(args["selector"]))
             )
-            sources = [session.url] if text.strip() else []
-            return {"content": text, "_sources": sources}
+            sources = [read.url] if read.text.strip() else []
+            return {"content": read.text, "_sources": sources}
         if tool_name == "browser.screenshot":
             if workspace is None:
                 raise RuntimeError(

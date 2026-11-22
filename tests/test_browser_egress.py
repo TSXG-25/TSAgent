@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import ipaddress
+import json
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from types import SimpleNamespace
@@ -74,6 +75,15 @@ class _Origin:
                     body = (
                         f'<body>LINK<a id="go" href="{origin.link_to}">'
                         "go</a></body>"
+                    )
+                elif self.path == "/delayed":
+                    # No title exists until the next document commits. A
+                    # title read must wait through this navigation and
+                    # check the new document before returning its text.
+                    body = (
+                        '<body>Loading<script>setTimeout(() => location.href = '
+                        + json.dumps(origin.redirect_to)
+                        + ', 500)</script></body>'
                     )
                 elif self.path == "/embed":
                     body = (
@@ -246,7 +256,7 @@ def test_chromium_redirect_and_subresources_cannot_reach_forbidden_origin(origin
         try:
             base = f"http://127.0.0.1:{allowed.port}"
             assert (await session.navigate(f"{base}/")).startswith("ok")
-            assert "ALLOWED-BODY" in await session.snapshot()
+            assert "ALLOWED-BODY" in (await session.snapshot()).text
             with pytest.raises(EgressBlocked):
                 await session.navigate(f"{base}/redirect")
             # the proxy's refusal document is not a readable source
@@ -271,7 +281,7 @@ def test_chromium_redirect_and_subresources_cannot_reach_forbidden_origin(origin
             await session.navigate(f"{base}/embed")
             await page.wait_for_timeout(500)
             # refused subresources do not mark the real main document
-            assert "EMBED" in await session.snapshot()
+            assert "EMBED" in (await session.snapshot()).text
             with pytest.raises(EgressBlocked):
                 await session.navigate(forbidden_https)
             with pytest.raises(RuntimeError, match="navigation error page"):
@@ -282,3 +292,51 @@ def test_chromium_redirect_and_subresources_cannot_reach_forbidden_origin(origin
     asyncio.run(go())
     assert forbidden.hits == []
     assert any(path == "/redirect" for path, _ in allowed.hits)
+
+
+def test_chromium_read_during_navigation_cannot_publish_refusal_source(origins, tmp_path):
+    """A selector wait can finish on a different document. The entire
+    executor path must reject the refusal page, not publish its title."""
+    async_api = pytest.importorskip("playwright.async_api")
+    from agent.llm import ToolCall
+    from agent.loop.runner import AgentLoop
+    from tests.test_browser_tools import _loop_env
+
+    allowed, forbidden = origins
+    allowed.redirect_to = f"http://127.0.0.1:{forbidden.port}/secret"
+
+    async def go():
+        proxy = EgressProxy(policy=_policy(forbidden.port))
+        port = await proxy.start()
+        pw = await async_api.async_playwright().start()
+        try:
+            browser = await pw.chromium.launch(
+                proxy={"server": f"http://127.0.0.1:{port}"},
+                args=["--proxy-bypass-list=<-loopback>"],
+            )
+        except Exception as exc:
+            await pw.stop()
+            await proxy.close()
+            pytest.skip(f"Chromium unavailable: {exc}")
+        page = await (await browser.new_context()).new_page()
+        session = BrowserSession(pw, browser, proxy, page)
+        orch, state, tools, events = _loop_env(tmp_path)
+        orch.run_context.browser_session = session
+        try:
+            await session.navigate(f"http://127.0.0.1:{allowed.port}/delayed")
+            assert await page.locator("title").count() == 0
+            result = await AgentLoop(orch)._dispatch(
+                ToolCall(id="read", name="browser_extract", arguments={"selector": "title"}),
+                tools, state, index=1, run_context=orch.run_context,
+                user_id="u", user_input="读取页面标题",
+            )
+            assert "BROWSER_URL_BLOCKED" in result["content"]
+            assert events[-1][1]["status"] == "failed"
+            assert state["fresh_evidence"] is False
+            assert state["plan"] == []
+            assert page.url == allowed.redirect_to
+        finally:
+            await session.close()
+
+    asyncio.run(go())
+    assert forbidden.hits == []

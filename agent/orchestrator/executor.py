@@ -87,6 +87,7 @@ class ExecutionStage:
                 CancellationSafetyClass.BOUNDARY_ONLY,
             )
 
+        task_args = (task_dict.get("inputs") or {}).get("args") or {}
         self._emit_progress(
             "task_started",
             {
@@ -95,6 +96,7 @@ class ExecutionStage:
                 "executor": plan.executor,
                 "target": str(task_dict.get("target", "")),
                 "tool": str((task_dict.get("inputs") or {}).get("tool", "")),
+                "view_id": str(task_args.get("view_id", "")),
             },
         )
         context = ExecutionContext(
@@ -160,6 +162,7 @@ class ExecutionStage:
                 "task_id": str(task_dict.get("id", "")),
                 "verb": str(task_dict.get("verb", "")),
                 "executor": plan.executor,
+                "view_id": str(task_args.get("view_id", "")),
                 "status": "succeeded" if exec_result.success else "failed",
                 "verified": bool(
                     completed_action_result is not None

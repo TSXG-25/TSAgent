@@ -58,6 +58,7 @@ class FakeSession:
     view_id = "vw-fake"
     controller = "agent"
     doc_generation = 0
+    page = SimpleNamespace(url="about:blank")
 
     def __init__(self, run_context=None, *, text=PAGE_TEXT):
         self.run_context = run_context

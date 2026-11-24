@@ -254,3 +254,82 @@ async def test_service_claim_release_roundtrip(tmp_path) -> None:
             assert "FACT:" in result["content"]
     finally:
         await svc.close()
+
+
+# --- MB-07: URL-bearing results + Mars handoff ---------------------------
+
+def test_e2e_dual_window_research_then_mars_handoff(monkeypatch, tmp_path):
+    """A run bound to two windows reads a distinct fact from each; the
+    completed output carries both facts with their page URLs; delegating
+    to Mars hands the conclusions to the child model verbatim."""
+    import tests.test_ha_r1_harness as harness
+    from tests.test_browser_tools import FakeSession, _service, _wait_terminal
+    from agent.service.contracts import DelegateRunRequest, StartRunRequest
+    import asyncio
+
+    harness.setup_provider(monkeypatch, [
+        ("两个窗口各读一条事实",
+         harness.intent("两个窗口各读一条事实", action="read", source=True)),
+        ("两个窗口各读一条事实",
+         harness.call_tool("browser_extract", selector="#fact", view_id="vw-a")),
+        ("FACT-A", harness.call_tool("browser_extract", selector="#fact", view_id="vw-b")),
+        ("FACT-B", "A 页事实 FACT-A [a-url]，B 页事实 FACT-B [b-url]"),
+    ])
+
+    async def resolve(run_context, view_id=None):
+        windows = run_context.browser_windows
+        if not windows:
+            for vid, text in (("vw-a", "FACT-A"), ("vw-b", "FACT-B")):
+                session = FakeSession(run_context, text=text)
+                session.view_id = vid
+                windows[vid] = session
+        if view_id is not None:
+            return windows[view_id]
+        raise RuntimeError("must name view_id")
+
+    monkeypatch.setattr("agent.orchestrator.executor.resolve_browser", resolve)
+
+    # bound windows exist in the manager — fake pages, real binding path
+    from agent.browser.manager import BrowserManager
+
+    def fake_acquire(self, run_id, view_ids):
+        acquired = []
+        for vid, text in zip(view_ids, ("FACT-A", "FACT-B")):
+            session = FakeSession(text=text)
+            session.view_id = vid
+            acquired.append(session)
+            session.run_id = run_id
+        return acquired
+
+    monkeypatch.setattr(BrowserManager, "acquire", fake_acquire)
+
+    async def scenario():
+        service, store, _ = _service(tmp_path)
+        try:
+            run = await service.start_run(StartRunRequest(
+                tenant_id="t", user_id="u", session_id="s1",
+                request_id="r1", request_text="两个窗口各读一条事实",
+                origin_planet="mercury",
+                view_ids=("vw-a", "vw-b")))
+            head = await _wait_terminal(service, "t", "s1", run.run_id)
+            assert head.run_status == "COMPLETED", head
+            out = store.read_run_snapshot("t", run.run_id, session_id="s1").output
+            assert "FACT-A" in out.text and "FACT-B" in out.text
+
+            # research conclusions travel to Mars as the child's request —
+            # not a browser session, not a login state.
+            delegation = await service.delegate_run(DelegateRunRequest(
+                tenant_id="t", user_id="u", session_id="s1",
+                request_id="d1", parent_run_id=run.run_id,
+                target_planet="mars",
+                request_text="基于结论 FACT-A 与 FACT-B 继续实现"))
+            child = await service.start_run(StartRunRequest(
+                tenant_id="t", user_id="u", session_id="s1",
+                request_id="r2", request_text="基于结论 FACT-A 与 FACT-B 继续实现",
+                task_id=delegation["task_id"], origin_planet="mars"))
+            await _wait_terminal(service, "t", "s1", child.run_id, timeout=20)
+            assert delegation["task_id"]
+        finally:
+            await service.close()
+
+    asyncio.run(scenario())

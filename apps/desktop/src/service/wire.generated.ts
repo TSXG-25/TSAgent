@@ -71,6 +71,8 @@ export const LOCAL_TRANSPORT_METHODS = [
   "open_window",
   "close_window",
   "navigate_window",
+  "claim_window",
+  "release_window",
   "display_ticket",
   "shutdown",
 ] as const;
@@ -146,6 +148,8 @@ export interface WireMethods {
   open_window: { params: WireOpenWindowRequest; result: WireWindowSummaryDict };
   close_window: { params: WireCloseWindowRequest; result: WireClosedResult };
   navigate_window: { params: WireNavigateWindowRequest; result: WireWindowSummaryDict };
+  claim_window: { params: WireClaimWindowRequest; result: WireWindowSummaryDict };
+  release_window: { params: WireReleaseWindowRequest; result: WireWindowSummaryDict };
   display_ticket: { params: WireDisplayTicketRequest; result: WireDisplayTicketResult };
   shutdown: { params: WireEmptyParams; result: WireShutdownResult };
 }
@@ -241,6 +245,14 @@ export interface WireCancelRunRequest {
 export interface WireCapabilityEntry {
   capability: string;
   tools: string[];
+}
+
+export interface WireClaimWindowRequest {
+  tenant_id: string;
+  user_id: string;
+  session_id: string;
+  request_id: string;
+  view_id: string;
 }
 
 export interface WireCloseWindowRequest {
@@ -759,6 +771,14 @@ export interface WireRejectMotifRequest {
   session_id: string;
   request_id: string;
   motif_id: string;
+}
+
+export interface WireReleaseWindowRequest {
+  tenant_id: string;
+  user_id: string;
+  session_id: string;
+  request_id: string;
+  view_id: string;
 }
 
 export interface WireRemovedResult {

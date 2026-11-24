@@ -239,6 +239,30 @@ export class MercuryWindowBoard {
     }
   }
 
+  async claim(viewId: string): Promise<void> {
+    try {
+      const summary = await this.service.claimWindow(
+        { sessionId: this.sessionId }, viewId);
+      this.replace(viewId, summary);
+      this.notify();
+    } catch (error) {
+      this.err = String(error instanceof Error ? error.message : error);
+      this.notify();
+    }
+  }
+
+  async release(viewId: string): Promise<void> {
+    try {
+      const summary = await this.service.releaseWindow(
+        { sessionId: this.sessionId }, viewId);
+      this.replace(viewId, summary);
+      this.notify();
+    } catch (error) {
+      this.err = String(error instanceof Error ? error.message : error);
+      this.notify();
+    }
+  }
+
   /** Lazily attach a display channel for a visible pane. */
   async channelFor(viewId: string): Promise<DisplayChannel | null> {
     const entry = this.entry(viewId);

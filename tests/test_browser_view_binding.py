@@ -180,3 +180,77 @@ async def test_window_ids_survive_in_tool_args_and_observation() -> None:
         "view_ids": ["v-a", "v-b"],
     })
     assert request.view_ids == ("v-a", "v-b")
+
+
+async def test_occupied_window_rejects_third_run_with_holder(manager) -> None:
+    """Two parallel runs hold different windows; a third claim on an
+    occupied one fails naming the holding run."""
+    from agent.browser.manager import WindowOccupied
+
+    with _Site() as site:
+        a = await manager.open_window(scope_key="t:s", owner="workbench",
+                                      url=f"{site.url}/a")
+        b = await manager.open_window(scope_key="t:s", owner="workbench",
+                                      url=f"{site.url}/b")
+        c = await manager.open_window(scope_key="t:s", owner="workbench",
+                                      url=f"{site.url}/c")
+        manager.acquire("run-a", [a.view_id])
+        manager.acquire("run-b", [b.view_id])
+        with pytest.raises(WindowOccupied) as info:
+            manager.acquire("run-c", [a.view_id])
+        assert info.value.view_id == a.view_id
+        assert info.value.held_by == "run-a"
+        # run-c can still take the free window — conflicts are per-window
+        acquired = manager.acquire("run-c", [c.view_id])
+        assert acquired[0].view_id == c.view_id
+        # releasing run-a frees its window only; b stays bound and open
+        await manager.release_run("run-a")
+        assert a.run_id is None and not a.closed
+        assert b.run_id == "run-b" and not b.closed
+
+
+async def test_service_claim_release_roundtrip(tmp_path) -> None:
+    """Takeover blocks agent input; explicit release returns control."""
+    from agent.service.factory import create_default_agent_service
+    from agent.service import contracts as c
+    from agent.executor.plan_executor import PlanExecutor
+    from agent.browser.manager import resolve_browser
+    import functools
+
+    svc = create_default_agent_service(
+        tmp_path / "runtime.sqlite", workspace_root=tmp_path / "workspace"
+    )
+    try:
+        with _Site() as site:
+            opened = await svc.open_window(c.OpenWindowRequest(
+                tenant_id="t", user_id="u", session_id="s",
+                request_id="r1", url=site.url))
+            # bind to a run so controller starts as agent
+            manager = svc._browser_manager()
+            manager.acquire("run-1", [opened.view_id])
+            rc = _run_context(manager, "run-1")
+            rc.browser_windows = {
+                opened.view_id: manager.window(opened.view_id)}
+
+            claimed = await svc.claim_window(c.ClaimWindowRequest(
+                tenant_id="t", user_id="u", session_id="s",
+                request_id="r2", view_id=opened.view_id))
+            assert claimed.controller == "user"
+
+            # while user drives, agent input is refused
+            open_browser = functools.partial(resolve_browser, rc)
+            with pytest.raises(RuntimeError, match="WINDOW_UNDER_USER_CONTROL"):
+                await PlanExecutor._exec_browser(
+                    "browser.click", {"selector": "#x", "view_id": opened.view_id},
+                    open_browser, None)
+
+            released = await svc.release_window(c.ReleaseWindowRequest(
+                tenant_id="t", user_id="u", session_id="s",
+                request_id="r3", view_id=opened.view_id))
+            assert released.controller == "agent"
+            result = await PlanExecutor._exec_browser(
+                "browser.extract", {"selector": "#fact", "view_id": opened.view_id},
+                open_browser, None)
+            assert "FACT:" in result["content"]
+    finally:
+        await svc.close()

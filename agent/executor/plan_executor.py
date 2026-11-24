@@ -456,6 +456,11 @@ class PlanExecutor:
                 "this execution has no Run-scoped browser"
             )
         session = await open_browser(str(args["view_id"]) if args.get("view_id") else None)
+        if getattr(session, "controller", "agent") == "user":
+            raise RuntimeError(
+                "WINDOW_UNDER_USER_CONTROL: user has taken over "
+                f"{session.view_id} — the agent must not inject input"
+            )
         window_evidence = {"view_id": session.view_id}
         if tool_name == "browser.navigate":
             return {

@@ -661,6 +661,17 @@ class AgentLoop:
         # 审批身份用 Run 内调用序号：Provider 的 call.id 只做协议关联，
         # 缺省或重复时不能把不同动作绑到同一条审批记录。
         approval_id = f"{run_context.run_id}:call-{index}"
+        # A pending approval is bound to the window state it was asked
+        # about — manual navigation or a user takeover while it waits
+        # must not let a stale "yes" execute on a changed document.
+        window_state: tuple[str, int] | None = None
+        view_id = call.arguments.get("view_id")
+        if view_id:
+            window = (getattr(run_context, "browser_windows", None) or {}).get(
+                str(view_id)
+            )
+            if window is not None:
+                window_state = (window.controller, window.doc_generation)
         try:
             record = await delegation.request_approval(
                 run_context,
@@ -682,6 +693,23 @@ class AgentLoop:
                 ok=False, error_code="APPROVAL_FAILED",
             )
         status = record.status
+        if status == "APPROVED" and window_state is not None:
+            window = (getattr(run_context, "browser_windows", None) or {}).get(
+                str(view_id)
+            )
+            if window is None or (
+                window.controller, window.doc_generation
+            ) != window_state:
+                denials = state.setdefault("authorization_denials", [])
+                denials.append({
+                    "tool": tool.executor_tool or call.name,
+                    "args": dict(call.arguments),
+                    "reason": "window_state_changed",
+                })
+                return _tool_message(
+                    call, "窗口在审批期间已变更，审批作废", ok=False,
+                    error_code="APPROVAL_STALE",
+                )
         if status == "APPROVED":
             return None
         if status == "DENIED":

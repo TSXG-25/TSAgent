@@ -45,7 +45,9 @@ _KW = {"view_id": "vw-t", "owner": "run", "scope_key": "run:t"}
 
 
 def _window(page, proxy):
-    return BrowserWindow(page, proxy, **_KW)
+    window = BrowserWindow(page, proxy, **_KW)
+    window.controller = "agent"  # matches manager's run-window creation
+    return window
 
 
 def _window_of(orch):
@@ -54,6 +56,8 @@ def _window_of(orch):
 
 class FakeSession:
     view_id = "vw-fake"
+    controller = "agent"
+    doc_generation = 0
 
     def __init__(self, run_context=None, *, text=PAGE_TEXT):
         self.run_context = run_context
@@ -223,7 +227,9 @@ class _RefusalPage:
 def _refusal_session():
     """Real BrowserWindow whose page always lands on the refusal doc."""
     proxy = SimpleNamespace(blocked=["refusing to load 10.0.0.1:80"])
-    return BrowserWindow(_RefusalPage(), proxy, **_KW)
+    window = BrowserWindow(_RefusalPage(), proxy, **_KW)
+    window.controller = "agent"
+    return window
 
 
 @pytest.mark.parametrize("name,args", [
@@ -692,3 +698,48 @@ def test_e2e_two_runs_get_separate_browsers_closed_on_cancel(monkeypatch, tmp_pa
     assert a.calls == [("navigate", "https://a.example/")]
     assert b.calls == [("navigate", "https://b.example/"), ("snapshot",)]
     assert a.closed and b.closed
+
+
+def test_takeover_blocks_agent_input(tmp_path):
+    """MB-06: a window under user control refuses injected actions —
+    approved or not, no selector is ever clicked."""
+    orch, state, tools, events = _loop_env(tmp_path)
+    orch.run_context.delegation = _Approvals("APPROVED")
+    _window_of(orch).controller = "user"
+    msg = _call(orch, state, tools, "browser_click", {"selector": "#buy"})
+    assert "WINDOW_UNDER_USER_CONTROL" in msg["content"]
+    assert _window_of(orch).calls == []
+
+
+def test_approval_invalidated_by_manual_navigation(tmp_path):
+    """MB-06: a manual navigation while approval pends invalidates the
+    grant — the approved click never reaches the page."""
+    class _NavigatingApprovals(_Approvals):
+        async def request_approval(self, run_context, **kwargs):
+            run_context.browser_windows["vw-fake"].doc_generation += 1
+            return await super().request_approval(run_context, **kwargs)
+
+    orch, state, tools, events = _loop_env(tmp_path)
+    orch.run_context.delegation = _NavigatingApprovals("APPROVED")
+    msg = _call(
+        orch, state, tools, "browser_click",
+        {"selector": "#buy", "view_id": "vw-fake"},
+    )
+    assert "APPROVAL_STALE" in msg["content"]
+    assert _window_of(orch).calls == []
+
+
+def test_approval_invalidated_by_takeover(tmp_path):
+    class _TakingApprovals(_Approvals):
+        async def request_approval(self, run_context, **kwargs):
+            run_context.browser_windows["vw-fake"].controller = "user"
+            return await super().request_approval(run_context, **kwargs)
+
+    orch, state, tools, events = _loop_env(tmp_path)
+    orch.run_context.delegation = _TakingApprovals("APPROVED")
+    msg = _call(
+        orch, state, tools, "browser_click",
+        {"selector": "#buy", "view_id": "vw-fake"},
+    )
+    assert "APPROVAL_STALE" in msg["content"]
+    assert _window_of(orch).calls == []

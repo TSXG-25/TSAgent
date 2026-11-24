@@ -152,6 +152,8 @@ export class UnavailableDesktopAgentServiceClient implements DesktopAgentService
   async openWindow(): Promise<never> { throw this.error; }
   async closeWindow(): Promise<never> { throw this.error; }
   async navigateWindow(): Promise<never> { throw this.error; }
+  async claimWindow(): Promise<never> { throw this.error; }
+  async releaseWindow(): Promise<never> { throw this.error; }
   async displayTicket(): Promise<never> { throw this.error; }
 
   async listSessions(): Promise<SessionSummary[]> {

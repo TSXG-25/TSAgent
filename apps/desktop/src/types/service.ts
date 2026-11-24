@@ -1133,6 +1133,10 @@ export interface WindowClient {
   openWindow(scope: SessionScope, url?: string): Promise<WindowSummary>;
   closeWindow(scope: SessionScope, viewId: string): Promise<{ closed: boolean }>;
   navigateWindow(scope: SessionScope, viewId: string, action: string, url?: string): Promise<WindowSummary>;
+  /** Human takeover — agent input is refused until releaseWindow. */
+  claimWindow(scope: SessionScope, viewId: string): Promise<WindowSummary>;
+  /** Explicit return-to-agent. */
+  releaseWindow(scope: SessionScope, viewId: string): Promise<WindowSummary>;
   displayTicket(scope: SessionScope): Promise<DisplayTicket>;
 }
 

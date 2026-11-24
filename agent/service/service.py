@@ -3505,6 +3505,29 @@ class AgentService:
             ) from error
         return WindowSummary(**(await window.summary()))
 
+    async def claim_window(self, request: Any) -> Any:
+        """Human takeover — the window stops accepting agent input."""
+        self._ensure_open()
+        from .contracts import WindowSummary
+
+        window = self._session_window(
+            request.tenant_id, request.session_id, request.view_id
+        )
+        window.controller = "user"
+        return WindowSummary(**(await window.summary()))
+
+    async def release_window(self, request: Any) -> Any:
+        """Return a taken-over window to whoever owns it — agent if a
+        Run still holds it, user otherwise."""
+        self._ensure_open()
+        from .contracts import WindowSummary
+
+        window = self._session_window(
+            request.tenant_id, request.session_id, request.view_id
+        )
+        window.controller = "agent" if window.run_id else "user"
+        return WindowSummary(**(await window.summary()))
+
     async def close(self) -> None:
         import asyncio
 

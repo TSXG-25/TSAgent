@@ -253,7 +253,9 @@ async def _chromium_session(forbidden_port):
                 raise
             try:
                 page = await (await browser.new_context()).new_page()
-                yield BrowserWindow(page, proxy, view_id="vw-e2e", owner="run", scope_key="run:e2e")
+                window = BrowserWindow(page, proxy, view_id="vw-e2e", owner="run", scope_key="run:e2e")
+                window.controller = "agent"
+                yield window
             finally:
                 await browser.close()
     finally:

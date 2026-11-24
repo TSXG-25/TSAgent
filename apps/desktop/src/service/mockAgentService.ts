@@ -186,6 +186,12 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
   async navigateWindow(): Promise<never> {
     throw new AgentServiceClientError({ code: "UNSUPPORTED_OPERATION", message: "mock: no browser", retryable: false });
   }
+  async claimWindow(): Promise<never> {
+    throw new AgentServiceClientError({ code: "UNSUPPORTED_OPERATION", message: "mock: no browser", retryable: false });
+  }
+  async releaseWindow(): Promise<never> {
+    throw new AgentServiceClientError({ code: "UNSUPPORTED_OPERATION", message: "mock: no browser", retryable: false });
+  }
   async displayTicket(): Promise<never> {
     throw new AgentServiceClientError({ code: "UNSUPPORTED_OPERATION", message: "mock: no browser", retryable: false });
   }

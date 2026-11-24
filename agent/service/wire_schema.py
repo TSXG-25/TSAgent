@@ -240,6 +240,8 @@ WIRE_METHODS: dict[M, WireMethod] = {
     M.OPEN_WINDOW: _plain(c.OpenWindowRequest, WindowSummaryDict, "open_window"),
     M.CLOSE_WINDOW: _plain(c.CloseWindowRequest, ClosedResult, "close_window"),
     M.NAVIGATE_WINDOW: _plain(c.NavigateWindowRequest, WindowSummaryDict, "navigate_window"),
+    M.CLAIM_WINDOW: _plain(c.ClaimWindowRequest, WindowSummaryDict, "claim_window"),
+    M.RELEASE_WINDOW: _plain(c.ReleaseWindowRequest, WindowSummaryDict, "release_window"),
     M.DISPLAY_TICKET: WireMethod(c.DisplayTicketRequest, DisplayTicketResult),
     M.SHUTDOWN: WireMethod(EmptyParams, ShutdownResult),
 }

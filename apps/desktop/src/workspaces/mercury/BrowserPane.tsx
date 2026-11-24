@@ -109,6 +109,14 @@ export default function BrowserPane({
             onClick={(e) => { e.stopPropagation(); void board.navigate(summary.viewId, "forward"); }}>›</button>
           <button type="button" title="reload"
             onClick={(e) => { e.stopPropagation(); void board.navigate(summary.viewId, "reload"); }}>⟳</button>
+          <button type="button" className={summary.controller === "user" ? "nav-taken" : ""}
+            title={summary.controller === "user" ? t("mer.hand-back") : t("mer.take-over")}
+            onClick={(e) => {
+              e.stopPropagation();
+              void (summary.controller === "user"
+                ? board.release(summary.viewId)
+                : board.claim(summary.viewId));
+            }}>{summary.controller === "user" ? "◉" : "○"}</button>
           <button type="button" title={expanded ? t("mer.restore") : t("mer.expand")}
             onClick={(e) => { e.stopPropagation(); onExpand(); }}>{expanded ? "⊡" : "⊞"}</button>
           <button type="button" className="nav-win-close" title="close"
@@ -154,7 +162,7 @@ export default function BrowserPane({
       </div>
       <footer className="nav-win-foot">
         <code>{summary.url || "about:blank"}</code>
-        <span>{summary.controller !== "user" ? `agent:${summary.controller}` : ""}</span>
+        <span>{summary.controller === "user" ? t("mer.you-drive") : `agent`}</span>
       </footer>
     </section>
   );

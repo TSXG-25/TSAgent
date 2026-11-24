@@ -667,6 +667,18 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
     }));
   }
 
+  async claimWindow(scope: SessionScope, viewId: string) {
+    return mapWindow(await this.call("claim_window", {
+      ...this.ids(scope, "claim_window"), view_id: viewId,
+    }));
+  }
+
+  async releaseWindow(scope: SessionScope, viewId: string) {
+    return mapWindow(await this.call("release_window", {
+      ...this.ids(scope, "release_window"), view_id: viewId,
+    }));
+  }
+
   async displayTicket(scope: SessionScope) {
     return this.call("display_ticket", this.ids(scope, "display_ticket"));
   }

@@ -90,6 +90,8 @@ class LocalTransportMethod(str, Enum):
     OPEN_WINDOW = "open_window"
     CLOSE_WINDOW = "close_window"
     NAVIGATE_WINDOW = "navigate_window"
+    CLAIM_WINDOW = "claim_window"
+    RELEASE_WINDOW = "release_window"
     DISPLAY_TICKET = "display_ticket"
     SHUTDOWN = "shutdown"
 

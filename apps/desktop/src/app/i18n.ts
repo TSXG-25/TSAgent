@@ -236,6 +236,9 @@ const zh = {
   "mer.channel-dead": "实时通道不可用",
   "mer.new-window": "＋ 窗口",
   "mer.windows-na": "此客户端不支持真实窗口",
+  "mer.take-over": "接管",
+  "mer.hand-back": "交还 Agent",
+  "mer.you-drive": "你正在操作",
   // saturn
   "sat.ph-task": "定时任务内容…",
   "sat.ph-mins": "分钟",
@@ -660,6 +663,9 @@ const en: Record<keyof typeof zh, string> = {
   "mer.channel-dead": "Live channel unavailable",
   "mer.new-window": "+ window",
   "mer.windows-na": "This client has no live windows",
+  "mer.take-over": "Take over",
+  "mer.hand-back": "Hand back to Agent",
+  "mer.you-drive": "You're driving",
   // saturn
   "sat.ph-task": "Scheduled task…",
   "sat.ph-mins": "Minutes",

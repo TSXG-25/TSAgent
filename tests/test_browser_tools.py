@@ -180,17 +180,6 @@ def test_blocked_url_surfaces_stable_code(tmp_path):
 
 # --- a refused main document is not a readable source -------------------
 
-class _ReadHandle:
-    def __init__(self, value):
-        self.value = value
-
-    async def json_value(self):
-        return self.value
-
-    async def dispose(self):
-        pass
-
-
 class _RefusalPage:
     """Fake page: goto() commits the proxy's marked refusal document at the
     target URL — the same shape Chromium sees when the boundary answers its
@@ -206,11 +195,14 @@ class _RefusalPage:
         self.url = url
         return SimpleNamespace(headers={BLOCKED_HEADER.lower(): "1"})
 
-    async def wait_for_function(self, script, *, arg):
-        return _ReadHandle({
+    def locator(self, selector):
+        return self
+
+    async def evaluate_all(self, script, arg):
+        return {
             "url": self.url, "refused": self.refused,
             "text": self.refusal_text,
-        })
+        }
 
 
 def _refusal_session():
@@ -257,38 +249,38 @@ def test_read_retries_destroyed_context_and_load_timeout_only():
 
     page = _RefusalPage()
     page.refused = False
-    read = _ReadHandle({"url": PAGE_URL, "refused": False, "text": PAGE_TEXT})
-    page.wait_for_function = AsyncMock(side_effect=[
+    read = {"url": PAGE_URL, "refused": False, "text": PAGE_TEXT}
+    page.evaluate_all = AsyncMock(side_effect=[
         Error("Execution context was destroyed"), read,
     ])
     page.wait_for_load_state = AsyncMock(side_effect=TimeoutError("load timed out"))
     session = BrowserSession(None, None, None, page)
     assert asyncio.run(session.snapshot()) == BrowserRead(PAGE_TEXT, PAGE_URL)
-    assert page.wait_for_function.await_count == 2
+    assert page.evaluate_all.await_count == 2
 
 
 def test_read_propagates_unrelated_load_error():
     from playwright.async_api import Error
 
     page = _RefusalPage()
-    page.wait_for_function = AsyncMock(side_effect=Error("Execution context was destroyed"))
+    page.evaluate_all = AsyncMock(side_effect=Error("Execution context was destroyed"))
     page.wait_for_load_state = AsyncMock(side_effect=Error("UNRELATED_BROKEN_PROTOCOL"))
     session = BrowserSession(None, None, None, page)
     with pytest.raises(Error, match="UNRELATED_BROKEN_PROTOCOL"):
         asyncio.run(session.snapshot())
-    assert page.wait_for_function.await_count == 1
+    assert page.evaluate_all.await_count == 1
 
 
 def test_read_propagates_unrelated_read_error():
     from playwright.async_api import Error
 
     page = _RefusalPage()
-    page.wait_for_function = AsyncMock(side_effect=Error("Target page has been closed"))
+    page.evaluate_all = AsyncMock(side_effect=Error("Target page has been closed"))
     page.wait_for_load_state = AsyncMock()
     session = BrowserSession(None, None, None, page)
     with pytest.raises(Error, match="Target page has been closed"):
         asyncio.run(session.snapshot())
-    assert page.wait_for_function.await_count == 1
+    assert page.evaluate_all.await_count == 1
     page.wait_for_load_state.assert_not_awaited()
 
 

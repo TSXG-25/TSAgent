@@ -14,6 +14,7 @@ import asyncio
 import ipaddress
 import json
 import threading
+from contextlib import asynccontextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from types import SimpleNamespace
 
@@ -232,28 +233,39 @@ def test_navigate_keeps_unrelated_errors():
 
 # --- real Chromium behind the proxy ---------------------------------------
 
-def test_chromium_redirect_and_subresources_cannot_reach_forbidden_origin(origins):
+@asynccontextmanager
+async def _chromium_session(forbidden_port):
     async_api = pytest.importorskip("playwright.async_api")
+    proxy = EgressProxy(policy=_policy(forbidden_port))
+    port = await proxy.start()
+    try:
+        async with async_api.async_playwright() as pw:
+            try:
+                browser = await pw.chromium.launch(
+                    proxy={"server": f"http://127.0.0.1:{port}"},
+                    args=["--proxy-bypass-list=<-loopback>"],
+                )
+            except async_api.Error as exc:
+                if "Executable doesn't exist at" in str(exc):
+                    pytest.skip(f"Chromium not installed: {exc}")
+                raise
+            try:
+                page = await (await browser.new_context()).new_page()
+                yield BrowserSession(pw, browser, proxy, page)
+            finally:
+                await browser.close()
+    finally:
+        await proxy.close()
+
+
+def test_chromium_redirect_and_subresources_cannot_reach_forbidden_origin(origins):
     allowed, forbidden = origins
     forbidden_url = f"http://127.0.0.1:{forbidden.port}/secret"
     allowed.redirect_to = forbidden_url
 
     async def go():
-        proxy = EgressProxy(policy=_policy(forbidden.port))
-        port = await proxy.start()
-        pw = await async_api.async_playwright().start()
-        try:
-            browser = await pw.chromium.launch(
-                proxy={"server": f"http://127.0.0.1:{port}"},
-                args=["--proxy-bypass-list=<-loopback>"],
-            )
-        except Exception as exc:
-            await pw.stop()
-            await proxy.close()
-            pytest.skip(f"Chromium unavailable: {exc}")
-        page = await (await browser.new_context()).new_page()
-        session = BrowserSession(pw, browser, proxy, page)
-        try:
+        async with _chromium_session(forbidden.port) as session:
+            page = session.page
             base = f"http://127.0.0.1:{allowed.port}"
             assert (await session.navigate(f"{base}/")).startswith("ok")
             assert "ALLOWED-BODY" in (await session.snapshot()).text
@@ -286,18 +298,16 @@ def test_chromium_redirect_and_subresources_cannot_reach_forbidden_origin(origin
                 await session.navigate(forbidden_https)
             with pytest.raises(RuntimeError, match="navigation error page"):
                 await session.snapshot()
-        finally:
-            await session.close()
 
     asyncio.run(go())
     assert forbidden.hits == []
     assert any(path == "/redirect" for path, _ in allowed.hits)
 
 
-def test_chromium_read_during_navigation_cannot_publish_refusal_source(origins, tmp_path):
+@pytest.mark.parametrize("selector", ["title", "article"])
+def test_chromium_read_during_navigation_cannot_publish_refusal_source(origins, tmp_path, selector):
     """A selector wait can finish on a different document. The entire
     executor path must reject the refusal page, not publish its title."""
-    async_api = pytest.importorskip("playwright.async_api")
     from agent.llm import ToolCall
     from agent.loop.runner import AgentLoop
     from tests.test_browser_tools import _loop_env
@@ -306,27 +316,14 @@ def test_chromium_read_during_navigation_cannot_publish_refusal_source(origins, 
     allowed.redirect_to = f"http://127.0.0.1:{forbidden.port}/secret"
 
     async def go():
-        proxy = EgressProxy(policy=_policy(forbidden.port))
-        port = await proxy.start()
-        pw = await async_api.async_playwright().start()
-        try:
-            browser = await pw.chromium.launch(
-                proxy={"server": f"http://127.0.0.1:{port}"},
-                args=["--proxy-bypass-list=<-loopback>"],
-            )
-        except Exception as exc:
-            await pw.stop()
-            await proxy.close()
-            pytest.skip(f"Chromium unavailable: {exc}")
-        page = await (await browser.new_context()).new_page()
-        session = BrowserSession(pw, browser, proxy, page)
-        orch, state, tools, events = _loop_env(tmp_path)
-        orch.run_context.browser_session = session
-        try:
+        async with _chromium_session(forbidden.port) as session:
+            page = session.page
+            orch, state, tools, events = _loop_env(tmp_path)
+            orch.run_context.browser_session = session
             await session.navigate(f"http://127.0.0.1:{allowed.port}/delayed")
             assert await page.locator("title").count() == 0
             result = await AgentLoop(orch)._dispatch(
-                ToolCall(id="read", name="browser_extract", arguments={"selector": "title"}),
+                ToolCall(id="read", name="browser_extract", arguments={"selector": selector}),
                 tools, state, index=1, run_context=orch.run_context,
                 user_id="u", user_input="读取页面标题",
             )
@@ -335,8 +332,51 @@ def test_chromium_read_during_navigation_cannot_publish_refusal_source(origins, 
             assert state["fresh_evidence"] is False
             assert state["plan"] == []
             assert page.url == allowed.redirect_to
-        finally:
-            await session.close()
 
     asyncio.run(go())
     assert forbidden.hits == []
+
+
+def test_chromium_extract_reads_nested_shadow_dom(origins):
+    allowed, forbidden = origins
+
+    async def go():
+        async with _chromium_session(forbidden.port) as session:
+            url = f"http://127.0.0.1:{allowed.port}/"
+            await session.navigate(url)
+            await session.page.evaluate("""() => {
+                const host = document.createElement('div');
+                host.id = 'host';
+                document.body.append(host);
+                const root = host.attachShadow({mode: 'open'});
+                root.innerHTML = '<section></section>';
+                const nested = root.querySelector('section').attachShadow({mode: 'open'});
+                setTimeout(() => nested.innerHTML = '<article>SHADOW-CONTENT</article>', 100);
+            }""")
+            for selector in ('article', '#host article', 'article:has-text("SHADOW")'):
+                read = await session.extract(selector)
+                expected = await session.page.inner_text(selector)
+                assert read.text == expected == "SHADOW-CONTENT"
+                assert read.url == url
+            assert (await session.extract('article', limit=6)).text == "SHADOW"
+
+    asyncio.run(go())
+
+
+@pytest.mark.parametrize("missing", [True, False])
+def test_chromium_launch_only_skips_missing_executable(monkeypatch, missing):
+    async_api = pytest.importorskip("playwright.async_api")
+    message = "Executable doesn't exist at /missing/chromium" if missing else "BROKEN_PROTOCOL"
+
+    async def fail_launch(self, **kwargs):
+        raise async_api.Error(message)
+
+    monkeypatch.setattr(async_api.BrowserType, "launch", fail_launch)
+
+    async def go():
+        async with _chromium_session(9):
+            pytest.fail("launch unexpectedly succeeded")
+
+    expected = pytest.skip.Exception if missing else async_api.Error
+    with pytest.raises(expected, match=message):
+        asyncio.run(go())

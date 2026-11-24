@@ -12,6 +12,7 @@ before navigation."""
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlparse
@@ -30,13 +31,13 @@ class BrowserRead:
     url: str
 
 
-_READ_DOCUMENT = """({selector, marker}) => {
-    const url = location.href;
-    const refused = !!document.querySelector(`meta[name="${marker}"]`);
+_READ_DOCUMENT = """(elements, marker) => {
+    const doc = elements.length ? elements[0].ownerDocument : document;
+    const url = doc.location.href;
+    const refused = !!doc.querySelector(`meta[name="${marker}"]`);
     if (refused || url.startsWith('chrome-error://'))
         return {url, refused, text: ''};
-    const element = document.querySelector(selector);
-    return element ? {url, refused, text: element.innerText} : false;
+    return elements.length ? {url, refused, text: elements[0].innerText} : null;
 }"""
 
 
@@ -65,14 +66,17 @@ class BrowserSession:
 
         for attempt in range(3):
             try:
-                handle = await self.page.wait_for_function(
-                    _READ_DOCUMENT,
-                    arg={"selector": selector, "marker": BLOCKED_META},
-                )
-                try:
-                    read = await handle.json_value()
-                finally:
-                    await handle.dispose()
+                # evaluate_all preserves Playwright's selector semantics,
+                # including open shadow roots. It also runs with no matches,
+                # so a failed document can end the wait for a missing element.
+                async with asyncio.timeout(30):
+                    while True:
+                        read = await self.page.locator(selector).evaluate_all(
+                            _READ_DOCUMENT, BLOCKED_META,
+                        )
+                        if read is not None:
+                            break
+                        await asyncio.sleep(0.05)
                 url = read["url"]
                 if url.startswith("chrome-error://"):
                     raise RuntimeError(
@@ -86,6 +90,10 @@ class BrowserSession:
                         "refusal notice, not page content"
                     )
                 return BrowserRead(text=read["text"][:limit], url=url)
+            except TimeoutError as exc:
+                raise PlaywrightTimeoutError(
+                    f"Timeout 30000ms exceeded waiting to read {selector!r}"
+                ) from exc
             except PlaywrightError as exc:
                 if "Execution context was destroyed" not in str(exc) or attempt == 2:
                     raise

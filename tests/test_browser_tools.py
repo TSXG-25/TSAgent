@@ -53,6 +53,8 @@ def _window_of(orch):
 
 
 class FakeSession:
+    view_id = "vw-fake"
+
     def __init__(self, run_context=None, *, text=PAGE_TEXT):
         self.run_context = run_context
         self.calls: list[tuple] = []

@@ -455,9 +455,13 @@ class PlanExecutor:
                 f"{FailureCode.EXECUTION_ENVIRONMENT_UNAVAILABLE.value}: "
                 "this execution has no Run-scoped browser"
             )
-        session = await open_browser()
+        session = await open_browser(str(args["view_id"]) if args.get("view_id") else None)
+        window_evidence = {"view_id": session.view_id}
         if tool_name == "browser.navigate":
-            return {"content": await session.navigate(str(args["url"]))}
+            return {
+                "content": await session.navigate(str(args["url"])),
+                **window_evidence,
+            }
         if tool_name in {"browser.snapshot", "browser.extract"}:
             read = (
                 await session.snapshot()
@@ -465,7 +469,11 @@ class PlanExecutor:
                 else await session.extract(str(args["selector"]))
             )
             sources = [read.url] if read.text.strip() else []
-            return {"content": read.text, "_sources": sources}
+            return {
+                "content": read.text,
+                "_sources": sources,
+                **window_evidence,
+            }
         if tool_name == "browser.screenshot":
             if workspace is None:
                 raise RuntimeError(
@@ -474,13 +482,20 @@ class PlanExecutor:
                 )
             path = str(args["path"])
             workspace.write_bytes(path, await session.screenshot())
-            return {"content": f"{session.url} → {path}"}
+            return {
+                "content": f"{session.url} → {path}",
+                **window_evidence,
+            }
         if tool_name == "browser.click":
-            return {"content": await session.click(str(args["selector"]))}
+            return {
+                "content": await session.click(str(args["selector"])),
+                **window_evidence,
+            }
         return {
             "content": await session.type_text(
                 str(args["selector"]), str(args["text"])
-            )
+            ),
+            **window_evidence,
         }
 
     async def _exec_tool(

@@ -120,6 +120,16 @@ _CODE_EXECUTION_TOOLS = ("run_python", "run_python_file")
 
 
 def _browser_spec(name: str, desc: str, props: dict, required: list) -> dict:
+    # Every browser action names its window — a run bound to several
+    # workbench windows must say which one; a single bound window (or a
+    # run-owned ephemeral page) fills it in at resolve time.
+    props = {
+        "view_id": {
+            "type": "string",
+            "description": "目标窗口 id（绑定多个窗口时必填）",
+        },
+        **props,
+    }
     return function_tool_spec(name, desc, {
         "type": "object", "properties": props, "required": required,
         "additionalProperties": False,

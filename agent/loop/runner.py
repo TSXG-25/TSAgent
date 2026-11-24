@@ -371,6 +371,16 @@ class AgentLoop:
             source_grounding_required=bool(state.get("source_grounding_required")),
             workspace_card=str(state.get("workspace_card") or ""),
         )
+        bound = getattr(run_context, "browser_windows", None) or {}
+        if bound:
+            listing = "\n".join(
+                f"- {view_id}: {window.page.url}"
+                for view_id, window in bound.items()
+            )
+            system += (
+                "\n## 可用浏览器窗口（browser_* 工具的 view_id 白名单）\n"
+                f"{listing}\n"
+            )
 
         transcript: list[dict[str, Any]] = [
             {"role": "system", "content": system},

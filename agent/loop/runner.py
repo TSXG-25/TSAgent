@@ -661,17 +661,26 @@ class AgentLoop:
         # 审批身份用 Run 内调用序号：Provider 的 call.id 只做协议关联，
         # 缺省或重复时不能把不同动作绑到同一条审批记录。
         approval_id = f"{run_context.run_id}:call-{index}"
-        # A pending approval is bound to the window state it was asked
-        # about — manual navigation or a user takeover while it waits
-        # must not let a stale "yes" execute on a changed document.
-        window_state: tuple[str, int] | None = None
+        # A pending approval is bound to the actual target window it was
+        # asked about — resolve it the same way the executor will: an
+        # explicit view_id, else the run's single bound window.  The
+        # snapshot covers control epoch (takeover→release is a change
+        # even when the controller string round-trips) plus the document
+        # generation, so a grant never outlives the page it named.
+        bound = getattr(run_context, "browser_windows", None) or {}
+        target_window = None
         view_id = call.arguments.get("view_id")
         if view_id:
-            window = (getattr(run_context, "browser_windows", None) or {}).get(
-                str(view_id)
+            target_window = bound.get(str(view_id))
+        elif len(bound) == 1:
+            target_window = next(iter(bound.values()))
+        window_state: tuple | None = None
+        if target_window is not None:
+            window_state = (
+                getattr(target_window, "control_epoch", 0),
+                target_window.controller,
+                target_window.doc_generation,
             )
-            if window is not None:
-                window_state = (window.controller, window.doc_generation)
         try:
             record = await delegation.request_approval(
                 run_context,
@@ -694,11 +703,15 @@ class AgentLoop:
             )
         status = record.status
         if status == "APPROVED" and window_state is not None:
-            window = (getattr(run_context, "browser_windows", None) or {}).get(
-                str(view_id)
+            bound = getattr(run_context, "browser_windows", None) or {}
+            current = (
+                bound.get(str(view_id)) if view_id
+                else next(iter(bound.values()), None)
             )
-            if window is None or (
-                window.controller, window.doc_generation
+            if current is None or (
+                getattr(current, "control_epoch", 0),
+                current.controller,
+                current.doc_generation,
             ) != window_state:
                 denials = state.setdefault("authorization_denials", [])
                 denials.append({

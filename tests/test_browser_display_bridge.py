@@ -252,3 +252,83 @@ async def test_display_bridge_rejects_bad_ticket(service) -> None:
                 await _read_frame(ws)
     finally:
         await bridge.close()
+
+
+async def test_input_respects_controller_and_generation(service) -> None:
+    """Human input injects only while the user holds the window, and a
+    message stamped with a stale document generation is dropped."""
+    websockets = pytest.importorskip("websockets")
+    from agent.service.local_sidecar.display_bridge import DisplayBridge
+    from agent.service import contracts as c
+
+    with _Site() as site:
+        try:
+            opened = await service.open_window(
+                _window_request("open", url=site.url)
+            )
+        except Exception as error:  # pragma: no cover
+            _skip_no_chromium(error)
+            return
+        bridge = DisplayBridge(
+            service, allowed_origins=frozenset({"http://127.0.0.1:4173"})
+        )
+        try:
+            ticket = await bridge.ticket("t-1", "s-1")
+            url = (
+                f"ws://127.0.0.1:{ticket['port']}/display/s-1/"
+                f"{opened.view_id}?token={ticket['token']}"
+            )
+            window = service.window_for_session("t-1", "s-1", opened.view_id)
+
+            async def value() -> str:
+                return await window.page.input_value("#box")
+
+            async def fill(chars: str, gen=None) -> str:
+                await ws.send(
+                    json.dumps({"t": "click", "x": 60, "y": 40, "g": gen})
+                )
+                await ws.send(json.dumps({"t": "text", "s": chars, "g": gen}))
+                for _ in range(30):
+                    v = await value()
+                    if chars in v:
+                        return v
+                    await asyncio.sleep(0.1)
+                return await value()
+
+            async with websockets.connect(url) as ws:
+                await _read_frame(ws)
+                # agent holds the window → clicks/text inject nothing
+                manager = service._browser_manager()
+                manager.acquire("run-1", [opened.view_id])
+                box = await window.page.locator("#box").bounding_box()
+                await ws.send(json.dumps({
+                    "t": "click",
+                    "x": box["x"] + 2, "y": box["y"] + 2,
+                }))
+                await ws.send(json.dumps({"t": "text", "s": "agent期输入"}))
+                await asyncio.sleep(0.6)
+                assert await value() == ""
+
+                # user takes over → input flows again
+                await service.claim_window(c.ClaimWindowRequest(
+                    tenant_id="t-1", user_id="u", session_id="s-1",
+                    request_id="r-claim", view_id=opened.view_id))
+                await ws.send(json.dumps({
+                    "t": "click",
+                    "x": box["x"] + 2, "y": box["y"] + 2,
+                }))
+                await ws.send(json.dumps({"t": "text", "s": "abc"}))
+                for _ in range(30):
+                    if await value() == "abc":
+                        break
+                    await asyncio.sleep(0.1)
+                assert await value() == "abc"
+
+                # stale generation → dropped
+                stale = window.doc_generation - 1
+                await window.page.fill("#box", "")
+                await ws.send(json.dumps({"t": "text", "s": "stale", "g": stale}))
+                await asyncio.sleep(0.6)
+                assert await value() == ""
+        finally:
+            await bridge.close()

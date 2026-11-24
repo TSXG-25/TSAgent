@@ -19,7 +19,7 @@ const BUSY = new Set(["active", "pending"]);
 const PLANETS = ["sun","mercury","venus","earth","mars","jupiter","saturn","uranus","neptune","pluto"];
 const DEEPSEEK_MODELS = ["deepseek-chat", "deepseek-reasoner"];
 
-export default function AgentComposer({ ctx, planet, placeholder, contextPrefix, onSend }: { ctx: RunCtx; planet?: string; placeholder?: string; contextPrefix?: string; onSend?: (to: string, body: string, files: string[], options: { model?: string }) => Promise<{ runId: string; sessionId: string }> }) {
+export default function AgentComposer({ ctx, planet, placeholder, contextPrefix, onSend, boundViewIds }: { ctx: RunCtx; planet?: string; placeholder?: string; contextPrefix?: string; onSend?: (to: string, body: string, files: string[], options: { model?: string }) => Promise<{ runId: string; sessionId: string }>; boundViewIds?: () => string[] }) {
   const target = planet ?? "sun";
   const key = draftKey(ctx.service.identity.tenantId, ctx.sessionId, target);
   const [draft, setDraft] = useDraft(key);
@@ -114,7 +114,7 @@ export default function AgentComposer({ ctx, planet, placeholder, contextPrefix,
               runId: (await delegateFromPlanet(ctx, target, to, runHere, body, files, modelOptions)).runId,
               sessionId: ctx.sessionId,
             }
-          : { runId: await submitToPlanet(ctx, to, body, files, modelOptions), sessionId: ctx.sessionId };
+          : { runId: await submitToPlanet(ctx, to, body, files, { ...modelOptions, viewIds: boundViewIds?.() }), sessionId: ctx.sessionId };
       // The workstation the send targeted now owns this task — its rail
       // selects it without navigating away from where the user is.
       selectWorkspaceRun(ctx.service.identity.tenantId, sent.sessionId, to, sent.runId);

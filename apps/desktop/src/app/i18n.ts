@@ -239,6 +239,7 @@ const zh = {
   "mer.take-over": "接管",
   "mer.hand-back": "交还 Agent",
   "mer.you-drive": "你正在操作",
+  "mer.bind-window": "绑定到任务",
   // saturn
   "sat.ph-task": "定时任务内容…",
   "sat.ph-mins": "分钟",
@@ -666,6 +667,7 @@ const en: Record<keyof typeof zh, string> = {
   "mer.take-over": "Take over",
   "mer.hand-back": "Hand back to Agent",
   "mer.you-drive": "You're driving",
+  "mer.bind-window": "Bind to task",
   // saturn
   "sat.ph-task": "Scheduled task…",
   "sat.ph-mins": "Minutes",

@@ -4,11 +4,11 @@ import { WorkspaceFrame } from "../../design-system/WorkspaceFrame";
 import AgentComposer from "../../app/AgentComposer";
 import { t } from "../../app/i18n";
 import { useWorkspaceCurrentRun } from "../../app/workspaceSelection";
+import type { RunEvent } from "../../types/service";
 import type { RunCtx } from "../../app/runCtx";
 import { WorkspaceTasks } from "../../app/WorkspaceTasks";
 import { MercuryWindowBoard } from "./windows";
 import BrowserPane from "./BrowserPane";
-import { submitToPlanet } from "../../app/delegate";
 
 /** Navigator — live browser windows per the implementation plan.
  *  1 view fills the row, 2 split side-by-side, 3 puts one left and two
@@ -22,16 +22,42 @@ export default function MercuryWorkspace({ ctx }: { ctx: RunCtx }) {
   const [query, setQuery] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [steps, setSteps] = useState<{ plan: string; preview: string }[]>([]);
+  const [runEvents, setRunEvents] = useState<RunEvent[]>([]);
   const [, bump] = useReducer((n: number) => n + 1, 0);
 
+  // Right rail reads the run's real event stream — tool calls carry
+  // their bound view_id, so each action shows the window it drove.
+  const runId = currentRun?.runId;
+  const runActive = currentRun?.status === "active" || currentRun?.status === "pending";
+  useEffect(() => {
+    setRunEvents([]);
+    if (!runId) return;
+    let dead = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let after = 0;
+    const tick = async () => {
+      try {
+        const batch = await service.readEvents({
+          sessionId: ctx.sessionId, runId, afterSequence: after, limit: 200,
+        });
+        if (dead) return;
+        if (batch.length) {
+          after = Math.max(...batch.map((e) => e.sequenceNumber));
+          setRunEvents((prev) => [...prev, ...batch].slice(-80));
+        }
+      } catch { /* next tick retries */ }
+      if (!dead) timer = setTimeout(tick, runActive ? 1200 : 5000);
+    };
+    void tick();
+    return () => { dead = true; if (timer) clearTimeout(timer); };
+  }, [service, ctx.sessionId, runId, runActive]);
+
   const board = useMemo(() => new MercuryWindowBoard(service), [service]);
+  // One lifecycle per (board, session): listener must be re-attached on
+  // every bind because board.stop() clears it — a stale session's
+  // windows otherwise linger with no repaint ever arriving.
   useEffect(() => {
     board.listener = () => bump();
-    return () => { board.listener = null; };
-  }, [board]);
-  // Bind per chat session — window state is session-scoped on the
-  // service side; switching sessions leaves nothing behind here.
-  useEffect(() => {
     board.bind(ctx.sessionId);
     void board.refresh();
     return () => board.stop();
@@ -110,19 +136,14 @@ export default function MercuryWorkspace({ ctx }: { ctx: RunCtx }) {
 
           <div className="nav-foot">
             <div className="nav-vctl" />
-            {/* Window ids are bound at submission — the snapshot the send
-                captures, not whatever is selected later. */}
+            {/* Window ids bind only on same-planet flat sends — @planet
+                delegation walks the handoff chain and never carries
+                browser windows to another workstation. */}
             <AgentComposer
               ctx={ctx}
               planet="mercury"
               placeholder={t("mer.composer-ph")}
-              onSend={async (to, body, files, options) => ({
-                runId: await submitToPlanet(ctx, to, body, files, {
-                  ...options,
-                  viewIds: board.boundIds(),
-                }),
-                sessionId: ctx.sessionId,
-              })}
+              boundViewIds={() => board.boundIds()}
             />
           </div>
         </div>
@@ -131,17 +152,41 @@ export default function MercuryWorkspace({ ctx }: { ctx: RunCtx }) {
           <section className="nav-block">
             <h4 className="ws-mod">{t("mer.plan")}</h4>
             <div className="step-line">
-              {steps.filter((s) => s.plan).map((s, i) => <div className="nav-step" key={i}><code>{i + 1}.</code><span>{s.plan}</span></div>)}
-              {steps.length === 0 && <p className="omni-empty">{t("mer.no-actions")}</p>}
+              {runEvents
+                .filter((e) => e.eventType === "task_started")
+                .map((e) => {
+                  const tool = String(e.payload.tool ?? e.payload.verb ?? "");
+                  const vid = String(e.payload.view_id ?? "");
+                  return (
+                    <div className="nav-step" key={e.eventId}>
+                      <code>{vid ? vid.slice(0, 8) : "·"}</code>
+                      <span>{tool || e.eventType}</span>
+                    </div>
+                  );
+                })}
+              {steps.filter((s) => s.plan).map((s, i) => <div className="nav-step" key={`m${i}`}><code>ui</code><span>{s.plan}</span></div>)}
+              {runEvents.length === 0 && steps.length === 0 && <p className="omni-empty">{t("mer.no-actions")}</p>}
             </div>
           </section>
           <section className="nav-block">
             <h4 className="ws-mod">{t("mer.preview")}</h4>
-            {steps.filter((s) => s.preview).slice(-4).map((s, i) => <div className="nav-step" key={i}><code>→</code><span>{s.preview}</span></div>)}
-            {steps.length === 0 && <p className="omni-empty">{t("mer.nothing-previewed")}</p>}
+            {runEvents
+              .filter((e) => e.eventType === "task_completed")
+              .slice(-4)
+              .map((e) => {
+                const vid = String(e.payload.view_id ?? "");
+                const status = String(e.payload.status ?? "");
+                return (
+                  <div className="nav-step" key={e.eventId}>
+                    <code>{vid ? vid.slice(0, 8) : "→"}</code>
+                    <span>{status}{e.payload.error_code ? ` ${String(e.payload.error_code)}` : ""}</span>
+                  </div>
+                );
+              })}
+            {runEvents.length === 0 && <p className="omni-empty">{t("mer.nothing-previewed")}</p>}
           </section>
           <WorkspaceTasks ctx={ctx} planet="mercury" />
-          <div className="ws-statusbar"><span>{windows.length} VIEWS</span><span>{steps.length} ACTIONS</span><span className="right">mercury</span></div>
+          <div className="ws-statusbar"><span>{windows.length} VIEWS</span><span>{runEvents.length} EVENTS</span><span className="right">mercury</span></div>
         </aside>
       </div>
     </WorkspaceFrame>

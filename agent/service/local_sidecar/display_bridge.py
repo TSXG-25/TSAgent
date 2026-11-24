@@ -110,7 +110,7 @@ class DisplayBridge:
         try:
             async for raw in ws:
                 try:
-                    await self._input(display, json.loads(raw))
+                    await self._input(window, display, json.loads(raw))
                 except Exception:
                     pass  # malformed input is ignored, never fatal
         finally:
@@ -122,8 +122,16 @@ class DisplayBridge:
         if task.exception() is not None:
             self._connections.discard(ws)
 
-    @staticmethod
-    async def _input(display: Any, msg: dict) -> None:
+    async def _input(self, window: Any, display: Any, msg: dict) -> None:
+        # Window-boundary validation, same rule as the model path:
+        # input is only accepted while the user holds the window, and a
+        # message stamped with a stale document generation is dropped —
+        # a click aimed at the previous page never reaches this one.
+        if getattr(window, "controller", "user") != "user":
+            return
+        gen = msg.get("g")
+        if gen is not None and gen != window.doc_generation:
+            return
         kind = msg.get("t")
         if kind == "click":
             await display.click(msg["x"], msg["y"], button=msg.get("b", "left"))
@@ -132,6 +140,14 @@ class DisplayBridge:
         elif kind == "text":
             await display.insert_text(str(msg.get("s", "")))
         elif kind == "key":
-            await display.key_press(str(msg["k"]))
+            await display.key_press(
+                str(msg["k"]), modifiers=msg.get("m") or ()
+            )
+        elif kind == "down":
+            await display.mouse_down(msg["x"], msg["y"])
+        elif kind == "move":
+            await display.mouse_move(msg["x"], msg["y"])
+        elif kind == "up":
+            await display.mouse_up(msg["x"], msg["y"])
         elif kind == "viewport":
             await display.set_viewport(int(msg["w"]), int(msg["h"]))

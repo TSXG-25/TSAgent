@@ -56,11 +56,22 @@ def _window_of(orch):
 
 class FakeSession:
     view_id = "vw-fake"
-    controller = "agent"
     doc_generation = 0
     page = SimpleNamespace(url="about:blank")
 
+    @property
+    def controller(self):
+        return self._controller
+
+    @controller.setter
+    def controller(self, value):
+        if value != getattr(self, "_controller", None):
+            self.control_epoch = getattr(self, "control_epoch", 0) + 1
+        self._controller = value
+
     def __init__(self, run_context=None, *, text=PAGE_TEXT):
+        self._controller = "agent"
+        self.control_epoch = 0
         self.run_context = run_context
         self.calls: list[tuple] = []
         self.closed = False
@@ -738,6 +749,42 @@ def test_approval_invalidated_by_takeover(tmp_path):
 
     orch, state, tools, events = _loop_env(tmp_path)
     orch.run_context.delegation = _TakingApprovals("APPROVED")
+    msg = _call(
+        orch, state, tools, "browser_click",
+        {"selector": "#buy", "view_id": "vw-fake"},
+    )
+    assert "APPROVAL_STALE" in msg["content"]
+    assert _window_of(orch).calls == []
+
+
+def test_approval_invalidated_without_explicit_view_id(tmp_path):
+    """Single bound window omits view_id — the approval still binds the
+    actual resolved target, so a doc change during the wait is stale."""
+    class _NavigatingApprovals(_Approvals):
+        async def request_approval(self, run_context, **kwargs):
+            run_context.browser_windows["vw-fake"].doc_generation += 1
+            return await super().request_approval(run_context, **kwargs)
+
+    orch, state, tools, events = _loop_env(tmp_path)
+    orch.run_context.delegation = _NavigatingApprovals("APPROVED")
+    msg = _call(orch, state, tools, "browser_click", {"selector": "#buy"})
+    assert "APPROVAL_STALE" in msg["content"]
+    assert _window_of(orch).calls == []
+
+
+def test_approval_invalidated_by_takeover_release_roundtrip(tmp_path):
+    """controller goes agent→user→agent during the wait — the epoch
+    still moved, the grant is void."""
+    class _RoundTrip(_Approvals):
+        async def request_approval(self, run_context, **kwargs):
+            w = run_context.browser_windows["vw-fake"]
+            w.controller = "user"
+            w.controller = "agent"
+            return await super().request_approval(run_context, **kwargs)
+
+    orch, state, tools, events = _loop_env(tmp_path)
+    orch.run_context.delegation = _RoundTrip("APPROVED")
+    _window_of(orch).control_epoch = 0
     msg = _call(
         orch, state, tools, "browser_click",
         {"selector": "#buy", "view_id": "vw-fake"},

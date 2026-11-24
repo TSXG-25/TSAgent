@@ -27,6 +27,8 @@ export default function BrowserPane({
   const metaRef = useRef<Record<string, unknown>>({});
   const [channelState, setChannelState] = useState<"connecting" | "live" | "dead">("connecting");
   const [addr, setAddr] = useState("");
+  const dragging = useRef(false);
+  const composing = useRef(false);
 
   useEffect(() => {
     setAddr(summary.url);
@@ -109,6 +111,9 @@ export default function BrowserPane({
             onClick={(e) => { e.stopPropagation(); void board.navigate(summary.viewId, "forward"); }}>›</button>
           <button type="button" title="reload"
             onClick={(e) => { e.stopPropagation(); void board.navigate(summary.viewId, "reload"); }}>⟳</button>
+          <button type="button" className={board.selected.has(summary.viewId) ? "nav-taken" : ""}
+            title={t("mer.bind-window")}
+            onClick={(e) => { e.stopPropagation(); board.toggleSelected(summary.viewId); }}>⌗</button>
           <button type="button" className={summary.controller === "user" ? "nav-taken" : ""}
             title={summary.controller === "user" ? t("mer.hand-back") : t("mer.take-over")}
             onClick={(e) => {
@@ -139,21 +144,55 @@ export default function BrowserPane({
             const p = point(e);
             if (p && channelRef.current) {
               canvasRef.current?.focus();
-              channelRef.current.click(p.x, p.y);
+              dragging.current = true;
+              channelRef.current.down(p.x, p.y);
             }
           }}
+          onMouseMove={(e) => {
+            if (!dragging.current) return;
+            const p = point(e);
+            if (p && channelRef.current) channelRef.current.move(p.x, p.y);
+          }}
+          onMouseUp={(e) => {
+            if (!dragging.current) return;
+            dragging.current = false;
+            const p = point(e);
+            if (p && channelRef.current) channelRef.current.up(p.x, p.y);
+          }}
+          onMouseLeave={() => { dragging.current = false; }}
           onWheel={(e) => {
             const p = point(e as unknown as React.MouseEvent);
             if (p && channelRef.current) {
               channelRef.current.scroll(p.x, p.y, e.deltaX, e.deltaY);
             }
           }}
+          onCompositionEnd={(e) => {
+            // IME commit — the full composed string lands at once.
+            channelRef.current?.text(e.data);
+          }}
+          onPaste={(e) => {
+            const text = e.clipboardData.getData("text");
+            if (text) channelRef.current?.text(text);
+            e.preventDefault();
+          }}
+          onCopy={(e) => e.preventDefault()}
+          onCut={(e) => e.preventDefault()}
           onKeyDown={(e) => {
             const channel = channelRef.current;
-            if (!channel) return;
-            if (e.key.length === 1 && !e.metaKey && !e.ctrlKey) {
+            if (!channel || composing.current) return;
+            const mods = [
+              ...(e.metaKey ? ["meta"] : []),
+              ...(e.ctrlKey ? ["ctrl"] : []),
+              ...(e.altKey ? ["alt"] : []),
+              ...(e.shiftKey ? ["shift"] : []),
+            ];
+            if (mods.length) {
+              // Copy/cut/select-all reach the page as real key chords —
+              // the page's own clipboard/selection logic handles them.
+              channel.key(e.key.length === 1 ? e.key.toUpperCase() : e.key, mods);
+            } else if (e.key.length === 1) {
               channel.text(e.key);
-            } else if (e.key.length > 1) {
+            } else {
               channel.key(e.key);
             }
             e.preventDefault();

@@ -78,7 +78,9 @@ class BrowserWindow:
         self.owner = owner
         self.scope_key = scope_key
         self.run_id = run_id
-        self.controller = "user"
+        self._controller = "user"
+        self.control_epoch = 0  # bumps on every controller change —
+        # approval binding survives a takeover→release roundtrip
         self.manager = manager
         self.doc_generation = 0
         self.display: Any | None = None
@@ -91,6 +93,16 @@ class BrowserWindow:
         page.on("domcontentloaded", self._on_settled)
 
     # ---- window state ----
+
+    @property
+    def controller(self) -> str:
+        return self._controller
+
+    @controller.setter
+    def controller(self, value: str) -> None:
+        if value != getattr(self, "_controller", None):
+            self.control_epoch = getattr(self, "control_epoch", 0) + 1
+        self._controller = value
 
     @property
     def closed(self) -> bool:

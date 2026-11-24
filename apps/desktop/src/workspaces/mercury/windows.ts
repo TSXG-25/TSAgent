@@ -82,6 +82,7 @@ export class DisplayChannel {
       }
       this.bitmap?.close();
       this.bitmap = bmp;
+      this.lastMeta = meta;
       this.onFrame?.(bmp, meta);
     } finally {
       this.drawing = false;
@@ -95,17 +96,36 @@ export class DisplayChannel {
     if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(msg));
   }
 
+  private lastMeta: Record<string, unknown> = {};
+
+  private stamp(msg: Record<string, unknown>): void {
+    // Tag input with the document generation the user saw — the bridge
+    // drops anything aimed at a superseded document.
+    const g = this.lastMeta.doc_generation;
+    if (typeof g === "number") msg.g = g;
+    this.send(msg);
+  }
+
   click(x: number, y: number): void {
-    this.send({ t: "click", x, y });
+    this.stamp({ t: "click", x, y });
+  }
+  down(x: number, y: number): void {
+    this.stamp({ t: "down", x, y });
+  }
+  move(x: number, y: number): void {
+    this.stamp({ t: "move", x, y });
+  }
+  up(x: number, y: number): void {
+    this.stamp({ t: "up", x, y });
   }
   scroll(x: number, y: number, dx: number, dy: number): void {
-    this.send({ t: "scroll", x, y, dx, dy });
+    this.stamp({ t: "scroll", x, y, dx, dy });
   }
   text(s: string): void {
-    this.send({ t: "text", s });
+    this.stamp({ t: "text", s });
   }
-  key(k: string): void {
-    this.send({ t: "key", k });
+  key(k: string, m: string[] = []): void {
+    this.stamp({ t: "key", k, m });
   }
   viewport(w: number, h: number): void {
     this.send({ t: "viewport", w, h });
@@ -148,9 +168,24 @@ export class MercuryWindowBoard {
     );
   }
 
+  /** Per-window task selection — checked windows, else the active one.
+   *  A send never claims the whole board: claiming A+B once blocks a
+   *  second task aimed only at B. */
+  selected = new Set<string>();
+
+  toggleSelected(viewId: string): void {
+    if (this.selected.has(viewId)) this.selected.delete(viewId);
+    else this.selected.add(viewId);
+    this.notify();
+  }
+
   /** window ids bound at submission time — a snapshot, never live state. */
   boundIds(): string[] {
-    return this.windows.map((w) => w.summary.viewId);
+    if (this.selected.size) {
+      return [...this.selected].filter((id) =>
+        this.windows.some((w) => w.summary.viewId === id));
+    }
+    return this.activeViewId ? [this.activeViewId] : [];
   }
 
   private entry(viewId: string): WindowEntry | undefined {
@@ -173,6 +208,9 @@ export class MercuryWindowBoard {
       const seen = new Set(list.map((w) => w.viewId));
       for (const w of this.windows) {
         if (!seen.has(w.summary.viewId)) w.channel?.close();
+      }
+      for (const id of [...this.selected]) {
+        if (!seen.has(id)) this.selected.delete(id);
       }
       this.windows = list.map((summary) => {
         const prior = this.entry(summary.viewId);

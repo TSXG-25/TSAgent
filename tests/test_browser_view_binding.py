@@ -297,11 +297,29 @@ def test_e2e_dual_window_research_then_mars_handoff(monkeypatch, tmp_path):
         for vid, text in zip(view_ids, ("FACT-A", "FACT-B")):
             session = FakeSession(text=text)
             session.view_id = vid
+            session.owner = "workbench"
+            session.scope_key = "t:s1"
+            session.closed = False
             acquired.append(session)
             session.run_id = run_id
         return acquired
 
+    bound: dict = {}
+
+    def fake_window(self, view_id):
+        if not bound:
+            for vid in ("vw-a", "vw-b"):
+                s = FakeSession()
+                s.view_id = vid
+                s.owner = "workbench"
+                s.scope_key = "t:s1"
+                s.closed = False
+                s.run_id = None
+                bound[vid] = s
+        return bound.get(view_id)
+
     monkeypatch.setattr(BrowserManager, "acquire", fake_acquire)
+    monkeypatch.setattr(BrowserManager, "window", fake_window)
 
     async def scenario():
         service, store, _ = _service(tmp_path)
@@ -333,3 +351,46 @@ def test_e2e_dual_window_research_then_mars_handoff(monkeypatch, tmp_path):
             await service.close()
 
     asyncio.run(scenario())
+
+
+async def test_concurrent_opens_share_one_context_and_cap(manager) -> None:
+    """Five concurrent opens on one scope: at most the cap of four land,
+    and they all share the scope's single context."""
+    import asyncio
+    from agent.browser.manager import MAX_WORKBENCH_WINDOWS
+
+    with _Site() as site:
+        results = await asyncio.gather(
+            *(manager.open_window(scope_key="t:s", owner="workbench",
+                                  url=site.url) for _ in range(5)),
+            return_exceptions=True,
+        )
+        opened = [w for w in results if not isinstance(w, Exception)]
+        refused = [w for w in results if isinstance(w, ValueError)]
+        assert len(opened) == MAX_WORKBENCH_WINDOWS
+        assert len(refused) == 5 - MAX_WORKBENCH_WINDOWS
+        assert len(manager._contexts) == 1
+
+
+async def test_start_run_refuses_foreign_session_window(tmp_path) -> None:
+    """view_ids from another session are refused at admission."""
+    from agent.service.factory import create_default_agent_service
+    from agent.service import contracts as c
+    from agent.service.errors import AgentServiceError
+
+    svc = create_default_agent_service(
+        tmp_path / "runtime.sqlite", workspace_root=tmp_path / "workspace"
+    )
+    try:
+        with _Site() as site:
+            opened = await svc.open_window(c.OpenWindowRequest(
+                tenant_id="t", user_id="u", session_id="s-A",
+                request_id="r1", url=site.url))
+            with pytest.raises(AgentServiceError) as info:
+                await svc.start_run(c.StartRunRequest(
+                    tenant_id="t", user_id="u", session_id="s-B",
+                    request_id="r2", request_text="借用别人的窗口",
+                    view_ids=(opened.view_id,)))
+            assert info.value.code.value == "INVALID_REQUEST"
+    finally:
+        await svc.close()

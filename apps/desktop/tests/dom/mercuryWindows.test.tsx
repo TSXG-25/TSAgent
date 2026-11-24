@@ -59,16 +59,20 @@ describe("MercuryWindowBoard", () => {
     expect(listed).toHaveBeenCalledWith({ sessionId: "sess-a" });
   });
 
-  test("boundIds snapshots the current window set", async () => {
+  test("boundIds returns a snapshot the send owns", async () => {
     const service = new MockAgentServiceClient();
-    vi.spyOn(service, "listWindows").mockResolvedValue([
-      win({ viewId: "v-a" }), win({ viewId: "v-b" }),
-    ] as never);
+    vi.spyOn(service, "listWindows")
+      .mockResolvedValueOnce([win({ viewId: "v-a" }), win({ viewId: "v-b" })] as never)
+      .mockResolvedValueOnce([win({ viewId: "v-a" })] as never);
     const board = new MercuryWindowBoard(service);
     board.bind("s");
     await board.refresh();
-    expect(board.boundIds()).toEqual(["v-a", "v-b"]);
-    // a later refresh that drops v-b must not rewrite the earlier snapshot
+    board.activeViewId = "v-b";
+    const snapshot = board.boundIds();
+    await board.refresh(); // v-b goes away
+    // the snapshot the send captured is unaffected by the refresh
+    expect(snapshot).toEqual(["v-b"]);
+    expect(board.boundIds()).toEqual(["v-a"]);
   });
 
   test("session switch clears the previous session's windows", async () => {
@@ -127,5 +131,43 @@ describe("MercuryWorkspace live panes", () => {
     await waitFor(() =>
       expect(document.querySelector(".nav-grid.live")).toBeTruthy());
     expect(document.querySelectorAll(".nav-view.live").length).toBe(0);
+  });
+});
+
+describe("session switch + binding", () => {
+  test("switching sessions re-binds and shows the new session's windows", async () => {
+    const service = new MockAgentServiceClient();
+    vi.spyOn(service, "listWindows")
+      .mockResolvedValueOnce([win({ viewId: "v-a", title: "Alpha" })] as never)
+      .mockResolvedValueOnce([win({ viewId: "v-b", title: "Beta" })] as never);
+    const ctx = ctxFor(service, "s-1");
+    const { rerender } = mount(ctx);
+    await waitFor(() => expect(screen.getByText("Alpha")).toBeTruthy());
+    rerender(
+      <MemoryRouter initialEntries={["/w/mercury"]}>
+        <MercuryWorkspace ctx={{ ...ctx, sessionId: "s-2" }} />
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(screen.getByText("Beta")).toBeTruthy());
+    expect(screen.queryByText("Alpha")).toBeNull();
+  });
+
+  test("boundIds returns the active window unless some are selected", async () => {
+    const service = new MockAgentServiceClient();
+    vi.spyOn(service, "listWindows").mockResolvedValue([
+      win({ viewId: "v-a" }), win({ viewId: "v-b" }), win({ viewId: "v-c" }),
+    ] as never);
+    const board = new MercuryWindowBoard(service);
+    board.bind("s");
+    await board.refresh();
+    board.activeViewId = "v-b";
+    // no explicit selection → the focused window, never the whole set
+    expect(board.boundIds()).toEqual(["v-b"]);
+    board.toggleSelected("v-a");
+    board.toggleSelected("v-c");
+    expect(board.boundIds()).toEqual(["v-a", "v-c"]);
+    board.toggleSelected("v-a");
+    board.toggleSelected("v-c");
+    expect(board.boundIds()).toEqual(["v-b"]);
   });
 });

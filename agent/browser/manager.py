@@ -99,40 +99,44 @@ class BrowserManager:
         workbench windows — their context is shared; run windows ignore
         it and always get an isolated context keyed by run.
         """
-        if owner == "run":
-            context_key = f"run:{run_id}"
-        else:
-            owned = sum(
-                1 for w in self._windows.values()
-                if w.owner == "workbench" and w.scope_key == scope_key
-                and not w.closed
-            )
-            if owned >= self._max_windows:
-                raise ValueError(
-                    f"browser window limit reached ({self._max_windows})"
-                )
-            context_key = scope_key
         await self._ensure_started()
-        context = self._contexts.get(context_key)
-        if context is None:
-            context = await self._browser.new_context()
-            self._contexts[context_key] = context
-        page = await context.new_page()
-        window = BrowserWindow(
-            page,
-            self._proxy,
-            view_id=f"vw-{uuid.uuid4().hex[:12]}",
-            owner=owner,
-            scope_key=scope_key,
-            run_id=run_id,
-            manager=self,
-        )
-        window.controller = controller
-        self._windows[window.view_id] = window
-        if owner == "run":
-            self._run_windows.setdefault(run_id or "", []).append(
-                window.view_id
+        # The cap check, context lookup and creation are one unit —
+        # two concurrent opens must not race each into a separate
+        # context or past the workbench limit.
+        async with self._lock:
+            if owner == "run":
+                context_key = f"run:{run_id}"
+            else:
+                owned = sum(
+                    1 for w in self._windows.values()
+                    if w.owner == "workbench" and w.scope_key == scope_key
+                    and not w.closed
+                )
+                if owned >= self._max_windows:
+                    raise ValueError(
+                        f"browser window limit reached ({self._max_windows})"
+                    )
+                context_key = scope_key
+            context = self._contexts.get(context_key)
+            if context is None:
+                context = await self._browser.new_context()
+                self._contexts[context_key] = context
+            page = await context.new_page()
+            window = BrowserWindow(
+                page,
+                self._proxy,
+                view_id=f"vw-{uuid.uuid4().hex[:12]}",
+                owner=owner,
+                scope_key=scope_key,
+                run_id=run_id,
+                manager=self,
             )
+            window.controller = controller
+            self._windows[window.view_id] = window
+            if owner == "run":
+                self._run_windows.setdefault(run_id or "", []).append(
+                    window.view_id
+                )
         if url is not None:
             await window.navigate(url)
         return window

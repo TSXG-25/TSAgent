@@ -173,8 +173,34 @@ class DisplaySession:
     async def insert_text(self, text: str) -> None:
         await self._cdp.send("Input.insertText", {"text": text})
 
-    async def key_press(self, name: str) -> None:
+    _MODIFIER = {"alt": 1, "ctrl": 2, "meta": 4, "shift": 8,
+                 "Alt": 1, "Control": 2, "Meta": 4, "Shift": 8}
+
+    async def mouse_down(self, x: float, y: float) -> None:
+        await self._cdp.send(
+            "Input.dispatchMouseEvent",
+            {"type": "mousePressed", "x": x, "y": y, "button": "left",
+             "clickCount": 1},
+        )
+
+    async def mouse_move(self, x: float, y: float) -> None:
+        await self._cdp.send(
+            "Input.dispatchMouseEvent",
+            {"type": "mouseMoved", "x": x, "y": y},
+        )
+
+    async def mouse_up(self, x: float, y: float) -> None:
+        await self._cdp.send(
+            "Input.dispatchMouseEvent",
+            {"type": "mouseReleased", "x": x, "y": y, "button": "left",
+             "clickCount": 1},
+        )
+
+    async def key_press(self, name: str, *, modifiers=()) -> None:
         code, vk, key = _KEYS[name]
+        mods = 0
+        for m in modifiers:
+            mods |= self._MODIFIER.get(str(m), 0)
         await self._cdp.send(
             "Input.dispatchKeyEvent",
             {
@@ -182,6 +208,7 @@ class DisplaySession:
                 "code": code,
                 "key": key,
                 "windowsVirtualKeyCode": vk,
+                "modifiers": mods,
             },
         )
         await self._cdp.send(
@@ -191,6 +218,7 @@ class DisplaySession:
                 "code": code,
                 "key": key,
                 "windowsVirtualKeyCode": vk,
+                "modifiers": mods,
             },
         )
 

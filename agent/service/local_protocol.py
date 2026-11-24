@@ -86,6 +86,11 @@ class LocalTransportMethod(str, Enum):
     READ_WORKSPACE_FILE = "read_workspace_file"
     WRITE_WORKSPACE_FILE = "write_workspace_file"
     READ_EVENTS = "read_events"
+    LIST_WINDOWS = "list_windows"
+    OPEN_WINDOW = "open_window"
+    CLOSE_WINDOW = "close_window"
+    NAVIGATE_WINDOW = "navigate_window"
+    DISPLAY_TICKET = "display_ticket"
     SHUTDOWN = "shutdown"
 
 

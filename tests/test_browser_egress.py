@@ -1,4 +1,4 @@
-"""The browser's SSRF boundary: EgressProxy + BrowserSession.navigate.
+"""The browser's SSRF boundary: EgressProxy + BrowserWindow.navigate.
 
 Three layers, all offline (loopback only):
 - the default address policy;
@@ -22,7 +22,9 @@ import pytest
 
 from agent.browser import egress
 from agent.browser.egress import BLOCKED_HEADER, EgressBlocked, EgressProxy, public_only
-from agent.browser.session import BrowserSession, check_scheme
+from agent.browser.window import BrowserWindow, check_scheme
+
+_KW = {"view_id": "vw-t", "owner": "run", "scope_key": "run:t"}
 
 
 # --- policy ---------------------------------------------------------------
@@ -203,7 +205,7 @@ def test_navigate_maps_proxy_refusal_response_to_blocked():
         proxy.blocked.append("refusing to load 10.0.0.1:80: non-public")
         return SimpleNamespace(headers={BLOCKED_HEADER.lower(): "1"})
 
-    session = BrowserSession(None, None, proxy, SimpleNamespace(goto=goto, on=lambda *a, **k: None))
+    session = BrowserWindow(SimpleNamespace(goto=goto, on=lambda *a, **k: None), proxy, **_KW)
     with pytest.raises(EgressBlocked, match="non-public"):
         asyncio.run(session.navigate("http://example.com/redirect"))
 
@@ -215,7 +217,7 @@ def test_navigate_maps_refused_tunnel_error_to_blocked():
         proxy.blocked.append("refusing to load 10.0.0.1:443: non-public")
         raise RuntimeError("net::ERR_TUNNEL_CONNECTION_FAILED")
 
-    session = BrowserSession(None, None, proxy, SimpleNamespace(goto=goto, on=lambda *a, **k: None))
+    session = BrowserWindow(SimpleNamespace(goto=goto, on=lambda *a, **k: None), proxy, **_KW)
     with pytest.raises(EgressBlocked, match="non-public"):
         asyncio.run(session.navigate("https://example.com/"))
 
@@ -226,7 +228,7 @@ def test_navigate_keeps_unrelated_errors():
     async def goto(url, wait_until):
         raise RuntimeError("net::ERR_NAME_NOT_RESOLVED")
 
-    session = BrowserSession(None, None, proxy, SimpleNamespace(goto=goto, on=lambda *a, **k: None))
+    session = BrowserWindow(SimpleNamespace(goto=goto, on=lambda *a, **k: None), proxy, **_KW)
     with pytest.raises(RuntimeError, match="NAME_NOT_RESOLVED"):
         asyncio.run(session.navigate("https://nx.example/"))
 
@@ -251,7 +253,7 @@ async def _chromium_session(forbidden_port):
                 raise
             try:
                 page = await (await browser.new_context()).new_page()
-                yield BrowserSession(pw, browser, proxy, page)
+                yield BrowserWindow(page, proxy, view_id="vw-e2e", owner="run", scope_key="run:e2e")
             finally:
                 await browser.close()
     finally:
@@ -319,7 +321,7 @@ def test_chromium_read_during_navigation_cannot_publish_refusal_source(origins, 
         async with _chromium_session(forbidden.port) as session:
             page = session.page
             orch, state, tools, events = _loop_env(tmp_path)
-            orch.run_context.browser_session = session
+            orch.run_context.browser_windows = {session.view_id: session}
             await session.navigate(f"http://127.0.0.1:{allowed.port}/delayed")
             assert await page.locator("title").count() == 0
             result = await AgentLoop(orch)._dispatch(

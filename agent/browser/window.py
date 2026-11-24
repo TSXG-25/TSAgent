@@ -1,14 +1,18 @@
-"""Per-run browser session — one playwright page bound to a RunContext.
+"""A browser window — one Playwright Page with identity and ownership.
 
-Lazy: the first browser_* tool call in a run starts the browser; the loop's
-run() finally closes it.  Read ops are R1, mutating ops (click/type) are R2
-and pass the shared approval gate in the dispatcher.
+Windows are created and closed by ``agent.browser.manager.BrowserManager``,
+never by a Run directly.  A window's ``owner`` decides its lifetime:
 
-Network boundary: Chromium runs behind ``EgressProxy`` (see
-``agent.browser.egress``), which checks every destination — including each
-redirect hop and subresource — against the same public-address boundary as
-web_fetch.  Non-proxied schemes (file:, data:, chrome:, …) are refused
-before navigation."""
+- ``"workbench"`` windows live in the session's shared context and may be
+  *borrowed* by a Run (``run_id`` bound, ``controller == "agent"``);
+  releasing the Run unbinds them without closing the page.
+- ``"run"`` windows live in a dedicated context owned by one Run and are
+  closed when that Run releases its browser resources.
+
+Read ops are R1, mutating ops (click/type) are R2 and pass the shared
+approval gate in the dispatcher.  The page sits behind the manager's
+``EgressProxy`` — the same SSRF boundary as before.
+"""
 
 from __future__ import annotations
 
@@ -21,7 +25,6 @@ from agent.browser.egress import (
     BLOCKED_HEADER,
     BLOCKED_META,
     EgressBlocked,
-    EgressProxy,
 )
 
 
@@ -50,12 +53,99 @@ def check_scheme(url: str) -> None:
         )
 
 
-class BrowserSession:
-    def __init__(self, playwright: Any, browser: Any, proxy: EgressProxy, page: Any):
-        self._pw = playwright
-        self._browser = browser
-        self._proxy = proxy
+class BrowserWindow:
+    """One page the workbench or a Run may operate on.
+
+    ``doc_generation`` counts committed main-frame documents and ``_history``
+    tracks them for the window's back/forward contract — both are part of
+    the window identity the display channel and approval binding rely on.
+    """
+
+    def __init__(
+        self,
+        page: Any,
+        proxy: Any,
+        *,
+        view_id: str,
+        owner: str,
+        scope_key: str,
+        run_id: str | None = None,
+        manager: Any = None,
+    ) -> None:
         self.page = page
+        self._proxy = proxy
+        self.view_id = view_id
+        self.owner = owner
+        self.scope_key = scope_key
+        self.run_id = run_id
+        self.controller = "user"
+        self.manager = manager
+        self.doc_generation = 0
+        self.display: Any | None = None
+        self._closed = False
+        self._loading = False
+        self._history: list[str] = []
+        self._history_index = -1
+        page.on("framenavigated", self._on_frame_navigated)
+        page.on("load", self._on_settled)
+        page.on("domcontentloaded", self._on_settled)
+
+    # ---- window state ----
+
+    @property
+    def closed(self) -> bool:
+        return self._closed
+
+    def _on_frame_navigated(self, frame: Any) -> None:
+        if frame.parent_frame is not None:
+            return
+        self.doc_generation += 1
+        self._loading = True
+        url = frame.url
+        history, index = self._history, self._history_index
+        if index > 0 and url == history[index - 1]:
+            self._history_index = index - 1
+        elif index + 1 < len(history) and url == history[index + 1]:
+            self._history_index = index + 1
+        else:
+            del history[index + 1:]
+            history.append(url)
+            self._history_index += 1
+
+    def _on_settled(self, *args: Any) -> None:
+        self._loading = False
+
+    async def summary(self) -> dict[str, Any]:
+        """The public window card — only fields the UI needs."""
+        try:
+            title = await self.page.title()
+        except Exception:
+            title = ""
+        url = self.page.url
+        return {
+            "view_id": self.view_id,
+            "title": title,
+            "url": url,
+            "loading": self._loading,
+            "error": url.startswith("chrome-error://"),
+            "can_back": self._history_index > 0,
+            "can_forward": self._history_index + 1 < len(self._history),
+            "controller": self.controller,
+            "run_id": self.run_id,
+            "owner": self.owner,
+            "doc_generation": self.doc_generation,
+        }
+
+    async def ensure_display(self) -> Any:
+        """Attach this window's live-display channel (screencast + input)."""
+        if self.display is None:
+            from agent.browser.display import DisplaySession
+
+            self.display = DisplaySession(self.page)
+            await self.display.start()
+        return self.display
+
+    # ---- page operations (same document contract as before) ----
 
     async def _read(self, selector: str, limit: int) -> BrowserRead:
         """Wait for an element or a failed document, then capture validity,
@@ -104,26 +194,6 @@ class BrowserSession:
                 except PlaywrightTimeoutError:
                     pass
 
-    @classmethod
-    async def for_context(cls, run_context: Any) -> "BrowserSession":
-        if run_context.browser_session is not None:
-            return run_context.browser_session
-        from playwright.async_api import async_playwright
-
-        proxy = EgressProxy()
-        port = await proxy.start()
-        pw = await async_playwright().start()
-        browser = await pw.chromium.launch(
-            proxy={"server": f"http://127.0.0.1:{port}"},
-            # Chromium bypasses proxies for loopback by default; the
-            # boundary must see those requests too.
-            args=["--proxy-bypass-list=<-loopback>"],
-        )
-        context = await browser.new_context()
-        session = cls(pw, browser, proxy, await context.new_page())
-        run_context.browser_session = session
-        return session
-
     async def navigate(self, url: str) -> str:
         check_scheme(url)
         seen = len(self._proxy.blocked)
@@ -138,6 +208,18 @@ class BrowserSession:
         if response is not None and response.headers.get(BLOCKED_HEADER.lower()):
             raise EgressBlocked(self._proxy.blocked[-1])
         return f"{await self.page.title()} — {self.page.url}"
+
+    async def back(self) -> str:
+        await self.page.go_back()
+        return self.page.url
+
+    async def forward(self) -> str:
+        await self.page.go_forward()
+        return self.page.url
+
+    async def reload(self) -> str:
+        await self.page.reload()
+        return self.page.url
 
     @property
     def url(self) -> str:
@@ -161,6 +243,12 @@ class BrowserSession:
         return await self._read(selector, limit)
 
     async def close(self) -> None:
-        await self._browser.close()
-        await self._pw.stop()
-        await self._proxy.close()
+        if self._closed:
+            return
+        self._closed = True
+        if self.display is not None:
+            await self.display.stop()
+        try:
+            await self.page.close()
+        except Exception:
+            pass

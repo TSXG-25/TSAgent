@@ -58,6 +58,11 @@ class ServiceContextFactory:
         return self._application
 
     @property
+    def application_if_started(self):
+        """The shared ApplicationContext, if any context was ever built."""
+        return self._application
+
+    @property
     def writer_id(self) -> str:
         return self._writer_id
 

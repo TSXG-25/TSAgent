@@ -32,7 +32,9 @@ def run_http_sidecar(
     loop_ready=None,
 ) -> None:
     """Serve the sidecar dispatcher over HTTP until shutdown."""
-    dispatcher = SidecarDispatcher(service, diagnostics=diagnostics)
+    dispatcher = SidecarDispatcher(
+        service, diagnostics=diagnostics, allowed_origins=allowed_origins
+    )
     loop = asyncio.new_event_loop()
     threading.Thread(target=loop.run_forever, daemon=True).start()
     if loop_ready is not None:

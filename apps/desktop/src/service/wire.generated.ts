@@ -67,6 +67,11 @@ export const LOCAL_TRANSPORT_METHODS = [
   "read_workspace_file",
   "write_workspace_file",
   "read_events",
+  "list_windows",
+  "open_window",
+  "close_window",
+  "navigate_window",
+  "display_ticket",
   "shutdown",
 ] as const;
 
@@ -137,6 +142,11 @@ export interface WireMethods {
   read_workspace_file: { params: WireWorkspaceFileRequest; result: WireWorkspaceFileContent };
   write_workspace_file: { params: WireWorkspaceFileRequest; result: WireWorkspaceFileContent };
   read_events: { params: WireEventStreamRequest; result: WireRunEvent[] };
+  list_windows: { params: WireListWindowsRequest; result: WireWindowSummaryDict[] };
+  open_window: { params: WireOpenWindowRequest; result: WireWindowSummaryDict };
+  close_window: { params: WireCloseWindowRequest; result: WireClosedResult };
+  navigate_window: { params: WireNavigateWindowRequest; result: WireWindowSummaryDict };
+  display_ticket: { params: WireDisplayTicketRequest; result: WireDisplayTicketResult };
   shutdown: { params: WireEmptyParams; result: WireShutdownResult };
 }
 
@@ -231,6 +241,18 @@ export interface WireCancelRunRequest {
 export interface WireCapabilityEntry {
   capability: string;
   tools: string[];
+}
+
+export interface WireCloseWindowRequest {
+  tenant_id: string;
+  user_id: string;
+  session_id: string;
+  request_id: string;
+  view_id: string;
+}
+
+export interface WireClosedResult {
+  closed: boolean;
 }
 
 export interface WireCreateMotifRequest {
@@ -341,6 +363,18 @@ export interface WireDirectoryListing {
   dirs: string[];
   home: string;
   error: string;
+}
+
+export interface WireDisplayTicketRequest {
+  tenant_id: string;
+  user_id: string;
+  session_id: string;
+  request_id: string;
+}
+
+export interface WireDisplayTicketResult {
+  port: number;
+  token: string;
 }
 
 export type WireEmptyParams = Record<string, never>;
@@ -589,6 +623,13 @@ export interface WireListTasksRequest {
   limit?: number;
 }
 
+export interface WireListWindowsRequest {
+  tenant_id: string;
+  user_id: string;
+  session_id: string;
+  request_id: string;
+}
+
 export interface WireListWorkflowGraphsRequest {
   tenant_id: string;
   user_id: string;
@@ -626,11 +667,29 @@ export interface WireMotifSummary {
   updated_at: string;
 }
 
+export interface WireNavigateWindowRequest {
+  tenant_id: string;
+  user_id: string;
+  session_id: string;
+  request_id: string;
+  view_id: string;
+  action?: string;
+  url?: string;
+}
+
 export interface WireNoEffectConfirmation {
   task_id: string;
   idempotency_key: string;
   external_reference: string;
   checked_at: string;
+}
+
+export interface WireOpenWindowRequest {
+  tenant_id: string;
+  user_id: string;
+  session_id: string;
+  request_id: string;
+  url?: string;
 }
 
 export interface WireParticipantSummary {
@@ -916,6 +975,7 @@ export interface WireStartRunRequest {
   workspace_root?: string;
   origin_planet?: string;
   context_refs?: string[];
+  view_ids?: string[];
   metadata?: Record<string, unknown>;
 }
 
@@ -1016,6 +1076,20 @@ export interface WireWebSearchResult {
   provider: string;
   content: string;
   sources: Record<string, unknown>[];
+}
+
+export interface WireWindowSummaryDict {
+  view_id: string;
+  title: string;
+  url: string;
+  loading: boolean;
+  error: boolean;
+  can_back: boolean;
+  can_forward: boolean;
+  controller: string;
+  run_id: string;
+  owner: string;
+  doc_generation: number;
 }
 
 export interface WireWorkflowEntry {

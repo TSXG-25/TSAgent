@@ -30,6 +30,8 @@ export interface StartRunRequest {
   originPlanet?: string;
   /** Attachment refs (file:/task:/run:) — validated and recorded on start. */
   contextRefs?: string[];
+  /** Workbench windows this run may operate — structured refs, not prompt text. */
+  viewIds?: string[];
   requestDigest?: string;
 }
 
@@ -1106,7 +1108,35 @@ export interface TaskCatalogClient {
   getTask(request: TaskLookupRequest): Promise<TaskRecord>;
 }
 
-export interface DesktopAgentServiceClient extends AgentServiceClient, RunCatalogClient, TaskCatalogClient, ApprovalClient, SessionCatalogClient, HandoffClient, HistoryClient, ScheduleClient, ProfileClient, SettingsClient, WorkspaceClient, CapabilityClient, WebSearchClient, SkillClient, DelegationClient, MemoryClient, ParticipantClient, JupiterClient, WorkspaceFilesClient, EvaluationClient, WorkflowCatalogClient, WorkflowGraphClient, MotifClient {
+/** Public window card — the only window fields the UI may hold (plan §4.1). */
+export interface WindowSummary {
+  viewId: string;
+  title: string;
+  url: string;
+  loading: boolean;
+  error: boolean;
+  canBack: boolean;
+  canForward: boolean;
+  controller: string;
+  runId: string;
+  owner: string;
+  docGeneration: number;
+}
+
+export interface DisplayTicket {
+  port: number;
+  token: string;
+}
+
+export interface WindowClient {
+  listWindows(scope: SessionScope): Promise<WindowSummary[]>;
+  openWindow(scope: SessionScope, url?: string): Promise<WindowSummary>;
+  closeWindow(scope: SessionScope, viewId: string): Promise<{ closed: boolean }>;
+  navigateWindow(scope: SessionScope, viewId: string, action: string, url?: string): Promise<WindowSummary>;
+  displayTicket(scope: SessionScope): Promise<DisplayTicket>;
+}
+
+export interface DesktopAgentServiceClient extends AgentServiceClient, RunCatalogClient, TaskCatalogClient, ApprovalClient, SessionCatalogClient, HandoffClient, HistoryClient, ScheduleClient, ProfileClient, SettingsClient, WorkspaceClient, CapabilityClient, WebSearchClient, SkillClient, DelegationClient, MemoryClient, ParticipantClient, JupiterClient, WorkspaceFilesClient, EvaluationClient, WorkflowCatalogClient, WorkflowGraphClient, MotifClient, WindowClient {
   readonly mode: DesktopAgentServiceMode;
   readonly identity: DesktopIdentity;
   /** Resolve the backend health before the UI begins using the client. */

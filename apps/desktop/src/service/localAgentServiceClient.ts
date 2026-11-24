@@ -94,6 +94,7 @@ import {
   type ArtifactPreview,
   type StartRunRequest,
   type TaskHandle,
+  type WindowSummary,
   type TaskLookupRequest,
   type TaskRecord,
   type VerifierSummary,
@@ -129,6 +130,7 @@ import type {
   WireSettingsSummary,
   WireTaskHandle,
   WireTaskSnapshot,
+  WireWindowSummaryDict,
   WireWorkflowGraphSummary,
   WireWorkspaceSummary,
 } from "./wire.generated";
@@ -585,6 +587,22 @@ function mapEvents(value: WireRunEvent[], afterSequence: number): RunEvent[] {
   return [...byId.values()].sort((left, right) => left.sequenceNumber - right.sequenceNumber);
 }
 
+function mapWindow(raw: WireWindowSummaryDict): WindowSummary {
+  return {
+    viewId: requiredString(raw.view_id, "view_id"),
+    title: String(raw.title ?? ""),
+    url: String(raw.url ?? ""),
+    loading: Boolean(raw.loading),
+    error: Boolean(raw.error),
+    canBack: Boolean(raw.can_back),
+    canForward: Boolean(raw.can_forward),
+    controller: String(raw.controller ?? "user"),
+    runId: String(raw.run_id ?? ""),
+    owner: String(raw.owner ?? ""),
+    docGeneration: Number(raw.doc_generation ?? 0),
+  };
+}
+
 function mapHealth(raw: WireHealthResult): HealthSnapshot {
   if (raw.status !== "ok") throw new Error("health status is not ok");
   return {
@@ -621,6 +639,36 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
 
   async ready(): Promise<void> {
     await this.health();
+  }
+
+  // ---- Mercury browser windows ----
+
+  async listWindows(scope: SessionScope) {
+    return (await this.call("list_windows", this.ids(scope, "list_windows")))
+      .map(mapWindow);
+  }
+
+  async openWindow(scope: SessionScope, url = "") {
+    return mapWindow(await this.call("open_window", {
+      ...this.ids(scope, "open_window"), url,
+    }));
+  }
+
+  async closeWindow(scope: SessionScope, viewId: string) {
+    return this.call("close_window", {
+      ...this.ids(scope, "close_window"), view_id: viewId,
+    });
+  }
+
+  async navigateWindow(scope: SessionScope, viewId: string, action: string, url = "") {
+    return mapWindow(await this.call("navigate_window", {
+      ...this.ids(scope, "navigate_window"),
+      view_id: viewId, action, url,
+    }));
+  }
+
+  async displayTicket(scope: SessionScope) {
+    return this.call("display_ticket", this.ids(scope, "display_ticket"));
   }
 
   async listRuns(scope: SessionScope): Promise<RunSnapshot[]> {
@@ -1042,6 +1090,7 @@ export class LocalAgentServiceClient implements DesktopAgentServiceClient {
       workspace_root: request.workspaceRoot ?? "",
       origin_planet: request.originPlanet ?? "",
       context_refs: request.contextRefs ?? [],
+      view_ids: request.viewIds ?? [],
       metadata: { ...(request.metadata ?? {}), ...(request.requestDigest ? { desktop_request_digest: request.requestDigest } : {}) },
     };
     return this.project(async () => mapRunHandle(await this.call("start_run", params)));

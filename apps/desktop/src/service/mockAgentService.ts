@@ -178,6 +178,18 @@ export class MockAgentServiceClient implements DesktopAgentServiceClient {
     seed.forEach((run, index) => this.addSeedRun(run, index));
   }
 
+  async listWindows() { return []; }
+  async openWindow(): Promise<never> {
+    throw new AgentServiceClientError({ code: "UNSUPPORTED_OPERATION", message: "mock: no browser", retryable: false });
+  }
+  async closeWindow() { return { closed: false }; }
+  async navigateWindow(): Promise<never> {
+    throw new AgentServiceClientError({ code: "UNSUPPORTED_OPERATION", message: "mock: no browser", retryable: false });
+  }
+  async displayTicket(): Promise<never> {
+    throw new AgentServiceClientError({ code: "UNSUPPORTED_OPERATION", message: "mock: no browser", retryable: false });
+  }
+
   async ready(): Promise<void> {
     // The mock has no external process to probe, but it still participates in
     // the same composition-root readiness contract as the local client.

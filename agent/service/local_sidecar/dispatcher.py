@@ -23,9 +23,17 @@ Handler = Callable[[Mapping[str, Any]], Awaitable[Any]]
 class SidecarDispatcher:
     """Thin allowlisted adapter; it owns no Runtime or business decisions."""
 
-    def __init__(self, service: Any, *, diagnostics: TextIO) -> None:
+    def __init__(
+        self,
+        service: Any,
+        *,
+        diagnostics: TextIO,
+        allowed_origins: frozenset[str] = frozenset(),
+    ) -> None:
         self._service = service
         self._diagnostics = diagnostics
+        self._allowed_origins = allowed_origins
+        self._display_bridge: Any | None = None
         self._shutdown_requested = False
         self._closed = False
         # Plain methods forward straight to the AgentService method the
@@ -94,10 +102,21 @@ class SidecarDispatcher:
             "service result contains unsupported object",
         )
 
+    def _bridge(self) -> Any:
+        if self._display_bridge is None:
+            from .display_bridge import DisplayBridge
+
+            self._display_bridge = DisplayBridge(
+                self._service, allowed_origins=self._allowed_origins
+            )
+        return self._display_bridge
+
     async def close(self) -> None:
         if self._closed:
             return
         self._closed = True
+        if self._display_bridge is not None:
+            await self._display_bridge.close()
         await self._service.close()
 
     async def _health(self, params: Mapping[str, Any]) -> dict[str, Any]:
@@ -232,6 +251,14 @@ class SidecarDispatcher:
             if close_stream is not None:
                 await close_stream()
         return events
+
+    async def _display_ticket(self, params: Mapping[str, Any]) -> Any:
+        from ..contracts import DisplayTicketRequest
+
+        request = self._from_dto(DisplayTicketRequest.from_dict, params)
+        return await self._bridge().ticket(
+            request.tenant_id, request.session_id
+        )
 
     async def _shutdown(self, params: Mapping[str, Any]) -> dict[str, str]:
         del params

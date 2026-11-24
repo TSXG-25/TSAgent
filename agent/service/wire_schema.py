@@ -133,6 +133,29 @@ class DelegationResult(TypedDict):
     request_text: str
 
 
+class WindowSummaryDict(TypedDict):
+    view_id: str
+    title: str
+    url: str
+    loading: bool
+    error: bool
+    can_back: bool
+    can_forward: bool
+    controller: str
+    run_id: str
+    owner: str
+    doc_generation: int
+
+
+class ClosedResult(TypedDict):
+    closed: bool
+
+
+class DisplayTicketResult(TypedDict):
+    port: int
+    token: str
+
+
 @dataclass(frozen=True)
 class WireMethod:
     """``service`` names the AgentService method a plain method forwards
@@ -213,6 +236,11 @@ WIRE_METHODS: dict[M, WireMethod] = {
     M.READ_WORKSPACE_FILE: _plain(c.WorkspaceFileRequest, c.WorkspaceFileContent, "read_workspace_file"),
     M.WRITE_WORKSPACE_FILE: _plain(c.WorkspaceFileRequest, c.WorkspaceFileContent, "write_workspace_file"),
     M.READ_EVENTS: WireMethod(c.EventStreamRequest, list[c.RunEvent]),
+    M.LIST_WINDOWS: _plain(c.ListWindowsRequest, list[WindowSummaryDict], "list_windows"),
+    M.OPEN_WINDOW: _plain(c.OpenWindowRequest, WindowSummaryDict, "open_window"),
+    M.CLOSE_WINDOW: _plain(c.CloseWindowRequest, ClosedResult, "close_window"),
+    M.NAVIGATE_WINDOW: _plain(c.NavigateWindowRequest, WindowSummaryDict, "navigate_window"),
+    M.DISPLAY_TICKET: WireMethod(c.DisplayTicketRequest, DisplayTicketResult),
     M.SHUTDOWN: WireMethod(EmptyParams, ShutdownResult),
 }
 

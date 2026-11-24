@@ -256,10 +256,10 @@ class AgentLoop:
             )
         finally:
             run_context = getattr(self._orch, "run_context", None)
-            session = getattr(run_context, "browser_session", None)
-            if session is not None:
-                run_context.browser_session = None
-                await session.close()
+            if getattr(run_context, "browser_windows", None):
+                from agent.browser.manager import release_run_browsers
+
+                await release_run_browsers(run_context)
 
     async def _run_impl(
         self,

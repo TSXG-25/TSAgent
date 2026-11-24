@@ -265,6 +265,9 @@ class StartRunRequest:
     workspace_root: str = ""
     origin_planet: str = ""
     context_refs: tuple[str, ...] = ()
+    # Structured window references — the workbench views this Run may
+    # operate; every browser action must name one of these (plan §4.1).
+    view_ids: tuple[str, ...] = ()
     metadata: Mapping[str, JSONValue] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -300,6 +303,8 @@ class StartRunRequest:
             value["origin_planet"] = self.origin_planet
         if self.context_refs:
             value["context_refs"] = list(self.context_refs)
+        if self.view_ids:
+            value["view_ids"] = list(self.view_ids)
         return value
 
     @classmethod
@@ -316,6 +321,9 @@ class StartRunRequest:
             origin_planet=str(value.get("origin_planet", "")),
             context_refs=tuple(
                 str(item) for item in (value.get("context_refs") or ())
+            ),
+            view_ids=tuple(
+                str(item) for item in (value.get("view_ids") or ())
             ),
             metadata=cast(Mapping[str, JSONValue], value.get("metadata", {}) or {}),
         )
@@ -2966,3 +2974,170 @@ class DeleteWorkspaceRequest:
             request_id=str(value.get("request_id", "")),
             workspace_id=str(value.get("workspace_id", "")),
         )
+
+
+@dataclass(frozen=True)
+class ListWindowsRequest:
+    """The Mercury window directory — workbench windows of this session."""
+
+    tenant_id: str
+    user_id: str
+    session_id: str
+    request_id: str
+
+    def __post_init__(self) -> None:
+        _required_identifier(self.tenant_id, "tenant_id")
+        _required_identifier(self.user_id, "user_id")
+        _required_identifier(self.session_id, "session_id")
+        _required_identifier(self.request_id, "request_id")
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "ListWindowsRequest":
+        return cls(
+            tenant_id=str(value.get("tenant_id", "")),
+            user_id=str(value.get("user_id", "")),
+            session_id=str(value.get("session_id", "")),
+            request_id=str(value.get("request_id", "")),
+        )
+
+
+@dataclass(frozen=True)
+class OpenWindowRequest:
+    """Create a workbench window in this session's shared context."""
+
+    tenant_id: str
+    user_id: str
+    session_id: str
+    request_id: str
+    url: str = ""
+
+    def __post_init__(self) -> None:
+        _required_identifier(self.tenant_id, "tenant_id")
+        _required_identifier(self.user_id, "user_id")
+        _required_identifier(self.session_id, "session_id")
+        _required_identifier(self.request_id, "request_id")
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "OpenWindowRequest":
+        return cls(
+            tenant_id=str(value.get("tenant_id", "")),
+            user_id=str(value.get("user_id", "")),
+            session_id=str(value.get("session_id", "")),
+            request_id=str(value.get("request_id", "")),
+            url=str(value.get("url", "")),
+        )
+
+
+@dataclass(frozen=True)
+class CloseWindowRequest:
+    tenant_id: str
+    user_id: str
+    session_id: str
+    request_id: str
+    view_id: str
+
+    def __post_init__(self) -> None:
+        _required_identifier(self.tenant_id, "tenant_id")
+        _required_identifier(self.user_id, "user_id")
+        _required_identifier(self.session_id, "session_id")
+        _required_identifier(self.request_id, "request_id")
+        _required_identifier(self.view_id, "view_id")
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "CloseWindowRequest":
+        return cls(
+            tenant_id=str(value.get("tenant_id", "")),
+            user_id=str(value.get("user_id", "")),
+            session_id=str(value.get("session_id", "")),
+            request_id=str(value.get("request_id", "")),
+            view_id=str(value.get("view_id", "")),
+        )
+
+
+@dataclass(frozen=True)
+class NavigateWindowRequest:
+    """One navigation action on a window the session owns."""
+
+    tenant_id: str
+    user_id: str
+    session_id: str
+    request_id: str
+    view_id: str
+    action: str = "navigate"  # navigate | back | forward | reload
+    url: str = ""
+
+    def __post_init__(self) -> None:
+        _required_identifier(self.tenant_id, "tenant_id")
+        _required_identifier(self.user_id, "user_id")
+        _required_identifier(self.session_id, "session_id")
+        _required_identifier(self.request_id, "request_id")
+        _required_identifier(self.view_id, "view_id")
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "NavigateWindowRequest":
+        return cls(
+            tenant_id=str(value.get("tenant_id", "")),
+            user_id=str(value.get("user_id", "")),
+            session_id=str(value.get("session_id", "")),
+            request_id=str(value.get("request_id", "")),
+            view_id=str(value.get("view_id", "")),
+            action=str(value.get("action", "navigate")),
+            url=str(value.get("url", "")),
+        )
+
+
+@dataclass(frozen=True)
+class DisplayTicketRequest:
+    """Mint a display-channel token for this session's windows."""
+
+    tenant_id: str
+    user_id: str
+    session_id: str
+    request_id: str
+
+    def __post_init__(self) -> None:
+        _required_identifier(self.tenant_id, "tenant_id")
+        _required_identifier(self.user_id, "user_id")
+        _required_identifier(self.session_id, "session_id")
+        _required_identifier(self.request_id, "request_id")
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "DisplayTicketRequest":
+        return cls(
+            tenant_id=str(value.get("tenant_id", "")),
+            user_id=str(value.get("user_id", "")),
+            session_id=str(value.get("session_id", "")),
+            request_id=str(value.get("request_id", "")),
+        )
+
+
+@dataclass(frozen=True)
+class WindowSummary:
+    """Public window card — only what the UI needs (plan §4.1)."""
+
+    view_id: str
+    title: str
+    url: str
+    loading: bool
+    error: bool
+    can_back: bool
+    can_forward: bool
+    controller: str
+    run_id: str
+    owner: str
+    doc_generation: int
+
+    def to_dict(self) -> dict[str, JSONValue]:
+        return {
+            "view_id": self.view_id,
+            "title": self.title,
+            "url": self.url,
+            "loading": self.loading,
+            "error": self.error,
+            "can_back": self.can_back,
+            "can_forward": self.can_forward,
+            "controller": self.controller,
+            "run_id": self.run_id,
+            "owner": self.owner,
+            "doc_generation": self.doc_generation,
+        }

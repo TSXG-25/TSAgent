@@ -414,6 +414,15 @@ class AgentService:
                     run_id=run_id,
                 )
             context.delegation = self
+            if request.view_ids:
+                # Structured window refs bind at admission — occupancy
+                # failure lands on this Run and names the holding Run.
+                acquired = self._browser_manager().acquire(
+                    run_id, request.view_ids
+                )
+                context.browser_windows.update(
+                    {window.view_id: window for window in acquired}
+                )
             managed = self._runs.get(run_id)
             if managed is not None:
                 self._runs[run_id] = _ManagedRun(context, managed.task)
@@ -442,6 +451,12 @@ class AgentService:
             if managed is not None and managed.run_context is context:
                 self._runs.pop(run_id, None)
             if context is not None:
+                if getattr(context, "browser_windows", None):
+                    # Failure between acquire and the loop's own finally
+                    # must not leave workbench windows bound forever.
+                    from agent.browser.manager import release_run_browsers
+
+                    await release_run_browsers(context)
                 self._contexts.release_run(context)
 
     def _persist_start_failure(
@@ -3378,6 +3393,118 @@ class AgentService:
         self._ensure_open()
         return self._event_repository().stream(request)
 
+    # ---- Mercury browser windows (plan §4) ----
+
+    def _browser_manager(self):
+        from agent.browser.manager import BrowserManager
+
+        return BrowserManager.for_application(self._contexts.application)
+
+    @staticmethod
+    def _window_scope(tenant_id: str, session_id: str) -> str:
+        return f"{tenant_id}:{session_id}"
+
+    def _session_window(self, tenant_id: str, session_id: str, view_id: str):
+        """The session's workbench window or a scope-safe error."""
+        window = self._browser_manager().window(view_id)
+        if (
+            window is None
+            or window.owner != "workbench"
+            or window.scope_key != self._window_scope(tenant_id, session_id)
+        ):
+            raise AgentServiceError(
+                ServiceErrorCode.INVALID_REQUEST,
+                f"unknown browser window for this session: {view_id}",
+            )
+        return window
+
+    def window_for_session(
+        self, tenant_id: str, session_id: str, view_id: str
+    ):
+        """Display-bridge resolution — live window or None, same scope rule."""
+        try:
+            return self._session_window(tenant_id, session_id, view_id)
+        except AgentServiceError:
+            return None
+
+    async def list_windows(self, request: Any) -> list[Any]:
+        self._ensure_open()
+        from .contracts import WindowSummary
+
+        scope = self._window_scope(request.tenant_id, request.session_id)
+        windows = self._browser_manager().windows(scope)
+        return [WindowSummary(**(await w.summary())) for w in windows]
+
+    async def open_window(self, request: Any) -> Any:
+        self._ensure_open()
+        from .contracts import WindowSummary
+        from agent.browser.egress import EgressBlocked
+
+        try:
+            window = await self._browser_manager().open_window(
+                scope_key=self._window_scope(
+                    request.tenant_id, request.session_id
+                ),
+                owner="workbench",
+                url=request.url.strip() or None,
+            )
+        except (ValueError, EgressBlocked) as error:
+            raise AgentServiceError(
+                ServiceErrorCode.INVALID_REQUEST, str(error)
+            ) from error
+        return WindowSummary(**(await window.summary()))
+
+    async def close_window(self, request: Any) -> Any:
+        self._ensure_open()
+        from agent.browser.manager import WindowOccupied
+
+        manager = self._browser_manager()
+        window = manager.window(request.view_id)
+        if (
+            window is not None
+            and window.scope_key
+            != self._window_scope(request.tenant_id, request.session_id)
+        ):
+            raise AgentServiceError(
+                ServiceErrorCode.INVALID_REQUEST,
+                f"unknown browser window for this session: {request.view_id}",
+            )
+        try:
+            closed = await manager.close_window(request.view_id)
+        except WindowOccupied as error:
+            raise AgentServiceError(
+                ServiceErrorCode.INVALID_REQUEST, str(error)
+            ) from error
+        return {"closed": closed}
+
+    async def navigate_window(self, request: Any) -> Any:
+        self._ensure_open()
+        from .contracts import WindowSummary
+        from agent.browser.egress import EgressBlocked
+
+        window = self._session_window(
+            request.tenant_id, request.session_id, request.view_id
+        )
+        try:
+            if request.action == "navigate":
+                await window.navigate(request.url)
+            elif request.action == "back":
+                await window.back()
+            elif request.action == "forward":
+                await window.forward()
+            elif request.action == "reload":
+                await window.reload()
+            else:
+                raise AgentServiceError(
+                    ServiceErrorCode.INVALID_REQUEST,
+                    f"unsupported window action: {request.action}",
+                )
+        except EgressBlocked as error:
+            raise AgentServiceError(
+                ServiceErrorCode.INVALID_REQUEST, str(error)
+            ) from error
+        return WindowSummary(**(await window.summary()))
+
     async def close(self) -> None:
         import asyncio
 
@@ -3429,6 +3556,16 @@ class AgentService:
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
         self._runs.clear()
+        # BrowserManager is application-level and async — reap every owned
+        # window/context here, before the synchronous context teardown.
+        application = self._contexts.application_if_started
+        manager = (
+            getattr(application, "browser_manager", None)
+            if application is not None
+            else None
+        )
+        if manager is not None:
+            await manager.close()
         if self._events is not None:
             self._events.close()
         self._contexts.close()

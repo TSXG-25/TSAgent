@@ -69,6 +69,9 @@ class ApplicationContext:
         )
         self._sessions: dict[str, SessionContext] = {}
         self._repository_indexers: dict[Path, Any] = {}
+        # Lazily opened by the first browser window; closed by the Service
+        # (async close) — ApplicationContext.close is synchronous.
+        self.browser_manager: Any | None = None
         self._closed = False
 
     @property
@@ -339,9 +342,10 @@ class RunContext:
             if self.workspace is not None
             else None
         )
-        # Lazily opened by the first browser.* step; closed when the loop
-        # run ends (agent.loop.runner.AgentLoop.run).
-        self.browser_session: Any | None = None
+        # Browser windows this Run may drive — run-owned plus workbench
+        # windows bound at admission.  Released (closed or unbound) when
+        # the loop run ends (agent.loop.runner.AgentLoop.run).
+        self.browser_windows: dict[str, Any] = {}
         self.clock = time.time
         self.created_at = self.clock()
         self.diagnostics = RunDiagnosticsSink(scope_id=self.scope_id)

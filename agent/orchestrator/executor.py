@@ -9,7 +9,7 @@ from dataclasses import replace
 from functools import partial
 from typing import Any
 
-from agent.browser.session import BrowserSession
+from agent.browser.manager import resolve_browser
 
 from agent.state import AgentState
 from agent.executor.contract import executor_factory
@@ -112,7 +112,7 @@ class ExecutionStage:
             context.set_var("repository_indexer", run_context.repository_indexer)
             context.set_var(
                 "open_browser",
-                partial(BrowserSession.for_context, run_context),
+                partial(resolve_browser, run_context),
             )
         context.set_var("execution_plan", plan)
         context.set_var("conversation_snapshot", state.get("conversation_snapshot"))

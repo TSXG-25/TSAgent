@@ -1,6 +1,6 @@
 """browser_* tools through the executor pipeline — offline contracts.
 
-Playwright is replaced by ``FakeSession`` via ``BrowserSession.for_context``
+Playwright is replaced by a fake window via ``resolve_browser``
 (the Run-scoped factory the ExecutionStage hands to the tool layer), so the
 real path runs: AgentLoop dispatch → authorization → approval gate →
 ExecutionStage → ToolExecutor → PlanExecutor → verifier → evidence.
@@ -29,7 +29,7 @@ pytest.importorskip("playwright.async_api")  # browser tools need playwright
 
 import tests.test_ha_r1_harness as harness  # noqa: E402
 from agent.browser.egress import BLOCKED_HEADER, EgressBlocked  # noqa: E402
-from agent.browser.session import BrowserRead, BrowserSession  # noqa: E402
+from agent.browser.window import BrowserRead, BrowserWindow  # noqa: E402
 from agent.llm import ToolCall  # noqa: E402
 from agent.loop.runner import AgentLoop  # noqa: E402
 from agent.loop.toolset import build_toolset  # noqa: E402
@@ -40,6 +40,16 @@ from tests.test_agent_loop import _mutation_state, _orchestrator  # noqa: E402
 PNG = b"\x89PNG\r\n\x1a\nFAKE-SCREENSHOT"
 PAGE_URL = "https://final.example/article"
 PAGE_TEXT = "UNIQUE-PAGE-BODY-3141 lives only in the page body."
+
+_KW = {"view_id": "vw-t", "owner": "run", "scope_key": "run:t"}
+
+
+def _window(page, proxy):
+    return BrowserWindow(page, proxy, **_KW)
+
+
+def _window_of(orch):
+    return next(iter(orch.run_context.browser_windows.values()))
 
 
 class FakeSession:
@@ -90,7 +100,7 @@ class FakeSession:
 def _loop_env(tmp_path, *, outcomes=("USER_VISIBLE_OUTPUT",), targets=()):
     orch = _orchestrator(tmp_path)
     orch.run_context.run_id = "run-b"
-    orch.run_context.browser_session = FakeSession()
+    orch.run_context.browser_windows = {"vw-fake": FakeSession()}
     events: list[tuple[str, dict]] = []
     for kind in ("task_started", "task_completed"):
         orch.run_context.event_bus.subscribe(
@@ -140,7 +150,7 @@ def test_read_text_records_actual_page_url_as_source(tmp_path, name, args):
 
 def test_empty_page_text_is_not_source_evidence(tmp_path):
     orch, state, tools, _ = _loop_env(tmp_path)
-    orch.run_context.browser_session.text = "   "
+    _window_of(orch).text = "   "
     _call(orch, state, tools, "browser_snapshot", {})
     assert state["plan"][0]["observations"][0]["sources"] == []
     assert state["fresh_evidence"] is False
@@ -152,7 +162,7 @@ def test_empty_page_text_is_not_source_evidence(tmp_path):
 ])
 def test_source_stays_bound_to_read_when_page_navigates(tmp_path, name, args):
     orch, state, tools, _ = _loop_env(tmp_path)
-    session = orch.run_context.browser_session
+    session = _window_of(orch)
 
     async def read_then_navigate(*args):
         read = BrowserRead(text=PAGE_TEXT, url=PAGE_URL)
@@ -171,7 +181,7 @@ def test_blocked_url_surfaces_stable_code(tmp_path):
     async def blocked(url):
         raise EgressBlocked(f"BROWSER_URL_BLOCKED: refusing to load {url}")
 
-    orch.run_context.browser_session.navigate = blocked
+    _window_of(orch).navigate = blocked
     msg = _call(orch, state, tools, "browser_navigate", {"url": "http://10.0.0.1/"})
     assert "BROWSER_URL_BLOCKED" in msg["content"]
     assert events[-1][1]["status"] == "failed"
@@ -195,6 +205,9 @@ class _RefusalPage:
         self.url = url
         return SimpleNamespace(headers={BLOCKED_HEADER.lower(): "1"})
 
+    def on(self, *args, **kwargs):
+        pass
+
     def locator(self, selector):
         return self
 
@@ -206,9 +219,9 @@ class _RefusalPage:
 
 
 def _refusal_session():
-    """Real BrowserSession whose page always lands on the refusal doc."""
+    """Real BrowserWindow whose page always lands on the refusal doc."""
     proxy = SimpleNamespace(blocked=["refusing to load 10.0.0.1:80"])
-    return BrowserSession(object(), object(), proxy, _RefusalPage())
+    return BrowserWindow(_RefusalPage(), proxy, **_KW)
 
 
 @pytest.mark.parametrize("name,args", [
@@ -219,7 +232,7 @@ def test_refused_document_produces_no_source(tmp_path, name, args):
     """navigate → BROWSER_URL_BLOCKED, then a read of the proxy's refusal
     page must fail too — never recorded as a source, never evidence."""
     orch, state, tools, events = _loop_env(tmp_path)
-    orch.run_context.browser_session = _refusal_session()
+    orch.run_context.browser_windows = {"vw-fake": _refusal_session()}
     _call(orch, state, tools, "browser_navigate", {"url": "http://10.0.0.1/"})
     msg = _call(orch, state, tools, name, args, index=2)
     assert "BROWSER_URL_BLOCKED" in msg["content"]
@@ -239,8 +252,7 @@ def test_refusal_marker_makes_document_unreadable():
         asyncio.run(session.snapshot())
     page = _RefusalPage()
     page.refused = False  # a real page has no marker
-    session = BrowserSession(
-        object(), object(), SimpleNamespace(blocked=[]), page)
+    session = BrowserWindow(page, SimpleNamespace(blocked=[]), **_KW)
     assert asyncio.run(session.snapshot()).text == _RefusalPage.refusal_text
 
 
@@ -254,7 +266,7 @@ def test_read_retries_destroyed_context_and_load_timeout_only():
         Error("Execution context was destroyed"), read,
     ])
     page.wait_for_load_state = AsyncMock(side_effect=TimeoutError("load timed out"))
-    session = BrowserSession(None, None, None, page)
+    session = BrowserWindow(page, None, **_KW)
     assert asyncio.run(session.snapshot()) == BrowserRead(PAGE_TEXT, PAGE_URL)
     assert page.evaluate_all.await_count == 2
 
@@ -265,7 +277,7 @@ def test_read_propagates_unrelated_load_error():
     page = _RefusalPage()
     page.evaluate_all = AsyncMock(side_effect=Error("Execution context was destroyed"))
     page.wait_for_load_state = AsyncMock(side_effect=Error("UNRELATED_BROKEN_PROTOCOL"))
-    session = BrowserSession(None, None, None, page)
+    session = BrowserWindow(page, None, **_KW)
     with pytest.raises(Error, match="UNRELATED_BROKEN_PROTOCOL"):
         asyncio.run(session.snapshot())
     assert page.evaluate_all.await_count == 1
@@ -277,7 +289,7 @@ def test_read_propagates_unrelated_read_error():
     page = _RefusalPage()
     page.evaluate_all = AsyncMock(side_effect=Error("Target page has been closed"))
     page.wait_for_load_state = AsyncMock()
-    session = BrowserSession(None, None, None, page)
+    session = BrowserWindow(page, None, **_KW)
     with pytest.raises(Error, match="Target page has been closed"):
         asyncio.run(session.snapshot())
     assert page.evaluate_all.await_count == 1
@@ -304,8 +316,7 @@ class _AbortPage(_RefusalPage):
 
 
 def test_aborted_navigation_document_is_not_readable():
-    session = BrowserSession(
-        object(), object(), SimpleNamespace(blocked=[]), _AbortPage())
+    session = BrowserWindow(_AbortPage(), SimpleNamespace(blocked=[]), **_KW)
     with pytest.raises(RuntimeError, match="ERR_NAME_NOT_RESOLVED"):
         asyncio.run(session.navigate("http://missing.invalid/"))
     with pytest.raises(RuntimeError, match="navigation error page"):
@@ -318,7 +329,7 @@ def test_refused_connect_leaves_no_readable_document():
     page.error = "net::ERR_TUNNEL_CONNECTION_FAILED"
     page.on_navigate = lambda: proxy.blocked.append(
         "refusing to load 10.0.0.1:443")
-    session = BrowserSession(object(), object(), proxy, page)
+    session = BrowserWindow(page, proxy, **_KW)
 
     async def go():
         # the caller still gets the boundary's reason …
@@ -344,8 +355,7 @@ def test_error_document_produces_no_source(tmp_path, name, args):
     page.error = "net::ERR_TUNNEL_CONNECTION_FAILED"
     page.on_navigate = lambda: proxy.blocked.append(
         "refusing to load 10.0.0.1:443")
-    orch.run_context.browser_session = BrowserSession(
-        object(), object(), proxy, page)
+    orch.run_context.browser_windows = {"vw-fake": _window(page, proxy)}
     _call(orch, state, tools, "browser_navigate", {"url": "http://allowed.example/"})
     msg = _call(orch, state, tools, name, args, index=2)
     assert "navigation error page" in msg["content"]
@@ -390,7 +400,7 @@ def test_screenshot_outside_write_scope_is_refused(tmp_path):
     )
     msg = _call(orch, state, tools, "browser_screenshot", {"path": "other/p.png"})
     assert "EFFECT_SCOPE_VIOLATION" in msg["content"]
-    assert orch.run_context.browser_session.calls == []
+    assert _window_of(orch).calls == []
     assert events == []
 
 
@@ -408,7 +418,7 @@ def test_click_without_approval_channel_fails_closed(tmp_path):
     orch, state, tools, events = _loop_env(tmp_path)
     msg = _call(orch, state, tools, "browser_click", {"selector": "#buy"})
     assert "APPROVAL_UNAVAILABLE" in msg["content"]
-    assert orch.run_context.browser_session.calls == []
+    assert _window_of(orch).calls == []
     assert events == []
 
 
@@ -417,7 +427,7 @@ def test_denied_click_has_no_side_effect(tmp_path):
     orch.run_context.delegation = _Approvals("DENIED")
     msg = _call(orch, state, tools, "browser_click", {"selector": "#buy"})
     assert "APPROVAL_DENIED" in msg["content"]
-    assert orch.run_context.browser_session.calls == []
+    assert _window_of(orch).calls == []
     assert events == []
     assert orch.run_context.delegation.requests[0]["action"] == "browser.click"
     assert orch.run_context.delegation.requests[0]["risk_level"] == "R2"
@@ -428,7 +438,7 @@ def test_approved_click_records_success(tmp_path):
     orch.run_context.delegation = _Approvals("APPROVED")
     msg = _call(orch, state, tools, "browser_click", {"selector": "#buy"})
     assert msg["content"] == "clicked #buy"
-    assert orch.run_context.browser_session.calls == [("click", "#buy")]
+    assert _window_of(orch).calls == [("click", "#buy")]
     assert events[-1][1]["status"] == "succeeded"
     assert state["inbox"]["next_step"][-1]["result"]["ok"] is True
 
@@ -436,7 +446,7 @@ def test_approved_click_records_success(tmp_path):
 def test_approved_click_failure_is_recorded(tmp_path):
     orch, state, tools, events = _loop_env(tmp_path)
     orch.run_context.delegation = _Approvals("APPROVED")
-    orch.run_context.browser_session.click_error = RuntimeError(
+    _window_of(orch).click_error = RuntimeError(
         "Timeout 30000ms exceeded waiting for selector #buy")
     msg = _call(orch, state, tools, "browser_click", {"selector": "#buy"})
     assert "ERROR" in msg["content"]
@@ -447,7 +457,7 @@ def test_approved_click_failure_is_recorded(tmp_path):
 def test_run_end_closes_and_unbinds_session(tmp_path):
     orch = _orchestrator(tmp_path)
     fake = FakeSession()
-    orch.run_context.browser_session = fake
+    orch.run_context.browser_windows = {"vw-fake": fake}
     loop = AgentLoop(orch)
 
     async def impl(state, **kwargs):
@@ -457,7 +467,7 @@ def test_run_end_closes_and_unbinds_session(tmp_path):
     with pytest.raises(asyncio.CancelledError):
         asyncio.run(loop.run({}, user_input="x", user_id="u"))
     assert fake.closed is True
-    assert orch.run_context.browser_session is None
+    assert orch.run_context.browser_windows == {}
 
 
 # --- service-level E2E (real runtime, scripted provider) ------------------
@@ -468,20 +478,24 @@ class _Opened(list):
 
 @pytest.fixture
 def sessions(monkeypatch):
-    """Patch the Run-scoped factory: one FakeSession per RunContext."""
+    """Patch the executor's window resolver: one fake window per Run."""
     opened = _Opened()
     opened_gates: list[asyncio.Event] = []  # gates for the next sessions
 
-    async def for_context(cls, run_context):
-        if run_context.browser_session is None:
+    async def resolve(run_context, view_id=None):
+        windows = run_context.browser_windows
+        if view_id is not None:
+            return windows[view_id]
+        if not windows:
             session = FakeSession(run_context)
             if opened_gates:
                 session.gate = opened_gates.pop(0)
             opened.append(session)
-            run_context.browser_session = session
-        return run_context.browser_session
+            windows["vw-fake"] = session
+        return next(iter(windows.values()))
 
-    monkeypatch.setattr(BrowserSession, "for_context", classmethod(for_context))
+    monkeypatch.setattr(
+        "agent.orchestrator.executor.resolve_browser", resolve)
     opened.gates = opened_gates  # type: ignore[attr-defined]
     return opened
 

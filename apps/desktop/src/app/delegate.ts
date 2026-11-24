@@ -17,7 +17,7 @@ export async function submitToPlanet(
   targetPlanet: string,
   requestText: string,
   attachments: string[] = [],
-  options: { model?: string; sessionId?: string } = {},
+  options: { model?: string; sessionId?: string; viewIds?: string[] } = {},
 ): Promise<string> {
   // No explicit workspaceRoot — admission resolves the session's durable
   // binding itself, so a stale ctx path can never become the run root.
@@ -29,6 +29,7 @@ export async function submitToPlanet(
     sessionId: options.sessionId ?? ctx.sessionId,
     originPlanet: targetPlanet,
     contextRefs: attachments,
+    viewIds: options.viewIds,
     metadata: metadataFor(options),
     requestText,
   });

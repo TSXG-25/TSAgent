@@ -2,65 +2,65 @@ import { useCallback, useEffect, useMemo, useReducer, useState, type FormEvent }
 import { SCENES } from "../../app/scenes";
 import { WorkspaceFrame } from "../../design-system/WorkspaceFrame";
 import AgentComposer from "../../app/AgentComposer";
-import { draftKey, prefillDraft } from "../../app/draftStore";
 import { t } from "../../app/i18n";
-import { CapNotInstalled } from "../../design-system/WorkspaceFrame";
 import { useWorkspaceCurrentRun } from "../../app/workspaceSelection";
 import type { RunCtx } from "../../app/runCtx";
 import { WorkspaceTasks } from "../../app/WorkspaceTasks";
-import { MercurySearchSession } from "./searchSession";
+import { MercuryWindowBoard } from "./windows";
+import BrowserPane from "./BrowserPane";
+import { submitToPlanet } from "../../app/delegate";
 
-/** Navigator per hand-drawn spec §3 — BrowserSessionBar | 4-pane viewport
- *  grid (+/- views) | Plan Action + Action Preview + Stop | Composer.
- *  Views carry real webSearch results until a browser adapter lands. */
+/** Navigator — live browser windows per the implementation plan.
+ *  1 view fills the row, 2 split side-by-side, 3 puts one left and two
+ *  stacked right, 4 grid 2×2; expanding promotes one pane to full
+ *  width. Windows are real browser documents owned by this session's
+ *  workbench scope — the frames are CDP screencast, not cards. */
 export default function MercuryWorkspace({ ctx }: { ctx: RunCtx }) {
   const { service } = ctx;
   const scene = SCENES[1];
   const currentRun = useWorkspaceCurrentRun(ctx, "mercury");
   const [query, setQuery] = useState("");
-  const [searchedQuery, setSearchedQuery] = useState("");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [steps, setSteps] = useState<{ plan: string; preview: string }[]>([]);
   const [, bump] = useReducer((n: number) => n + 1, 0);
 
-  const search = useMemo(
-    () => new MercurySearchSession((q) =>
-      service.webSearch({
-        sessionId: ctx.sessionId,
-        query: q,
-        maxResults: 4,
-      }),
-    ),
-    [service, ctx.sessionId],
-  );
+  const board = useMemo(() => new MercuryWindowBoard(service), [service]);
   useEffect(() => {
-    search.listener = () => bump();
-    return () => { search.listener = null; };
-  }, [search]);
-  // 会话切换与组件卸载都让在途响应失效 — 旧会话的晚到响应不得
-  // 更新当前页面（service 对象在会话间复用，memo 不会重建）。
+    board.listener = () => bump();
+    return () => { board.listener = null; };
+  }, [board]);
+  // Bind per chat session — window state is session-scoped on the
+  // service side; switching sessions leaves nothing behind here.
   useEffect(() => {
-    // 切换会话清空本台搜索状态 —— A 的来源/日志不残留到 B。
-    search.bind(ctx.sessionId);
-    if (search.sessionId === ctx.sessionId) { setSteps([]); setQuery(""); }
-    return () => search.stop();
-  }, [search, ctx.sessionId]);
+    board.bind(ctx.sessionId);
+    void board.refresh();
+    return () => board.stop();
+  }, [board, ctx.sessionId]);
+
+  const windows = board.windows;
+  const count = expandedId ? 1 : windows.length;
+  const shown = expandedId
+    ? windows.filter((w) => w.summary.viewId === expandedId)
+    : windows;
 
   const doSearch = useCallback(async (e: FormEvent) => {
     e.preventDefault();
     const q = query.trim();
     if (!q) return;
-    setSteps((s) => [...s, { plan: `web_search → "${q}"`, preview: t("mer.searching") }]);
-    const applied = await search.run(q);
-    if (!applied) return; // stopped/superseded — no view or log update
-    setSearchedQuery(q);
-    setSteps((s) => [...s, {
-      plan: search.status === "error" || search.status === "unavailable"
-        ? t("status.failed")
-        : `${search.sourceCount} sources · ${search.provider}`,
-      preview: search.err
-        ?? String(search.panes[0]?.source?.title ?? search.panes[0]?.source?.url ?? "—"),
-    }]);
-  }, [query, search]);
+    // Address-bar semantics: a URL navigates the active window (or the
+    // first one); anything else opens a new window on the query.
+    const url = /^https?:\/\/|^about:|^[\w-]+(\.[\w-]+)+/.test(q)
+      ? (/^[\w-]+(\.[\w-]+)+/.test(q) && !/^[a-z]+:/.test(q) ? `https://${q}` : q)
+      : "";
+    if (url && board.active) {
+      setSteps((s) => [...s, { plan: `navigate → ${url}`, preview: "" }]);
+      await board.navigate(board.active.summary.viewId, "navigate", url);
+    } else {
+      const target = url || `https://duckduckgo.com/?q=${encodeURIComponent(q)}`;
+      setSteps((s) => [...s, { plan: `open → ${q}`, preview: target }]);
+      await board.open(target);
+    }
+  }, [query, board]);
 
   return (
     <WorkspaceFrame scene={scene} ctx={ctx}>
@@ -72,53 +72,61 @@ export default function MercuryWorkspace({ ctx }: { ctx: RunCtx }) {
                 <small><code>{currentRun.runId}</code> · {currentRun.status}</small></div>
             </div>
           )}
-          {/* BrowserSessionBar [H] */}
+
           <form className="nav-bar" onSubmit={doSearch}>
             <span className="nav-web">web:</span>
             <input onChange={(e) => setQuery(e.target.value)} placeholder={t("mer.placeholder")} value={query} />
-            <button className="btn primary" disabled={search.running} type="submit">{search.running ? "…" : t("mer.go")}</button>
+            <button className="btn primary" type="submit">{t("mer.go")}</button>
+            <button className="btn secondary" disabled={windows.length >= 4} type="button"
+              onClick={() => void board.open()}>{t("mer.new-window")}</button>
           </form>
-          {search.err && <p className="omni-empty" style={{ color: "var(--st-danger,#ff5a4f)" }}>{search.err}</p>}
-          {search.status === "empty" && <p className="omni-empty">{t("mer.no-results")}</p>}
+          {board.err && <p className="omni-empty" style={{ color: "var(--st-danger,#ff5a4f)" }}>{board.err}</p>}
+          {board.available === false && <p className="omni-empty">{t("mer.windows-na")}</p>}
 
-          {/* ViewportGrid [H] 2×2 */}
-          <div className="nav-grid">
-            {search.panes.map((v, i) => (
-              <section className="nav-view" key={i}>
-                <header><span>{t("mer.view-n", { n: i + 1 })}</span>{v.source && <code>{String(v.source.source ?? v.source.engine ?? "web")}</code>}</header>
+          <div className={`nav-grid live count-${count}`}>
+            {shown.map((w) => (
+              <BrowserPane
+                key={w.summary.viewId}
+                board={board}
+                summary={w.summary}
+                active={board.activeViewId === w.summary.viewId}
+                expanded={expandedId === w.summary.viewId}
+                onSelect={() => { board.activeViewId = w.summary.viewId; bump(); }}
+                onExpand={() =>
+                  setExpandedId((cur) =>
+                    cur === w.summary.viewId ? null : w.summary.viewId,
+                  )
+                }
+              />
+            ))}
+            {windows.length === 0 && board.available !== false && (
+              <section className="nav-view">
                 <div className="nav-view-body">
-                  {v.source ? (
-                    <>
-                      <strong>{String(v.source.title ?? "Source")}</strong>
-                      <a href={String(v.source.url ?? "#")} rel="noreferrer" target="_blank">{String(v.source.url ?? "")}</a>
-                      <p>{String(v.source.snippet || v.content?.slice(0, 240) || "")}</p>
-                    </>
-                  ) : v.content ? (
-                    <p>{v.content.slice(0, 240)}</p>
-                  ) : (
-                    <div className="empty-state"><p>{t("mer.empty-view")}</p><p className="omni-empty">{t("mer.empty-hint")}</p></div>
-                  )}
+                  <div className="empty-state"><p>{t("mer.empty-view")}</p></div>
                 </div>
               </section>
-            ))}
+            )}
           </div>
 
           <div className="nav-foot">
-            <div className="nav-vctl">
-              <button className="btn secondary" disabled={search.panes.length >= 4} onClick={() => search.addPane()} type="button">{t("mer.add-view")}</button>
-              <button className="btn secondary" disabled={search.panes.length <= 1} onClick={() => search.removePane()} type="button">{t("mer.remove-view")}</button>
-              <button className="btn secondary" disabled={search.sourceCount === 0} type="button" onClick={() => {
-                // 选中来源经既有草稿合同进入研究任务 —— 预填不代提交。
-                const sources = search.panes.flatMap((p) => p.source ? [p.source] : [])
-                  .map((s) => `- ${String(s.title ?? s.url ?? "source")} — ${String(s.url ?? "")}`).join("\n");
-                prefillDraft(draftKey(ctx.service.identity.tenantId, ctx.sessionId, "mercury"), t("mer.research-prefill", { query: searchedQuery, sources }));
-              }}>{t("mer.research-task")}</button>
-            </div>
-            <AgentComposer ctx={ctx} planet="mercury" placeholder={t("mer.composer-ph")} />
+            <div className="nav-vctl" />
+            {/* Window ids are bound at submission — the snapshot the send
+                captures, not whatever is selected later. */}
+            <AgentComposer
+              ctx={ctx}
+              planet="mercury"
+              placeholder={t("mer.composer-ph")}
+              onSend={async (to, body, files, options) => ({
+                runId: await submitToPlanet(ctx, to, body, files, {
+                  ...options,
+                  viewIds: board.boundIds(),
+                }),
+                sessionId: ctx.sessionId,
+              })}
+            />
           </div>
         </div>
 
-        {/* right rail: Plan Action + Action Preview + Stop */}
         <aside className="nav-side">
           <section className="nav-block">
             <h4 className="ws-mod">{t("mer.plan")}</h4>
@@ -132,12 +140,8 @@ export default function MercuryWorkspace({ ctx }: { ctx: RunCtx }) {
             {steps.filter((s) => s.preview).slice(-4).map((s, i) => <div className="nav-step" key={i}><code>→</code><span>{s.preview}</span></div>)}
             {steps.length === 0 && <p className="omni-empty">{t("mer.nothing-previewed")}</p>}
           </section>
-          <section className="nav-block">
-            <button className="btn danger" disabled={!search.running} onClick={() => search.stop()} type="button">{t("mer.stop")}</button>
-            <CapNotInstalled what={t("mer.cap-browser")} />
-          </section>
-                    <WorkspaceTasks ctx={ctx} planet="mercury" />
-          <div className="ws-statusbar"><span>{search.panes.length} VIEWS</span><span>{steps.length} ACTIONS</span><span className="right">mercury</span></div>
+          <WorkspaceTasks ctx={ctx} planet="mercury" />
+          <div className="ws-statusbar"><span>{windows.length} VIEWS</span><span>{steps.length} ACTIONS</span><span className="right">mercury</span></div>
         </aside>
       </div>
     </WorkspaceFrame>

@@ -239,7 +239,7 @@ async def test_service_claim_release_roundtrip(tmp_path) -> None:
 
             # while user drives, agent input is refused
             open_browser = functools.partial(resolve_browser, rc)
-            with pytest.raises(RuntimeError, match="WINDOW_UNDER_USER_CONTROL"):
+            with pytest.raises(RuntimeError, match="WINDOW_NOT_UNDER_AGENT_CONTROL"):
                 await PlanExecutor._exec_browser(
                     "browser.click", {"selector": "#x", "view_id": opened.view_id},
                     open_browser, None)

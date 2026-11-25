@@ -406,3 +406,92 @@ async def test_claim_waits_for_inflight_action(service) -> None:
         summary = await claim
         assert summary.controller == "user"
         await in_flight
+
+
+async def test_replayed_frame_carries_its_own_generation(service) -> None:
+    """A late subscriber gets the cached frame with the same
+    doc_generation it was stamped at arrival — no KeyError, no
+    send-time re-stamp."""
+    websockets = pytest.importorskip("websockets")
+    from agent.service.local_sidecar.display_bridge import DisplayBridge
+
+    with _Site() as site:
+        try:
+            opened = await service.open_window(
+                _window_request("open", url=site.url)
+            )
+        except Exception as error:  # pragma: no cover
+            _skip_no_chromium(error)
+            return
+        window = service.window_for_session("t-1", "s-1", opened.view_id)
+        display = await window.ensure_display()
+        for _ in range(40):
+            if display.frame_count:
+                break
+            await asyncio.sleep(0.1)
+        gen_seen = display._latest[2]["doc_generation"]
+        replayed: list[dict] = []
+        display.subscribe(lambda d, m: replayed.append(m))
+        assert replayed and replayed[0]["doc_generation"] == gen_seen
+
+        # end-to-end: a bridge client connecting late receives a frame
+        # whose meta has doc_generation — no KeyError, no dead channel.
+        bridge = DisplayBridge(
+            service, allowed_origins=frozenset({"http://127.0.0.1:4173"})
+        )
+        try:
+            ticket = await bridge.ticket("t-1", "s-1")
+            url = (
+                f"ws://127.0.0.1:{ticket['port']}/display/s-1/"
+                f"{opened.view_id}?token={ticket['token']}"
+            )
+            async with websockets.connect(url) as ws:
+                meta, _ = await _read_frame(ws)
+                assert "doc_generation" in meta
+        finally:
+            await bridge.close()
+
+
+async def test_settling_blocks_human_and_agent_input(service) -> None:
+    """While a claim drains the in-flight action the window is
+    'settling' — the bridge drops human input AND the executor-facing
+    controller check refuses new agent ops."""
+    from agent.service import contracts as c
+
+    with _Site() as site:
+        try:
+            opened = await service.open_window(
+                _window_request("open", url=site.url)
+            )
+        except Exception as error:  # pragma: no cover
+            _skip_no_chromium(error)
+            return
+        window = service.window_for_session("t-1", "s-1", opened.view_id)
+        window._controller = "agent"
+
+        gate = asyncio.Event()
+        orig_click = window.page.click
+
+        async def slow_click(selector: str) -> None:
+            await gate.wait()
+            return await orig_click(selector)
+
+        window.page.click = slow_click  # type: ignore[assignment]
+        in_flight = asyncio.ensure_future(window.click("#box"))
+        await asyncio.sleep(0.05)
+        claim = asyncio.ensure_future(
+            service.claim_window(
+                c.ClaimWindowRequest(
+                    tenant_id="t-1", user_id="u-1", session_id="s-1",
+                    request_id="rs", view_id=opened.view_id,
+                )
+            )
+        )
+        await asyncio.sleep(0.05)
+        assert not claim.done()
+        # during the drain the window is neither user nor agent
+        assert window.controller == "settling"
+        gate.set()
+        await claim
+        assert window.controller == "user"
+        await in_flight

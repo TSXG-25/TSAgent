@@ -719,7 +719,7 @@ def test_takeover_blocks_agent_input(tmp_path):
     orch.run_context.delegation = _Approvals("APPROVED")
     _window_of(orch).controller = "user"
     msg = _call(orch, state, tools, "browser_click", {"selector": "#buy"})
-    assert "WINDOW_UNDER_USER_CONTROL" in msg["content"]
+    assert "WINDOW_NOT_UNDER_AGENT_CONTROL" in msg["content"]
     assert _window_of(orch).calls == []
 
 

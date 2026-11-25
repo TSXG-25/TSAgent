@@ -2565,3 +2565,18 @@ ol.md-list li::marker { color: var(--planet-accent); font-family: var(--font-mon
   text-overflow: ellipsis; white-space: nowrap;
 }
 .nav-win-foot span { color: var(--planet-accent); }
+
+/* Editable host for the display pane — carries keyboard/IME/clipboard so
+   the non-editable canvas only renders. Invisible but focusable. */
+.nav-view-body.canvas .ime-host {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  caret-color: transparent;
+  font-size: 1px;
+}

@@ -29,6 +29,7 @@ export default function BrowserPane({
   const [addr, setAddr] = useState("");
   const dragging = useRef(false);
   const composing = useRef(false);
+  const imeRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setAddr(summary.url);
@@ -143,7 +144,9 @@ export default function BrowserPane({
           onMouseDown={(e) => {
             const p = point(e);
             if (p && channelRef.current) {
-              canvasRef.current?.focus();
+              // the editable host takes focus so IME/keyboard reach it —
+              // a canvas cannot carry a composition.
+              imeRef.current?.focus();
               dragging.current = true;
               channelRef.current.down(p.x, p.y);
             }
@@ -166,6 +169,11 @@ export default function BrowserPane({
               channelRef.current.scroll(p.x, p.y, e.deltaX, e.deltaY);
             }
           }}
+        />
+        <input
+          ref={imeRef}
+          className="ime-host"
+          aria-label={summary.title || summary.viewId}
           onCompositionStart={() => {
             composing.current = true;
           }}
@@ -174,6 +182,15 @@ export default function BrowserPane({
             // intermediate keydowns were suppressed while composing.
             composing.current = false;
             channelRef.current?.text(e.data);
+            e.currentTarget.value = "";
+          }}
+          onInput={(e) => {
+            // Text that landed without a keydown path (IME variants,
+            // autocorrect) — forward the host's value and clear it.
+            if ((e.nativeEvent as InputEvent).isComposing || composing.current) return;
+            const v = e.currentTarget.value;
+            if (v) channelRef.current?.text(v);
+            e.currentTarget.value = "";
           }}
           onPaste={(e) => {
             const text = e.clipboardData.getData("text");
@@ -191,14 +208,16 @@ export default function BrowserPane({
               ...(e.altKey ? ["alt"] : []),
               ...(e.shiftKey ? ["shift"] : []),
             ];
-            if (mods.length) {
+            const chord = e.metaKey || e.ctrlKey || e.altKey || e.key.length > 1;
+            if (chord) {
               // Copy/cut/select-all reach the page as real key chords —
               // the page's own clipboard/selection logic handles them.
               channel.key(e.key.length === 1 ? e.key.toUpperCase() : e.key, mods);
-            } else if (e.key.length === 1) {
-              channel.text(e.key);
             } else {
-              channel.key(e.key);
+              // Text-producing key (Shift alone included): the DOM key
+              // already carries the shifted glyph — send it as text so
+              // insertText types "A", not a bare keyDown that types "".
+              channel.text(e.key);
             }
             e.preventDefault();
           }}

@@ -3534,11 +3534,13 @@ class AgentService:
         window = self._session_window(
             request.tenant_id, request.session_id, request.view_id
         )
-        # Refuse new agent input immediately, then wait for the action
-        # already in flight to settle before confirming the handover —
-        # a pending page.click must not land after the user takes over.
-        window.controller = "user"
+        # "settling" is neither "user" nor "agent": the display bridge
+        # drops human input and the executor refuses new agent ops while
+        # the action already in flight drains — control actually changes
+        # hands only after the window is quiet.
+        window.controller = "settling"
         await window.wait_idle()
+        window.controller = "user"
         return WindowSummary(**(await window.summary()))
 
     async def release_window(self, request: Any) -> Any:

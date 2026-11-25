@@ -227,11 +227,56 @@ describe("BrowserPane input composition", () => {
       />,
     );
     await waitFor(() =>
-      expect(document.querySelector(".nav-view.live canvas")).toBeTruthy());
-    const canvas = document.querySelector("canvas")!;
-    fireEvent.compositionStart(canvas);
-    fireEvent.keyDown(canvas, { key: "n" });
-    fireEvent.compositionEnd(canvas, { data: "你" });
+      expect(document.querySelector(".nav-view.live .ime-host")).toBeTruthy());
+    const host = document.querySelector(".ime-host")!;
+    fireEvent.compositionStart(host);
+    fireEvent.keyDown(host, { key: "n" });
+    fireEvent.compositionEnd(host, { data: "你" });
     expect(sent).toEqual([{ kind: "text", value: "你" }]);
+  });
+
+  test("shifted character types text; chorded modifiers send keys", async () => {
+    const sent: { kind: string; value: unknown }[] = [];
+    const channel = {
+      text: (s: string) => sent.push({ kind: "text", value: s }),
+      key: (k: string, mods: string[]) => sent.push({ kind: "key", value: [k, mods] }),
+      click: () => {}, down: () => {}, move: () => {}, up: () => {},
+      scroll: () => {}, stamp: () => {}, close: () => {},
+      onFrame: null, onClose: null,
+    };
+    const board = {
+      channelFor: async () => channel,
+      selected: new Set<string>(),
+      navigate: vi.fn(),
+      toggleSelect: vi.fn(),
+      refresh: vi.fn(),
+    };
+    const { default: BrowserPane } = await import(
+      "../../src/workspaces/mercury/BrowserPane"
+    );
+    const { fireEvent } = await import("@testing-library/react");
+    render(
+      <BrowserPane
+        board={board as never}
+        summary={win()}
+        active={true}
+        onSelect={() => {}}
+        onExpand={() => {}}
+        expanded={false}
+      />,
+    );
+    await waitFor(() =>
+      expect(document.querySelector(".ime-host")).toBeTruthy());
+    const host = document.querySelector(".ime-host")!;
+    // Shift+A is text input — the DOM key already carries "A";
+    // Cmd+C is a shortcut chord, Shift+ArrowLeft extends selection.
+    fireEvent.keyDown(host, { key: "A", shiftKey: true });
+    fireEvent.keyDown(host, { key: "c", metaKey: true });
+    fireEvent.keyDown(host, { key: "ArrowLeft", shiftKey: true });
+    expect(sent).toEqual([
+      { kind: "text", value: "A" },
+      { kind: "key", value: ["C", ["meta"]] },
+      { kind: "key", value: ["ArrowLeft", ["shift"]] },
+    ]);
   });
 });

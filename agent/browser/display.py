@@ -131,7 +131,6 @@ class DisplaySession:
         self.frame_bytes += len(payload)
         if self._first_frame_at is None:
             self._first_frame_at = time.monotonic()
-        self._latest = (self._seq, payload, meta)
         meta = {
             **meta,
             "_seq": self._seq,
@@ -139,6 +138,9 @@ class DisplaySession:
         }
         if self.meta_hook is not None:
             self.meta_hook(meta)
+        # Cache the finalized dict — a replayed frame must carry the same
+        # doc_generation it was stamped with, never a send-time value.
+        self._latest = (self._seq, payload, meta)
         for listener in list(self._listeners):
             try:
                 listener(payload, meta)

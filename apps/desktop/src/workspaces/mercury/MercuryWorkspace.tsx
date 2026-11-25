@@ -4,7 +4,10 @@ import { WorkspaceFrame } from "../../design-system/WorkspaceFrame";
 import AgentComposer from "../../app/AgentComposer";
 import { t } from "../../app/i18n";
 import { useWorkspaceCurrentRun } from "../../app/workspaceSelection";
-import type { RunEvent } from "../../types/service";
+import type {
+  ApprovalSummary,
+  RunEvent,
+} from "../../types/service";
 import type { RunCtx } from "../../app/runCtx";
 import { WorkspaceTasks } from "../../app/WorkspaceTasks";
 import { MercuryWindowBoard } from "./windows";
@@ -23,6 +26,7 @@ export default function MercuryWorkspace({ ctx }: { ctx: RunCtx }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [steps, setSteps] = useState<{ plan: string; preview: string }[]>([]);
   const [runEvents, setRunEvents] = useState<RunEvent[]>([]);
+  const [approvals, setApprovals] = useState<ApprovalSummary[]>([]);
   const [, bump] = useReducer((n: number) => n + 1, 0);
 
   // Right rail reads the run's real event stream — tool calls carry
@@ -31,6 +35,7 @@ export default function MercuryWorkspace({ ctx }: { ctx: RunCtx }) {
   const runActive = currentRun?.status === "active" || currentRun?.status === "pending";
   useEffect(() => {
     setRunEvents([]);
+    setApprovals([]);
     if (!runId) return;
     let dead = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -45,6 +50,10 @@ export default function MercuryWorkspace({ ctx }: { ctx: RunCtx }) {
           after = Math.max(...batch.map((e) => e.sequenceNumber));
           setRunEvents((prev) => [...prev, ...batch].slice(-80));
         }
+        const pending = await service.listApprovals({
+          sessionId: ctx.sessionId, runId, status: "PENDING",
+        });
+        if (!dead) setApprovals(pending);
       } catch { /* next tick retries */ }
       if (!dead) timer = setTimeout(tick, runActive ? 1200 : 5000);
     };
@@ -60,8 +69,25 @@ export default function MercuryWorkspace({ ctx }: { ctx: RunCtx }) {
     board.listener = () => bump();
     board.bind(ctx.sessionId);
     void board.refresh();
+    // The expanded window belongs to the previous session — a stale id
+    // would filter the new session's panes down to zero.
+    setExpandedId(null);
     return () => board.stop();
   }, [board, ctx.sessionId]);
+
+  const decideApproval = useCallback(
+    async (approvalId: string, decision: "approve" | "deny") => {
+      if (!runId) return;
+      await service.decideApproval({
+        sessionId: ctx.sessionId,
+        runId,
+        approvalId,
+        decision,
+      });
+      setApprovals((prev) => prev.filter((a) => a.approvalId !== approvalId));
+    },
+    [service, ctx.sessionId, runId]
+  );
 
   const windows = board.windows;
   const count = expandedId ? 1 : windows.length;
@@ -149,6 +175,32 @@ export default function MercuryWorkspace({ ctx }: { ctx: RunCtx }) {
         </div>
 
         <aside className="nav-side">
+          {approvals.length > 0 && (
+            <section className="nav-block">
+              <h4 className="ws-mod">{t("mer.approvals")}</h4>
+              {approvals.map((a) => {
+                const vid = String(a.params?.view_id ?? "");
+                return (
+                  <div className="nav-step" key={a.approvalId}>
+                    <code>{vid ? vid.slice(0, 8) : "!"}</code>
+                    <span>{a.action}</span>
+                    <button
+                      className="approval-btn"
+                      onClick={() => void decideApproval(a.approvalId, "approve")}
+                    >
+                      {t("mer.approve")}
+                    </button>
+                    <button
+                      className="approval-btn deny"
+                      onClick={() => void decideApproval(a.approvalId, "deny")}
+                    >
+                      {t("mer.deny")}
+                    </button>
+                  </div>
+                );
+              })}
+            </section>
+          )}
           <section className="nav-block">
             <h4 className="ws-mod">{t("mer.plan")}</h4>
             <div className="step-line">

@@ -166,8 +166,13 @@ export default function BrowserPane({
               channelRef.current.scroll(p.x, p.y, e.deltaX, e.deltaY);
             }
           }}
+          onCompositionStart={() => {
+            composing.current = true;
+          }}
           onCompositionEnd={(e) => {
-            // IME commit — the full composed string lands at once.
+            // IME commit — the full composed string lands at once; the
+            // intermediate keydowns were suppressed while composing.
+            composing.current = false;
             channelRef.current?.text(e.data);
           }}
           onPaste={(e) => {
@@ -179,7 +184,7 @@ export default function BrowserPane({
           onCut={(e) => e.preventDefault()}
           onKeyDown={(e) => {
             const channel = channelRef.current;
-            if (!channel || composing.current) return;
+            if (!channel || composing.current || e.nativeEvent.isComposing) return;
             const mods = [
               ...(e.metaKey ? ["meta"] : []),
               ...(e.ctrlKey ? ["ctrl"] : []),

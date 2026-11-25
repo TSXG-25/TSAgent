@@ -171,3 +171,67 @@ describe("session switch + binding", () => {
     expect(board.boundIds()).toEqual(["v-b"]);
   });
 });
+
+describe("expanded pane lifecycle", () => {
+  test("expanding in session A then switching to B shows B's windows", async () => {
+    const service = new MockAgentServiceClient();
+    vi.spyOn(service, "listWindows")
+      .mockResolvedValueOnce([win({ viewId: "v-a", title: "Alpha" })] as never)
+      .mockResolvedValueOnce([win({ viewId: "v-b", title: "Beta" })] as never);
+    const ctx = ctxFor(service, "s-1");
+    const { rerender } = mount(ctx);
+    await waitFor(() => expect(screen.getByText("Alpha")).toBeTruthy());
+    const expandBtn = document.querySelector('button[title*="xpand"], button[title*="展开"]')
+      ?? screen.getAllByRole("button").find((b) => b.textContent === "⊞");
+    (expandBtn as HTMLElement).click();
+    expect(document.querySelectorAll(".nav-view.live").length).toBe(1);
+    rerender(
+      <MemoryRouter initialEntries={["/w/mercury"]}>
+        <MercuryWorkspace ctx={{ ...ctx, sessionId: "s-2" }} />
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(screen.getByText("Beta")).toBeTruthy());
+    expect(document.querySelectorAll(".nav-view.live").length).toBe(1);
+  });
+});
+
+describe("BrowserPane input composition", () => {
+  test("composition suppresses intermediate keys and commits once", async () => {
+    const sent: { kind: string; value: unknown }[] = [];
+    const channel = {
+      text: (s: string) => sent.push({ kind: "text", value: s }),
+      key: (k: string, mods: string[]) => sent.push({ kind: "key", value: [k, mods] }),
+      click: () => {}, down: () => {}, move: () => {}, up: () => {},
+      scroll: () => {}, stamp: () => {}, close: () => {},
+      onFrame: null, onClose: null,
+    };
+    const board = {
+      channelFor: async () => channel,
+      selected: new Set<string>(),
+      navigate: vi.fn(),
+      toggleSelect: vi.fn(),
+      refresh: vi.fn(),
+    };
+    const { default: BrowserPane } = await import(
+      "../../src/workspaces/mercury/BrowserPane"
+    );
+    const { fireEvent } = await import("@testing-library/react");
+    render(
+      <BrowserPane
+        board={board as never}
+        summary={win()}
+        active={true}
+        onSelect={() => {}}
+        onExpand={() => {}}
+        expanded={false}
+      />,
+    );
+    await waitFor(() =>
+      expect(document.querySelector(".nav-view.live canvas")).toBeTruthy());
+    const canvas = document.querySelector("canvas")!;
+    fireEvent.compositionStart(canvas);
+    fireEvent.keyDown(canvas, { key: "n" });
+    fireEvent.compositionEnd(canvas, { data: "你" });
+    expect(sent).toEqual([{ kind: "text", value: "你" }]);
+  });
+});

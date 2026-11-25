@@ -332,3 +332,77 @@ async def test_input_respects_controller_and_generation(service) -> None:
                 assert await value() == ""
         finally:
             await bridge.close()
+
+
+async def test_frame_generation_bound_at_arrival(service) -> None:
+    """A frame received before a navigation commit keeps the old document
+    generation — meta is stamped when the frame arrives, not when the
+    bridge later sends it, so an input stamped against the stale picture
+    is correctly refused."""
+    websockets = pytest.importorskip("websockets")
+    from agent.service import contracts as c
+
+    with _Site() as site:
+        try:
+            opened = await service.open_window(
+                _window_request("open", url=site.url)
+            )
+        except Exception as error:  # pragma: no cover
+            _skip_no_chromium(error)
+            return
+        window = service.window_for_session("t-1", "s-1", opened.view_id)
+        display = await window.ensure_display()
+        captured: list[dict] = []
+        display.subscribe(lambda data, meta: captured.append(meta))
+        for _ in range(40):
+            if captured:
+                break
+            await asyncio.sleep(0.1)
+        assert captured and captured[0]["doc_generation"] == 1
+        gen_before = window.doc_generation
+        await window.navigate(f"{site.url}/next")
+        assert window.doc_generation == gen_before + 1
+        # the frame captured pre-nav still reports its own generation
+        assert captured[0]["doc_generation"] == gen_before
+
+
+async def test_claim_waits_for_inflight_action(service) -> None:
+    """claim_window confirms handover only after the action already in
+    flight settles — a pending click must not land post-takeover."""
+    from agent.service import contracts as c
+
+    with _Site() as site:
+        try:
+            opened = await service.open_window(
+                _window_request("open", url=site.url)
+            )
+        except Exception as error:  # pragma: no cover
+            _skip_no_chromium(error)
+            return
+        window = service.window_for_session("t-1", "s-1", opened.view_id)
+        window._controller = "agent"
+
+        gate = asyncio.Event()
+        orig_click = window.page.click
+
+        async def slow_click(selector: str) -> None:
+            await gate.wait()
+            return await orig_click(selector)
+
+        window.page.click = slow_click  # type: ignore[assignment]
+        in_flight = asyncio.ensure_future(window.click("#box"))
+        await asyncio.sleep(0.05)
+        claim = asyncio.ensure_future(
+            service.claim_window(
+                c.ClaimWindowRequest(
+                    tenant_id="t-1", user_id="u-1", session_id="s-1",
+                    request_id="rc", view_id=opened.view_id,
+                )
+            )
+        )
+        await asyncio.sleep(0.05)
+        assert not claim.done()  # still waiting for the click to settle
+        gate.set()
+        summary = await claim
+        assert summary.controller == "user"
+        await in_flight

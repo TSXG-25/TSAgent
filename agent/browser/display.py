@@ -37,6 +37,21 @@ _KEYS: dict[str, tuple[str, int, str]] = {
 }
 
 
+def _key_info(name: str) -> tuple[str, int, str]:
+    if name in _KEYS:
+        return _KEYS[name]
+    if len(name) == 1 and name.isprintable():
+        upper = name.upper()
+        if upper.isalpha():
+            code = f"Key{upper}"
+        elif upper.isdigit():
+            code = f"Digit{upper}"
+        else:
+            code = name
+        return (code, ord(upper), name)
+    raise KeyError(name)
+
+
 class DisplaySession:
     """Screencast + input channel for a single existing Playwright Page."""
 
@@ -46,6 +61,7 @@ class DisplaySession:
         self._listeners: list[FrameListener] = []
         self._seq = 0
         self._latest: tuple[int, bytes, dict] | None = None
+        self.meta_hook: "Callable[[dict], None] | None" = None
         self._started_at: float | None = None
         self._first_frame_at: float | None = None
         self.frame_count = 0
@@ -121,6 +137,8 @@ class DisplaySession:
             "_seq": self._seq,
             "_received_mono": time.monotonic(),
         }
+        if self.meta_hook is not None:
+            self.meta_hook(meta)
         for listener in list(self._listeners):
             try:
                 listener(payload, meta)
@@ -197,7 +215,7 @@ class DisplaySession:
         )
 
     async def key_press(self, name: str, *, modifiers=()) -> None:
-        code, vk, key = _KEYS[name]
+        code, vk, key = _key_info(name)
         mods = 0
         for m in modifiers:
             mods |= self._MODIFIER.get(str(m), 0)

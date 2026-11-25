@@ -394,3 +394,47 @@ async def test_start_run_refuses_foreign_session_window(tmp_path) -> None:
             assert info.value.code.value == "INVALID_REQUEST"
     finally:
         await svc.close()
+
+
+async def test_refused_run_leaves_no_reservation_and_replay_uses_admitted(tmp_path) -> None:
+    """A refused view_ids request writes no run row; a replayed request_id
+    resolves to the originally admitted run without re-validating."""
+    from agent.service.factory import create_default_agent_service
+    from agent.service import contracts as c
+    from agent.service.errors import AgentServiceError
+
+    svc = create_default_agent_service(
+        tmp_path / "runtime.sqlite", workspace_root=tmp_path / "workspace"
+    )
+    try:
+        with _Site() as site:
+            opened = await svc.open_window(c.OpenWindowRequest(
+                tenant_id="t", user_id="u", session_id="s-A",
+                request_id="r1", url=site.url))
+            # refused foreign bind → no CREATED row anywhere
+            with pytest.raises(AgentServiceError):
+                await svc.start_run(c.StartRunRequest(
+                    tenant_id="t", user_id="u", session_id="s-B",
+                    request_id="r2", request_text="借用窗口",
+                    view_ids=(opened.view_id,)))
+            assert await svc.list_runs(c.ListRunsRequest(
+                tenant_id="t", user_id="u", session_id="s-B",
+                request_id="r2l")) == []
+
+            # an identical replay resolves to the admitted run — the
+            # admitted path runs before view_ids validation, so replay
+            # reuses admitted facts instead of re-validating windows
+            first = await svc.start_run(c.StartRunRequest(
+                tenant_id="t", user_id="u", session_id="s-A",
+                request_id="r3", request_text="占位 run",
+                view_ids=(opened.view_id,)))
+            await svc.close_window(c.CloseWindowRequest(
+                tenant_id="t", user_id="u", session_id="s-A",
+                request_id="rc", view_id=opened.view_id))
+            replayed = await svc.start_run(c.StartRunRequest(
+                tenant_id="t", user_id="u", session_id="s-A",
+                request_id="r3", request_text="占位 run",
+                view_ids=(opened.view_id,)))
+            assert replayed.run_id == first.run_id
+    finally:
+        await svc.close()

@@ -241,3 +241,32 @@ def test_input_to_next_frame_latency_is_measurable(site):
                 await display.stop()
 
     asyncio.run(go())
+
+
+async def test_key_press_accepts_modifier_chords_and_letters():
+    """Cmd/Ctrl chords and Shift+letter reach CDP as keyDown+keyUp with
+    the modifier bitmask — _KEYS is no longer an eight-entry allowlist."""
+    from agent.browser.display import DisplaySession
+
+    sent = []
+
+    class CDP:
+        async def send(self, method, params):
+            sent.append((method, params))
+
+    class Page:
+        async def context(self):
+            return None
+
+        def on(self, *a):
+            pass
+
+    display = DisplaySession.__new__(DisplaySession)
+    display._cdp = CDP()
+    await display.key_press("A", modifiers=("shift",))
+    await display.key_press("C", modifiers=("meta",))
+    downs = [p for m, p in sent if m == "Input.dispatchKeyEvent"
+             and p.get("type") == "rawKeyDown"]
+    assert len(downs) == 2
+    assert downs[0]["code"] == "KeyA" and downs[0]["modifiers"] == 8
+    assert downs[1]["code"] == "KeyC" and downs[1]["modifiers"] == 4

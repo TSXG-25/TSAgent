@@ -308,6 +308,27 @@ class AgentService:
                     root=run_root,
                     allow_artifact=False,
                 )
+                if request.view_ids:
+                    # Foreign workbench windows are refused before any
+                    # reservation row exists — a failed request leaves no
+                    # CREATED run behind, and replayed requests already
+                    # took the admitted path above.
+                    scope = self._window_scope(
+                        request.tenant_id, request.session_id
+                    )
+                    manager = self._browser_manager()
+                    for view_id in request.view_ids:
+                        window = manager.window(view_id)
+                        if (
+                            window is None
+                            or window.owner != "workbench"
+                            or window.scope_key != scope
+                        ):
+                            raise AgentServiceError(
+                                ServiceErrorCode.INVALID_REQUEST,
+                                "unknown browser window for this session: "
+                                f"{view_id}",
+                            )
                 external_reference = encode_request_reference(
                     request,
                     run_id=requested_run_id,
@@ -329,25 +350,6 @@ class AgentService:
                 raise self._store_error(error, request_id=request.request_id) from error
 
             run_id = reservation.head.run_id
-            if request.view_ids:
-                # Foreign workbench windows never reach the worker —
-                # refused at admission, not as a failed Run.
-                scope = self._window_scope(
-                    request.tenant_id, request.session_id
-                )
-                manager = self._browser_manager()
-                for view_id in request.view_ids:
-                    window = manager.window(view_id)
-                    if (
-                        window is None
-                        or window.owner != "workbench"
-                        or window.scope_key != scope
-                    ):
-                        raise AgentServiceError(
-                            ServiceErrorCode.INVALID_REQUEST,
-                            "unknown browser window for this session: "
-                            f"{view_id}",
-                        )
             # A run admitted under a provisioned (delegated) Task binds the
             # pending Handoff edge to itself — the UI path splits
             # delegate_run/start_run into two calls, so the binding lives at
@@ -3532,7 +3534,11 @@ class AgentService:
         window = self._session_window(
             request.tenant_id, request.session_id, request.view_id
         )
+        # Refuse new agent input immediately, then wait for the action
+        # already in flight to settle before confirming the handover —
+        # a pending page.click must not land after the user takes over.
         window.controller = "user"
+        await window.wait_idle()
         return WindowSummary(**(await window.summary()))
 
     async def release_window(self, request: Any) -> Any:

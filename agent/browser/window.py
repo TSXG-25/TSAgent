@@ -16,6 +16,9 @@ approval gate in the dispatcher.  The page sits behind the manager's
 
 from __future__ import annotations
 
+import functools
+from contextlib import asynccontextmanager
+
 import asyncio
 from dataclasses import dataclass
 from typing import Any
@@ -42,6 +45,16 @@ _READ_DOCUMENT = """(elements, marker) => {
         return {url, refused, text: ''};
     return elements.length ? {url, refused, text: elements[0].innerText} : null;
 }"""
+
+
+def _tracked(fn):
+    """Count the call as in flight so claim_window can wait for the
+    already-admitted action to settle before confirming handover."""
+    @functools.wraps(fn)
+    async def wrapper(self, *args, **kwargs):
+        async with self._op():
+            return await fn(self, *args, **kwargs)
+    return wrapper
 
 
 def check_scheme(url: str) -> None:
@@ -84,6 +97,9 @@ class BrowserWindow:
         self.manager = manager
         self.doc_generation = 0
         self.display: Any | None = None
+        self._inflight = 0
+        self._idle = asyncio.Event()
+        self._idle.set()
         self._closed = False
         self._loading = False
         self._history: list[str] = []
@@ -148,12 +164,32 @@ class BrowserWindow:
             "doc_generation": self.doc_generation,
         }
 
+    @asynccontextmanager
+    async def _op(self):
+        self._inflight += 1
+        self._idle.clear()
+        try:
+            yield
+        finally:
+            self._inflight -= 1
+            if not self._inflight:
+                self._idle.set()
+
+    async def wait_idle(self) -> None:
+        await self._idle.wait()
+
     async def ensure_display(self) -> Any:
         """Attach this window's live-display channel (screencast + input)."""
         if self.display is None:
             from agent.browser.display import DisplaySession
 
             self.display = DisplaySession(self.page)
+            # Generation belongs to the frame as it arrives — a frame of
+            # the old document keeps its own generation even when sent
+            # to the client after a navigation commit.
+            self.display.meta_hook = lambda meta: meta.update(
+                doc_generation=self.doc_generation
+            )
             await self.display.start()
         return self.display
 
@@ -206,6 +242,7 @@ class BrowserWindow:
                 except PlaywrightTimeoutError:
                     pass
 
+    @_tracked
     async def navigate(self, url: str) -> str:
         check_scheme(url)
         seen = len(self._proxy.blocked)
@@ -221,14 +258,17 @@ class BrowserWindow:
             raise EgressBlocked(self._proxy.blocked[-1])
         return f"{await self.page.title()} — {self.page.url}"
 
+    @_tracked
     async def back(self) -> str:
         await self.page.go_back()
         return self.page.url
 
+    @_tracked
     async def forward(self) -> str:
         await self.page.go_forward()
         return self.page.url
 
+    @_tracked
     async def reload(self) -> str:
         await self.page.reload()
         return self.page.url
@@ -240,13 +280,16 @@ class BrowserWindow:
     async def snapshot(self, limit: int = 4000) -> BrowserRead:
         return await self._read("body", limit)
 
+    @_tracked
     async def screenshot(self) -> bytes:
         return await self.page.screenshot(full_page=True)
 
+    @_tracked
     async def click(self, selector: str) -> str:
         await self.page.click(selector)
         return f"clicked {selector} → {self.page.url}"
 
+    @_tracked
     async def type_text(self, selector: str, text: str) -> str:
         await self.page.fill(selector, text)
         return f"typed into {selector}"

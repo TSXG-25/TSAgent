@@ -98,7 +98,7 @@ class DisplayBridge:
                 {
                     **meta,
                     "view_id": view_id,
-                    "doc_generation": window.doc_generation,
+                    "doc_generation": meta["doc_generation"],
                 },
                 data,
             )

@@ -280,3 +280,62 @@ describe("BrowserPane input composition", () => {
     ]);
   });
 });
+
+describe("BrowserPane pointer forwarding", () => {
+  test("mouse down/move/up and wheel reach the channel from the host", async () => {
+    const sent: { t: string; x?: number; y?: number }[] = [];
+    const channel = {
+      text: () => {}, key: () => {},
+      click: () => {},
+      down: (x: number, y: number) => sent.push({ t: "down", x, y }),
+      move: (x: number, y: number) => sent.push({ t: "move", x, y }),
+      up: (x: number, y: number) => sent.push({ t: "up", x, y }),
+      scroll: (x: number, y: number) => sent.push({ t: "scroll", x, y }),
+      stamp: () => {}, close: () => {},
+      onFrame: null as null | ((b: unknown, m: Record<string, number>) => void),
+      onClose: null,
+    };
+    const board = {
+      channelFor: async () => channel,
+      selected: new Set<string>(),
+      navigate: vi.fn(),
+      toggleSelect: vi.fn(),
+      refresh: vi.fn(),
+    };
+    const { default: BrowserPane } = await import(
+      "../../src/workspaces/mercury/BrowserPane"
+    );
+    const { fireEvent } = await import("@testing-library/react");
+    render(
+      <BrowserPane
+        board={board as never}
+        summary={win()}
+        active={true}
+        onSelect={() => {}}
+        onExpand={() => {}}
+        expanded={false}
+      />,
+    );
+    await waitFor(() =>
+      expect(document.querySelector(".ime-host")).toBeTruthy());
+    // real layout: canvas at 0,0 sized 200x100, device 200x100
+    const canvas = document.querySelector("canvas")!;
+    vi.spyOn(canvas, "getBoundingClientRect").mockReturnValue({
+      left: 0, top: 0, width: 200, height: 100,
+      right: 200, bottom: 100, x: 0, y: 0,
+      toJSON: () => ({}),
+    } as DOMRect);
+    channel.onFrame?.(null, { deviceWidth: 200, deviceHeight: 100 });
+    const host = document.querySelector(".ime-host")!;
+    fireEvent.mouseDown(host, { clientX: 20, clientY: 10 });
+    fireEvent.mouseMove(host, { clientX: 60, clientY: 40 });
+    fireEvent.mouseUp(host, { clientX: 60, clientY: 40 });
+    fireEvent.wheel(host, { clientX: 50, clientY: 50, deltaX: 0, deltaY: 30 });
+    expect(sent).toEqual([
+      { t: "down", x: 20, y: 10 },
+      { t: "move", x: 60, y: 40 },
+      { t: "up", x: 60, y: 40 },
+      { t: "scroll", x: 50, y: 50 },
+    ]);
+  });
+});

@@ -138,15 +138,16 @@ export default function BrowserPane({
         {channelState === "dead" && (
           <div className="empty-state"><p>{t("mer.channel-dead")}</p></div>
         )}
-        <canvas
-          ref={canvasRef}
-          tabIndex={0}
+        <canvas ref={canvasRef} />
+        <input
+          ref={imeRef}
+          className="ime-host"
+          aria-label={summary.title || summary.viewId}
+          // The host is the hit layer — pointer/wheel land here, so the
+          // handlers live here too (the canvas only paints).
           onMouseDown={(e) => {
             const p = point(e);
             if (p && channelRef.current) {
-              // the editable host takes focus so IME/keyboard reach it —
-              // a canvas cannot carry a composition.
-              imeRef.current?.focus();
               dragging.current = true;
               channelRef.current.down(p.x, p.y);
             }
@@ -169,11 +170,6 @@ export default function BrowserPane({
               channelRef.current.scroll(p.x, p.y, e.deltaX, e.deltaY);
             }
           }}
-        />
-        <input
-          ref={imeRef}
-          className="ime-host"
-          aria-label={summary.title || summary.viewId}
           onCompositionStart={() => {
             composing.current = true;
           }}
